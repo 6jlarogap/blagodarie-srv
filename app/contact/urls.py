@@ -30,7 +30,7 @@ urlpatterns = [
     url(r'^api/getcontactsuminfobyid/?$', views.api_get_contacts_sum_info, {'by': 'ids'}),
 
     url(r'^api/getstats/?$', views.api_get_stats),
-    url(r'^api/getstats/users/with/symptoms?$', views.api_get_stats, {'only': 'users_with_symptoms'}),
+    url(r'^api/getstats/users/?$', views.api_get_stats, {'only': 'users'}),
     url(r'^api/getstats/symptoms?$', views.api_get_stats, {'only': 'symptoms'}),
 
     url(r'^api/getlatestversion/?$', views.api_latest_version),

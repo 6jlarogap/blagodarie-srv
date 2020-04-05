@@ -74,13 +74,13 @@ class LogLike(models.Model):
     @classmethod
     def get_stats(cls, *args, **kwargs):
 
-        if kwargs.get('only') == 'users_with_symptoms':
-            # Вернуть число пользователей, доложивших о симптоме
+        if kwargs.get('only') == 'users':
+            # Вернуть число пользователей
             #
             return dict(
-                users=UserSymptom.objects.filter(
-                    user__is_superuser=False,
-                ).distinct('user').count(),
+                users=User.objects.filter(
+                    is_superuser=False,
+                ).count(),
             )
 
         if kwargs.get('only') == 'symptoms':
@@ -100,15 +100,15 @@ class LogLike(models.Model):
             #       ]
             #   }
             #
-            count_users_with_symptoms = UserSymptom.objects.filter(
-                    user__is_superuser=False,
-                ).distinct('user').count()
+            count_users = User.objects.filter(
+                    is_superuser=False,
+                ).count()
             data = dict(
                 titles=[
-                    'Пользователи с симптомами (%s)' % count_users_with_symptoms,
+                    'Пользователи (%s)' % count_users,
                 ],
                 counts=[
-                    count_users_with_symptoms,
+                    count_users,
                 ],
             )
             req_str = """
