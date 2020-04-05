@@ -1,0 +1,8 @@
+local_settings.py
+
+__pycache__/
+*.pyc
+
+ENV
+app/media
+app/static

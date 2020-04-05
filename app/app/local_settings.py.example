@@ -1,0 +1,15 @@
+DEBUG = False
+ADMIN_ENABLED = False
+
+# MEDIA_ROOT = '/path/to/media/'
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'NAME': 'blagodarie', 
+        'USER': 'postgres',
+        'PASSWORD': '',
+        'HOST': '',
+        'PORT': '',
+    },
+}

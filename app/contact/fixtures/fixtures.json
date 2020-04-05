@@ -1,0 +1,150 @@
+[
+  {
+    "model": "contact.keytype",
+    "pk": 1,
+    "fields": {
+      "title": "PhoneNumber"
+    }
+  },
+  {
+    "model": "contact.keytype",
+    "pk": 2,
+    "fields": {
+      "title": "Email"
+    }
+  },
+  {
+    "model": "contact.keytype",
+    "pk": 3,
+    "fields": {
+      "title": "GoogleAccountId"
+    }
+  },
+
+  {
+    "model": "contact.symptom",
+    "pk": 1,
+    "fields": {
+      "name": "Жажда"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 2,
+    "fields": {
+      "name": "Голод"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 3,
+    "fields": {
+      "name": "Нехватка лекарств"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 4,
+    "fields": {
+      "name": "Слабость"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 5,
+    "fields": {
+      "name": "Температура"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 6,
+    "fields": {
+      "name": "Кашель"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 7,
+    "fields": {
+      "name": "Боль в груди при дыхании"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 8,
+    "fields": {
+      "name": "Затруднённое дыхание"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 9,
+    "fields": {
+      "name": "Одышка"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 10,
+    "fields": {
+      "name": "Сухость носа, заложенность или насморк"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 11,
+    "fields": {
+      "name": "Головная боль"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 12,
+    "fields": {
+      "name": "Боль и ломота в мышцах и суставах"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 13,
+    "fields": {
+      "name": "Рвота"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 14,
+    "fields": {
+      "name": "Понос"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 15,
+    "fields": {
+      "name": "Хорошее самочувствие"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 16,
+    "fields": {
+      "name": "Сердечная боль"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 17,
+    "fields": {
+      "name": "Гипертония"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 18,
+    "fields": {
+      "name": "Гипотония"
+    }
+  }
+]
