@@ -271,19 +271,14 @@ class LogLike(models.Model):
                             zorder = 2, label=label_names[i],
                 )
                 handles.append(h)
-            ax.set_yticks(range(len(data_values)))
-            ax.set_yticklabels(label_names)
+            legend = plt.legend(handles=handles[::-1], frameon=False)
 
-            height = 5
-            if len(data_values) < 15:
-                height = 4
-            if len(data_values) < 10:
-                height = 3
-            fig.set_figheight(height)
-            fig.tight_layout()
+            fig  = legend.figure
+            fig.canvas.draw()
+            bbox  = legend.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
 
             tmpfile = BytesIO()
-            plt.savefig(tmpfile, format='png')
+            fig.savefig(tmpfile, format='png', dpi="figure", bbox_inches=bbox)
             legend = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
 
             return dict(
