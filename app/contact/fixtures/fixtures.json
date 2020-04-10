@@ -146,5 +146,19 @@
     "fields": {
       "name": "Гипотония"
     }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 19,
+    "fields": {
+      "name": "Хорошее настроение"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 20,
+    "fields": {
+      "name": "Плохое настроение"
+    }
   }
 ]

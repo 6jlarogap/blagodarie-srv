@@ -1,3 +1,14 @@
+import time, datetime
+import numpy as np
+import os
+import matplotlib as mpl
+if os.environ.get('DISPLAY','') == '':
+    mpl.use('Agg')
+from matplotlib import colors as mcolors
+
+import base64
+from io import BytesIO
+
 from django.db import models, connection
 from django.utils.translation import ugettext_lazy as _
 
@@ -63,13 +74,15 @@ class UserSymptom(BaseModelInsertTimestamp, GeoPointModel):
 
 class LogLike(models.Model):
     """
-    Нарастающим итогом за каждую дату статистика
+    Статистика
     """
 
     dt = models.DateField(_("Дата"), unique=True)
     users = models.PositiveIntegerField(_("Участники"), default=0)
     likes = models.PositiveIntegerField(_("Благодарности"), default=0)
     keys = models.PositiveIntegerField(_("Ключи"), default=0)
+
+    LAST_STAT_HOURS = 48
 
     @classmethod
     def get_stats(cls, *args, **kwargs):
@@ -111,6 +124,8 @@ class LogLike(models.Model):
                     count_users,
                 ],
             )
+            time_current = int(time.time())
+            time_1st = time_current - LogLike.LAST_STAT_HOURS * 3600
             req_str = """
                 SELECT
                     contact_symptom.name AS name,
@@ -121,11 +136,17 @@ class LogLike(models.Model):
                     contact_symptom
                 ON
                     symptom_id=contact_symptom.id
+                WHERE
+                    insert_timestamp < %(time_current)s AND
+                    insert_timestamp >= %(time_1st)s
                 GROUP BY
                     name
                 ORDER BY
                     count
-            """
+            """ % dict(
+                time_current=time_current,
+                time_1st=time_1st,
+            )
             with connection.cursor() as cursor:
                 cursor.execute(req_str)
                 symptoms = dictfetchall(cursor)
@@ -133,6 +154,142 @@ class LogLike(models.Model):
                 data['titles'].append('%s (%s)' % (symptom['name'], symptom['count'],))
                 data['counts'].append(symptom['count'])
             return data
+
+        if kwargs.get('only') == 'symptoms_hist':
+
+            # Возвращает json:
+            #   {
+            #       "stats": код картинки в base64
+            #   }
+
+            time_current = int(time.time())
+            time_1st = time_current - LogLike.LAST_STAT_HOURS * 3600
+            time_1st_hour = int(((time_1st + 3599) / 3600)) * 3600
+            bins = [time_1st]
+            if time_1st != time_1st_hour:
+                bins.append(time_1st_hour)
+            t = time_1st_hour + 3600
+            while t < time_current:
+                bins.append(t)
+                t += 3600
+            bins.append(time_current)
+
+            tick_times = []
+            for i, t in enumerate(bins):
+                hour = datetime.datetime.fromtimestamp(t).hour
+                if i == 0 or i == len(bins) - 1:
+                    tick_times.append(t)
+                elif hour % 6 == 0 and t - time_1st < 6*3600:
+                    continue
+                elif hour % 6 == 0 and time_current - t < 6*3600:
+                    continue
+                elif hour % 6 == 0:
+                    tick_times.append(t)
+            tick_labels = []
+            cur_day = 0
+            for i, t in enumerate(tick_times):
+                dt = datetime.datetime.fromtimestamp(t)
+                if dt.day != cur_day:
+                    tick_labels.append(dt.strftime('%d.%m %H:%M'))
+                    cur_day = dt.day
+                elif i == len(tick_times)-1:
+                    tick_labels.append(dt.strftime('%d.%m %H:%M'))
+                else:
+                    tick_labels.append(dt.strftime('%H:%M'))
+
+            colors = [mcolor for mcolor in mcolors.CSS4_COLORS]
+            colors.sort()
+
+            symptom_ids = dict()
+            symptom_names = dict()
+            n = 0
+            for symptom in Symptom.objects.all().order_by('pk'):
+                symptom_ids[symptom.pk] = n
+                symptom_names[n] = symptom.name
+                n += 1
+
+            time_current = int(time.time())
+            ss = [[] for _ in symptom_ids]
+            for usersymptom in UserSymptom.objects.filter(
+                    insert_timestamp__lt=time_current,
+                    insert_timestamp__gte=time_current - 48 * 3600,
+                ).select_related('symptom').order_by('symptom__pk'):
+                ss[symptom_ids[usersymptom.symptom.pk]].append(usersymptom.insert_timestamp)
+
+            if not any(ss):
+                return dict(hist='', legend='')
+
+            import matplotlib.pyplot as plt
+
+            fig, ax = plt.subplots()
+            ax.hist(ss, bins, stacked=True, edgecolor='black', color=colors[0:len(symptom_ids)])
+            fig.set_figwidth(10)
+
+            ax.set_xticks(tick_times)
+            ax.set_xticklabels(tick_labels, rotation=12, rotation_mode="anchor", ha="right")
+
+            yint = []
+            locs, labels = plt.yticks()
+            for each in locs:
+                if each == int(each):
+                    yint.append(each)
+            plt.yticks(yint)
+
+            tmpfile = BytesIO()
+            plt.savefig(tmpfile, format='png')
+            hist = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
+
+            symptoms_total = 0
+            for s in ss:
+                symptoms_total += len(ss)
+            legends = []
+            for i, s in enumerate(ss):
+                percent = round((len(s)/symptoms_total)*100, 2)
+                legends.append(dict(
+                    symptom_name=symptom_names[i],
+                    percent=percent,
+                    color=colors[i],
+                ))
+            legends.sort(key = lambda d: d['percent'])
+            
+            data_values = []
+            label_names = []
+            legend_colors = []
+            for l in legends:
+                if l['percent']:
+                    data_values.append(l['percent'])
+                    label_names.append('%s (%s%%)' % (l['symptom_name'], l['percent'], ))
+                    legend_colors.append(l['color'])
+
+            import matplotlib.pyplot as plt
+
+            handles = []
+            fig, ax = plt.subplots()
+            for i in range(len(data_values)):
+                h = ax.barh(i, data_values[i],
+                            height = 0.2, color = legend_colors[i], alpha = 0.7,
+                            zorder = 2, label=label_names[i],
+                )
+                handles.append(h)
+            ax.set_yticks(range(len(data_values)))
+            ax.set_yticklabels(label_names)
+
+            height = 5
+            if len(data_values) < 15:
+                height = 4
+            if len(data_values) < 10:
+                height = 3
+            fig.set_figheight(height)
+            fig.tight_layout()
+
+            tmpfile = BytesIO()
+            plt.savefig(tmpfile, format='png')
+            legend = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
+
+            return dict(
+                hist=hist,
+                legend=legend,
+            )
 
         return dict(
             users=User.objects.filter(is_superuser=False).count(),
