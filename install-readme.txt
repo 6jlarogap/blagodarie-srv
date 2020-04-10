@@ -8,6 +8,8 @@ install-readme.txt
         Пусть project - это:
 
             - имя проекта на github.com
+                Полагаем, что проект там хранится. Возможен другой ресурс,
+                например, bitbucket.org
             - имя каталога кода проекта
             - имя каталога медии проекта (загружаемых данных пользователями сайта):
                 /home/www-data/django/MEDIA/project
@@ -39,6 +41,7 @@ install-readme.txt
             * python3:
                   * sudo apt install python3-all-dev
                   * sudo apt install python3-virtualenv python3-pycurl virtualenv
+                  * sudo apt-get install python3-matplotlib
 
          - postgresql,
             * в т.ч. для разработчика:
@@ -134,9 +137,9 @@ install-readme.txt
         SSLProtocol all -SSLv2
         SSLCipherSuite ALL:!ADH:!EXPORT:!SSLv2:RC4+RSA:+HIGH:+MEDIUM
 
-        SSLCertificateFile /path/to/certificate.crt
-        SSLCertificateKeyFile /path/to/private.key
-        SSLCertificateChainFile /path/to/ca_bundle.crt
+        SSLCertificateFile /home/www-data/ssl-certificates/sslforfree/project.org/certificate.crt
+        SSLCertificateKeyFile /home/www-data/ssl-certificates/sslforfree/project.org/private.key
+        SSLCertificateChainFile /home/www-data/ssl-certificates/sslforfree/project.org/ca_bundle.crt
 
         Alias /media/           /home/www-data/django/MEDIA/project/
         <Directory /home/www-data/django/MEDIA/project/>
@@ -190,4 +193,3 @@ install-readme.txt
     * Очистка "мусора"
       В /etc/crontab такого типа строки:
           15 2 * * * www-data   cd /home/www-data/django/project/app && ./manage.py clearsessions
-          16 5 * * 0 www-data   rm -rf /home/www-data/django/MEDIA/project/thumbnails/*
