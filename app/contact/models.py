@@ -241,7 +241,7 @@ class LogLike(models.Model):
 
             symptoms_total = 0
             for s in ss:
-                symptoms_total += len(ss)
+                symptoms_total += len(s)
             legends = []
             for i, s in enumerate(ss):
                 percent = round((len(s)/symptoms_total)*100, 2)
@@ -256,10 +256,10 @@ class LogLike(models.Model):
             label_names = []
             legend_colors = []
             for l in legends:
-                if l['percent']:
-                    data_values.append(l['percent'])
-                    label_names.append('%s (%s%%)' % (l['symptom_name'], l['percent'], ))
-                    legend_colors.append(l['color'])
+                data_values.append(l['percent'])
+                label_names.append('%s (%s%%)' % (l['symptom_name'], l['percent'], ))
+                legend_colors.append(l['color'])
+            plt.close()
 
             import matplotlib.pyplot as plt
 
@@ -271,7 +271,9 @@ class LogLike(models.Model):
                             zorder = 2, label=label_names[i],
                 )
                 handles.append(h)
-            legend = plt.legend(handles=handles[::-1], frameon=False)
+            legend = plt.legend(handles=handles[::-1], frameon=False, fontsize='large')
+            fig.set_figwidth(30)
+            fig.set_figheight(30)
 
             fig  = legend.figure
             fig.canvas.draw()
@@ -280,6 +282,7 @@ class LogLike(models.Model):
             tmpfile = BytesIO()
             fig.savefig(tmpfile, format='png', dpi="figure", bbox_inches=bbox)
             legend = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
+            plt.close()
 
             return dict(
                 hist=hist,

@@ -160,5 +160,19 @@
     "fields": {
       "name": "Плохое настроение"
     }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 21,
+    "fields": {
+      "name": "Зубная боль"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 22,
+    "fields": {
+      "name": "Боль в ушах"
+    }
   }
 ]
