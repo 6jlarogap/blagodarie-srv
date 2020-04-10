@@ -271,7 +271,7 @@ class LogLike(models.Model):
                             zorder = 2, label=label_names[i],
                 )
                 handles.append(h)
-            legend = plt.legend(handles=handles[::-1], frameon=False, fontsize='large')
+            legend = plt.legend(handles=handles[::-1], frameon=False, fontsize='xx-large')
             fig.set_figwidth(30)
             fig.set_figheight(30)
 
