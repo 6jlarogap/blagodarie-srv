@@ -174,5 +174,12 @@
     "fields": {
       "name": "Боль в ушах"
     }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 23,
+    "fields": {
+      "name": "Головокружение"
+    }
   }
 ]
