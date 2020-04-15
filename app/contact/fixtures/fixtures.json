@@ -25,14 +25,14 @@
     "model": "contact.symptom",
     "pk": 1,
     "fields": {
-      "name": "Жажда"
+      "name": "Нехватка питьевой воды"
     }
   },
   {
     "model": "contact.symptom",
     "pk": 2,
     "fields": {
-      "name": "Голод"
+      "name": "Нехватка еды"
     }
   },
   {
@@ -116,7 +116,7 @@
     "model": "contact.symptom",
     "pk": 14,
     "fields": {
-      "name": "Понос"
+      "name": "Диарея"
     }
   },
   {
@@ -137,14 +137,14 @@
     "model": "contact.symptom",
     "pk": 17,
     "fields": {
-      "name": "Гипертония"
+      "name": "Повышенное давление"
     }
   },
   {
     "model": "contact.symptom",
     "pk": 18,
     "fields": {
-      "name": "Гипотония"
+      "name": "Пониженное давление"
     }
   },
   {
@@ -180,6 +180,20 @@
     "pk": 23,
     "fields": {
       "name": "Головокружение"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 24,
+    "fields": {
+      "name": "Аллергия"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 25,
+    "fields": {
+      "name": "Пробуждение"
     }
   }
 ]
