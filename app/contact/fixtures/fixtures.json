@@ -88,7 +88,7 @@
     "model": "contact.symptom",
     "pk": 10,
     "fields": {
-      "name": "Сухость носа, заложенность или насморк"
+      "name": "Сухость носа"
     }
   },
   {
@@ -194,6 +194,41 @@
     "pk": 25,
     "fields": {
       "name": "Пробуждение"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 26,
+    "fields": {
+      "name": "Заложенность носа"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 27,
+    "fields": {
+      "name": "Насморк"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 28,
+    "fields": {
+      "name": "Озноб"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 29,
+    "fields": {
+      "name": "Плохое самочувствие"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 30,
+    "fields": {
+      "name": "Чувство тревоги"
     }
   }
 ]
