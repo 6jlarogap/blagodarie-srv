@@ -163,7 +163,9 @@ class LogLike(models.Model):
             #   }
 
             time_current = int(time.time())
+            time_current = int(((time_current + 3599) / 3600)) * 3600
             time_1st = time_current - LogLike.LAST_STAT_HOURS * 3600
+            time_1st = int(time_1st / 3600) * 3600
             time_1st_hour = int(((time_1st + 3599) / 3600)) * 3600
             bins = [time_1st]
             if time_1st != time_1st_hour:
