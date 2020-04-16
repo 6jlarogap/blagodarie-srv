@@ -162,9 +162,9 @@ class LogLike(models.Model):
             #       "stats": код картинки в base64
             #   }
 
-            time_current = int(time.time())
-            time_current = int(((time_current + 3599) / 3600)) * 3600
-            time_1st = time_current - LogLike.LAST_STAT_HOURS * 3600
+            time_current_ = int(time.time())
+            time_current = int(((time_current_ + 3599) / 3600)) * 3600
+            time_1st = time_current_ - LogLike.LAST_STAT_HOURS * 3600
             time_1st = int(time_1st / 3600) * 3600
             time_1st_hour = int(((time_1st + 3599) / 3600)) * 3600
             bins = [time_1st]
@@ -197,7 +197,7 @@ class LogLike(models.Model):
                 elif i == len(tick_times)-1:
                     tick_labels.append(dt.strftime('%d.%m %H:%M'))
                 else:
-                    tick_labels.append(dt.strftime('%H:%M'))
+                    tick_labels.append(dt.strftime('%H:'))
 
             colors = [mcolor for mcolor in mcolors.CSS4_COLORS]
             colors.sort()
@@ -214,7 +214,7 @@ class LogLike(models.Model):
             ss = [[] for _ in symptom_ids]
             for usersymptom in UserSymptom.objects.filter(
                     insert_timestamp__lt=time_current,
-                    insert_timestamp__gte=time_current - 48 * 3600,
+                    insert_timestamp__gte=time_1st,
                 ).select_related('symptom').order_by('symptom__pk'):
                 ss[symptom_ids[usersymptom.symptom.pk]].append(usersymptom.insert_timestamp)
 
@@ -228,7 +228,7 @@ class LogLike(models.Model):
             fig.set_figwidth(10)
 
             ax.set_xticks(tick_times)
-            ax.set_xticklabels(tick_labels, rotation=12, rotation_mode="anchor", ha="right")
+            ax.set_xticklabels(tick_labels, rotation=15, rotation_mode="anchor", ha="right")
 
             yint = []
             locs, labels = plt.yticks()
