@@ -82,17 +82,33 @@ class LogLike(models.Model):
     likes = models.PositiveIntegerField(_("Благодарности"), default=0)
     keys = models.PositiveIntegerField(_("Ключи"), default=0)
 
+    # За сколько часов берем статистику
+    #
     LAST_STAT_HOURS = 48
+
+    # Промежуток между соседними тиками на гистограмме
+    #
+    HIST_HOURS_INERVAL = 2
 
     @classmethod
     def get_stats(cls, *args, **kwargs):
 
+        time_current = int(time.time())
+        time_last = int(((time_current + 3599) / 3600)) * 3600
+        time_1st = time_current - LogLike.LAST_STAT_HOURS * 3600
+        time_1st = int(time_1st / 3600) * 3600
+
         if kwargs.get('only') == 'users':
             # Вернуть число пользователей
+            # и симтомов
             #
             return dict(
                 users=User.objects.filter(
                     is_superuser=False,
+                ).count(),
+                symptoms=UserSymptom.objects.filter(
+                    insert_timestamp__lt=time_last,
+                    insert_timestamp__gte=time_1st,
                 ).count(),
             )
 
@@ -124,8 +140,6 @@ class LogLike(models.Model):
                     count_users,
                 ],
             )
-            time_current = int(time.time())
-            time_1st = time_current - LogLike.LAST_STAT_HOURS * 3600
             req_str = """
                 SELECT
                     contact_symptom.name AS name,
@@ -137,14 +151,14 @@ class LogLike(models.Model):
                 ON
                     symptom_id=contact_symptom.id
                 WHERE
-                    insert_timestamp < %(time_current)s AND
+                    insert_timestamp < %(time_last)s AND
                     insert_timestamp >= %(time_1st)s
                 GROUP BY
                     name
                 ORDER BY
                     count
             """ % dict(
-                time_current=time_current,
+                time_last=time_last,
                 time_1st=time_1st,
             )
             with connection.cursor() as cursor:
@@ -162,30 +176,24 @@ class LogLike(models.Model):
             #       "stats": код картинки в base64
             #   }
 
-            time_current_ = int(time.time())
-            time_current = int(((time_current_ + 3599) / 3600)) * 3600
-            time_1st = time_current_ - LogLike.LAST_STAT_HOURS * 3600
-            time_1st = int(time_1st / 3600) * 3600
-            time_1st_hour = int(((time_1st + 3599) / 3600)) * 3600
-            bins = [time_1st]
-            if time_1st != time_1st_hour:
-                bins.append(time_1st_hour)
-            t = time_1st_hour + 3600
-            while t < time_current:
+            bins = []
+            t = time_1st
+            while t <= time_last:
                 bins.append(t)
                 t += 3600
-            bins.append(time_current)
 
             tick_times = []
             for i, t in enumerate(bins):
                 hour = datetime.datetime.fromtimestamp(t).hour
                 if i == 0 or i == len(bins) - 1:
                     tick_times.append(t)
-                elif hour % 2 == 0 and t - time_1st < 2 * 3600:
+                elif hour % LogLike.HIST_HOURS_INERVAL == 0 and \
+                     t - time_1st < LogLike.HIST_HOURS_INERVAL * 3600:
                     continue
-                elif hour % 2 == 0 and time_current - t < 2 * 3600:
+                elif hour % LogLike.HIST_HOURS_INERVAL == 0 and \
+                     time_last - t < LogLike.HIST_HOURS_INERVAL * 3600:
                     continue
-                elif hour % 2 == 0:
+                elif hour % LogLike.HIST_HOURS_INERVAL == 0:
                     tick_times.append(t)
             tick_labels = []
             cur_day = 0
@@ -210,16 +218,41 @@ class LogLike(models.Model):
                 symptom_names[n] = symptom.name
                 n += 1
 
-            time_current = int(time.time())
             ss = [[] for _ in symptom_ids]
+            points = []
+            # Если точек нет, то пусть будут координаты Москвы
+            # Что не показывался в этом случае Атлантический океан
+            #
+            lat_avg = 55.7522200
+            lng_avg = 37.6155600
+            lat_sum = 0
+            lng_sum = 0
             for usersymptom in UserSymptom.objects.filter(
-                    insert_timestamp__lt=time_current,
+                    insert_timestamp__lt=time_last,
                     insert_timestamp__gte=time_1st,
                 ).select_related('symptom').order_by('symptom__pk'):
                 ss[symptom_ids[usersymptom.symptom.pk]].append(usersymptom.insert_timestamp)
+                if usersymptom.latitude is not None and usersymptom.longitude is not None:
+                    points.append([
+                        usersymptom.latitude,
+                        usersymptom.longitude,
+                        usersymptom.symptom.name,
+                    ])
+                    lat_sum += usersymptom.latitude
+                    lng_sum += usersymptom.longitude
 
             if not any(ss):
-                return dict(hist='', legend='')
+                return dict(
+                    hist='',
+                    legend='',
+                    points=[],
+                    lat_avg=lat_avg,
+                    lng_avg=lng_avg
+                )
+            if (points):
+                lat_avg = lat_sum / len(points)
+                lng_avg = lng_sum / len(points)
+                print(len(points))
 
             import matplotlib.pyplot as plt
 
@@ -289,6 +322,9 @@ class LogLike(models.Model):
             return dict(
                 hist=hist,
                 legend=legend,
+                points=points,
+                lat_avg=lat_avg,
+                lng_avg=lng_avg
             )
 
         return dict(
