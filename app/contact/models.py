@@ -179,11 +179,11 @@ class LogLike(models.Model):
                 hour = datetime.datetime.fromtimestamp(t).hour
                 if i == 0 or i == len(bins) - 1:
                     tick_times.append(t)
-                elif hour % 6 == 0 and t - time_1st < 6*3600:
+                elif hour % 3 == 0 and t - time_1st < 3 * 3600:
                     continue
-                elif hour % 6 == 0 and time_current - t < 6*3600:
+                elif hour % 3 == 0 and time_current - t < 3 * 3600:
                     continue
-                elif hour % 6 == 0:
+                elif hour % 3 == 0:
                     tick_times.append(t)
             tick_labels = []
             cur_day = 0
