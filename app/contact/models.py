@@ -256,7 +256,6 @@ class LogLike(models.Model):
             if (points):
                 lat_avg = lat_sum / len(points)
                 lng_avg = lng_sum / len(points)
-                print(len(points))
 
             import matplotlib.pyplot as plt
 
