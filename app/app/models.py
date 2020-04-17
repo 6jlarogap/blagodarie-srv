@@ -8,7 +8,7 @@ class BaseModelInsertTimestamp(models.Model):
     class Meta:
         abstract = True
 
-    insert_timestamp = models.BigIntegerField(_("Когда добавлено"), default=0)
+    insert_timestamp = models.BigIntegerField(_("Когда добавлено"), default=0, db_index=True)
 
     def fill_insert_timestamp(self):
         if not self.insert_timestamp:

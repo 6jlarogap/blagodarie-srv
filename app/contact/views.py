@@ -1017,6 +1017,7 @@ class ApiAddUserSymptom(APIView):
             "user_id": 123,
             "user_symptoms": [
                 {
+                "user_symptom_id":1, // локальный идентификатор
                 "symptom_id": 1,
                 "timestamp": 1585912637,
                 "latitude": 53.893009,
@@ -1028,7 +1029,7 @@ class ApiAddUserSymptom(APIView):
         {
             "user_symptoms": [
                 {
-                "symptom_id": 1,
+                "user_symptom_id":1,
                 "symptom_server_id": 1,
                 }
             ]
@@ -1053,6 +1054,7 @@ class ApiAddUserSymptom(APIView):
                     symptom_id = user_symptom['symptom_id']
                 except KeyError:
                     raise ServiceException(MSG_NO_PARM % n_key)
+                user_symptom_id = user_symptom.get('user_symptom_id')
                 try:
                     symptom = Symptom.objects.get(pk=symptom_id)
                 except Symptom.DoesNotExist:
@@ -1068,7 +1070,7 @@ class ApiAddUserSymptom(APIView):
                     longitude=longitude,
                 )
                 data['user_symptoms'].append({
-                    'user_symptom_id': symptom_id,
+                    'user_symptom_id': user_symptom_id,
                     'user_symptom_server_id': usersymptom.pk,
                 })
                 n_key += 1

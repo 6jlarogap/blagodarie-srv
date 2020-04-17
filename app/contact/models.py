@@ -227,19 +227,23 @@ class LogLike(models.Model):
             lng_avg = 37.6155600
             lat_sum = 0
             lng_sum = 0
+            got_symptom = dict()
             for usersymptom in UserSymptom.objects.filter(
                     insert_timestamp__lt=time_last,
                     insert_timestamp__gte=time_1st,
-                ).select_related('symptom').order_by('symptom__pk'):
+                ).select_related('symptom').order_by('-insert_timestamp'):
                 ss[symptom_ids[usersymptom.symptom.pk]].append(usersymptom.insert_timestamp)
                 if usersymptom.latitude is not None and usersymptom.longitude is not None:
-                    points.append([
-                        usersymptom.latitude,
-                        usersymptom.longitude,
-                        usersymptom.symptom.name,
-                    ])
-                    lat_sum += usersymptom.latitude
-                    lng_sum += usersymptom.longitude
+                    got_symptom_key = '%s-%s' % (usersymptom.user.pk, usersymptom.symptom.pk, )
+                    if not got_symptom.get(got_symptom_key):
+                        got_symptom[got_symptom_key] = 1
+                        points.append([
+                            usersymptom.latitude,
+                            usersymptom.longitude,
+                            usersymptom.symptom.name,
+                        ])
+                        lat_sum += usersymptom.latitude
+                        lng_sum += usersymptom.longitude
 
             if not any(ss):
                 return dict(
