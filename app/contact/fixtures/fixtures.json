@@ -230,5 +230,40 @@
     "fields": {
       "name": "Чувство тревоги"
     }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 31,
+    "fields": {
+      "name": "Похолодало"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 32,
+    "fields": {
+      "name": "Потеплело"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 33,
+    "fields": {
+      "name": "Дождь"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 34,
+    "fields": {
+      "name": "Ветер"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 35,
+    "fields": {
+      "name": "Жара"
+    }
   }
 ]
