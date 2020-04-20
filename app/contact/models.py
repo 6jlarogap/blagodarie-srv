@@ -121,7 +121,7 @@ class LogLike(models.Model):
             #           ...
             #           "симптомN (<число симптомовN>)"
             #       ],
-            #       "counts": [
+            #       "counts_last": [
             #           <число участников с симптомами>,
             #           "<число симптомов1>",
             #           ...
@@ -136,10 +136,36 @@ class LogLike(models.Model):
                 titles=[
                     'Пользователи (%s)' % count_users,
                 ],
-                counts=[
+                counts_last=[
                     count_users,
                 ],
+                counts_all=[
+                    count_users,
+                ]
             )
+            req_str = """
+                SELECT
+                    contact_symptom.name AS name,
+                    count(contact_usersymptom.id) as count
+                FROM
+                    contact_usersymptom
+                LEFT JOIN
+                    contact_symptom
+                ON
+                    symptom_id=contact_symptom.id
+                GROUP BY
+                    name
+                ORDER BY
+                    count
+            """
+            with connection.cursor() as cursor:
+                cursor.execute(req_str)
+                symptoms = dictfetchall(cursor)
+            s_dict = dict()
+            for symptom in symptoms:
+                s_dict[symptom['name']] = dict(
+                    count_all=symptom['count'],
+                )
             req_str = """
                 SELECT
                     contact_symptom.name AS name,
@@ -165,8 +191,34 @@ class LogLike(models.Model):
                 cursor.execute(req_str)
                 symptoms = dictfetchall(cursor)
             for symptom in symptoms:
-                data['titles'].append('%s (%s)' % (symptom['name'], symptom['count'],))
-                data['counts'].append(symptom['count'])
+                s_dict[symptom['name']]['count_last'] = symptom['count']
+            for name in s_dict:
+                if not s_dict[name].get('count_last'):
+                    s_dict[name]['count_last'] = 0
+            s_list = []
+            for name in s_dict:
+                if s_dict[name]['count_last']:
+                    title = '%s (%s, %s)' % (
+                        name,
+                        s_dict[name]['count_all'],
+                        s_dict[name]['count_last'],
+                    )
+                else:
+                    title = '%s (%s)' % (
+                        name,
+                        s_dict[name]['count_all'],
+                    )
+                s_list.append(dict(
+                    title=title,
+                    count_all=s_dict[name]['count_all'],
+                    count_last=s_dict[name]['count_last'],
+                ))
+            s_list.sort(key = lambda d: d['count_all'])
+
+            for s in s_list:
+                data['titles'].append(s['title'])
+                data['counts_all'].append(s['count_all'])
+                data['counts_last'].append(s['count_last'])
             return data
 
         if kwargs.get('only') == 'symptoms_hist':

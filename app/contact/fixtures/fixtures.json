@@ -20,6 +20,13 @@
       "title": "GoogleAccountId"
     }
   },
+  {
+    "model": "contact.keytype",
+    "pk": 4,
+    "fields": {
+      "title": "BlagodarieKey"
+    }
+  },
 
   {
     "model": "contact.symptom",
