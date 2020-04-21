@@ -312,7 +312,14 @@
     "model": "contact.symptom",
     "pk": 44,
     "fields": {
-      "name": "Сытость"
+      "name": "Прием пищи"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 45,
+    "fields": {
+      "name": "Запор"
     }
   }
 ]
