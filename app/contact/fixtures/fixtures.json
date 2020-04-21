@@ -321,5 +321,19 @@
     "fields": {
       "name": "Запор"
     }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 46,
+    "fields": {
+      "name": "Чихание"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 47,
+    "fields": {
+      "name": "Першит в горле"
+    }
   }
 ]

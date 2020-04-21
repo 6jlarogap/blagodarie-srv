@@ -156,6 +156,8 @@ CORS_ORIGIN_ALLOW_ALL = True
 #
 CORS_ALLOW_CREDENTIALS = True
 
+APK_URL = 'https://github.com/6jlarogap/blagodarie/raw/master/app/latest/blagodarie-latest.apk'
+ONLINE_TIMEOUT = 20
 
 # Давать ли доступ к Django Admin,
 # по умолчанию - не давать

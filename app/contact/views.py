@@ -1,4 +1,5 @@
 import os, datetime, string, random, time
+import urllib.request, urllib.error
 
 from django.shortcuts import render
 from django.db import IntegrityError, transaction, connection
@@ -962,7 +963,7 @@ class ApiGetStats(APIView):
 
 api_get_stats = ApiGetStats.as_view()
 
-class ApiGetLatestVersion(APIView):
+class ApiGetLatestVersionOld(APIView):
 
     def get(self, request):
         """
@@ -1003,7 +1004,48 @@ class ApiGetLatestVersion(APIView):
             ),
         ))
 
-api_latest_version = ApiGetLatestVersion.as_view()
+api_latest_version_old = ApiGetLatestVersionOld.as_view()
+
+class ApiGetLatestVersionNew(APIView):
+
+    def get(self, request):
+        """
+        Получить последнюю версию apk клиента
+        """
+        try:
+            try:
+                req = urllib.request.Request(settings.APK_URL)
+                response = urllib.request.urlopen(req, None, timeout=settings.ONLINE_TIMEOUT)
+                raw_data = response.read()
+            except urllib.error.URLError:
+                raise ServiceException('Ошибка получения apk последней версии')
+            version_code = version_name = version_file = None
+            apk_path = os.path.join(settings.MEDIA_ROOT, settings.APK_MEDIA_PATH)
+            msg_not_valid = 'Считанный файл - не верный apk'
+            try:
+                ap = apk.APK(raw_data, raw = True)
+            except:
+                raise ServiceException(msg_not_valid)
+            if not ap.is_valid_apk():
+                raise ServiceException(msg_not_valid)
+            version_code = ap.get_androidversion_code()
+            version_name = ap.get_androidversion_name()
+            try:
+                version_code = int(version_code)
+            except (ValueError, TypeError,):
+                pass
+            status_code = 200
+            data = dict(
+                url=settings.APK_URL,
+                version_name=version_name,
+                version_code=version_code,
+            )
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_latest_version_new = ApiGetLatestVersionNew.as_view()
 
 class ApiAddUserSymptom(APIView):
 

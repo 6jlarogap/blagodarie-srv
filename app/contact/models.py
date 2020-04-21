@@ -116,31 +116,42 @@ class LogLike(models.Model):
             # Возвращает json:
             #   {
             #       "titles": [
-            #           "Участники с симптомами (<число участников с симптомами>)",
-            #           "симптом1 (<число симптомов1>)",
+            #           "Пользователи (<общее число>, <число с симптомами за LAST_STAT_HOURS>)",
+            #           "симптом1 (<всего>, <за LAST_STAT_HOURS>)",
             #           ...
-            #           "симптомN (<число симптомовN>)"
+            #           "симптомN (<всего>, <за LAST_STAT_HOURS>)"
+            #       ],
+            #       "counts_all": [
+            #           <всего пользователей>,
+            #           "<всего симптомов1>",
+            #           ...
+            #           "<всего симптомовN>"
             #       ],
             #       "counts_last": [
-            #           <число участников с симптомами>,
-            #           "<число симптомов1>",
+            #           <пользователей за LAST_STAT_HOURS>,
+            #           "<за LAST_STAT_HOURS симптомов1>",
             #           ...
-            #           "<число симптомовN>"
-            #       ]
+            #           "<за LAST_STAT_HOURS симптомовN>"
+            #       ],
             #   }
             #
-            count_users = User.objects.filter(
+            count_users_all = User.objects.filter(
                     is_superuser=False,
                 ).count()
+            count_users_last = UserSymptom.objects.filter(
+                    insert_timestamp__lt=time_last,
+                    insert_timestamp__gte=time_1st,
+                ).distinct('user').count()
+
             data = dict(
                 titles=[
-                    'Пользователи (%s)' % count_users,
+                    'Пользователи (%s, %s)' % (count_users_all, count_users_last)
                 ],
                 counts_last=[
-                    count_users,
+                    count_users_last,
                 ],
                 counts_all=[
-                    count_users,
+                    count_users_all,
                 ]
             )
             req_str = """
