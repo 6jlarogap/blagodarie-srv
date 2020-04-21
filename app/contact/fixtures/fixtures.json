@@ -289,20 +289,6 @@
   },
   {
     "model": "contact.symptom",
-    "pk": 38,
-    "fields": {
-      "name": "Тепло"
-    }
-  },
-  {
-    "model": "contact.symptom",
-    "pk": 39,
-    "fields": {
-      "name": "Холодно"
-    }
-  },
-  {
-    "model": "contact.symptom",
     "pk": 40,
     "fields": {
       "name": "Влажно"
@@ -320,13 +306,6 @@
     "pk": 42,
     "fields": {
       "name": "Свежо"
-    }
-  },
-  {
-    "model": "contact.symptom",
-    "pk": 43,
-    "fields": {
-      "name": "Голод"
     }
   },
   {
