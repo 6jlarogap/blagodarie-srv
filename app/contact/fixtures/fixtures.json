@@ -342,5 +342,12 @@
     "fields": {
       "name": "Пасмурно"
     }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 49,
+    "fields": {
+      "name": "Учащённое сердцебиение"
+    }
   }
 ]
