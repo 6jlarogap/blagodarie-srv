@@ -305,7 +305,7 @@
     "model": "contact.symptom",
     "pk": 42,
     "fields": {
-      "name": "Свежо"
+      "name": "Прохладно"
     }
   },
   {
@@ -334,6 +334,13 @@
     "pk": 47,
     "fields": {
       "name": "Першит в горле"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 48,
+    "fields": {
+      "name": "Пасмурно"
     }
   }
 ]
