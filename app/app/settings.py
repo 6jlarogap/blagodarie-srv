@@ -78,9 +78,10 @@ INSTALLED_APPS = [
     'debug_toolbar',
 
     'rest_framework',
-    # 'rest_framework.authtoken',
+    'rest_framework.authtoken',
 
     'contact',
+    'users',
 ]
 
 MIDDLEWARE = [
@@ -129,7 +130,7 @@ REST_FRAMEWORK = {
 
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework.authentication.BasicAuthentication',
-        # 'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
     ),
     'DEFAULT_RENDERER_CLASSES': (
         'rest_framework.renderers.JSONRenderer',

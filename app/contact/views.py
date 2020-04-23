@@ -1,8 +1,8 @@
-import os, datetime, string, random, time
+import os, datetime, time
 import urllib.request, urllib.error
 
 from django.shortcuts import render
-from django.db import IntegrityError, transaction, connection
+from django.db import transaction, connection
 from django.db.models import F, Sum
 from django.db.models.query_utils import Q
 
@@ -17,30 +17,11 @@ from rest_framework.response import Response
 from app.utils import ServiceException
 
 from contact.models import KeyType, Key, UserKey, LikeKey, Like, LogLike, Symptom, UserSymptom
+from users.models import CreateUserMixin
 
 from axmlparserpy import apk
 
 MSG_NO_PARM = 'Не задан или не верен какой-то из параметров в связке номер %s (начиная с 0)'
-MSG_FAILED_CREATE_USER = 'Не удалось создать пользователя с уникальным именем. Попробуйте еще раз.'
-
-class CreateUserMixin(object):
-
-    def create_user(self):
-        user = None
-        chars = string.ascii_lowercase + string.digits
-        for c in '0Ol1':
-            chars = chars.replace(c, '')
-        random.seed()
-        for i in range(100):
-            dt_str = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-            username = "%s-%s" % (dt_str, ''.join(random.choice(chars) for x in range(5)),)
-            with transaction.atomic():
-                try:
-                    user = User.objects.create(username=username)
-                    break
-                except IntegrityError:
-                    continue
-        return user
 
 class ApiAddUserView(CreateUserMixin, APIView):
     
@@ -61,7 +42,7 @@ class ApiAddUserView(CreateUserMixin, APIView):
             data['server_id'] = user.pk
             status_code = status.HTTP_200_OK
         else:
-            data['message'] = MSG_FAILED_CREATE_USER
+            data['message'] = CreateUserMixin.MSG_FAILED_CREATE_USER
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
@@ -305,7 +286,7 @@ class ApiGetOrCreateUser(CreateUserMixin, APIView):
             if key_object.owner is None:
                 user = self.create_user()
                 if not user:
-                    raise ServiceException(MSG_FAILED_CREATE_USER)
+                    raise ServiceException(CreateUserMixin.MSG_FAILED_CREATE_USER)
                 key_object.owner = user
                 key_object.save(update_fields=('owner',))
             data = dict(

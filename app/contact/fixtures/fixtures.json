@@ -242,7 +242,7 @@
     "model": "contact.symptom",
     "pk": 31,
     "fields": {
-      "name": "Похолодало"
+      "name": "Холодно"
     }
   },
   {
