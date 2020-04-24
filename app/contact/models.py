@@ -9,6 +9,8 @@ from matplotlib import colors as mcolors
 import base64
 from io import BytesIO
 
+from app.utils import get_moon_day
+
 from django.db import models, connection
 from django.utils.translation import ugettext_lazy as _
 
@@ -71,6 +73,14 @@ class UserSymptom(BaseModelInsertTimestamp, GeoPointModel):
 
     user = models.ForeignKey('auth.User', verbose_name=_("Пользователь"), on_delete=models.CASCADE)
     symptom = models.ForeignKey(Symptom, verbose_name=_("Симптом"), on_delete=models.CASCADE)
+    # От 0 до 27
+    moon_day = models.IntegerField(_("День лунного календаря"), default=0)
+
+    def save(self, *args, **kwargs):
+        self.fill_insert_timestamp()
+        if not self.moon_day:
+            self.moon_day = get_moon_day(self.insert_timestamp)
+        return super(UserSymptom, self).save(*args, **kwargs)
 
 class LogLike(models.Model):
     """

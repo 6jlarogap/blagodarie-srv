@@ -1,3 +1,5 @@
+import datetime, time
+from skyfield.api import load
 
 class ServiceException(Exception):
     """
@@ -26,3 +28,25 @@ def dictfetchall(cursor):
         dict(list(zip(columns, row)))
         for row in cursor.fetchall()
     ]
+
+def get_moon_day(utc_time):
+    """
+    Из unix timestamp получить номер дня по лунному календарю, 0 - 27
+    """
+
+    ts = load.timescale()
+    d = datetime.datetime.utcfromtimestamp(utc_time)
+    t = ts.utc(d.year, d.month, d.day, d.hour, d.minute, d.second)
+
+    eph = load('de421.bsp')
+    sun, moon, earth = eph['sun'], eph['moon'], eph['earth']
+
+    e = earth.at(t)
+    _, slon, _ = e.observe(sun).apparent().ecliptic_latlon()
+    _, mlon, _ = e.observe(moon).apparent().ecliptic_latlon()
+    phase = (mlon.degrees - slon.degrees) % 360.0
+    if phase >= 360:
+        phase = phase % 360.
+    elif phase < 0:
+        phase = 0
+    return int(phase * 28 / 360)

@@ -161,7 +161,7 @@ install-readme.txt
         # и этого момента ждет graceful-timeout секунд. Если wsgi- application зависло
         # в течение deadlock-timeout, перезагружать его
         #
-        WSGIDaemonProcess project.org display-name=%{GROUP} threads=16 maximum-requests=10000 graceful-timeout=7200 deadlock-timeout=60
+        WSGIDaemonProcess project.org display-name=%{GROUP} threads=16 maximum-requests=10000 graceful-timeout=7200 deadlock-timeout=60 home=/home/www-data/django/project/app
 
         WSGIProcessGroup  project.org
         WSGIScriptAlias / /home/www-data/django/project/app/app/wsgi.py

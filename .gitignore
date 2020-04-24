@@ -6,3 +6,8 @@ __pycache__/
 ENV
 app/media
 app/static
+
+app/*.bsp
+app/*.data
+app/*.dat
+app/*.preds
