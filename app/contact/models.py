@@ -250,7 +250,29 @@ class LogLike(models.Model):
                 data['counts_last'].append(s['count_last'])
             return data
 
-        if kwargs.get('only') in ( 'symptoms_hist', 'symptoms_moon',):
+        if kwargs.get('only') == 'symptoms_hist':
+
+            # Возвращает json:
+            # Картинка с гистограммой симптомов за два дня
+            # Картинка с легендой для гистограммы
+            # Точки для карты ощущений за два дня
+            # Координаты центра для карты
+            # График симптомов с начала текущего лунного месяца
+
+            # Можно было бы отдавать разные картинки в разных
+            # методах, но оно то одну картинку не заполнит, то другую
+
+            hist = ''
+            legend = ''
+            points = []
+
+            # Если точек нет, то пусть будут координаты Москвы
+            # Что не показывался в этом случае Атлантический океан
+            #
+            lat_avg = 55.7522200
+            lng_avg = 37.6155600
+
+            moon_days_fig = ''
 
             colors = [mcolor for mcolor in mcolors.CSS4_COLORS]
             colors.sort()
@@ -262,23 +284,6 @@ class LogLike(models.Model):
                 symptom_ids[symptom.pk] = n
                 symptom_names[n] = symptom.name
                 n += 1
-
-        if kwargs.get('only') == 'symptoms_hist':
-
-            # Возвращает json:
-            #   {
-            #       "stats": код картинки в base64
-            #   }
-
-            hist = ''
-            legend = ''
-            points = []
-
-            # Если точек нет, то пусть будут координаты Москвы
-            # Что не показывался в этом случае Атлантический океан
-            #
-            lat_avg = 55.7522200
-            lng_avg = 37.6155600
 
             bins = []
             t = time_1st
@@ -398,15 +403,6 @@ class LogLike(models.Model):
                 legend = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
                 plt.close()
 
-            return dict(
-                hist=hist,
-                legend=legend,
-                points=points,
-                lat_avg=lat_avg,
-                lng_avg=lng_avg,
-            )
-        if kwargs.get('only') == 'symptoms_moon':
-
             # Лунная диагамма
             #
             # Выбрать последние лунные дни, начиная с нулевого до текущего,
@@ -434,7 +430,6 @@ class LogLike(models.Model):
             #   Не раньше этого времени будет выборка сумм симптомов
             #   по лунным дням.
 
-            moon_days_fig = ''
             current_moon_day = get_moon_day(time_current)
             moon_days = [[0 for j in range(28)] for i in range(len(symptom_ids))]
 
@@ -564,5 +559,11 @@ class LogLike(models.Model):
             plt.close()
 
             return dict(
+                hist=hist,
+                legend=legend,
+                points=points,
+                lat_avg=lat_avg,
+                lng_avg=lng_avg,
                 moon_days_fig=moon_days_fig,
             )
+

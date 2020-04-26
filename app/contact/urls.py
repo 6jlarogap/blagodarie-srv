@@ -33,7 +33,6 @@ urlpatterns = [
     url(r'^api/getstats/users/?$', views.api_get_stats, {'only': 'users'}),
     url(r'^api/getstats/symptoms?$', views.api_get_stats, {'only': 'symptoms'}),
     url(r'^api/getstats/symptoms/hist?$', views.api_get_stats, {'only': 'symptoms_hist'}),
-    url(r'^api/getstats/symptoms/moon?$', views.api_get_stats, {'only': 'symptoms_moon'}),
 
     url(r'^api/getlatestversion/?$', views.api_latest_version_old),
     url(r'^api/getlatestversion_new/?$', views.api_latest_version_new),
