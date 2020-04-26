@@ -5,6 +5,7 @@ import matplotlib as mpl
 if os.environ.get('DISPLAY','') == '':
     mpl.use('Agg')
 from matplotlib import colors as mcolors
+import matplotlib.pyplot as plt
 
 import base64
 from io import BytesIO
@@ -102,6 +103,13 @@ class LogLike(models.Model):
 
     @classmethod
     def get_stats(cls, *args, **kwargs):
+
+        if not kwargs.get('only'):
+            return dict(
+                users=User.objects.filter(is_superuser=False).count(),
+                keys=Key.objects.all().count(),
+                likes=Like.objects.all().count(),
+            )
 
         time_current = int(time.time())
         time_last = int(((time_current + 3599) / 3600)) * 3600
@@ -242,12 +250,35 @@ class LogLike(models.Model):
                 data['counts_last'].append(s['count_last'])
             return data
 
+        if kwargs.get('only') in ( 'symptoms_hist', 'symptoms_moon',):
+
+            colors = [mcolor for mcolor in mcolors.CSS4_COLORS]
+            colors.sort()
+
+            symptom_ids = dict()
+            symptom_names = dict()
+            n = 0
+            for symptom in Symptom.objects.all().order_by('pk'):
+                symptom_ids[symptom.pk] = n
+                symptom_names[n] = symptom.name
+                n += 1
+
         if kwargs.get('only') == 'symptoms_hist':
 
             # Возвращает json:
             #   {
             #       "stats": код картинки в base64
             #   }
+
+            hist = ''
+            legend = ''
+            points = []
+
+            # Если точек нет, то пусть будут координаты Москвы
+            # Что не показывался в этом случае Атлантический океан
+            #
+            lat_avg = 55.7522200
+            lng_avg = 37.6155600
 
             bins = []
             t = time_1st
@@ -280,24 +311,8 @@ class LogLike(models.Model):
                 else:
                     tick_labels.append(dt.strftime('%H:'))
 
-            colors = [mcolor for mcolor in mcolors.CSS4_COLORS]
-            colors.sort()
-
-            symptom_ids = dict()
-            symptom_names = dict()
-            n = 0
-            for symptom in Symptom.objects.all().order_by('pk'):
-                symptom_ids[symptom.pk] = n
-                symptom_names[n] = symptom.name
-                n += 1
-
-            ss = [[] for _ in symptom_ids]
+            ss = [[] for i in symptom_ids]
             points = []
-            # Если точек нет, то пусть будут координаты Москвы
-            # Что не показывался в этом случае Атлантический океан
-            #
-            lat_avg = 55.7522200
-            lng_avg = 37.6155600
             lat_sum = 0
             lng_sum = 0
             got_symptom = dict()
@@ -318,93 +333,236 @@ class LogLike(models.Model):
                         lat_sum += usersymptom.latitude
                         lng_sum += usersymptom.longitude
 
-            if not any(ss):
-                return dict(
-                    hist='',
-                    legend='',
-                    points=[],
-                    lat_avg=lat_avg,
-                    lng_avg=lng_avg
-                )
-            if (points):
-                lat_avg = lat_sum / len(points)
-                lng_avg = lng_sum / len(points)
+            if(any(ss)):
+                if (points):
+                    lat_avg = lat_sum / len(points)
+                    lng_avg = lng_sum / len(points)
+                fig, ax = plt.subplots()
+                ax.hist(ss, bins, stacked=True, edgecolor='black', color=colors[0:len(symptom_ids)])
+                fig.set_figwidth(10)
 
-            import matplotlib.pyplot as plt
+                ax.set_xticks(tick_times)
+                ax.set_xticklabels(tick_labels, rotation=15, rotation_mode="anchor", ha="right")
 
-            fig, ax = plt.subplots()
-            ax.hist(ss, bins, stacked=True, edgecolor='black', color=colors[0:len(symptom_ids)])
-            fig.set_figwidth(10)
+                yint = []
+                locs, labels = plt.yticks()
+                for each in locs:
+                    if each == int(each):
+                        yint.append(each)
+                plt.yticks(yint)
 
-            ax.set_xticks(tick_times)
-            ax.set_xticklabels(tick_labels, rotation=15, rotation_mode="anchor", ha="right")
+                tmpfile = BytesIO()
+                plt.savefig(tmpfile, format='png')
+                hist = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
+                plt.close()
 
-            yint = []
-            locs, labels = plt.yticks()
-            for each in locs:
-                if each == int(each):
-                    yint.append(each)
-            plt.yticks(yint)
+                symptoms_total = 0
+                for s in ss:
+                    symptoms_total += len(s)
+                legends = []
+                for i, s in enumerate(ss):
+                    percent = round((len(s)/symptoms_total)*100, 2)
+                    legends.append(dict(
+                        symptom_name=symptom_names[i],
+                        percent=percent,
+                        color=colors[i],
+                    ))
+                legends.sort(key = lambda d: d['percent'])
+                
+                data_values = []
+                label_names = []
+                legend_colors = []
+                for l in legends:
+                    data_values.append(l['percent'])
+                    label_names.append('%s (%s%%)' % (l['symptom_name'], l['percent'], ))
+                    legend_colors.append(l['color'])
 
-            tmpfile = BytesIO()
-            plt.savefig(tmpfile, format='png')
-            hist = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
+                handles = []
+                fig, ax = plt.subplots()
+                for i in range(len(data_values)):
+                    h = ax.barh(i, data_values[i],
+                                height = 0.2, color = legend_colors[i], alpha = 0.7,
+                                zorder = 2, label=label_names[i],
+                    )
+                    handles.append(h)
+                legend = plt.legend(handles=handles[::-1], frameon=False, fontsize='xx-large')
+                fig.set_figwidth(30)
+                fig.set_figheight(30)
 
-            symptoms_total = 0
-            for s in ss:
-                symptoms_total += len(s)
-            legends = []
-            for i, s in enumerate(ss):
-                percent = round((len(s)/symptoms_total)*100, 2)
-                legends.append(dict(
-                    symptom_name=symptom_names[i],
-                    percent=percent,
-                    color=colors[i],
-                ))
-            legends.sort(key = lambda d: d['percent'])
-            
-            data_values = []
-            label_names = []
-            legend_colors = []
-            for l in legends:
-                data_values.append(l['percent'])
-                label_names.append('%s (%s%%)' % (l['symptom_name'], l['percent'], ))
-                legend_colors.append(l['color'])
-            plt.close()
+                fig  = legend.figure
+                fig.canvas.draw()
+                bbox  = legend.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
 
-            import matplotlib.pyplot as plt
-
-            handles = []
-            fig, ax = plt.subplots()
-            for i in range(len(data_values)):
-                h = ax.barh(i, data_values[i],
-                            height = 0.2, color = legend_colors[i], alpha = 0.7,
-                            zorder = 2, label=label_names[i],
-                )
-                handles.append(h)
-            legend = plt.legend(handles=handles[::-1], frameon=False, fontsize='xx-large')
-            fig.set_figwidth(30)
-            fig.set_figheight(30)
-
-            fig  = legend.figure
-            fig.canvas.draw()
-            bbox  = legend.get_window_extent().transformed(fig.dpi_scale_trans.inverted())
-
-            tmpfile = BytesIO()
-            fig.savefig(tmpfile, format='png', dpi="figure", bbox_inches=bbox)
-            legend = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
-            plt.close()
+                tmpfile = BytesIO()
+                fig.savefig(tmpfile, format='png', dpi="figure", bbox_inches=bbox)
+                legend = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
+                plt.close()
 
             return dict(
                 hist=hist,
                 legend=legend,
                 points=points,
                 lat_avg=lat_avg,
-                lng_avg=lng_avg
+                lng_avg=lng_avg,
+            )
+        if kwargs.get('only') == 'symptoms_moon':
+
+            # Лунная диагамма
+            #
+            # Выбрать последние лунные дни, начиная с нулевого до текущего,
+            # занести только оттуда суммы по симптомам
+            #
+            # Все бы было просто, если симптомы приходили каждый лунный день,
+            # тогда делалась бы выборка после последнего insert_timestamp
+            # за последним за 27 день и до текущего. А вдруг в последний из 
+            # 27-ых дней не окажется симптомов? Тогда будем считать, начиная
+            # с предыдущего 27-го лунного дня. То и оно!
+            # (На текущий день как 27-й можно было бы сделать поправку
+            # в том же sql запросе.)
+            #
+            # Посему все чуть сложнее:
+            #
+            # - находим текущий лунный день, current_moon_day по текущему
+            #   времени time_current.
+            # - По дням 0..current_moon_day ищем максимальный insert_timestamp
+            #   не раньше time_current минус 40 календарных дней.
+            #   Один лунный месяц всегда будет меньше. Находим такой максимум
+            #   в первом лунном дне (moon_day), в котором окажутся симптомы.
+            # - по этому moon_day ищем минимальный insert_timestamp за время
+            #   не раньше его максимального insert_timestamp минус 2 недели:
+            #   один лунный день всегда меньше 2 недель, а 28 - всегда больше.
+            #   Не раньше этого времени будет выборка сумм симптомов
+            #   по лунным дням.
+
+            moon_days_fig = ''
+            current_moon_day = get_moon_day(time_current)
+            moon_days = [[0 for j in range(28)] for i in range(len(symptom_ids))]
+
+            req_str = """
+                SELECT
+                    Max(insert_timestamp) as max_time,
+                    moon_day
+                FROM
+                    contact_usersymptom
+                WHERE
+                    moon_day <= %(current_moon_day)s AND
+                    insert_timestamp > %(time_current)s - 40 * 86400
+                GROUP BY
+                    moon_day
+                ORDER BY
+                    max_time
+                LIMIT 1
+            """ % dict(
+                current_moon_day=current_moon_day,
+                time_current=time_current,
+            )
+            with connection.cursor() as cursor:
+                cursor.execute(req_str)
+                m = dictfetchall(cursor)
+
+            if m:
+                req_str = """
+                    SELECT
+                        Min(insert_timestamp) as min_time
+                    FROM
+                        contact_usersymptom
+                    WHERE
+                        moon_day = %(min_moon_day)s AND
+                        insert_timestamp >= %(min_time)s - 14 * 86400
+                """ % dict(
+                    min_moon_day=m[0]['moon_day'],
+                    min_time=m[0]['max_time'],
+                )
+                with connection.cursor() as cursor:
+                    cursor.execute(req_str)
+                    m = dictfetchall(cursor)
+
+                # fool-proof
+                if m:
+                    req_str = """
+                        SELECT
+                            moon_day,
+                            symptom_id,
+                            Count(symptom_id) as count
+                        FROM
+                            contact_usersymptom
+                        WHERE
+                            moon_day <= %(current_moon_day)s AND
+                            insert_timestamp >= %(min_time)s
+                        GROUP BY
+                            moon_day,
+                            symptom_id
+                        ORDER BY
+                            moon_day,
+                            symptom_id
+                    """ % dict(
+                        current_moon_day=current_moon_day,
+                        min_time=m[0]['min_time'],
+                    )
+                    with connection.cursor() as cursor:
+                        cursor.execute(req_str)
+                        m = dictfetchall(cursor)
+                    for r in m:
+                        moon_days [symptom_ids[ r['symptom_id']] ] [r['moon_day']] = r['count']
+
+            moon_phases = (
+
+                # new moon (black circle)
+
+                '\u25CF', '\u25CF', '\u25CF', '\u25CF', '\u25CF', '\u25CF', '\u25CF',
+
+                # 1-st quarter (circle with left half black)
+
+                '\u25D0', '\u25D0', '\u25D0', '\u25D0', '\u25D0', '\u25D0', '\u25D0',
+
+                # full moon (white circle)
+
+                '\u25CB', '\u25CB', '\u25CB', '\u25CB', '\u25CB', '\u25CB', '\u25CB',
+
+                # 3-rd quarter (circle with right half black)
+
+                '\u25D1', '\u25D1', '\u25D1', '\u25D1', '\u25D1', '\u25D1', '\u25D1',
             )
 
-        return dict(
-            users=User.objects.filter(is_superuser=False).count(),
-            keys=Key.objects.all().count(),
-            likes=Like.objects.all().count(),
-        )
+            ind = range(28)
+            days = [str(i+1) for i in range(28)]
+            days[current_moon_day] = '*\n%s' % datetime.datetime.fromtimestamp(time_current).strftime('%d.%m')
+            bar_width = 0.5
+
+            fig, ax1 = plt.subplots()
+            fig.set_figwidth(10)
+
+            bottom = [ 0 for j in range(len(moon_days[0]))]
+            for i, s in enumerate(moon_days):
+                ax1.bar(
+                    ind,
+                    moon_days[i],
+                    width=bar_width,
+                    bottom=bottom,
+                    color=colors[i],
+                    tick_label=days
+                )
+                for j, b in enumerate(bottom):
+                    bottom[j] += moon_days[i][j]
+            got_any = False
+            for i, s in enumerate(moon_days):
+                for j, y in enumerate(s):
+                    if y:
+                        got_any = True
+                        break
+                if got_any:
+                    break
+            if not got_any:
+                plt.yticks(range(0, 51, 10))
+
+            ax2 = ax1.twiny()
+            ax2.bar(ind, [0] * 28, width=bar_width, tick_label=moon_phases)
+
+            tmpfile = BytesIO()
+            plt.savefig(tmpfile, format='png')
+            moon_days_fig = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
+            plt.close()
+
+            return dict(
+                moon_days_fig=moon_days_fig,
+            )
