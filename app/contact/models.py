@@ -406,32 +406,63 @@ class LogLike(models.Model):
             # Лунная диагамма
             #
             # Выбрать последние лунные дни, начиная с нулевого до текущего,
-            # занести только оттуда суммы по симптомам
+            # занести оттуда количества по симптомам. По остальным лунным
+            # дням выбрать усредненные суммы по симптомам за весь период наблюдений.
             #
-            # Все бы было просто, если симптомы приходили каждый лунный день,
+            # Все бы было просто, если б симптомы приходили каждый лунный день,
             # тогда делалась бы выборка после последнего insert_timestamp
-            # за последним за 27 день и до текущего. А вдруг в последний из 
-            # 27-ых дней не окажется симптомов? Тогда будем считать, начиная
-            # с предыдущего 27-го лунного дня. То и оно!
-            # (На текущий день как 27-й можно было бы сделать поправку
-            # в том же sql запросе.)
+            # за 27 день и до текущего. А вдруг в последний из 
+            # 27-ых дней не окажется симптомов? Тогда будем ошибочно считать,\
+            # начиная с 27-го лунного дня предыдущего цикла. То и оно!
             #
-            # Посему все чуть сложнее:
+            # К сожалению, не удалось найти в апи, как вычислить
+            # utc время начала текущего лунного цикла.
             #
-            # - находим текущий лунный день, current_moon_day по текущему
+            # Посему все сложнее:
+            #
+            # - Находим текущий лунный день, current_moon_day по текущему
             #   времени time_current.
-            # - По дням 0..current_moon_day ищем максимальный insert_timestamp
-            #   не раньше time_current минус 40 календарных дней.
-            #   Один лунный месяц всегда будет меньше. Находим такой максимум
-            #   в первом лунном дне (moon_day), в котором окажутся симптомы.
-            # - по этому moon_day ищем минимальный insert_timestamp за время
-            #   не раньше его максимального insert_timestamp минус 2 недели:
-            #   один лунный день всегда меньше 2 недель, а 28 - всегда больше.
-            #   Не раньше этого времени будет выборка сумм симптомов
-            #   по лунным дням.
-
+            # - Надо найти минимальный min_insert_timestamp из лунных дней
+            #   0..current_moon_day.
+            #       * Сначала ищем минимальный из максимальных
+            #         по лунным дням 0..current_moon_day.
+            #         Он будет первым из этих максимальных (limit 1 в поиске).
+            #         Найденный moon_day обзовем min_moon_day.
+            #       * По этому min_moon_day ищем min_insert_timestamp за время
+            #         не раньше его max_insert_timestamp минус 2 дня:
+            #         один лунный день всегда меньше 2 календарных дней.
+            #
+            #   Однако! В текущем лунном цикле может не оказаться
+            #           симптомов. Очень даже возможно: начался новый лунный цикл
+            #           (current_moon_day == 0), а симптомы еще не поступали
+            #           (min_moon_day == 27)
+            #
+            #       * Если min_moon_day > current_moon_day, то
+            #         в текущем цикле не было симптомов
+            #         Самый частый случай: current_moon_day == 0 && min_moon_day == 27
+            #         (перешли в следующий цикл, а он пока без симптомов)
+            #       * Иначе (delta_moon = current_moon_day - min_moon_day) >= 0.
+            #         Считаем delta_time = time_current - min_insert_timestamp.
+            #         При delta_moon == 0 достаточно с запасом delta_time = 5 суток,
+            #         чтобы выяснить, что min_insert_timestamp -- в предыдущем цикле.
+            #         При delta_moon == 1 с запасом delta_time = 6. И т.д
+            #         Получается формула:
+            #           если delta_time > (delta_moon + 5) * 86400,
+            #               то в текущем лунном цикле не было симптомов.
+            #
+            # - Если в текущем цикле не было симптомов, то находим усредненные суммы
+            #   по всем дням по всей таблице, исключая current_moon_day:
+            #   по нему всегда показываем количества симптомов (а не суммы),
+            #   даже если симптомов в current_moon_day не было.
+            #   
+            # - Если в текущем цикле были симптомы, то не раньше
+            #   min_insert_timestamp будет выборка количеств симптомов
+            #   по лунным дням 0..current_moon_day. Усредненные суммы
+            #   ищем по лунным дням current_moon_day+1 .. 28 по всей таблице
+            
             current_moon_day = get_moon_day(time_current)
             moon_days = [[0 for j in range(28)] for i in range(len(symptom_ids))]
+            min_insert_timestamp = None
 
             req_str = """
                 SELECT
@@ -441,7 +472,7 @@ class LogLike(models.Model):
                     contact_usersymptom
                 WHERE
                     moon_day <= %(current_moon_day)s AND
-                    insert_timestamp > %(time_current)s - 40 * 86400
+                    insert_timestamp > %(time_current)s - 40 * 86040
                 GROUP BY
                     moon_day
                 ORDER BY
@@ -455,50 +486,61 @@ class LogLike(models.Model):
                 cursor.execute(req_str)
                 m = dictfetchall(cursor)
 
-            if m:
+            if m and (m[0]['moon_day'] <= current_moon_day):
+                min_moon_day = m[0]['moon_day']
                 req_str = """
                     SELECT
-                        Min(insert_timestamp) as min_time
+                        Min(insert_timestamp) as min_insert_timestamp
                     FROM
                         contact_usersymptom
                     WHERE
                         moon_day = %(min_moon_day)s AND
-                        insert_timestamp >= %(min_time)s - 14 * 86400
+                        insert_timestamp >= %(max_time)s - 2 * 86400
                 """ % dict(
-                    min_moon_day=m[0]['moon_day'],
-                    min_time=m[0]['max_time'],
+                    min_moon_day=min_moon_day,
+                    max_time=m[0]['max_time'],
                 )
                 with connection.cursor() as cursor:
                     cursor.execute(req_str)
                     m = dictfetchall(cursor)
 
                 # fool-proof
-                if m:
-                    req_str = """
-                        SELECT
-                            moon_day,
-                            symptom_id,
-                            Count(symptom_id) as count
-                        FROM
-                            contact_usersymptom
-                        WHERE
-                            moon_day <= %(current_moon_day)s AND
-                            insert_timestamp >= %(min_time)s
-                        GROUP BY
-                            moon_day,
-                            symptom_id
-                        ORDER BY
-                            moon_day,
-                            symptom_id
-                    """ % dict(
-                        current_moon_day=current_moon_day,
-                        min_time=m[0]['min_time'],
-                    )
-                    with connection.cursor() as cursor:
-                        cursor.execute(req_str)
-                        m = dictfetchall(cursor)
-                    for r in m:
-                        moon_days [symptom_ids[ r['symptom_id']] ] [r['moon_day']] = r['count']
+                if not m :
+                    min_insert_timestamp = None
+                else:
+                    min_insert_timestamp = m[0]['min_insert_timestamp']
+                    delta_moon = current_moon_day - min_moon_day
+                    delta_time = time_current - min_insert_timestamp
+                    if delta_time > (delta_moon + 5) * 86400:
+                        min_insert_timestamp = None
+                    else:
+                        req_str = """
+                            SELECT
+                                moon_day,
+                                symptom_id,
+                                Count(symptom_id) as count
+                            FROM
+                                contact_usersymptom
+                            WHERE
+                                moon_day <= %(current_moon_day)s AND
+                                insert_timestamp >= %(min_insert_timestamp)s
+                            GROUP BY
+                                moon_day,
+                                symptom_id
+                            ORDER BY
+                                moon_day,
+                                symptom_id
+                        """ % dict(
+                            current_moon_day=current_moon_day,
+                            min_insert_timestamp=min_insert_timestamp,
+                        )
+                        with connection.cursor() as cursor:
+                            cursor.execute(req_str)
+                            m = dictfetchall(cursor)
+                        for r in m:
+                            moon_days [symptom_ids[ r['symptom_id']] ] [r['moon_day']] = r['count']
+
+            #TODO Усредненные суммы, в зависимости от min_insert_timestamp
 
             moon_phases = (
 
