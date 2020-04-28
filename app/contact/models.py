@@ -386,7 +386,7 @@ class LogLike(models.Model):
                 fig, ax = plt.subplots()
                 for i in range(len(data_values)):
                     h = ax.barh(i, data_values[i],
-                                height = 0.2, color = legend_colors[i], alpha = 0.7,
+                                height = 0.2, color = legend_colors[i], alpha = 1.0,
                                 zorder = 2, label=label_names[i],
                     )
                     handles.append(h)
@@ -450,19 +450,15 @@ class LogLike(models.Model):
             #           если delta_time > (delta_moon + 5) * 86400,
             #               то в текущем лунном цикле не было симптомов.
             #
-            # - Если в текущем цикле не было симптомов, то находим усредненные суммы
-            #   по всем дням по всей таблице, исключая current_moon_day:
-            #   по нему всегда показываем количества симптомов (а не суммы),
-            #   даже если симптомов в current_moon_day не было.
-            #   
             # - Если в текущем цикле были симптомы, то не раньше
             #   min_insert_timestamp будет выборка количеств симптомов
-            #   по лунным дням 0..current_moon_day. Усредненные суммы
-            #   ищем по лунным дням current_moon_day+1 .. 28 по всей таблице
+            #   по лунным дням <= current_moon_day.
+            #
+            # - Усредненные суммы ищем по лунным дням > current_moon_day по всей таблице
             
             current_moon_day = get_moon_day(time_current)
-            moon_days = [[0 for j in range(28)] for i in range(len(symptom_ids))]
-            min_insert_timestamp = None
+            moon_fact = [[0 for j in range(28)] for i in range(len(symptom_ids))]
+            moon_cast = [[0 for j in range(28)] for i in range(len(symptom_ids))]
 
             req_str = """
                 SELECT
@@ -505,15 +501,11 @@ class LogLike(models.Model):
                     m = dictfetchall(cursor)
 
                 # fool-proof
-                if not m :
-                    min_insert_timestamp = None
-                else:
+                if m :
                     min_insert_timestamp = m[0]['min_insert_timestamp']
                     delta_moon = current_moon_day - min_moon_day
                     delta_time = time_current - min_insert_timestamp
-                    if delta_time > (delta_moon + 5) * 86400:
-                        min_insert_timestamp = None
-                    else:
+                    if delta_time < (delta_moon + 5) * 86400:
                         req_str = """
                             SELECT
                                 moon_day,
@@ -538,9 +530,31 @@ class LogLike(models.Model):
                             cursor.execute(req_str)
                             m = dictfetchall(cursor)
                         for r in m:
-                            moon_days [symptom_ids[ r['symptom_id']] ] [r['moon_day']] = r['count']
+                            moon_fact [symptom_ids[ r['symptom_id']] ] [r['moon_day']] = r['count']
 
-            #TODO Усредненные суммы, в зависимости от min_insert_timestamp
+            req_str = """
+                SELECT
+                    symptom_id,
+                    moon_day,
+                    Count(symptom_id) as count
+                FROM
+                    contact_usersymptom
+                WHERE
+                    moon_day > %(current_moon_day)s
+                GROUP BY
+                    moon_day,
+                    symptom_id
+                ORDER BY
+                    symptom_id,
+                    moon_day
+            """ % dict(
+                current_moon_day=current_moon_day,
+            )
+            with connection.cursor() as cursor:
+                cursor.execute(req_str)
+                m = dictfetchall(cursor)
+            for r in m:
+                moon_cast [symptom_ids[ r['symptom_id']] ] [r['moon_day']] = r['count']
 
             moon_phases = (
 
@@ -569,20 +583,36 @@ class LogLike(models.Model):
             fig, ax1 = plt.subplots()
             fig.set_figwidth(10)
 
-            bottom = [ 0 for j in range(len(moon_days[0]))]
-            for i, s in enumerate(moon_days):
+            bottom = [ 0 for j in range(len(moon_fact[0]))]
+            for i, s in enumerate(moon_fact):
                 ax1.bar(
                     ind,
-                    moon_days[i],
+                    moon_fact[i],
                     width=bar_width,
                     bottom=bottom,
                     color=colors[i],
                     tick_label=days
                 )
                 for j, b in enumerate(bottom):
-                    bottom[j] += moon_days[i][j]
+                    bottom[j] += moon_fact[i][j]
+
+            ax2 = ax1.twiny()
+            bottom = [ 0 for j in range(len(moon_cast[0]))]
+            for i, s in enumerate(moon_cast):
+                ax2.bar(
+                    ind,
+                    moon_cast[i],
+                    width=bar_width,
+                    bottom=bottom,
+                    color=colors[i],
+                    tick_label=moon_phases,
+                    alpha=0.3,
+                )
+                for j, b in enumerate(bottom):
+                    bottom[j] += moon_cast[i][j]
+
             got_any = False
-            for i, s in enumerate(moon_days):
+            for i, s in enumerate(moon_cast):
                 for j, y in enumerate(s):
                     if y:
                         got_any = True
@@ -590,10 +620,15 @@ class LogLike(models.Model):
                 if got_any:
                     break
             if not got_any:
+                for i, s in enumerate(moon_fact):
+                    for j, y in enumerate(s):
+                        if y:
+                            got_any = True
+                            break
+                    if got_any:
+                        break
+            if not got_any:
                 plt.yticks(range(0, 51, 10))
-
-            ax2 = ax1.twiny()
-            ax2.bar(ind, [0] * 28, width=bar_width, tick_label=moon_phases)
 
             tmpfile = BytesIO()
             plt.savefig(tmpfile, format='png')

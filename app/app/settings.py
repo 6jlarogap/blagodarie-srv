@@ -160,6 +160,14 @@ CORS_ALLOW_CREDENTIALS = True
 APK_URL = 'https://github.com/6jlarogap/blagodarie/raw/master/app/latest/blagodarie-latest.apk'
 ONLINE_TIMEOUT = 20
 
+# Время начала наблюдений (приема симптомов ощущений)
+#
+TIME_START_GET_SYMPTOMS = 1586469972
+
+# Средняя длительность лунного месяца
+#
+MOON_MONTH_LONG = 2551442.82048     # 29.5305882 * 86400
+
 # Давать ли доступ к Django Admin,
 # по умолчанию - не давать
 #
