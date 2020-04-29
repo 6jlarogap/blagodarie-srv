@@ -160,9 +160,11 @@ CORS_ALLOW_CREDENTIALS = True
 APK_URL = 'https://github.com/6jlarogap/blagodarie/raw/master/app/latest/blagodarie-latest.apk'
 ONLINE_TIMEOUT = 20
 
-# Время начала наблюдений (приема симптомов ощущений)
+# Время начала наблюдений (приема симптомов ощущений):
+# начало первого лунного дня, в котором появились
+# симптомы
 #
-TIME_START_GET_SYMPTOMS = 1586469972
+TIME_START_GET_SYMPTOMS = 1586459348
 
 # Средняя длительность лунного месяца
 #

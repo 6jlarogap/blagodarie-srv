@@ -49,4 +49,4 @@ def get_moon_day(utc_time):
         phase = phase % 360.
     elif phase < 0:
         phase = 0
-    return int(phase * 28 / 360)
+    return int(phase * 30 / 360)

@@ -12,6 +12,7 @@ from io import BytesIO
 
 from app.utils import get_moon_day
 
+from django.conf import settings
 from django.db import models, connection
 from django.utils.translation import ugettext_lazy as _
 
@@ -74,7 +75,7 @@ class UserSymptom(BaseModelInsertTimestamp, GeoPointModel):
 
     user = models.ForeignKey('auth.User', verbose_name=_("Пользователь"), on_delete=models.CASCADE)
     symptom = models.ForeignKey(Symptom, verbose_name=_("Симптом"), on_delete=models.CASCADE)
-    # От 0 до 27
+    # От 0 до 29
     moon_day = models.IntegerField(_("День лунного календаря"), default=0)
 
     def save(self, *args, **kwargs):
@@ -425,9 +426,9 @@ class LogLike(models.Model):
             #
             # Все бы было просто, если б симптомы приходили каждый лунный день,
             # тогда делалась бы выборка после последнего insert_timestamp
-            # за 27 день и до текущего. А вдруг в последний из 
-            # 27-ых дней не окажется симптомов? Тогда будем ошибочно считать,\
-            # начиная с 27-го лунного дня предыдущего цикла. То и оно!
+            # за 29 день и до текущего. А вдруг в последний из 
+            # 29-ых дней не окажется симптомов? Тогда будем ошибочно считать,\
+            # начиная с 29-го лунного дня предыдущего цикла. То и оно!
             #
             # К сожалению, не удалось найти в апи, как вычислить
             # utc время начала текущего лунного цикла.
@@ -449,11 +450,11 @@ class LogLike(models.Model):
             #   Однако! В текущем лунном цикле может не оказаться
             #           симптомов. Очень даже возможно: начался новый лунный цикл
             #           (current_moon_day == 0), а симптомы еще не поступали
-            #           (min_moon_day == 27)
+            #           (min_moon_day == 29)
             #
             #       * Если min_moon_day > current_moon_day, то
             #         в текущем цикле не было симптомов
-            #         Самый частый случай: current_moon_day == 0 && min_moon_day == 27
+            #         Самый частый случай: current_moon_day == 0 && min_moon_day == 29
             #         (перешли в следующий цикл, а он пока без симптомов)
             #       * Иначе (delta_moon = current_moon_day - min_moon_day) >= 0.
             #         Считаем delta_time = time_current - min_insert_timestamp.
@@ -471,8 +472,8 @@ class LogLike(models.Model):
             # - Усредненные суммы ищем по лунным дням > current_moon_day по всей таблице
             
             current_moon_day = get_moon_day(time_current)
-            moon_fact = [[0 for j in range(28)] for i in range(len(symptom_ids))]
-            moon_cast = [[0 for j in range(28)] for i in range(len(symptom_ids))]
+            moon_fact = [[0 for j in range(30)] for i in range(len(symptom_ids))]
+            moon_cast = [[0 for j in range(30)] for i in range(len(symptom_ids))]
 
             req_str = """
                 SELECT
@@ -546,29 +547,34 @@ class LogLike(models.Model):
                         for r in m:
                             moon_fact [symptom_ids[ r['symptom_id']] ] [r['moon_day']] = r['count']
 
-            req_str = """
-                SELECT
-                    symptom_id,
-                    moon_day,
-                    Count(symptom_id) as count
-                FROM
-                    contact_usersymptom
-                WHERE
-                    moon_day > %(current_moon_day)s
-                GROUP BY
-                    moon_day,
-                    symptom_id
-                ORDER BY
-                    symptom_id,
-                    moon_day
-            """ % dict(
-                current_moon_day=current_moon_day,
-            )
-            with connection.cursor() as cursor:
-                cursor.execute(req_str)
-                m = dictfetchall(cursor)
-            for r in m:
-                moon_cast [symptom_ids[ r['symptom_id']] ] [r['moon_day']] = r['count']
+            if current_moon_day < 29:
+                req_str = """
+                    SELECT
+                        symptom_id,
+                        moon_day,
+                        Count(symptom_id) as count
+                    FROM
+                        contact_usersymptom
+                    WHERE
+                        moon_day > %(current_moon_day)s
+                    GROUP BY
+                        moon_day,
+                        symptom_id
+                    ORDER BY
+                        symptom_id,
+                        moon_day
+                """ % dict(
+                    current_moon_day=current_moon_day,
+                )
+                divider = int((time_current + 21600 - settings.TIME_START_GET_SYMPTOMS)/settings.MOON_MONTH_LONG)
+                if divider == 0:
+                    divider = 1
+                with connection.cursor() as cursor:
+                    cursor.execute(req_str)
+                    m = dictfetchall(cursor)
+                for r in m:
+                    moon_cast [symptom_ids[ r['symptom_id']] ] [r['moon_day']] = \
+                        int(round(r['count'] / divider, 0))
 
             moon_phases = (
 
@@ -578,7 +584,7 @@ class LogLike(models.Model):
 
                 # 1-st quarter (circle with left half black)
 
-                '\u25D0', '\u25D0', '\u25D0', '\u25D0', '\u25D0', '\u25D0', '\u25D0',
+                '\u25D0', '\u25D0', '\u25D0', '\u25D0', '\u25D0', '\u25D0', '\u25D0', '\u25D0',
 
                 # full moon (white circle)
 
@@ -586,11 +592,11 @@ class LogLike(models.Model):
 
                 # 3-rd quarter (circle with right half black)
 
-                '\u25D1', '\u25D1', '\u25D1', '\u25D1', '\u25D1', '\u25D1', '\u25D1',
+                '\u25D1', '\u25D1', '\u25D1', '\u25D1', '\u25D1', '\u25D1', '\u25D1', '\u25D1',
             )
 
-            ind = range(28)
-            days = [str(i+1) for i in range(28)]
+            ind = range(30)
+            days = [str(i+1) for i in range(30)]
             days[current_moon_day] = '*\n%s' % datetime.datetime.fromtimestamp(time_current).strftime('%d.%m')
             bar_width = 0.5
 
@@ -620,10 +626,16 @@ class LogLike(models.Model):
                     bottom=bottom,
                     color=colors[i],
                     tick_label=moon_phases,
-                    alpha=0.3,
+                    alpha=0.35,
                 )
                 for j, b in enumerate(bottom):
                     bottom[j] += moon_cast[i][j]
+
+            ax1.tick_params(bottom=False, top=True, left=True, right=True)
+            ax1.tick_params(labelbottom=True, labeltop=False, labelleft=True, labelright=True)
+            if current_moon_day < 29:
+                ax1.set_ylabel('Прогноз')
+                ax1.yaxis.set_label_coords(0.99, 0.5)
 
             got_any = False
             for i, s in enumerate(moon_cast):
