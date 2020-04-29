@@ -23,7 +23,11 @@ class Oauth(BaseModelInsertUpdateTimestamp):
     PROVIDER_DETAILS = {
         PROVIDER_GOOGLE: {
             'url': "https://oauth2.googleapis.com/tokeninfo?id_token=%(token)s",
+
+            # Для отладки разработчиком
+            #
             # 'url': "http://sev12.bsuir.by:8000/api/auth/dummy?token=%(token)s",
+
             'uid': 'sub',
             'first_name': "given_name",
             'last_name': "family_name",

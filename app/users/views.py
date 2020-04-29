@@ -13,7 +13,7 @@ from contact.models import Key, KeyType
 
 class ApiAuthSignUp(CreateUserMixin, APIView):
     """
-    Регистрация пользователя
+    Регистрация (signup) или вход пользователя в систему
 
     Исходные данные
     {
@@ -21,6 +21,11 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
         "provider":"google",
         "id":"234234234234234231413",
         "token":"ajjjkelr8k4234msfsdf898fs6fs3sd8"
+        },
+        "userId": 123
+                //  только для signin. Будет проверка,
+                //  что существующий в системе пользователь
+                //  имеет тот же Id
     }
     Возвращает JSON:
     {
@@ -30,8 +35,15 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
     """
     
     @transaction.atomic
-    def post(self, request):
+    def post(self, request, signin=False):
+        signup = not signin
         try:
+            if signin:
+                user_id = request.data.get('userId')
+                if not user_id:
+                    status_code = 400
+                    raise ServiceException('Не задан userId')
+
             oauth_dict = request.data.get("oauth")
             if not oauth_dict:
                 raise ServiceException("Не задан oauth")
@@ -46,6 +58,7 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
                 )
             except Oauth.DoesNotExist:
                 oauth = None
+
             user = None
             if oauth:
                 user = oauth.user
@@ -59,27 +72,42 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
                             value=oauth_result['uid'],
                             owner__isnull=False,
                         ).owner
+                        # Если существует пользователь с таким ключом,
+                        # то что при signup регистрируем, а при
+                        # signin проверяем userId
                     except Key.DoesNotExist:
                         pass
-                if not user:
-                    user = self.create_user(
-                        last_name=oauth_result.get('last_name', ''),
-                        first_name=oauth_result.get('first_name', ''),
-                        email=oauth_result.get('email', ''),
-                    )
+                if signup:
                     if not user:
-                        raise ServiceException(CreateUserMixin.MSG_FAILED_CREATE_USER)
-                if key_type_title and not key_owner:
-                    try:
-                        keytype = KeyType.objects.get(title=key_type_title)
-                        Key.objects.create(
-                            owner=user,
-                            type=keytype,
-                            value=oauth_result['uid'],
+                        user = self.create_user(
+                            last_name=oauth_result.get('last_name', ''),
+                            first_name=oauth_result.get('first_name', ''),
+                            email=oauth_result.get('email', ''),
                         )
-                    except KeyType.DoesNotExist:
-                        pass
+                        if not user:
+                            raise ServiceException(CreateUserMixin.MSG_FAILED_CREATE_USER)
+                    if key_type_title and not key_owner:
+                        try:
+                            keytype = KeyType.objects.get(title=key_type_title)
+                            Key.objects.create(
+                                owner=user,
+                                type=keytype,
+                                value=oauth_result['uid'],
+                            )
+                        except KeyType.DoesNotExist:
+                            pass
+            if signin:
+                if user:
+                    if str(user.pk) != str(user_id):
+                        status_code = 401
+                        raise ServiceException('Не совпадает userId')
+                else:
+                    status_code = 401
+                    raise ServiceException('Не найден userId c таким Id от %s' % oauth_dict['provider'])
+
             if not oauth:
+                # Даже при signin, если user есть в ключах,
+                # возможно его нет в oauth
                 oauth = Oauth.objects.create(
                     provider=oauth_dict['provider'],
                     uid=oauth_result['uid'],
@@ -108,7 +136,7 @@ class ApiAuthDummy(APIView):
             "iss": "https://accounts.google.com",
             "azp": "dummy",
             "aud": "dummy",
-            "sub": "115029697887025630610",
+            "sub": "115029697887025630615",
             "email": "someone@gmail.com",
             "email_verified": "true",
             "name": "dummy",
