@@ -134,31 +134,39 @@ class LogLike(models.Model):
             # Возвращает json:
             #   {
             #       "titles": [
-            #           "Пользователи (<общее число>, <число с симптомами за LAST_STAT_HOURS>)",
-            #           "симптом1 (<всего>, <за LAST_STAT_HOURS>)",
+            #           "Пользователи (<число с симптомами за LAST_STAT_HOURS>, <число с симптомами за 24ч>)",
+            #           "симптом1 (<за LAST_STAT_HOURS>, <за 24 HOURS>)",
             #           ...
-            #           "симптомN (<всего>, <за LAST_STAT_HOURS>)"
+            #           "симптомN (<за LAST_STAT_HOURS>, <за 24 HOURS>)",
             #       ],
             #       "counts_all": [
-            #           <всего пользователей>,
-            #           "<всего симптомов1>",
-            #           ...
-            #           "<всего симптомовN>"
-            #       ],
-            #       "counts_last": [
-            #           <пользователей за LAST_STAT_HOURS>,
+            #           <число пользователей с симптомами за LAST_STAT_HOURS>,
             #           "<за LAST_STAT_HOURS симптомов1>",
             #           ...
             #           "<за LAST_STAT_HOURS симптомовN>"
             #       ],
+            #       "counts_last": [
+            #           <пользователей за LAST_STAT_HOURS>,
+            #           "<за 24 HOURS симптомов1>",
+            #           ...
+            #           "<за 24 HOURS симптомовN>"
+            #       ],
             #   }
             #
-            count_users_all = User.objects.filter(
-                    is_superuser=False,
-                ).count()
-            count_users_last = UserSymptom.objects.filter(
+
+            time_24h = time_current - 24 * 3600
+            time_24h = int(time_24h / 3600) * 3600
+
+            # Ниже count ... _all - это таки за последние 48 часов
+            #
+            count_users_all = UserSymptom.objects.filter(
                     insert_timestamp__lt=time_last,
                     insert_timestamp__gte=time_1st,
+                ).distinct('user').count()
+
+            count_users_last = UserSymptom.objects.filter(
+                    insert_timestamp__lt=time_last,
+                    insert_timestamp__gte=time_24h,
                 ).distinct('user').count()
 
             data = dict(
@@ -182,11 +190,17 @@ class LogLike(models.Model):
                     contact_symptom
                 ON
                     symptom_id=contact_symptom.id
+                WHERE
+                    insert_timestamp < %(time_last)s AND
+                    insert_timestamp >= %(time_1st)s
                 GROUP BY
                     name
                 ORDER BY
                     count
-            """
+            """ % dict(
+                time_last=time_last,
+                time_1st=time_1st,
+            )
             with connection.cursor() as cursor:
                 cursor.execute(req_str)
                 symptoms = dictfetchall(cursor)
@@ -207,14 +221,14 @@ class LogLike(models.Model):
                     symptom_id=contact_symptom.id
                 WHERE
                     insert_timestamp < %(time_last)s AND
-                    insert_timestamp >= %(time_1st)s
+                    insert_timestamp >= %(time_24h)s
                 GROUP BY
                     name
                 ORDER BY
                     count
             """ % dict(
                 time_last=time_last,
-                time_1st=time_1st,
+                time_24h=time_24h,
             )
             with connection.cursor() as cursor:
                 cursor.execute(req_str)
