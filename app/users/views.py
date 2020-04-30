@@ -1,3 +1,5 @@
+import urllib.request, urllib.error
+
 from django.shortcuts import render
 from django.db import IntegrityError, transaction, connection
 from django.contrib.auth import login, logout, authenticate
@@ -152,3 +154,26 @@ class ApiAuthDummy(APIView):
         return Response(data=data, status=200)
 
 api_auth_dummy = ApiAuthDummy.as_view()
+
+class ApiDownloadApkDetails(APIView):
+    """
+    Получить с github каталога данные о последней версии мобильного приложения
+
+    UNDER CONSTRUCTION
+    """
+
+    def post(self, request):
+        try:
+            signature = request.headers.get('X-Hub-Signature')
+            if not signature:
+                raise ServiceException('No Signature')
+            payload = request.body
+            # Do not use any request.data stuff after that!
+            data = dict()
+            status_code = 200
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+api_download_apk_details = ApiDownloadApkDetails.as_view()
