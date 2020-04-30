@@ -26,7 +26,7 @@ class Oauth(BaseModelInsertUpdateTimestamp):
 
             # Для отладки разработчиком
             #
-            # 'url': "http://sev12.bsuir.by:8000/api/auth/dummy?token=%(token)s",
+            # 'url': "http://127.0.0.1:8000/api/auth/dummy?token=%(token)s",
 
             'uid': 'sub',
             'first_name': "given_name",

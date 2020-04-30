@@ -22,7 +22,7 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
         "id":"234234234234234231413",
         "token":"ajjjkelr8k4234msfsdf898fs6fs3sd8"
         },
-        "userId": 123
+        "user_id": 123
                 //  только для signin. Будет проверка,
                 //  что существующий в системе пользователь
                 //  имеет тот же Id
@@ -39,10 +39,10 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
         signup = not signin
         try:
             if signin:
-                user_id = request.data.get('userId')
+                user_id = request.data.get('user_id')
                 if not user_id:
                     status_code = 400
-                    raise ServiceException('Не задан userId')
+                    raise ServiceException('Не задан user_id')
 
             oauth_dict = request.data.get("oauth")
             if not oauth_dict:
@@ -74,7 +74,7 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
                         ).owner
                         # Если существует пользователь с таким ключом,
                         # то что при signup регистрируем, а при
-                        # signin проверяем userId
+                        # signin проверяем user_id
                     except Key.DoesNotExist:
                         pass
                 if signup:
@@ -100,10 +100,10 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
                 if user:
                     if str(user.pk) != str(user_id):
                         status_code = 401
-                        raise ServiceException('Не совпадает userId')
+                        raise ServiceException('Не совпадает user_id')
                 else:
                     status_code = 401
-                    raise ServiceException('Не найден userId c таким Id от %s' % oauth_dict['provider'])
+                    raise ServiceException('Не найден user_id c таким Id от %s' % oauth_dict['provider'])
 
             if not oauth:
                 # Даже при signin, если user есть в ключах,
@@ -115,10 +115,9 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
                 )
             self.update_oauth(oauth, oauth_result)
             token, created_ = Token.objects.get_or_create(user=user)
-            data = dict(
-                user_id=user.pk,
-                token=token.key,
-            )
+            data = dict(token=token.key,)
+            if signup:
+                data.update(user_id=user.pk,)
             status_code = 200
         except ServiceException as excpt:
             transaction.set_rollback(True)
