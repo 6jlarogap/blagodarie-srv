@@ -73,14 +73,35 @@ class Symptom(models.Model):
 
 class UserSymptom(BaseModelInsertTimestamp, GeoPointModel):
 
-    user = models.ForeignKey('auth.User', verbose_name=_("Пользователь"), on_delete=models.CASCADE)
+    # TODO: Поле user удалить, как там будут все значения is Null.
+    #       При этом:
+    #           - удалить /api/addusersymptom
+    #           - в /api/add_user_symptom убрать обнуление этого поля
+    #           - в api/getstats/symptoms/hist убрать учет user.pk
+    #             при отборе точек для карты
+    #           - поле incognito_id: убрать null=True
+    #           - обнулить разработческую б.д.
+    #
+    user = models.ForeignKey('auth.User', verbose_name=_("Пользователь"),
+                             null=True, on_delete=models.CASCADE)
+    incognito_id = models.CharField(_("Идентификатор инкогнито"), max_length=36, null=True)
+
     symptom = models.ForeignKey(Symptom, verbose_name=_("Симптом"), on_delete=models.CASCADE)
-    # От 0 до 29
-    moon_day = models.IntegerField(_("День лунного календаря"), default=0)
+
+    # От 0 до 29. Вычисляется от угла поворота луны к солнцу:
+    # angle between the Moon and the Sun along the ecliptic как 360 град.,
+    # экстраполированные в 30 лунных дней (1 такой день - 360/30 градусов)
+    #
+    moon_day = models.IntegerField(_("День лунного календаря"), null=True, db_index=True)
+
+    # Поле timezone - число, получаемое, например, от строки по Московскому
+    # часовому поясу: "+0300", этот же часовой пояс - по умолчанию.
+    #
+    timezone = models.IntegerField(_("Часовой пояс"), default=300)
 
     def save(self, *args, **kwargs):
         self.fill_insert_timestamp()
-        if not self.moon_day:
+        if self.moon_day is None:
             self.moon_day = get_moon_day(self.insert_timestamp)
         return super(UserSymptom, self).save(*args, **kwargs)
 
@@ -342,9 +363,23 @@ class LogLike(models.Model):
                 ).select_related('symptom').order_by('-insert_timestamp'):
                 ss[symptom_ids[usersymptom.symptom.pk]].append(usersymptom.insert_timestamp)
                 if usersymptom.latitude is not None and usersymptom.longitude is not None:
-                    got_symptom_key = '%s-%s' % (usersymptom.user.pk, usersymptom.symptom.pk, )
+                    got_symptom_key = None
+                    if usersymptom.incognito_id:
+                        got_symptom_key = '%s-%s' % (
+                            usersymptom.incognito_id.lower(), usersymptom.symptom.pk,
+                        )
+
+                    # TODO Удалить этот elif после удаления поля UserSymptom.user
+                    #
+                    elif usersymptom.user:
+                        got_symptom_key = '%s-%s' % (
+                            usersymptom.user.pk,
+                            usersymptom.symptom.pk,
+                        )
+
                     if not got_symptom.get(got_symptom_key):
-                        got_symptom[got_symptom_key] = 1
+                        if got_symptom_key:
+                            got_symptom[got_symptom_key] = 1
                         points.append([
                             usersymptom.latitude,
                             usersymptom.longitude,

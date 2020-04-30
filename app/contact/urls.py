@@ -38,5 +38,6 @@ urlpatterns = [
     url(r'^api/getlatestversion_new/?$', views.api_latest_version_new),
 
     url(r'^api/addusersymptom/?$', views.api_add_user_symptom),
+    url(r'^api/add_user_symptom/?$', views.api_add_user_symptom_new),
 
 ]

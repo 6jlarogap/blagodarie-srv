@@ -13,6 +13,7 @@ from django.contrib.auth.models import User
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 
 from app.utils import ServiceException
 
@@ -1104,3 +1105,98 @@ class ApiAddUserSymptom(APIView):
         return Response(data=data, status=status_code)
 
 api_add_user_symptom = ApiAddUserSymptom.as_view()
+
+class ApiAddUserSymptomNew(APIView):
+
+    permission_classes = (IsAuthenticated, )
+
+    @transaction.atomic
+    def post(self, request):
+        """
+        Добавление симптома пользователя (новая версия)
+
+        Вставить переданные user_symptoms. Если у зарегистрировашегося
+        пользователя с заданными есть записи в UserSymptom, то всем этим записям
+        проставить incognito_id равный переданному, а затем установить user_id = null.
+        Пример исходных данных:
+        {
+            "incognito_id": "2b0cdb0a-544d-406a-b832-6821c63f5d45",
+            "user_symptoms": [
+                {
+                    "symptom_id": 10,
+                    "timestamp": 2341234134,
+                    "timezone": "+0300",
+                    "latitude": 22.4321,
+                    "longitude": 32.2212
+                },
+                {
+                    "symptom_id": 12,
+                    "timestamp": 2341234195,
+                    "timezone": "+0300",
+                    "latitude": 22.4321,
+                    "longitude": 32.2212
+                }
+            ]
+        }
+        Возвращает: {}
+        """
+        try:
+            print(request.user.pk)
+            incognito_id = request.data.get("incognito_id")
+            incognito_id = incognito_id.lower()
+            if not incognito_id:
+                raise ServiceException("Не задан incognito_id")
+            user_symptoms = request.data.get("user_symptoms")
+            if not isinstance(user_symptoms, list):
+                raise ServiceException("Не заданы user_symptoms")
+            n_key = 0
+            for user_symptom in user_symptoms:
+                try:
+                    symptom_id = user_symptom['symptom_id']
+                except KeyError:
+                    raise ServiceException(MSG_NO_PARM % n_key)
+                try:
+                    symptom = Symptom.objects.get(pk=symptom_id)
+                except Symptom.DoesNotExist:
+                    raise ServiceException(
+                        "Не найден symptom_id, элемент списка %s (начиная с нуля)" % n_key
+                    )
+                insert_timestamp = user_symptom.get('timestamp')
+                latitude = user_symptom.get('latitude')
+                longitude = user_symptom.get('longitude')
+                timezone = user_symptom.get(
+                    'timezone',
+                    UserSymptom._meta.get_field('timezone').default
+                )
+                try:
+                    timezone = int(timezone)
+                except ValueError:
+                    raise ServiceException(
+                        "Неверная timezone, элемент списка %s (начиная с нуля)" % n_key
+                    )
+                usersymptom = UserSymptom.objects.create(
+                    incognito_id=incognito_id,
+                    symptom=symptom,
+                    insert_timestamp=insert_timestamp,
+                    latitude=latitude,
+                    longitude=longitude,
+                    timezone=timezone,
+                )
+                n_key += 1
+
+            # TODO Убрать эту строку после удаления поля UserSymptom.user
+            #
+            UserSymptom.objects.filter(user=request.user).update(
+                user=None,
+                incognito_id=incognito_id,
+            )
+
+            data = dict()
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            transaction.set_rollback(True)
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_add_user_symptom_new = ApiAddUserSymptomNew.as_view()
