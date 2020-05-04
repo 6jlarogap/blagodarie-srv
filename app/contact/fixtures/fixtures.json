@@ -20,13 +20,6 @@
       "title": "GoogleAccountId"
     }
   },
-  {
-    "model": "contact.keytype",
-    "pk": 4,
-    "fields": {
-      "title": "BlagodarieKey"
-    }
-  },
 
   {
     "model": "contact.symptom",
@@ -348,6 +341,20 @@
     "pk": 49,
     "fields": {
       "name": "Учащённое сердцебиение"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 50,
+    "fields": {
+      "name": "Почки"
+    }
+  },
+  {
+    "model": "contact.symptom",
+    "pk": 51,
+    "fields": {
+      "name": "Лицевой нерв"
     }
   }
 ]
