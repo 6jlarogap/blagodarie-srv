@@ -12,7 +12,7 @@ from django.contrib.auth.models import User
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import AuthenticationFailed
 
 from app.utils import ServiceException
 
@@ -927,18 +927,11 @@ class ApiGetStats(APIView):
 
     def get(self, request, *args, **kwargs):
         """
-        Получение статистики, количества пользователей, лайков, ключей
+        Получение статистики, диаграмм и проч.
 
-        Для сайта, где выводится эта статстика
-
-        Возвращает:
-        {
-            "users": 50
-            "likes": 100,
-            "keys": 200
-        }
+        Что получать, определяется в словаре kwargs
         """
-        return Response(data=LogLike.get_stats(*args, **kwargs), status=status.HTTP_200_OK)
+        return Response(data=LogLike.get_stats(request, *args, **kwargs), status=status.HTTP_200_OK)
 
 api_get_stats = ApiGetStats.as_view()
 
@@ -1021,16 +1014,18 @@ api_add_user_symptom = ApiAddUserSymptom.as_view()
 
 class ApiAddUserSymptomNew(APIView):
 
-    permission_classes = (IsAuthenticated, )
-
     @transaction.atomic
-    def post(self, request):
+    def post(self, request, *args, **kwargs,):
         """
         Добавление симптома пользователя (новая версия)
 
-        Вставить переданные user_symptoms. Если у зарегистрировашегося
-        пользователя с заданными есть записи в UserSymptom, то всем этим записям
-        проставить incognito_id равный переданному, а затем установить user_id = null.
+        Вставить переданные user_symptoms.
+        Для этого метода есть url с обязательной авторизацией и без нее.
+        Если при обязательной авторизации у зарегистрировашегося
+        пользователя есть записи в UserSymptom, то всем этим записям
+        проставить incognito_id равный переданному и
+        установить user_id = null.
+        TODO это убрать, когда удалим UserSymptom.user
         Пример исходных данных:
         {
             "incognito_id": "2b0cdb0a-544d-406a-b832-6821c63f5d45",
@@ -1054,6 +1049,9 @@ class ApiAddUserSymptomNew(APIView):
         Возвращает: {}
         """
         try:
+            auth_only = kwargs.get('auth')
+            if auth_only and not request.user.is_authenticated:
+                raise AuthenticationFailed
             incognito_id = request.data.get("incognito_id")
             incognito_id = incognito_id.lower()
             if not incognito_id:
@@ -1096,12 +1094,13 @@ class ApiAddUserSymptomNew(APIView):
                 )
                 n_key += 1
 
-            # TODO Убрать эту строку после удаления поля UserSymptom.user
+            # TODO Убрать этот код после удаления поля UserSymptom.user
             #
-            UserSymptom.objects.filter(user=request.user).update(
-                user=None,
-                incognito_id=incognito_id,
-            )
+            if auth_only:
+                UserSymptom.objects.filter(user=request.user).update(
+                    user=None,
+                    incognito_id=incognito_id,
+                )
 
             data = dict()
             status_code = status.HTTP_200_OK

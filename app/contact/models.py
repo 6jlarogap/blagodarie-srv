@@ -124,7 +124,7 @@ class LogLike(models.Model):
     HIST_HOURS_INERVAL = 2
 
     @classmethod
-    def get_stats(cls, *args, **kwargs):
+    def get_stats(cls, request=None, *args, **kwargs):
 
         if not kwargs.get('only'):
             return dict(
