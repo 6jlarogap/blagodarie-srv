@@ -19,8 +19,6 @@ from app.utils import ServiceException
 from contact.models import KeyType, Key, UserKey, LikeKey, Like, LogLike, Symptom, UserSymptom
 from users.models import CreateUserMixin
 
-from axmlparserpy import apk
-
 MSG_NO_PARM = 'Не задан или не верен какой-то из параметров в связке номер %s (начиная с 0)'
 
 class ApiAddUserView(CreateUserMixin, APIView):
@@ -944,49 +942,6 @@ class ApiGetStats(APIView):
 
 api_get_stats = ApiGetStats.as_view()
 
-class ApiGetLatestVersionOld(APIView):
-
-    def get(self, request):
-        """
-        Получить последнюю версию apk клиента
-
-        Из папки settings.MEDIA_ROOT / settings.APK_MEDIA_PATH находится
-        apk с максимальным version_code
-        """
-        version_code = version_name = version_file = None
-        apk_path = os.path.join(settings.MEDIA_ROOT, settings.APK_MEDIA_PATH)
-        for f in os.listdir(apk_path):
-            if not f.endswith('.apk'):
-                continue
-            full_name = os.path.join(apk_path, f)
-            if not os.path.isfile(full_name):
-                continue
-            try:
-                ap = apk.APK(full_name)
-            except OSError:
-                continue
-            current_version_code = ap.get_androidversion_code()
-            current_version_name = ap.get_androidversion_name()
-            try:
-                current_version_code = int(current_version_code)
-            except (ValueError, TypeError,):
-                continue
-            if version_code is None or current_version_code > version_code:
-                version_code = current_version_code
-                version_name = current_version_name
-                version_file = f
-        if not version_code:
-            return Response(status=status.HTTP_404_NOT_FOUND)
-        return Response(status=200, data=dict(
-            version_name=version_name,
-            version_code=version_code,
-            url=request.build_absolute_uri(
-                os.path.join(settings.MEDIA_URL, settings.APK_MEDIA_PATH, version_file,)
-            ),
-        ))
-
-api_latest_version_old = ApiGetLatestVersionOld.as_view()
-
 class ApiAddUserSymptom(APIView):
 
     @transaction.atomic
@@ -1099,7 +1054,6 @@ class ApiAddUserSymptomNew(APIView):
         Возвращает: {}
         """
         try:
-            print(request.user.pk)
             incognito_id = request.data.get("incognito_id")
             incognito_id = incognito_id.lower()
             if not incognito_id:

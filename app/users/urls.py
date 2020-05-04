@@ -12,4 +12,5 @@ urlpatterns = [
     url(r'^api/auth/dummy?$', views.api_auth_dummy),
 
     url(r'^api/download\-apk\-details/?$', views.api_download_apk_details),
+    url(r'^api/getlatestversion/?$', views.api_latest_version),
 ]

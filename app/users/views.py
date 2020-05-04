@@ -1,4 +1,4 @@
-import os, re, hmac, hashlib
+import os, re, hmac, hashlib, json
 import urllib.request, urllib.error
 
 from django.shortcuts import render
@@ -210,3 +210,32 @@ class ApiDownloadApkDetails(APIView):
         return Response(data=data, status=status_code)
 
 api_download_apk_details = ApiDownloadApkDetails.as_view()
+
+class ApiGetLatestVersion(APIView):
+
+    def get(self, request):
+        try:
+            data = dict(url=settings.APK_URL)
+            try:
+                with open(os.path.join(settings.MEDIA_ROOT, settings.APK_OPTIONS_DOWNLOAD), 'r') as f:
+                    raw_output = f.read()
+            except IOError:
+                raise ServiceException('Не нашел, не смог прочитать output.json')
+            try:
+                output = json.loads(raw_output)
+            except ValueError:
+                raise ServiceException('Неверные данные в output.json')
+            try:
+                data.update(
+                    version_code=output[0]['apkData']['versionCode'],
+                    version_name=output[0]['apkData']['versionName'],
+                )
+            except (KeyError, IndexError,):
+                raise ServiceException('Не нашел данные о версии мобильного приложения в output.json')
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 500
+        return Response(data=data, status=200)
+
+api_latest_version = ApiGetLatestVersion.as_view()
+
