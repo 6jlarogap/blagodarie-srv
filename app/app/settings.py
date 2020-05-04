@@ -157,8 +157,24 @@ CORS_ORIGIN_ALLOW_ALL = True
 #
 CORS_ALLOW_CREDENTIALS = True
 
+# Webhook ключ от github репозитория. Webhook обеспечивает при каждом
+# push в репозиторий отправку запроса для получения данных о версии
+# мобильного приложения.
+#
+GITHUB_WEBHOOK_SECRET = 'secret'
+
+# Где можно скачать последнюю версию мобильного приложения
+#
 APK_URL = 'https://github.com/6jlarogap/blagodarie/raw/master/app/latest/blagodarie-latest.apk'
-ONLINE_TIMEOUT = 20
+
+# Где можно получить данные о последней версии мобильного приложения
+#
+APK_OPTIONS_URL = 'https://github.com/6jlarogap/blagodarie/raw/master/app/latest/output.json'
+
+# Куда считываем данные о последней версии мобильного приложения,
+# относительно MEDIA_ROOT
+#
+APK_OPTIONS_DOWNLOAD = 'download/apk-output/output.json'
 
 # Время начала наблюдений (приема симптомов ощущений):
 # начало первого лунного дня, в котором появились

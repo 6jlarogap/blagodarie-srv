@@ -1,7 +1,7 @@
 DEBUG = False
 ADMIN_ENABLED = False
 
-# MEDIA_ROOT = '/path/to/media/'
+MEDIA_ROOT = '/path/to/media/'
 
 DATABASES = {
     'default': {
@@ -13,3 +13,9 @@ DATABASES = {
         'PORT': '',
     },
 }
+
+# Webhook ключ от github репозитория. Webhook обеспечивает при каждом
+# push в репозиторий отправку запроса для получения данных о версии
+# мобильного приложения.
+#
+GITHUB_WEBHOOK_SECRET = 'secret'

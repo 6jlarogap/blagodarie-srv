@@ -113,9 +113,8 @@ class Oauth(BaseModelInsertUpdateTimestamp):
                 provider = oauth_dict['provider']
                 provider_details = Oauth.PROVIDER_DETAILS[oauth_dict['provider']]
                 oauth_dict['token'] = urllib.parse.quote(oauth_dict['token'])
-                id_ = str(oauth_dict['id'])
             except KeyError:
-                raise ServiceException(_('Провайдер Oauth не задан или не поддерживается, или не задан token или id'))
+                raise ServiceException(_('Провайдер Oauth не задан или не поддерживается, или не задан token'))
 
             url = provider_details['url'] % oauth_dict
 
@@ -159,12 +158,7 @@ class Oauth(BaseModelInsertUpdateTimestamp):
                 result['code'] = 401
                 raise ServiceException(_('Получен пустой (id) от провайдера'))
 
-            uid = str(uid)
-            if uid != id_:
-                result['code'] = 401
-                raise ServiceException(_('Не совпадают id от пользователя и от Oauth провайдера'))
-
-            result['uid'] = uid
+            result['uid'] = str(uid)
             result['key_type_title'] = provider_details.get('key_type_title')
             for key in Oauth.OAUTH_EXTRA_FIELDS:
                 real_key = provider_details.get(key)

@@ -1,8 +1,9 @@
+import os, re, hmac, hashlib
 import urllib.request, urllib.error
 
 from django.shortcuts import render
-from django.db import IntegrityError, transaction, connection
-from django.contrib.auth import login, logout, authenticate
+from django.db import transaction
+from django.conf import settings
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -158,18 +159,50 @@ api_auth_dummy = ApiAuthDummy.as_view()
 class ApiDownloadApkDetails(APIView):
     """
     Получить с github каталога данные о последней версии мобильного приложения
-
-    UNDER CONSTRUCTION
     """
 
     def post(self, request):
         try:
-            signature = request.headers.get('X-Hub-Signature')
-            if not signature:
-                raise ServiceException('No Signature')
+            header_signature = 'X-Hub-Signature'
+            encoding_eq_signature = request.headers.get('X-Hub-Signature')
+            if not encoding_eq_signature:
+                raise ServiceException('No "%s" header with signature' % header_signature)
+            encoding_eq_signature = encoding_eq_signature.lower()
             payload = request.body
             # Do not use any request.data stuff after that!
-            data = dict()
+
+            # Example of encoding_signature:
+            # 'sha1=5aaabbbcccdddeeefff11122233344455fffaaaa'
+            #
+            m = re.search(r'^([^\=]+)\=([^\=]+)$', encoding_eq_signature)
+            if not m:
+                raise ServiceException('Invalid "%s" header' % header_signature)
+            encoding = getattr(hashlib, m.group(1), None)
+            if not encoding:
+                raise ServiceException('No "<encoding>=" in "%s" header' % header_signature)
+            key = settings.GITHUB_WEBHOOK_SECRET
+            key = key.encode('utf-8')
+            if hmac.new(key, payload, encoding).hexdigest().lower() != m.group(2):
+                raise ServiceException('Request is not properly signed')
+
+            try:
+                req = urllib.request.Request(settings.APK_OPTIONS_URL)
+                response = urllib.request.urlopen(req, timeout=20)
+                raw_data = response.read()
+            except urllib.error.HTTPError as excpt:
+                raise ServiceException('HTTPError: %s' % settings.APK_OPTIONS_URL)
+            except urllib.error.URLError as excpt:
+                raise ServiceException('URLError: %s' % settings.APK_OPTIONS_URL)
+            fname = os.path.join(settings.MEDIA_ROOT, settings.APK_OPTIONS_DOWNLOAD)
+            try:
+                with open(fname, 'wb') as f:
+                    f.write(raw_data)
+            except IOError:
+                raise ServiceException('Ошибка настройки сервера, не удалось записать в файл: %s' % fname)
+            data = dict(message='Success: downloaded %s into %s' % (
+                settings.APK_OPTIONS_URL,
+                fname,
+            ))
             status_code = 200
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
