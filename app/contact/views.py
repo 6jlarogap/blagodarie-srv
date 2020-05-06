@@ -16,7 +16,8 @@ from rest_framework.exceptions import AuthenticationFailed
 
 from app.utils import ServiceException
 
-from contact.models import KeyType, Key, UserKey, LikeKey, Like, LogLike, Symptom, UserSymptom
+from contact.models import KeyType, Key, UserKey, LikeKey, Like, LogLike, \
+                           Symptom, UserSymptom, SymptomChecksumManage
 from users.models import CreateUserMixin
 
 MSG_NO_PARM = 'Не задан или не верен какой-то из параметров в связке номер %s (начиная с 0)'
@@ -1111,3 +1112,33 @@ class ApiAddUserSymptomNew(APIView):
         return Response(data=data, status=status_code)
 
 api_add_user_symptom_new = ApiAddUserSymptomNew.as_view()
+
+class ApiGetSymptoms(APIView):
+
+    def post(self, request):
+        """
+        Получить группы симптомов, симптомы, их контрольную сумму
+
+        Сравнивает контрольную сумму справочника симптомов
+        с переданной контрольной суммой.
+        Если они различаются, то возвращает все данные из таблиц
+        Symptom и SymptomGroup
+        """
+
+        try:
+            if 'checksum' not in request.data:
+                raise ServiceException('Не задана checksum')
+            checksum_got = request.data.get("checksum")
+            checksum_here = SymptomChecksumManage.get_symptoms_checksum().value
+            changed = checksum_got != checksum_here
+            data = dict(changed=changed)
+            if changed:
+                data.update(checksum=checksum_here)
+                data.update(SymptomChecksumManage.get_symptoms_dict())
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_getsymptoms = ApiGetSymptoms.as_view()

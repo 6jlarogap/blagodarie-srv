@@ -1,6 +1,7 @@
-import time, datetime
+import time, datetime, json, hashlib
 import numpy as np
 import os
+from collections import OrderedDict
 import matplotlib as mpl
 if os.environ.get('DISPLAY','') == '':
     mpl.use('Agg')
@@ -67,9 +68,105 @@ class LikeKey(BaseModelInsertTimestamp):
     class Meta:
         unique_together = ('like', 'key')
 
+class SymptomChecksumManage(object):
+    """
+    Расчет контрольной суммы при изменении симптомов/групп симптомов
+    """
+    SYMPTOM_CHECKSUM_CLASS = 'symptom'
+
+    @classmethod
+    def get_symptoms_checksum(cls):
+        checksum, created_ = Checksum.objects.get_or_create(
+            name=SymptomChecksumManage.SYMPTOM_CHECKSUM_CLASS,
+            defaults = dict(
+                value=''
+        ))
+        return checksum
+
+    @classmethod
+    def get_symptoms_dict(cls):
+        symptom_groups = []
+        for symptomgroup in SymptomGroup.objects.all().order_by('pk'):
+            orderered_dict = OrderedDict()
+            orderered_dict['id'] = symptomgroup.pk
+            orderered_dict['name'] = symptomgroup.name
+            orderered_dict['parent_id'] = symptomgroup.parent.pk if symptomgroup.parent else None
+            symptom_groups.append(orderered_dict)
+        symptoms = []
+        for symptom in Symptom.objects.all().order_by('pk'):
+            orderered_dict = OrderedDict()
+            orderered_dict['id'] = symptom.pk
+            orderered_dict['name'] = symptom.name
+            orderered_dict['group_id'] = symptom.group.pk if symptom.group else None
+            orderered_dict['order'] = symptom.order
+            symptoms.append(orderered_dict)
+        all_dict = OrderedDict()
+        all_dict['symptom_groups'] = symptom_groups
+        all_dict['symptoms'] = symptoms
+        return all_dict
+
+    @classmethod
+    def compute_checksum(cls):
+        checksum = SymptomChecksumManage.get_symptoms_checksum()
+        all_dict = SymptomChecksumManage.get_symptoms_dict()
+        all_str = json.dumps(all_dict, separators=(',', ':',), ensure_ascii=False)
+        md5sum = hashlib.md5(all_str.encode('utf-8')).hexdigest()
+        if checksum.value != md5sum:
+            checksum.value = md5sum
+            checksum.save()
+
+class Checksum(models.Model):
+
+    name = models.CharField(_("Класс"), max_length=255, unique=True, editable=False)
+    value = models.CharField(_("Значение"), max_length=255, editable=False)
+
+class SymptomGroup(models.Model):
+
+    name = models.CharField(_("Название"), max_length=255, unique=True)
+    parent = models.ForeignKey('contact.SymptomGroup', verbose_name=_("Родительская группа"),
+                               on_delete=models.SET_NULL, null=True, blank=True)
+    class Meta:
+        verbose_name = _("Группа симптомов")
+        verbose_name_plural = _("Группы симптомов")
+        ordering = ('name',)
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        result = super(SymptomGroup, self).save(*args, **kwargs)
+        SymptomChecksumManage.compute_checksum()
+        return result
+
+    def delete(self, *args, **kwargs):
+        result = super(SymptomGroup, self).delete(*args, **kwargs)
+        SymptomChecksumManage.compute_checksum()
+        return result
+
 class Symptom(models.Model):
 
     name = models.CharField(_("Название"), max_length=255, unique=True)
+    group = models.ForeignKey(SymptomGroup, verbose_name=_("Группа"),
+                               on_delete=models.SET_NULL, null=True, blank=True)
+    order = models.IntegerField(_("Порядок следования"), default = 0)
+
+    class Meta:
+        verbose_name = _("Cимптом")
+        verbose_name_plural = _("Симптомы")
+        ordering = ('name',)
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        result = super(Symptom, self).save(*args, **kwargs)
+        SymptomChecksumManage.compute_checksum()
+        return result
+
+    def delete(self, *args, **kwargs):
+        result = super(Symptom, self).delete(*args, **kwargs)
+        SymptomChecksumManage.compute_checksum()
+        return result
 
 class UserSymptom(BaseModelInsertTimestamp, GeoPointModel):
 

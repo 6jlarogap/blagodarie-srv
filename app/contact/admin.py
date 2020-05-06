@@ -2,7 +2,15 @@ import time
 
 from django.contrib import admin
 
-from .models import Key, UserKey, Like, LikeKey
+from app.admin import PreventBulkDeleteInAdmin
+
+from .models import Key, UserKey, Like, LikeKey, Symptom, SymptomGroup
+
+class SymptomGroupAdmin(PreventBulkDeleteInAdmin, admin.ModelAdmin):
+    list_display = ('name', 'parent',)
+
+class SymptomAdmin(PreventBulkDeleteInAdmin, admin.ModelAdmin):
+    list_display = ('name', 'group', 'order')
 
 class KeyAdmin(admin.ModelAdmin):
     list_display = ('id', 'type_', 'value',)
@@ -37,6 +45,8 @@ class LikeAdmin(admin.ModelAdmin):
 class LikeKeyAdmin(admin.ModelAdmin):
     list_display = ('id', 'like', 'key', )
 
+admin.site.register(Symptom, SymptomAdmin)
+admin.site.register(SymptomGroup, SymptomGroupAdmin)
 admin.site.register(Key, KeyAdmin)
 admin.site.register(UserKey, UserKeyAdmin)
 admin.site.register(Like, LikeAdmin)

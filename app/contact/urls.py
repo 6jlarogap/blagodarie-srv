@@ -38,4 +38,5 @@ urlpatterns = [
     url(r'^api/add_user_symptom/?$', views.api_add_user_symptom_new, {'auth': True}),
     url(r'^api/addincognitosymptom/?$', views.api_add_user_symptom_new, {'auth': False}),
 
+    url(r'^api/getsymptoms?$', views.api_getsymptoms),
 ]
