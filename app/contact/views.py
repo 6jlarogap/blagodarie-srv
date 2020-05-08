@@ -1,12 +1,13 @@
 import os, datetime, time
 
-from django.shortcuts import render
+from django.shortcuts import redirect
 from django.db import transaction, connection
 from django.db.models import F, Sum
 from django.db.models.query_utils import Q
+from django.views.generic.base import View
+from django.http import Http404
 
 from django.conf import settings
-
 from django.contrib.auth.models import User
 
 from rest_framework import status
@@ -1142,3 +1143,20 @@ class ApiGetSymptoms(APIView):
         return Response(data=data, status=status_code)
 
 api_getsymptoms = ApiGetSymptoms.as_view()
+
+class MergeSymptomsView(View):
+
+    @transaction.atomic
+    def post(self, request, *args, **kwargs):
+        if not request.user.is_superuser:
+            raise Http404
+        try:
+            src = Symptom.objects.get(pk=request.POST['symptom_src_pk'])
+            dst = Symptom.objects.get(pk=request.POST['symptom_dst_pk'])
+        except (Symptom.DoesNotExist, KeyError, IndexError,):
+            raise Http404
+        UserSymptom.objects.filter(symptom=src).update(symptom=dst)
+        src.delete()
+        return redirect('/admin/contact/symptom/')
+
+merge_symptoms = MergeSymptomsView.as_view()

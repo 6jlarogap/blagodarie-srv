@@ -31,13 +31,15 @@ urlpatterns = [
 
     url(r'^api/getstats/?$', views.api_get_stats),
     url(r'^api/getstats/users/?$', views.api_get_stats, {'only': 'users'}),
-    url(r'^api/getstats/symptoms?$', views.api_get_stats, {'only': 'symptoms'}),
-    url(r'^api/getstats/symptoms/hist?$', views.api_get_stats, {'only': 'symptoms_hist'}),
-    url(r'^api/getstats/symptoms/names?$', views.api_get_stats, {'only': 'symptoms_names'}),
+    url(r'^api/getstats/symptoms/?$', views.api_get_stats, {'only': 'symptoms'}),
+    url(r'^api/getstats/symptoms/hist/?$', views.api_get_stats, {'only': 'symptoms_hist'}),
+    url(r'^api/getstats/symptoms/names/?$', views.api_get_stats, {'only': 'symptoms_names'}),
 
     url(r'^api/addusersymptom/?$', views.api_add_user_symptom),
     url(r'^api/add_user_symptom/?$', views.api_add_user_symptom_new, {'auth': True}),
     url(r'^api/addincognitosymptom/?$', views.api_add_user_symptom_new, {'auth': False}),
 
-    url(r'^api/getsymptoms?$', views.api_getsymptoms),
+    url(r'^api/getsymptoms/?$', views.api_getsymptoms),
+
+    url(r'^admin/merge_symptoms/?$', views.merge_symptoms),
 ]

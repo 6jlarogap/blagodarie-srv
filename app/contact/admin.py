@@ -1,6 +1,8 @@
 import time
 
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.utils.translation import ugettext_lazy as _
+from django.template.response import TemplateResponse
 
 from app.admin import PreventBulkDeleteInAdmin
 
@@ -11,6 +13,26 @@ class SymptomGroupAdmin(PreventBulkDeleteInAdmin, admin.ModelAdmin):
 
 class SymptomAdmin(PreventBulkDeleteInAdmin, admin.ModelAdmin):
     list_display = ('name', 'group', 'order')
+
+    def confirm_merge_symptoms(self, request, queryset):
+        if queryset.count() != 2:
+            self.message_user(
+                request,
+                _('Допускается объединение лишь двух симптомов'),
+                messages.ERROR,
+            )
+            return
+        response = TemplateResponse(
+            request,
+            'admin/confirm_merge_symptoms.html',
+            dict(
+                symptom_src=queryset[0],
+                symptom_dst=queryset[1],
+        ))
+        return response
+
+    confirm_merge_symptoms.short_description = _("Объединить симптомы")
+    actions = (confirm_merge_symptoms, )
 
 class KeyAdmin(admin.ModelAdmin):
     list_display = ('id', 'type_', 'value',)
