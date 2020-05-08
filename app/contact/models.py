@@ -147,13 +147,14 @@ class Symptom(models.Model):
 
     name = models.CharField(_("Название"), max_length=255, unique=True)
     group = models.ForeignKey(SymptomGroup, verbose_name=_("Группа"),
-                               on_delete=models.SET_NULL, null=True, blank=True)
-    order = models.IntegerField(_("Порядок следования"), default = 0)
+                               on_delete=models.PROTECT)
+    order = models.IntegerField(_("Порядок следования"), null=True, default = None, blank=True)
 
     class Meta:
         verbose_name = _("Cимптом")
         verbose_name_plural = _("Симптомы")
         ordering = ('name',)
+        unique_together = ('group', 'order', )
 
     def __str__(self):
         return self.name
@@ -802,3 +803,14 @@ class LogLike(models.Model):
                 moon_days_fig=moon_days_fig,
             )
 
+        if kwargs.get('only') == 'symptoms_names':
+            data = [
+                {
+                    'id': str(symptom.pk),
+                    'name': symptom.name,
+                }
+                for symptom in Symptom.objects.all().order_by('name')
+            ]
+            return data
+
+        return dict()
