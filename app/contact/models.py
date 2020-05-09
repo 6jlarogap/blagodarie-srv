@@ -616,11 +616,11 @@ class LogLike(models.Model):
                     contact_usersymptom
                 WHERE
                     moon_day <= %(current_moon_day)s AND
-                    insert_timestamp > %(time_current)s - 40 * 86040
+                    insert_timestamp > %(time_current)s - 30 * 86040
                 GROUP BY
                     moon_day
                 ORDER BY
-                    max_time
+                    moon_day
                 LIMIT 1
             """ % dict(
                 current_moon_day=current_moon_day,
