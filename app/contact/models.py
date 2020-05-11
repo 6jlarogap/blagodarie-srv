@@ -181,14 +181,13 @@ class UserSymptom(BaseModelInsertTimestamp, GeoPointModel):
     #       При этом:
     #           - удалить /api/addusersymptom
     #           - в /api/add_user_symptom убрать обнуление этого поля
-    #           - в api/getstats/symptoms/hist убрать учет user.pk
-    #             при отборе точек для карты
     #           - поле incognito_id: убрать null=True
     #           - обнулить разработческую б.д.
     #
     user = models.ForeignKey('auth.User', verbose_name=_("Пользователь"),
                              null=True, on_delete=models.CASCADE)
-    incognito_id = models.CharField(_("Идентификатор инкогнито"), max_length=36, null=True)
+    incognito_id = models.CharField(_("Идентификатор инкогнито"),
+                                    max_length=36, null=True, db_index=True)
 
     symptom = models.ForeignKey(Symptom, verbose_name=_("Симптом"), on_delete=models.CASCADE)
 
@@ -521,15 +520,6 @@ class LogLike(models.Model):
                         got_symptom_key = '%s-%s' % (
                             usersymptom.incognito_id.lower(), usersymptom.symptom.pk,
                         )
-
-                    # TODO Удалить этот elif после удаления поля UserSymptom.user
-                    #
-                    elif usersymptom.user:
-                        got_symptom_key = '%s-%s' % (
-                            usersymptom.user.pk,
-                            usersymptom.symptom.pk,
-                        )
-
                     if not got_symptom.get(got_symptom_key):
                         if got_symptom_key:
                             got_symptom[got_symptom_key] = 1
