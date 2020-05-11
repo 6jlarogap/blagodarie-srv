@@ -9,7 +9,7 @@ from app.admin import PreventBulkDeleteInAdmin
 from .models import Key, UserKey, Like, LikeKey, Symptom, SymptomGroup
 
 class SymptomGroupAdmin(PreventBulkDeleteInAdmin, admin.ModelAdmin):
-    list_display = ('name', 'parent',)
+    list_display = ('name', 'parent', 'deprecated')
 
 class SymptomAdmin(PreventBulkDeleteInAdmin, admin.ModelAdmin):
     list_display = ('name', 'group', 'order', 'deprecated')

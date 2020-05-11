@@ -87,14 +87,17 @@ class SymptomChecksumManage(object):
     @classmethod
     def get_symptoms_dict(cls):
         symptom_groups = []
-        for symptomgroup in SymptomGroup.objects.all().order_by('pk'):
+        for symptomgroup in SymptomGroup.objects.filter(deprecated=False).order_by('pk'):
             orderered_dict = OrderedDict()
             orderered_dict['id'] = symptomgroup.pk
             orderered_dict['name'] = symptomgroup.name
             orderered_dict['parent_id'] = symptomgroup.parent.pk if symptomgroup.parent else None
             symptom_groups.append(orderered_dict)
         symptoms = []
-        for symptom in Symptom.objects.filter(deprecated=False).order_by('pk'):
+        for symptom in Symptom.objects.filter(
+                deprecated=False,
+                group__deprecated=False,
+            ).distinct().order_by('pk'):
             orderered_dict = OrderedDict()
             orderered_dict['id'] = symptom.pk
             orderered_dict['name'] = symptom.name
@@ -126,6 +129,7 @@ class SymptomGroup(models.Model):
     name = models.CharField(_("Название"), max_length=255, unique=True)
     parent = models.ForeignKey('contact.SymptomGroup', verbose_name=_("Родительская группа"),
                                on_delete=models.SET_NULL, null=True, blank=True)
+    deprecated = models.BooleanField(_("Устарела"), default=False)
     class Meta:
         verbose_name = _("Группа симптомов")
         verbose_name_plural = _("Группы симптомов")
