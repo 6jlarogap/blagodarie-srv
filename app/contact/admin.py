@@ -12,7 +12,7 @@ class SymptomGroupAdmin(PreventBulkDeleteInAdmin, admin.ModelAdmin):
     list_display = ('name', 'parent',)
 
 class SymptomAdmin(PreventBulkDeleteInAdmin, admin.ModelAdmin):
-    list_display = ('name', 'group', 'order')
+    list_display = ('name', 'group', 'order', 'deprecated')
 
     def confirm_merge_symptoms(self, request, queryset):
         if queryset.count() != 2:

@@ -94,7 +94,7 @@ class SymptomChecksumManage(object):
             orderered_dict['parent_id'] = symptomgroup.parent.pk if symptomgroup.parent else None
             symptom_groups.append(orderered_dict)
         symptoms = []
-        for symptom in Symptom.objects.all().order_by('pk'):
+        for symptom in Symptom.objects.filter(deprecated=False).order_by('pk'):
             orderered_dict = OrderedDict()
             orderered_dict['id'] = symptom.pk
             orderered_dict['name'] = symptom.name
@@ -150,6 +150,7 @@ class Symptom(models.Model):
     group = models.ForeignKey(SymptomGroup, verbose_name=_("Группа"),
                                on_delete=models.PROTECT)
     order = models.IntegerField(_("Порядок следования"), null=True, default = None, blank=True)
+    deprecated = models.BooleanField(_("Устарел"), default=False)
 
     class Meta:
         verbose_name = _("Cимптом")
