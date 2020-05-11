@@ -1,4 +1,4 @@
-import time, datetime, json, hashlib
+import time, datetime, json, hashlib, re
 import numpy as np
 import os
 from collections import OrderedDict
@@ -16,6 +16,7 @@ from app.utils import get_moon_day
 from django.conf import settings
 from django.db import models, connection
 from django.utils.translation import ugettext_lazy as _
+from django.db.models.query_utils import Q
 
 from django.contrib.auth.models import User
 
@@ -249,6 +250,37 @@ class LogLike(models.Model):
                 ).count(),
             )
 
+        if kwargs.get('only') == 'symptoms_names':
+            data = [
+                {
+                    'id': str(symptom.pk),
+                    'name': symptom.name,
+                }
+                for symptom in Symptom.objects.all().order_by('name')
+            ]
+            return data
+
+        selected_ids_str = request.GET.get('selected_ids_str', '')
+        # Проверим, что пришло
+
+        m = re.search(r'\((\S*)\)', selected_ids_str)
+        selected_ids_list = []
+        selected_ids_where = ''
+        if m:
+            m_group = m.group(1)
+            if m_group:
+                for s in m_group.split(','):
+                    try:
+                        selected_ids_list.append(int(s))
+                    except ValueError:
+                        selected_ids_list = []
+                        selected_ids_str = ''
+                        break
+        else:
+            selected_ids_str = ''
+        if selected_ids_str:
+            selected_ids_where = ' AND symptom_id IN %s ' % selected_ids_str
+
         if kwargs.get('only') == 'symptoms':
             # Возвращает json:
             #   {
@@ -278,15 +310,21 @@ class LogLike(models.Model):
 
             # Ниже count ... _all - это таки за последние 48 часов
             #
-            count_users_all = UserSymptom.objects.filter(
+            q = Q(
                     insert_timestamp__lt=time_last,
                     insert_timestamp__gte=time_1st,
-                ).distinct('incognito_id').count()
+                )
+            if selected_ids_str:
+                q &= Q(symptom__pk__in=selected_ids_list)
+            count_users_all = UserSymptom.objects.filter(q).distinct('incognito_id').count()
 
-            count_users_last = UserSymptom.objects.filter(
+            q = Q(
                     insert_timestamp__lt=time_last,
                     insert_timestamp__gte=time_24h,
-                ).distinct('incognito_id').count()
+                )
+            if selected_ids_str:
+                q &= Q(symptom__pk__in=selected_ids_list)
+            count_users_last = UserSymptom.objects.filter(q).distinct('incognito_id').count()
 
             data = dict(
                 titles=[
@@ -299,64 +337,70 @@ class LogLike(models.Model):
                     count_users_all,
                 ]
             )
-            req_str = """
-                SELECT
-                    contact_symptom.name AS name,
-                    count(contact_usersymptom.id) as count
-                FROM
-                    contact_usersymptom
-                LEFT JOIN
-                    contact_symptom
-                ON
-                    symptom_id=contact_symptom.id
-                WHERE
-                    insert_timestamp < %(time_last)s AND
-                    insert_timestamp >= %(time_1st)s
-                GROUP BY
-                    name
-                ORDER BY
-                    count
-            """ % dict(
-                time_last=time_last,
-                time_1st=time_1st,
-            )
-            with connection.cursor() as cursor:
-                cursor.execute(req_str)
-                symptoms = dictfetchall(cursor)
             s_dict = dict()
-            for symptom in symptoms:
-                s_dict[symptom['name']] = dict(
-                    count_all=symptom['count'],
+            if selected_ids_str != '()':
+                req_str = """
+                    SELECT
+                        contact_symptom.name AS name,
+                        count(contact_usersymptom.id) as count
+                    FROM
+                        contact_usersymptom
+                    LEFT JOIN
+                        contact_symptom
+                    ON
+                        symptom_id=contact_symptom.id
+                    WHERE
+                        insert_timestamp < %(time_last)s AND
+                        insert_timestamp >= %(time_1st)s
+                        %(selected_ids_where)s
+                    GROUP BY
+                        name
+                    ORDER BY
+                        count
+                """ % dict(
+                    time_last=time_last,
+                    time_1st=time_1st,
+                    selected_ids_where=selected_ids_where,
                 )
-            req_str = """
-                SELECT
-                    contact_symptom.name AS name,
-                    count(contact_usersymptom.id) as count
-                FROM
-                    contact_usersymptom
-                LEFT JOIN
-                    contact_symptom
-                ON
-                    symptom_id=contact_symptom.id
-                WHERE
-                    insert_timestamp < %(time_last)s AND
-                    insert_timestamp >= %(time_24h)s
-                GROUP BY
-                    name
-                ORDER BY
-                    count
-            """ % dict(
-                time_last=time_last,
-                time_24h=time_24h,
-            )
-            with connection.cursor() as cursor:
-                cursor.execute(req_str)
-                symptoms = dictfetchall(cursor)
-            for symptom in symptoms:
-                s_dict[symptom['name']]['count_last'] = symptom['count']
-            for name in s_dict:
-                if not s_dict[name].get('count_last'):
-                    s_dict[name]['count_last'] = 0
+                with connection.cursor() as cursor:
+                    cursor.execute(req_str)
+                    symptoms = dictfetchall(cursor)
+                for symptom in symptoms:
+                    s_dict[symptom['name']] = dict(
+                        count_all=symptom['count'],
+                    )
+                req_str = """
+                    SELECT
+                        contact_symptom.name AS name,
+                        count(contact_usersymptom.id) as count
+                    FROM
+                        contact_usersymptom
+                    LEFT JOIN
+                        contact_symptom
+                    ON
+                        symptom_id=contact_symptom.id
+                    WHERE
+                        insert_timestamp < %(time_last)s AND
+                        insert_timestamp >= %(time_24h)s
+                        %(selected_ids_where)s
+                    GROUP BY
+                        name
+                    ORDER BY
+                        count
+                """ % dict(
+                    time_last=time_last,
+                    time_24h=time_24h,
+                    selected_ids_where=selected_ids_where,
+                )
+                with connection.cursor() as cursor:
+                    cursor.execute(req_str)
+                    symptoms = dictfetchall(cursor)
+                for symptom in symptoms:
+                    s_dict[symptom['name']]['count_last'] = symptom['count']
+                for name in s_dict:
+                    if not s_dict[name].get('count_last'):
+                        s_dict[name]['count_last'] = 0
+
             s_list = []
             for name in s_dict:
                 if s_dict[name]['count_last']:
@@ -454,10 +498,17 @@ class LogLike(models.Model):
             lat_sum = 0
             lng_sum = 0
             got_symptom = dict()
-            for usersymptom in UserSymptom.objects.filter(
+
+            q = Q(
                     insert_timestamp__lt=time_last,
                     insert_timestamp__gte=time_1st,
+                )
+            if selected_ids_str:
+                q &= Q(symptom__pk__in=selected_ids_list)
+            for usersymptom in UserSymptom.objects.filter(
+                    q
                 ).select_related('symptom').order_by('-insert_timestamp'):
+
                 ss[symptom_ids[usersymptom.symptom.pk]].append(usersymptom.insert_timestamp)
                 if usersymptom.latitude is not None and usersymptom.longitude is not None:
                     got_symptom_key = None
@@ -652,7 +703,8 @@ class LogLike(models.Model):
                     min_insert_timestamp = m[0]['min_insert_timestamp']
                     delta_moon = current_moon_day - min_moon_day
                     delta_time = time_current - min_insert_timestamp
-                    if delta_time < (delta_moon + 5) * 86400:
+                    if (selected_ids_str != '()') and \
+                       (delta_time < (delta_moon + 5) * 86400):
                         req_str = """
                             SELECT
                                 moon_day,
@@ -663,6 +715,7 @@ class LogLike(models.Model):
                             WHERE
                                 moon_day <= %(current_moon_day)s AND
                                 insert_timestamp >= %(min_insert_timestamp)s
+                                %(selected_ids_where)s
                             GROUP BY
                                 moon_day,
                                 symptom_id
@@ -672,6 +725,7 @@ class LogLike(models.Model):
                         """ % dict(
                             current_moon_day=current_moon_day,
                             min_insert_timestamp=min_insert_timestamp,
+                            selected_ids_where=selected_ids_where,
                         )
                         with connection.cursor() as cursor:
                             cursor.execute(req_str)
@@ -679,7 +733,7 @@ class LogLike(models.Model):
                         for r in m:
                             moon_fact [symptom_ids[ r['symptom_id']] ] [r['moon_day']] = r['count']
 
-            if current_moon_day < 29:
+            if (selected_ids_str != '()') and (current_moon_day < 29):
                 req_str = """
                     SELECT
                         symptom_id,
@@ -689,6 +743,7 @@ class LogLike(models.Model):
                         contact_usersymptom
                     WHERE
                         moon_day > %(current_moon_day)s
+                        %(selected_ids_where)s
                     GROUP BY
                         moon_day,
                         symptom_id
@@ -697,6 +752,7 @@ class LogLike(models.Model):
                         moon_day
                 """ % dict(
                     current_moon_day=current_moon_day,
+                    selected_ids_where=selected_ids_where,
                 )
                 divider = int((time_current + 21600 - settings.TIME_START_GET_SYMPTOMS)/settings.MOON_MONTH_LONG)
                 if divider == 0:
@@ -763,6 +819,13 @@ class LogLike(models.Model):
                 for j, b in enumerate(bottom):
                     bottom[j] += moon_cast[i][j]
 
+            yint = []
+            locs, labels = plt.yticks()
+            for each in locs:
+                if int(each) == each:
+                    yint.append(int(each))
+            plt.yticks(yint)
+
             ax1.tick_params(bottom=False, top=True, left=True, right=True)
             ax1.tick_params(labelbottom=True, labeltop=False, labelleft=True, labelright=True)
             if current_moon_day < 29:
@@ -801,15 +864,5 @@ class LogLike(models.Model):
                 lng_avg=lng_avg,
                 moon_days_fig=moon_days_fig,
             )
-
-        if kwargs.get('only') == 'symptoms_names':
-            data = [
-                {
-                    'id': str(symptom.pk),
-                    'name': symptom.name,
-                }
-                for symptom in Symptom.objects.all().order_by('name')
-            ]
-            return data
 
         return dict()
