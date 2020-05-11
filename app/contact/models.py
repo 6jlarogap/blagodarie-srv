@@ -240,10 +240,9 @@ class LogLike(models.Model):
             # Вернуть число пользователей
             # и симтомов
             #
+            users = UserSymptom.objects.all().distinct('incognito_id').count()
             return dict(
-                users=User.objects.filter(
-                    is_superuser=False,
-                ).count(),
+                users=users,
                 symptoms=UserSymptom.objects.filter(
                     insert_timestamp__lt=time_last,
                     insert_timestamp__gte=time_1st,
@@ -282,12 +281,12 @@ class LogLike(models.Model):
             count_users_all = UserSymptom.objects.filter(
                     insert_timestamp__lt=time_last,
                     insert_timestamp__gte=time_1st,
-                ).distinct('user').count()
+                ).distinct('incognito_id').count()
 
             count_users_last = UserSymptom.objects.filter(
                     insert_timestamp__lt=time_last,
                     insert_timestamp__gte=time_24h,
-                ).distinct('user').count()
+                ).distinct('incognito_id').count()
 
             data = dict(
                 titles=[
