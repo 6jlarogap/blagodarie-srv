@@ -514,22 +514,22 @@ class LogLike(models.Model):
                 ).select_related('symptom').order_by('-insert_timestamp'):
 
                 ss[symptom_ids[usersymptom.symptom.pk]].append(usersymptom.insert_timestamp)
-                if usersymptom.latitude is not None and usersymptom.longitude is not None:
-                    got_symptom_key = None
-                    if usersymptom.incognito_id:
-                        got_symptom_key = '%s-%s' % (
-                            usersymptom.incognito_id.lower(), usersymptom.symptom.pk,
-                        )
-                    if not got_symptom.get(got_symptom_key):
-                        if got_symptom_key:
-                            got_symptom[got_symptom_key] = 1
-                        points.append([
-                            usersymptom.latitude,
-                            usersymptom.longitude,
-                            usersymptom.symptom.name,
-                        ])
-                        lat_sum += usersymptom.latitude
-                        lng_sum += usersymptom.longitude
+                #if usersymptom.latitude is not None and usersymptom.longitude is not None:
+                    #got_symptom_key = None
+                    #if usersymptom.incognito_id:
+                        #got_symptom_key = '%s-%s' % (
+                            #usersymptom.incognito_id.lower(), usersymptom.symptom.pk,
+                        #)
+                    #if not got_symptom.get(got_symptom_key):
+                        #if got_symptom_key:
+                            #got_symptom[got_symptom_key] = 1
+                        #points.append([
+                            #usersymptom.latitude,
+                            #usersymptom.longitude,
+                            #usersymptom.symptom.name,
+                        #])
+                        #lat_sum += usersymptom.latitude
+                        #lng_sum += usersymptom.longitude
 
             if(any(ss)):
                 if (points):
