@@ -454,6 +454,7 @@ class LogLike(models.Model):
             lng_avg = 37.6155600
 
             moon_days_fig = ''
+            moon_hour_fig = ''
 
             colors = [mcolor for mcolor in mcolors.CSS4_COLORS]
             colors.sort()
@@ -653,6 +654,8 @@ class LogLike(models.Model):
             moon_fact = [[0 for j in range(30)] for i in range(len(symptom_ids))]
             moon_cast = [[0 for j in range(30)] for i in range(len(symptom_ids))]
 
+            moon_hour = [[0 for j in range(30)] for i in range(24)]
+
             req_str = """
                 SELECT
                     Max(insert_timestamp) as max_time,
@@ -700,6 +703,7 @@ class LogLike(models.Model):
                     delta_time = time_current - min_insert_timestamp
                     if (selected_ids_str != '()') and \
                        (delta_time < (delta_moon + 5) * 86400):
+
                         req_str = """
                             SELECT
                                 moon_day,
@@ -714,9 +718,6 @@ class LogLike(models.Model):
                             GROUP BY
                                 moon_day,
                                 symptom_id
-                            ORDER BY
-                                moon_day,
-                                symptom_id
                         """ % dict(
                             current_moon_day=current_moon_day,
                             min_insert_timestamp=min_insert_timestamp,
@@ -728,7 +729,36 @@ class LogLike(models.Model):
                         for r in m:
                             moon_fact [symptom_ids[ r['symptom_id']] ] [r['moon_day']] = r['count']
 
+                        req_str = """
+                            SELECT
+                                moon_day,
+                                ((insert_timestamp + timezone * 3600/100 + (timezone %% 100) * 60)/3600) %% 24 as hour,
+                                Count(DISTINCT id) as count
+                            FROM
+                                contact_usersymptom
+                            WHERE
+                                moon_day <= %(current_moon_day)s AND
+                                insert_timestamp >= %(min_insert_timestamp)s
+                                %(selected_ids_where)s
+                            GROUP BY
+                                moon_day,
+                                hour
+                        """ % dict(
+                            current_moon_day=current_moon_day,
+                            min_insert_timestamp=min_insert_timestamp,
+                            selected_ids_where=selected_ids_where,
+                        )
+                        with connection.cursor() as cursor:
+                            cursor.execute(req_str)
+                            m = dictfetchall(cursor)
+                        for r in m:
+                            moon_hour [r['hour']] [r['moon_day']] = r['count']
+
             if (selected_ids_str != '()') and (current_moon_day < 29):
+                divider = int((time_current + 21600 - settings.TIME_START_GET_SYMPTOMS)/settings.MOON_MONTH_LONG)
+                if divider == 0:
+                    divider = 1
+
                 req_str = """
                     SELECT
                         symptom_id,
@@ -742,21 +772,39 @@ class LogLike(models.Model):
                     GROUP BY
                         moon_day,
                         symptom_id
-                    ORDER BY
-                        symptom_id,
-                        moon_day
                 """ % dict(
                     current_moon_day=current_moon_day,
                     selected_ids_where=selected_ids_where,
                 )
-                divider = int((time_current + 21600 - settings.TIME_START_GET_SYMPTOMS)/settings.MOON_MONTH_LONG)
-                if divider == 0:
-                    divider = 1
                 with connection.cursor() as cursor:
                     cursor.execute(req_str)
                     m = dictfetchall(cursor)
                 for r in m:
                     moon_cast [symptom_ids[ r['symptom_id']] ] [r['moon_day']] = \
+                        int(round(r['count'] / divider, 0))
+
+                req_str = """
+                    SELECT
+                        moon_day,
+                        ((insert_timestamp + timezone * 3600/100 + (timezone %% 100) * 60)/3600) %% 24 as hour,
+                        Count(DISTINCT id) as count
+                    FROM
+                        contact_usersymptom
+                    WHERE
+                        moon_day > %(current_moon_day)s
+                        %(selected_ids_where)s
+                    GROUP BY
+                        moon_day,
+                        hour
+                """ % dict(
+                    current_moon_day=current_moon_day,
+                    selected_ids_where=selected_ids_where,
+                )
+                with connection.cursor() as cursor:
+                    cursor.execute(req_str)
+                    m = dictfetchall(cursor)
+                for r in m:
+                    moon_hour [r['hour']] [r['moon_day']] = \
                         int(round(r['count'] / divider, 0))
 
             moon_phases = (
@@ -851,6 +899,45 @@ class LogLike(models.Model):
             moon_days_fig = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
             plt.close()
 
+            x = range(30)
+            y1_dummy = [24] * 30
+            y2_dummy = [0] * 30
+            s_no_size = [0 for r in x]
+
+            fig, ax1 = plt.subplots()
+            fig.set_figwidth(10)
+            fig.set_figheight(9)
+
+            for i, y in enumerate(moon_hour):
+                s = [10 * n for n in y]
+                y1 = [i + 0.5 for j in y]
+                ax1.scatter(x[:current_moon_day+1],y1[:current_moon_day+1],s=s[:current_moon_day+1], c='blue')
+                ax1.scatter(x[current_moon_day+1:],y1[current_moon_day+1:],s=s[current_moon_day+1:], c='aqua')
+
+            ax1.set_xticks(x)
+            ax1.set_xticklabels(days)
+            ax1.set_yticks(range(25))
+            ax1.set_yticklabels([str(i) for i in range(24)] + [ "0"])
+
+            ax1.tick_params(bottom=False, top=True, left=True, right=True)
+            ax1.tick_params(labelbottom=True, labeltop=False, labelleft=True, labelright=True)
+            if current_moon_day < 29:
+                ax1.set_ylabel('Прогноз')
+                ax1.yaxis.set_label_coords(0.99, 0.5)
+
+            ax2 = ax1.twiny()
+            ax2.scatter(x,y1_dummy,s=s_no_size)
+            ax2.scatter(x,y2_dummy,s=s_no_size)
+            ax2.set_xticks(x)
+            ax2.set_xticklabels(moon_phases)
+            ax2.set_yticks(range(25))
+            ax2.set_yticklabels([str(i) for i in range(24)] + [ "0"])
+
+            tmpfile = BytesIO()
+            plt.savefig(tmpfile, format='png')
+            moon_hour_fig = base64.b64encode(tmpfile.getvalue()).decode('utf-8')
+            plt.close()
+
             return dict(
                 hist=hist,
                 legend=legend,
@@ -858,6 +945,7 @@ class LogLike(models.Model):
                 lat_avg=lat_avg,
                 lng_avg=lng_avg,
                 moon_days_fig=moon_days_fig,
+                moon_hour_fig=moon_hour_fig,
             )
 
         return dict()
