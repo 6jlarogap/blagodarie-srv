@@ -236,23 +236,18 @@ class LogLike(models.Model):
                 likes=Like.objects.all().count(),
             )
 
+        if kwargs.get('only') == 'users':
+            # Вернуть число пользователей и симтомов
+            #
+            return dict(
+                users=UserSymptom.objects.all().distinct('incognito_id').count(),
+                symptoms=UserSymptom.objects.all().count(),
+            )
+
         time_current = int(time.time())
         time_last = int(((time_current + 3599) / 3600)) * 3600
         time_1st = time_current - LogLike.LAST_STAT_HOURS * 3600
         time_1st = int(time_1st / 3600) * 3600
-
-        if kwargs.get('only') == 'users':
-            # Вернуть число пользователей
-            # и симтомов
-            #
-            users = UserSymptom.objects.all().distinct('incognito_id').count()
-            return dict(
-                users=users,
-                symptoms=UserSymptom.objects.filter(
-                    insert_timestamp__lt=time_last,
-                    insert_timestamp__gte=time_1st,
-                ).count(),
-            )
 
         if kwargs.get('only') == 'symptoms_names':
             data = [
