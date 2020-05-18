@@ -230,7 +230,7 @@ class ApiGetLatestVersion(APIView):
                     version_code=output[0]['apkData']['versionCode'],
                     version_name=output[0]['apkData']['versionName'],
                     google_play_url=settings.GOOGLE_PLAY_URL,
-                    google_play_update=True,
+                    google_play_update=settings.GOOGLE_PLAY_UPDATE,
                 )
             except (KeyError, IndexError,):
                 raise ServiceException('Не нашел данные о версии мобильного приложения в output.json')
