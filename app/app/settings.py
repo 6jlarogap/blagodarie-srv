@@ -176,6 +176,8 @@ APK_OPTIONS_URL = 'https://github.com/6jlarogap/blagodarie/raw/master/app/latest
 #
 APK_OPTIONS_DOWNLOAD = 'download/apk-output/output.json'
 
+GOOGLE_PLAY_URL = 'https://play.google.com/store/apps/details?id=org.blagodarie'
+
 # Время начала наблюдений (приема симптомов ощущений):
 # начало первого лунного дня, в котором появились
 # симптомы
