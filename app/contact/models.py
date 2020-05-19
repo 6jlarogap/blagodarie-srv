@@ -249,13 +249,15 @@ class LogLike(models.Model):
         time_1st = time_current - LogLike.LAST_STAT_HOURS * 3600
         time_1st = int(time_1st / 3600) * 3600
 
+        symptom_by_name = Symptom.objects.all().order_by('name')
+
         if kwargs.get('only') == 'symptoms_names':
             data = [
                 {
                     'id': str(symptom.pk),
                     'name': symptom.name,
                 }
-                for symptom in Symptom.objects.all().order_by('name')
+                for symptom in symptom_by_name
             ]
             return data
 
@@ -276,6 +278,8 @@ class LogLike(models.Model):
                         selected_ids_str = ''
                         break
         else:
+            selected_ids_str = ''
+        if len(selected_ids_list) == symptom_by_name.count():
             selected_ids_str = ''
         if selected_ids_str:
             selected_ids_where = ' AND symptom_id IN %s ' % selected_ids_str
@@ -728,6 +732,7 @@ class LogLike(models.Model):
                             SELECT
                                 moon_day,
                                 ((insert_timestamp + timezone * 3600/100 + (timezone %% 100) * 60)/3600) %% 24 as hour,
+                                symptom_id,
                                 Count(DISTINCT id) as count
                             FROM
                                 contact_usersymptom
@@ -737,7 +742,11 @@ class LogLike(models.Model):
                                 %(selected_ids_where)s
                             GROUP BY
                                 moon_day,
-                                hour
+                                hour,
+                                symptom_id
+                            ORDER BY
+                                count
+                            DESC
                         """ % dict(
                             current_moon_day=current_moon_day,
                             min_insert_timestamp=min_insert_timestamp,
@@ -747,7 +756,12 @@ class LogLike(models.Model):
                             cursor.execute(req_str)
                             m = dictfetchall(cursor)
                         for r in m:
-                            moon_hour [r['hour']] [r['moon_day']] = r['count']
+                            if not moon_hour [r['hour']] [r['moon_day']]:
+                                moon_hour [r['hour']] [r['moon_day']] = []
+                            moon_hour [r['hour']] [r['moon_day']].append(dict(
+                                symptom_id=r['symptom_id'],
+                                count=r['count']
+                            ))
 
             if (selected_ids_str != '()') and (current_moon_day < 29):
                 divider = int((time_current + 21600 - settings.TIME_START_GET_SYMPTOMS)/settings.MOON_MONTH_LONG)
@@ -782,6 +796,7 @@ class LogLike(models.Model):
                     SELECT
                         moon_day,
                         ((insert_timestamp + timezone * 3600/100 + (timezone %% 100) * 60)/3600) %% 24 as hour,
+                        symptom_id,
                         Count(DISTINCT id) as count
                     FROM
                         contact_usersymptom
@@ -790,7 +805,11 @@ class LogLike(models.Model):
                         %(selected_ids_where)s
                     GROUP BY
                         moon_day,
-                        hour
+                        hour,
+                        symptom_id
+                    ORDER BY
+                        count
+                    DESC
                 """ % dict(
                     current_moon_day=current_moon_day,
                     selected_ids_where=selected_ids_where,
@@ -799,8 +818,14 @@ class LogLike(models.Model):
                     cursor.execute(req_str)
                     m = dictfetchall(cursor)
                 for r in m:
-                    moon_hour [r['hour']] [r['moon_day']] = \
-                        int(round(r['count'] / divider, 0))
+                    count = int(round(r['count'] / divider, 0))
+                    if count:
+                        if not moon_hour [r['hour']] [r['moon_day']]:
+                            moon_hour [r['hour']] [r['moon_day']] = []
+                        moon_hour [r['hour']] [r['moon_day']].append(dict(
+                            symptom_id=r['symptom_id'],
+                            count=count
+                        ))
 
             moon_phases = (
 
@@ -903,12 +928,32 @@ class LogLike(models.Model):
             fig.set_figwidth(10)
             fig.set_figheight(9)
 
-            for i, y in enumerate(moon_hour):
-                s = [10 * n for n in y]
-                y1 = [i + 0.5 for j in y]
-                ax1.scatter(x[:current_moon_day+1],y1[:current_moon_day+1],s=s[:current_moon_day+1], c='blue')
-                ax1.scatter(x[current_moon_day+1:],y1[current_moon_day+1:],s=s[current_moon_day+1:], c='aqua')
-
+            for i, hour in enumerate(moon_hour):
+                for j, lst in enumerate(hour):
+                    if not lst:
+                        continue
+                    if len(lst) == 1:
+                        alpha = 1.0 if j <= current_moon_day else 0.7
+                        ax1.scatter(
+                            j,
+                            i + 0.5,
+                            s=30,
+                            c=colors[symptom_ids[lst[0]['symptom_id']]],
+                            alpha=alpha
+                        )
+                    else:
+                        alpha = 0.7 if j <= current_moon_day else 0.3
+                        step = 0.5 / len(lst)
+                        y_current = i + 0.70
+                        for k, item in enumerate(lst):
+                            ax1.scatter(
+                                j,
+                                y_current,
+                                s=item['count']*30,
+                                c=colors[symptom_ids[item['symptom_id']]],
+                                alpha=alpha
+                            )
+                            y_current -= step
             ax1.set_xticks(x)
             ax1.set_xticklabels(days)
             ax1.set_yticks(range(25))
