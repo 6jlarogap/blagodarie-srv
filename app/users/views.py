@@ -2,7 +2,7 @@ import os, re, hmac, hashlib, json
 import urllib.request, urllib.error
 
 from django.shortcuts import render
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.conf import settings
 
 from rest_framework.views import APIView
@@ -11,7 +11,7 @@ from rest_framework.authtoken.models import Token
 
 from app.utils import ServiceException
 
-from users.models import Oauth, CreateUserMixin
+from users.models import Oauth, CreateUserMixin, IncognitoUser
 from contact.models import Key, KeyType
 
 class ApiAuthSignUp(CreateUserMixin, APIView):
@@ -241,3 +241,53 @@ class ApiGetLatestVersion(APIView):
 
 api_latest_version = ApiGetLatestVersion.as_view()
 
+class ApiAuthSignUpIncognito(APIView):
+
+    @transaction.atomic
+    def post(self, request):
+        """
+        Создание анонимного пользователя
+
+        На вход поступает, например:
+        {
+            "incognito": {
+                "private_key": "becd79d8-9741-4d23-88fe-9c6a75ac881e",
+                "public_key": "cf81884f-be1e-401e-a90b-1f70e2295a73"
+            }
+        }
+        Возвращает:
+        {
+            "incognito_user_id": 12345
+        }
+        В таблице IncognitoUser создает запись с полученными ключами,
+        если таковой не существует, либо, если запись с таким private_key уже существует,
+        и при этом public_key пуст, то устанавливает public_key равным полученному значению
+        """
+        try:
+            incognito = request.data.get('incognito')
+            if not incognito or not incognito.get('private_key'):
+                raise ServiceException('Не задан incognito ии incognito.private_key')
+            try:
+                incognito_user, created_ = IncognitoUser.objects.get_or_create(
+                    private_key=incognito['private_key'].lower(),
+                    defaults = dict(
+                        public_key=incognito.get('public_key') and incognito['public_key'].lower() or None,
+                ))
+                if not created_ and \
+                   'public_key' in incognito and \
+                   incognito_user.public_key is None:
+                    incognito_user.public_key = incognito['public_key'].lower()
+                    incognito_user.save(update_fields=('public_key',))
+                data = dict(
+                    incognito_user_id = incognito_user.pk,
+                )
+                status_code = 200
+            except IntegrityError:
+                raise ServiceException('Не выполнено условие уникальности ключа')
+        except ServiceException as excpt:
+            transaction.set_rollback(True)
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+api_auth_signup_incognito = ApiAuthSignUpIncognito.as_view()
