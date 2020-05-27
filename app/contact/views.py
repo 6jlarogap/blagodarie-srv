@@ -940,94 +940,12 @@ api_get_stats = ApiGetStats.as_view()
 class ApiAddUserSymptom(APIView):
 
     @transaction.atomic
-    def post(self, request):
-        """
-        Добавление симптома пользователя.
-
-        Пример исходных данных:
-        {
-            "user_id": 123,
-            "user_symptoms": [
-                {
-                "user_symptom_id":1, // локальный идентификатор
-                "symptom_id": 1,
-                "timestamp": 1585912637,
-                "latitude": 53.893009,
-                "longitude": 27.567444
-                }
-            ]
-        }
-        Возвращает:
-        {
-            "user_symptoms": [
-                {
-                "user_symptom_id":1,
-                "symptom_server_id": 1,
-                }
-            ]
-        }
-        """
-        try:
-            data = dict(user_symptoms=[])
-            status_code = status.HTTP_200_OK
-            user_id = request.data.get("user_id")
-            if user_id is None:
-                raise ServiceException("Не задан user_id")
-            try:
-                user = User.objects.get(pk=user_id)
-            except User.DoesNotExist:
-                raise ServiceException("Не найден user_id")
-            user_symptoms = request.data.get("user_symptoms")
-            if not isinstance(user_symptoms, list):
-                raise ServiceException("Не заданы user_symptoms")
-            n_key = 0
-            for user_symptom in user_symptoms:
-                try:
-                    symptom_id = user_symptom['symptom_id']
-                except KeyError:
-                    raise ServiceException(MSG_NO_PARM % n_key)
-                user_symptom_id = user_symptom.get('user_symptom_id')
-                try:
-                    symptom = Symptom.objects.get(pk=symptom_id)
-                except Symptom.DoesNotExist:
-                    raise ServiceException("Не найден symptom_id")
-                insert_timestamp = user_symptom.get('timestamp')
-                latitude = user_symptom.get('latitude')
-                longitude = user_symptom.get('longitude')
-                usersymptom = UserSymptom.objects.create(
-                    user=user,
-                    symptom=symptom,
-                    insert_timestamp=insert_timestamp,
-                    latitude=latitude,
-                    longitude=longitude,
-                )
-                data['user_symptoms'].append({
-                    'user_symptom_id': user_symptom_id,
-                    'user_symptom_server_id': usersymptom.pk,
-                })
-                n_key += 1
-        except ServiceException as excpt:
-            transaction.set_rollback(True)
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
-
-api_add_user_symptom = ApiAddUserSymptom.as_view()
-
-class ApiAddUserSymptomNew(APIView):
-
-    @transaction.atomic
     def post(self, request, *args, **kwargs,):
         """
         Добавление симптома пользователя (новая версия)
 
         Вставить переданные user_symptoms.
         Для этого метода есть url с обязательной авторизацией и без нее.
-        Если при обязательной авторизации у зарегистрировашегося
-        пользователя есть записи в UserSymptom, то всем этим записям
-        проставить incognito_id равный переданному и
-        установить user_id = null.
-        TODO это убрать, когда удалим UserSymptom.user
         Пример исходных данных:
         {
             "incognito_id": "2b0cdb0a-544d-406a-b832-6821c63f5d45",
@@ -1096,14 +1014,6 @@ class ApiAddUserSymptomNew(APIView):
                 )
                 n_key += 1
 
-            # TODO Убрать этот код после удаления поля UserSymptom.user
-            #
-            if auth_only:
-                UserSymptom.objects.filter(user=request.user).update(
-                    user=None,
-                    incognito_id=incognito_id,
-                )
-
             data = dict()
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
@@ -1112,7 +1022,7 @@ class ApiAddUserSymptomNew(APIView):
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
-api_add_user_symptom_new = ApiAddUserSymptomNew.as_view()
+api_add_user_symptom = ApiAddUserSymptom.as_view()
 
 class ApiGetSymptoms(APIView):
 

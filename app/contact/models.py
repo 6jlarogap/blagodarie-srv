@@ -177,15 +177,6 @@ class Symptom(models.Model):
 
 class UserSymptom(BaseModelInsertTimestamp, GeoPointModel):
 
-    # TODO: Поле user удалить, как там будут все значения is Null.
-    #       При этом:
-    #           - удалить /api/addusersymptom
-    #           - в /api/add_user_symptom убрать обнуление этого поля
-    #           - поле incognito_id: убрать null=True
-    #           - обнулить разработческую б.д.
-    #
-    user = models.ForeignKey('auth.User', verbose_name=_("Пользователь"),
-                             null=True, on_delete=models.CASCADE)
     incognito_id = models.CharField(_("Идентификатор инкогнито"),
                                     max_length=36, null=True, db_index=True)
 
