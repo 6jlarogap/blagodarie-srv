@@ -273,11 +273,11 @@ class ApiAuthSignUpIncognito(APIView):
                     defaults = dict(
                         public_key=incognito.get('public_key') and incognito['public_key'].lower() or None,
                 ))
-                if not created_ and \
-                   'public_key' in incognito and \
-                   incognito_user.public_key is None:
-                    incognito_user.public_key = incognito['public_key'].lower()
-                    incognito_user.save(update_fields=('public_key',))
+                if not created_ and 'public_key' in incognito:
+                    public_key = incognito['public_key'] and incognito['public_key'].lower() or None
+                    if incognito_user.public_key != public_key:
+                        incognito_user.public_key = public_key
+                        incognito_user.save(update_fields=('public_key',))
                 data = dict(
                     incognito_user_id = incognito_user.pk,
                 )
