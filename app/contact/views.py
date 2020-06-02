@@ -19,7 +19,7 @@ from app.utils import ServiceException
 
 from contact.models import KeyType, Key, UserKey, LikeKey, Like, LogLike, \
                            Symptom, UserSymptom, SymptomChecksumManage
-from users.models import CreateUserMixin
+from users.models import CreateUserMixin, IncognitoUser
 
 MSG_NO_PARM = 'Не задан или не верен какой-то из параметров в связке номер %s (начиная с 0)'
 
@@ -939,6 +939,9 @@ api_get_stats = ApiGetStats.as_view()
 
 class ApiAddUserSymptom(APIView):
 
+    # TODO
+    # Удалить обработку incognito_id, когда пользователи обновят свои апк
+
     @transaction.atomic
     def post(self, request, *args, **kwargs,):
         """
@@ -948,7 +951,10 @@ class ApiAddUserSymptom(APIView):
         Для этого метода есть url с обязательной авторизацией и без нее.
         Пример исходных данных:
         {
-            "incognito_id": "2b0cdb0a-544d-406a-b832-6821c63f5d45",
+            "incognito_id": "2b0cdb0a-544d-406a-b832-6821c63f5d45"
+            // Это временно
+            // или
+            "private_key": "2b0cdb0a-544d-406a-b832-6821c63fffff"
             "user_symptoms": [
                 {
                     "symptom_id": 10,
@@ -972,10 +978,28 @@ class ApiAddUserSymptom(APIView):
             auth_only = kwargs.get('auth')
             if auth_only and not request.user.is_authenticated:
                 raise AuthenticationFailed
+
             incognito_id = request.data.get("incognito_id")
-            incognito_id = incognito_id.lower()
-            if not incognito_id:
-                raise ServiceException("Не задан incognito_id")
+            private_key = request.data.get("private_key")
+            if not incognito_id and not private_key:
+                raise ServiceException("Не задано ни incognito_id, ни private_key")
+            if incognito_id and private_key:
+                raise ServiceException("Заданы и incognito_id, и private_key")
+            if private_key:
+                private_key = private_key.lower()
+                try:
+                    incognitouser = IncognitoUser.objects.get(
+                        private_key=private_key
+                    )
+                except IncognitoUser.DoesNotExist:
+                    raise ServiceException("Не найден private_key среди incognito пользователей")
+            else:
+                # got incognito_id
+                incognito_id = incognito_id.lower()
+                incognitouser, created_ = IncognitoUser.objects.get_or_create(
+                    private_key=incognito_id
+                )
+
             user_symptoms = request.data.get("user_symptoms")
             if not isinstance(user_symptoms, list):
                 raise ServiceException("Не заданы user_symptoms")
@@ -1005,7 +1029,7 @@ class ApiAddUserSymptom(APIView):
                         "Неверная timezone, элемент списка %s (начиная с нуля)" % n_key
                     )
                 usersymptom = UserSymptom.objects.create(
-                    incognito_id=incognito_id,
+                    incognitouser=incognitouser,
                     symptom=symptom,
                     insert_timestamp=insert_timestamp,
                     latitude=latitude,

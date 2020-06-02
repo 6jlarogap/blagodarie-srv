@@ -177,8 +177,9 @@ class Symptom(models.Model):
 
 class UserSymptom(BaseModelInsertTimestamp, GeoPointModel):
 
-    incognito_id = models.CharField(_("Идентификатор инкогнито"),
-                                    max_length=36, null=True, db_index=True)
+    incognitouser = models.ForeignKey('users.IncognitoUser',
+                                      verbose_name=_("Пользователь инкогнито"),
+                                      on_delete=models.CASCADE)
 
     symptom = models.ForeignKey(Symptom, verbose_name=_("Симптом"), on_delete=models.CASCADE)
 
@@ -186,7 +187,7 @@ class UserSymptom(BaseModelInsertTimestamp, GeoPointModel):
     # angle between the Moon and the Sun along the ecliptic как 360 град.,
     # экстраполированные в 30 лунных дней (1 такой день - 360/30 градусов)
     #
-    moon_day = models.IntegerField(_("День лунного календаря"), null=True, db_index=True)
+    moon_day = models.IntegerField(_("День лунного календаря"), db_index=True)
 
     # Поле timezone - число, получаемое, например, от строки по Московскому
     # часовому поясу: "+0300", этот же часовой пояс - по умолчанию.
@@ -231,7 +232,7 @@ class LogLike(models.Model):
             # Вернуть число пользователей и симтомов
             #
             return dict(
-                users=UserSymptom.objects.all().distinct('incognito_id').count(),
+                users=UserSymptom.objects.all().distinct('incognitouser').count(),
                 symptoms=UserSymptom.objects.all().count(),
             )
 
@@ -310,7 +311,7 @@ class LogLike(models.Model):
                 )
             if selected_ids_str:
                 q &= Q(symptom__pk__in=selected_ids_list)
-            count_users_all = UserSymptom.objects.filter(q).distinct('incognito_id').count()
+            count_users_all = UserSymptom.objects.filter(q).distinct('incognitouser').count()
 
             q = Q(
                     insert_timestamp__lt=time_last,
@@ -318,7 +319,7 @@ class LogLike(models.Model):
                 )
             if selected_ids_str:
                 q &= Q(symptom__pk__in=selected_ids_list)
-            count_users_last = UserSymptom.objects.filter(q).distinct('incognito_id').count()
+            count_users_last = UserSymptom.objects.filter(q).distinct('incognitouser').count()
 
             data = dict(
                 titles=[
@@ -507,10 +508,9 @@ class LogLike(models.Model):
                 ss[symptom_ids[usersymptom.symptom.pk]].append(usersymptom.insert_timestamp)
                 #if usersymptom.latitude is not None and usersymptom.longitude is not None:
                     #got_symptom_key = None
-                    #if usersymptom.incognito_id:
-                        #got_symptom_key = '%s-%s' % (
-                            #usersymptom.incognito_id.lower(), usersymptom.symptom.pk,
-                        #)
+                    #got_symptom_key = '%s-%s' % (
+                        #usersymptom.incognitouser.pk, usersymptom.symptom.pk,
+                    #)
                     #if not got_symptom.get(got_symptom_key):
                         #if got_symptom_key:
                             #got_symptom[got_symptom_key] = 1
