@@ -30,6 +30,8 @@ from app.models import BaseModelInsertTimestamp, BaseModelInsertUpdateTimestamp,
 
 from app.utils import dictfetchall
 
+from users.models import IncognitoUser
+
 class KeyType(models.Model):
 
     title = models.CharField(_("Код ключа"), max_length=255, unique=True)
@@ -254,8 +256,6 @@ class LogLike(models.Model):
             return data
 
         selected_ids_str = request.GET.get('selected_ids_str', '')
-        # Проверим, что пришло
-
         m = re.search(r'\((\S*)\)', selected_ids_str)
         selected_ids_list = []
         selected_ids_where = ''
@@ -275,6 +275,16 @@ class LogLike(models.Model):
             selected_ids_str = ''
         if selected_ids_str:
             selected_ids_where = ' AND symptom_id IN %s ' % selected_ids_str
+
+        public_key = request.GET.get('public_key', '')
+        incognitouser = None
+        incognitouser_where = ''
+        if public_key:
+            try:
+                incognitouser = IncognitoUser.objects.get(public_key=public_key)
+                incognitouser_where = ' AND incognitouser_id = %s ' % incognitouser.pk
+            except IncognitoUser.DoesNotExist:
+                pass
 
         if kwargs.get('only') == 'symptoms':
             # Возвращает json:
@@ -303,35 +313,31 @@ class LogLike(models.Model):
             time_24h = time_current - 24 * 3600
             time_24h = int(time_24h / 3600) * 3600
 
-            # Ниже count ... _all - это таки за последние 48 часов
-            #
-            q = Q(
-                    insert_timestamp__lt=time_last,
-                    insert_timestamp__gte=time_1st,
-                )
-            if selected_ids_str:
-                q &= Q(symptom__pk__in=selected_ids_list)
-            count_users_all = UserSymptom.objects.filter(q).distinct('incognitouser').count()
-
-            q = Q(
-                    insert_timestamp__lt=time_last,
-                    insert_timestamp__gte=time_24h,
-                )
-            if selected_ids_str:
-                q &= Q(symptom__pk__in=selected_ids_list)
-            count_users_last = UserSymptom.objects.filter(q).distinct('incognitouser').count()
-
             data = dict(
-                titles=[
-                    'Пользователи (%s, %s)' % (count_users_all, count_users_last)
-                ],
-                counts_last=[
-                    count_users_last,
-                ],
-                counts_all=[
-                    count_users_all,
-                ]
+                titles=[],
+                counts_last=[],
+                counts_all=[]
             )
+            if not incognitouser:
+                q = Q(
+                        insert_timestamp__lt=time_last,
+                        insert_timestamp__gte=time_1st,
+                    )
+                if selected_ids_str:
+                    q &= Q(symptom__pk__in=selected_ids_list)
+                count_users_all = UserSymptom.objects.filter(q).distinct('incognitouser').count()
+
+                q = Q(
+                        insert_timestamp__lt=time_last,
+                        insert_timestamp__gte=time_24h,
+                    )
+                if selected_ids_str:
+                    q &= Q(symptom__pk__in=selected_ids_list)
+                count_users_last = UserSymptom.objects.filter(q).distinct('incognitouser').count()
+                data['titles'].append('Пользователи (%s, %s)' % (count_users_all, count_users_last))
+                data['counts_last'].append(count_users_last)
+                data['counts_all'].append(count_users_all)
+
             s_dict = dict()
             if selected_ids_str != '()':
                 req_str = """
@@ -348,6 +354,7 @@ class LogLike(models.Model):
                         insert_timestamp < %(time_last)s AND
                         insert_timestamp >= %(time_1st)s
                         %(selected_ids_where)s
+                        %(incognitouser_where)s
                     GROUP BY
                         name
                     ORDER BY
@@ -356,6 +363,7 @@ class LogLike(models.Model):
                     time_last=time_last,
                     time_1st=time_1st,
                     selected_ids_where=selected_ids_where,
+                    incognitouser_where=incognitouser_where,
                 )
                 with connection.cursor() as cursor:
                     cursor.execute(req_str)
@@ -378,6 +386,7 @@ class LogLike(models.Model):
                         insert_timestamp < %(time_last)s AND
                         insert_timestamp >= %(time_24h)s
                         %(selected_ids_where)s
+                        %(incognitouser_where)s
                     GROUP BY
                         name
                     ORDER BY
@@ -386,6 +395,7 @@ class LogLike(models.Model):
                     time_last=time_last,
                     time_24h=time_24h,
                     selected_ids_where=selected_ids_where,
+                    incognitouser_where=incognitouser_where,
                 )
                 with connection.cursor() as cursor:
                     cursor.execute(req_str)
@@ -501,6 +511,8 @@ class LogLike(models.Model):
                 )
             if selected_ids_str:
                 q &= Q(symptom__pk__in=selected_ids_list)
+            if incognitouser:
+                q &= Q(incognitouser=incognitouser)
             for usersymptom in UserSymptom.objects.filter(
                     q
                 ).select_related('symptom').order_by('-insert_timestamp'):
@@ -705,6 +717,7 @@ class LogLike(models.Model):
                                 moon_day <= %(current_moon_day)s AND
                                 insert_timestamp >= %(min_insert_timestamp)s
                                 %(selected_ids_where)s
+                                %(incognitouser_where)s
                             GROUP BY
                                 moon_day,
                                 symptom_id
@@ -712,6 +725,7 @@ class LogLike(models.Model):
                             current_moon_day=current_moon_day,
                             min_insert_timestamp=min_insert_timestamp,
                             selected_ids_where=selected_ids_where,
+                            incognitouser_where=incognitouser_where,
                         )
                         with connection.cursor() as cursor:
                             cursor.execute(req_str)
@@ -731,6 +745,7 @@ class LogLike(models.Model):
                                 moon_day <= %(current_moon_day)s AND
                                 insert_timestamp >= %(min_insert_timestamp)s
                                 %(selected_ids_where)s
+                                %(incognitouser_where)s
                             GROUP BY
                                 moon_day,
                                 hour,
@@ -742,6 +757,7 @@ class LogLike(models.Model):
                             current_moon_day=current_moon_day,
                             min_insert_timestamp=min_insert_timestamp,
                             selected_ids_where=selected_ids_where,
+                            incognitouser_where=incognitouser_where,
                         )
                         with connection.cursor() as cursor:
                             cursor.execute(req_str)
@@ -769,12 +785,14 @@ class LogLike(models.Model):
                     WHERE
                         moon_day > %(current_moon_day)s
                         %(selected_ids_where)s
+                        %(incognitouser_where)s
                     GROUP BY
                         moon_day,
                         symptom_id
                 """ % dict(
                     current_moon_day=current_moon_day,
                     selected_ids_where=selected_ids_where,
+                    incognitouser_where=incognitouser_where,
                 )
                 with connection.cursor() as cursor:
                     cursor.execute(req_str)
@@ -794,6 +812,7 @@ class LogLike(models.Model):
                     WHERE
                         moon_day > %(current_moon_day)s
                         %(selected_ids_where)s
+                        %(incognitouser_where)s
                     GROUP BY
                         moon_day,
                         hour,
@@ -804,6 +823,7 @@ class LogLike(models.Model):
                 """ % dict(
                     current_moon_day=current_moon_day,
                     selected_ids_where=selected_ids_where,
+                    incognitouser_where=incognitouser_where,
                 )
                 with connection.cursor() as cursor:
                     cursor.execute(req_str)
