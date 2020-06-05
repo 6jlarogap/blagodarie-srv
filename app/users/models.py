@@ -8,7 +8,7 @@ from django.utils.translation import ugettext_lazy as _
 
 from django.contrib.auth.models import User
 
-from app.models import BaseModelInsertUpdateTimestamp, BaseModelInsertTimestamp
+from app.models import BaseModelInsertUpdateTimestamp
 from django.contrib.auth.models import User
 from app.utils import ServiceException
 
@@ -220,7 +220,7 @@ class CreateUserMixin(object):
                     setattr(oauth.user, f, oauth_result[f])
                 oauth.user.save()
 
-class IncognitoUser(BaseModelInsertTimestamp):
+class IncognitoUser(BaseModelInsertUpdateTimestamp):
 
     private_key = models.CharField(_("Личный ключ"), max_length=36, unique=True, db_index=True)
     public_key = models.CharField(_("Публичный ключ"), max_length=36, null=True, unique=True, db_index=True)
