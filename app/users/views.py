@@ -214,8 +214,21 @@ api_download_apk_details = ApiDownloadApkDetails.as_view()
 class ApiGetLatestVersion(APIView):
 
     def get(self, request):
+        """
+        Получить последнюю версию кода апк
+
+        Запрос возвращает последнюю версию кода апк,
+        а также анонимный публичный ключ пользователя и
+        таймштамп публичного ключа,
+        соответствующих полученного приватному ключу
+        в get параметре incognito_private_key
+        """
         try:
-            data = dict(url=settings.APK_URL)
+            data = dict(
+                url=settings.APK_URL,
+                incognito_public_key=None,
+                incognito_public_key_timestamp=None,
+            )
             try:
                 with open(os.path.join(settings.MEDIA_ROOT, settings.APK_OPTIONS_DOWNLOAD), 'r') as f:
                     raw_output = f.read()
@@ -234,6 +247,16 @@ class ApiGetLatestVersion(APIView):
                 )
             except (KeyError, IndexError,):
                 raise ServiceException('Не нашел данные о версии мобильного приложения в output.json')
+            private_key = request.GET.get('incognito_private_key')
+            if private_key:
+                try:
+                    incognitouser = IncognitoUser.objects.get(private_key=private_key)
+                    public_key = incognitouser.public_key
+                    if public_key:
+                        data['incognito_public_key'] = public_key
+                        data['incognito_public_key_timestamp'] = incognitouser.update_timestamp
+                except IncognitoUser.DoesNotExist:
+                    pass
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
             status_code = 500
