@@ -600,57 +600,10 @@ class LogLike(models.Model):
                 plt.close()
 
             # Лунная диагамма
+            # Выбираем количества симптомов по по каждому лунному дню
+            # за всё время наблюдений. Если больше текущего лунного дня,
+            # то это прогноз
             #
-            # Выбрать последние лунные дни, начиная с нулевого до текущего,
-            # занести оттуда количества по симптомам. По остальным лунным
-            # дням выбрать усредненные суммы по симптомам за весь период наблюдений.
-            #
-            # Все бы было просто, если б симптомы приходили каждый лунный день,
-            # тогда делалась бы выборка после последнего insert_timestamp
-            # за 29 день и до текущего. А вдруг в последний из 
-            # 29-ых дней не окажется симптомов? Тогда будем ошибочно считать,\
-            # начиная с 29-го лунного дня предыдущего цикла. То и оно!
-            #
-            # К сожалению, не удалось найти в апи, как вычислить
-            # utc время начала текущего лунного цикла.
-            #
-            # Посему все сложнее:
-            #
-            # - Находим текущий лунный день, current_moon_day по текущему
-            #   времени time_current.
-            # - Надо найти минимальный min_insert_timestamp из лунных дней
-            #   0..current_moon_day.
-            #       * Сначала ищем минимальный из максимальных
-            #         по лунным дням 0..current_moon_day.
-            #         Он будет первым из этих максимальных (limit 1 в поиске).
-            #         Найденный moon_day обзовем min_moon_day.
-            #       * По этому min_moon_day ищем min_insert_timestamp за время
-            #         не раньше его max_insert_timestamp минус 2 дня:
-            #         один лунный день всегда меньше 2 календарных дней.
-            #
-            #   Однако! В текущем лунном цикле может не оказаться
-            #           симптомов. Очень даже возможно: начался новый лунный цикл
-            #           (current_moon_day == 0), а симптомы еще не поступали
-            #           (min_moon_day == 29)
-            #
-            #       * Если min_moon_day > current_moon_day, то
-            #         в текущем цикле не было симптомов
-            #         Самый частый случай: current_moon_day == 0 && min_moon_day == 29
-            #         (перешли в следующий цикл, а он пока без симптомов)
-            #       * Иначе (delta_moon = current_moon_day - min_moon_day) >= 0.
-            #         Считаем delta_time = time_current - min_insert_timestamp.
-            #         При delta_moon == 0 достаточно с запасом delta_time = 5 суток,
-            #         чтобы выяснить, что min_insert_timestamp -- в предыдущем цикле.
-            #         При delta_moon == 1 с запасом delta_time = 6. И т.д
-            #         Получается формула:
-            #           если delta_time > (delta_moon + 5) * 86400,
-            #               то в текущем лунном цикле не было симптомов.
-            #
-            # - Если в текущем цикле были симптомы, то не раньше
-            #   min_insert_timestamp будет выборка количеств симптомов
-            #   по лунным дням <= current_moon_day.
-            #
-            # - Усредненные суммы ищем по лунным дням > current_moon_day по всей таблице
             
             current_moon_day = get_moon_day(time_current)
             moon_fact = [[0 for j in range(30)] for i in range(len(symptom_ids))]
@@ -658,123 +611,68 @@ class LogLike(models.Model):
 
             moon_hour = [[0 for j in range(30)] for i in range(24)]
 
-            req_str = """
-                SELECT
-                    Max(insert_timestamp) as max_time,
-                    moon_day
-                FROM
-                    contact_usersymptom
-                WHERE
-                    moon_day <= %(current_moon_day)s AND
-                    insert_timestamp > %(time_current)s - 30 * 86040
-                GROUP BY
-                    moon_day
-                ORDER BY
-                    moon_day
-                LIMIT 1
-            """ % dict(
-                current_moon_day=current_moon_day,
-                time_current=time_current,
-            )
-            with connection.cursor() as cursor:
-                cursor.execute(req_str)
-                m = dictfetchall(cursor)
-
-            if m and (m[0]['moon_day'] <= current_moon_day):
-                min_moon_day = m[0]['moon_day']
+            if selected_ids_str != '()':
                 req_str = """
                     SELECT
-                        Min(insert_timestamp) as min_insert_timestamp
+                        moon_day,
+                        symptom_id,
+                        Count(symptom_id) as count
                     FROM
                         contact_usersymptom
                     WHERE
-                        moon_day = %(min_moon_day)s AND
-                        insert_timestamp >= %(max_time)s - 2 * 86400
+                        moon_day <= %(current_moon_day)s
+                        %(selected_ids_where)s
+                        %(incognitouser_where)s
+                    GROUP BY
+                        moon_day,
+                        symptom_id
                 """ % dict(
-                    min_moon_day=min_moon_day,
-                    max_time=m[0]['max_time'],
+                    current_moon_day=current_moon_day,
+                    selected_ids_where=selected_ids_where,
+                    incognitouser_where=incognitouser_where,
                 )
                 with connection.cursor() as cursor:
                     cursor.execute(req_str)
                     m = dictfetchall(cursor)
+                for r in m:
+                    moon_fact [symptom_ids[ r['symptom_id']] ] [r['moon_day']] = r['count']
 
-                # fool-proof
-                if m :
-                    min_insert_timestamp = m[0]['min_insert_timestamp']
-                    delta_moon = current_moon_day - min_moon_day
-                    delta_time = time_current - min_insert_timestamp
-                    if (selected_ids_str != '()') and \
-                       (delta_time < (delta_moon + 5) * 86400):
-
-                        req_str = """
-                            SELECT
-                                moon_day,
-                                symptom_id,
-                                Count(symptom_id) as count
-                            FROM
-                                contact_usersymptom
-                            WHERE
-                                moon_day <= %(current_moon_day)s AND
-                                insert_timestamp >= %(min_insert_timestamp)s
-                                %(selected_ids_where)s
-                                %(incognitouser_where)s
-                            GROUP BY
-                                moon_day,
-                                symptom_id
-                        """ % dict(
-                            current_moon_day=current_moon_day,
-                            min_insert_timestamp=min_insert_timestamp,
-                            selected_ids_where=selected_ids_where,
-                            incognitouser_where=incognitouser_where,
-                        )
-                        with connection.cursor() as cursor:
-                            cursor.execute(req_str)
-                            m = dictfetchall(cursor)
-                        for r in m:
-                            moon_fact [symptom_ids[ r['symptom_id']] ] [r['moon_day']] = r['count']
-
-                        req_str = """
-                            SELECT
-                                moon_day,
-                                ((insert_timestamp + timezone * 3600/100 + (timezone %% 100) * 60)/3600) %% 24 as hour,
-                                symptom_id,
-                                Count(DISTINCT id) as count
-                            FROM
-                                contact_usersymptom
-                            WHERE
-                                moon_day <= %(current_moon_day)s AND
-                                insert_timestamp >= %(min_insert_timestamp)s
-                                %(selected_ids_where)s
-                                %(incognitouser_where)s
-                            GROUP BY
-                                moon_day,
-                                hour,
-                                symptom_id
-                            ORDER BY
-                                count
-                            DESC
-                        """ % dict(
-                            current_moon_day=current_moon_day,
-                            min_insert_timestamp=min_insert_timestamp,
-                            selected_ids_where=selected_ids_where,
-                            incognitouser_where=incognitouser_where,
-                        )
-                        with connection.cursor() as cursor:
-                            cursor.execute(req_str)
-                            m = dictfetchall(cursor)
-                        for r in m:
-                            if not moon_hour [r['hour']] [r['moon_day']]:
-                                moon_hour [r['hour']] [r['moon_day']] = []
-                            moon_hour [r['hour']] [r['moon_day']].append(dict(
-                                symptom_id=r['symptom_id'],
-                                count=r['count']
-                            ))
+                req_str = """
+                    SELECT
+                        moon_day,
+                        ((insert_timestamp + timezone * 3600/100 + (timezone %% 100) * 60)/3600) %% 24 as hour,
+                        symptom_id,
+                        Count(DISTINCT id) as count
+                    FROM
+                        contact_usersymptom
+                    WHERE
+                        moon_day <= %(current_moon_day)s
+                        %(selected_ids_where)s
+                        %(incognitouser_where)s
+                    GROUP BY
+                        moon_day,
+                        hour,
+                        symptom_id
+                    ORDER BY
+                        count
+                    DESC
+                """ % dict(
+                    current_moon_day=current_moon_day,
+                    selected_ids_where=selected_ids_where,
+                    incognitouser_where=incognitouser_where,
+                )
+                with connection.cursor() as cursor:
+                    cursor.execute(req_str)
+                    m = dictfetchall(cursor)
+                for r in m:
+                    if not moon_hour [r['hour']] [r['moon_day']]:
+                        moon_hour [r['hour']] [r['moon_day']] = []
+                    moon_hour [r['hour']] [r['moon_day']].append(dict(
+                        symptom_id=r['symptom_id'],
+                        count=r['count']
+                    ))
 
             if (selected_ids_str != '()') and (current_moon_day < 29):
-                divider = int((time_current + 21600 - settings.TIME_START_GET_SYMPTOMS)/settings.MOON_MONTH_LONG)
-                if divider == 0:
-                    divider = 1
-
                 req_str = """
                     SELECT
                         symptom_id,
@@ -798,8 +696,7 @@ class LogLike(models.Model):
                     cursor.execute(req_str)
                     m = dictfetchall(cursor)
                 for r in m:
-                    moon_cast [symptom_ids[ r['symptom_id']] ] [r['moon_day']] = \
-                        int(round(r['count'] / divider, 0))
+                    moon_cast [symptom_ids[ r['symptom_id']] ] [r['moon_day']] = r['count']
 
                 req_str = """
                     SELECT
@@ -829,13 +726,12 @@ class LogLike(models.Model):
                     cursor.execute(req_str)
                     m = dictfetchall(cursor)
                 for r in m:
-                    count = int(round(r['count'] / divider, 0))
-                    if count:
+                    if r['count']:
                         if not moon_hour [r['hour']] [r['moon_day']]:
                             moon_hour [r['hour']] [r['moon_day']] = []
                         moon_hour [r['hour']] [r['moon_day']].append(dict(
                             symptom_id=r['symptom_id'],
-                            count=count
+                            count=r['count']
                         ))
 
             moon_phases = (
