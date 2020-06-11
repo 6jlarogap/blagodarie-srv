@@ -295,13 +295,13 @@ class LogLike(models.Model):
             #           ...
             #           "симптомN (<за LAST_STAT_HOURS>, <за 24 HOURS>)",
             #       ],
-            #       "counts_all": [
+            #       "counts_48h": [
             #           <число пользователей с симптомами за LAST_STAT_HOURS>,
             #           "<за LAST_STAT_HOURS симптомов1>",
             #           ...
             #           "<за LAST_STAT_HOURS симптомовN>"
             #       ],
-            #       "counts_last": [
+            #       "counts_24h": [
             #           <пользователей за LAST_STAT_HOURS>,
             #           "<за 24 HOURS симптомов1>",
             #           ...
@@ -315,8 +315,8 @@ class LogLike(models.Model):
 
             data = dict(
                 titles=[],
-                counts_last=[],
-                counts_all=[]
+                counts_48h=[],
+                counts_24h=[]
             )
             if not incognitouser:
                 q = Q(
@@ -325,7 +325,7 @@ class LogLike(models.Model):
                     )
                 if selected_ids_str:
                     q &= Q(symptom__pk__in=selected_ids_list)
-                count_users_all = UserSymptom.objects.filter(q).distinct('incognitouser').count()
+                count_users_48h = UserSymptom.objects.filter(q).distinct('incognitouser').count()
 
                 q = Q(
                         insert_timestamp__lt=time_last,
@@ -333,10 +333,10 @@ class LogLike(models.Model):
                     )
                 if selected_ids_str:
                     q &= Q(symptom__pk__in=selected_ids_list)
-                count_users_last = UserSymptom.objects.filter(q).distinct('incognitouser').count()
-                data['titles'].append('Пользователи (%s, %s)' % (count_users_all, count_users_last))
-                data['counts_last'].append(count_users_last)
-                data['counts_all'].append(count_users_all)
+                count_users_24h = UserSymptom.objects.filter(q).distinct('incognitouser').count()
+                data['titles'].append('Пользователи (%s, %s)' % (count_users_48h, count_users_24h))
+                data['counts_24h'].append(count_users_24h)
+                data['counts_48h'].append(count_users_48h)
 
             s_dict = dict()
             if selected_ids_str != '()':
@@ -370,7 +370,7 @@ class LogLike(models.Model):
                     symptoms = dictfetchall(cursor)
                 for symptom in symptoms:
                     s_dict[symptom['name']] = dict(
-                        count_all=symptom['count'],
+                        count_48h=symptom['count'],
                     )
                 req_str = """
                     SELECT
@@ -401,35 +401,29 @@ class LogLike(models.Model):
                     cursor.execute(req_str)
                     symptoms = dictfetchall(cursor)
                 for symptom in symptoms:
-                    s_dict[symptom['name']]['count_last'] = symptom['count']
+                    s_dict[symptom['name']]['count_24h'] = symptom['count']
                 for name in s_dict:
-                    if not s_dict[name].get('count_last'):
-                        s_dict[name]['count_last'] = 0
+                    if not s_dict[name].get('count_24h'):
+                        s_dict[name]['count_24h'] = 0
 
             s_list = []
             for name in s_dict:
-                if s_dict[name]['count_last']:
-                    title = '%s (%s, %s)' % (
-                        name,
-                        s_dict[name]['count_all'],
-                        s_dict[name]['count_last'],
-                    )
-                else:
-                    title = '%s (%s)' % (
-                        name,
-                        s_dict[name]['count_all'],
-                    )
+                title = '%s (%s, %s)' % (
+                    name,
+                    s_dict[name]['count_48h'],
+                    s_dict[name]['count_24h'],
+                )
                 s_list.append(dict(
                     title=title,
-                    count_all=s_dict[name]['count_all'],
-                    count_last=s_dict[name]['count_last'],
+                    count_48h=s_dict[name]['count_48h'],
+                    count_24h=s_dict[name]['count_24h'],
                 ))
-            s_list.sort(key = lambda d: d['count_all'])
+            s_list.sort(key = lambda d: d['count_48h'])
 
             for s in s_list:
                 data['titles'].append(s['title'])
-                data['counts_all'].append(s['count_all'])
-                data['counts_last'].append(s['count_last'])
+                data['counts_48h'].append(s['count_48h'])
+                data['counts_24h'].append(s['count_24h'])
             return data
 
         if kwargs.get('only') == 'symptoms_hist':
