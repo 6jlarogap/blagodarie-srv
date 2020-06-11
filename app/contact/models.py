@@ -290,10 +290,16 @@ class LogLike(models.Model):
             # Возвращает json:
             #   {
             #       "titles": [
-            #           "Пользователи (<число с симптомами за LAST_STAT_HOURS>, <число с симптомами за 24ч>)",
-            #           "симптом1 (<за LAST_STAT_HOURS>, <за 24 HOURS>)",
+            #           "Пользователи (всего, <число с симптомами за LAST_STAT_HOURS>, <число с симптомами за 24ч>)",
+            #           "симптом1 (всего, <за LAST_STAT_HOURS>, <за 24 HOURS>)",
             #           ...
-            #           "симптомN (<за LAST_STAT_HOURS>, <за 24 HOURS>)",
+            #           "симптомN (всего, <за LAST_STAT_HOURS>, <за 24 HOURS>)",
+            #       ],
+            #       "counts_all": [
+            #           <число пользователей с симптомами всего>,
+            #           "<всего симптомов1>",
+            #           ...
+            #           "<всего симптомовN>"
             #       ],
             #       "counts_48h": [
             #           <число пользователей с симптомами за LAST_STAT_HOURS>,
@@ -315,10 +321,12 @@ class LogLike(models.Model):
 
             data = dict(
                 titles=[],
+                counts_all=[],
                 counts_48h=[],
                 counts_24h=[]
             )
             if not incognitouser:
+                count_users_all = UserSymptom.objects.all().distinct('incognitouser').count()
                 q = Q(
                         insert_timestamp__lt=time_last,
                         insert_timestamp__gte=time_1st,
@@ -334,11 +342,45 @@ class LogLike(models.Model):
                 if selected_ids_str:
                     q &= Q(symptom__pk__in=selected_ids_list)
                 count_users_24h = UserSymptom.objects.filter(q).distinct('incognitouser').count()
-                data['titles'].append('Пользователи (%s, %s)' % (count_users_48h, count_users_24h))
-                data['counts_24h'].append(count_users_24h)
+
+                data['titles'].append('Пользователи (%s, %s, %s)' % (count_users_all, count_users_48h, count_users_24h))
+                data['counts_all'].append(count_users_all)
                 data['counts_48h'].append(count_users_48h)
+                data['counts_24h'].append(count_users_24h)
 
             s_dict = dict()
+            if selected_ids_str != '()':
+                req_str = """
+                    SELECT
+                        contact_symptom.name AS name,
+                        count(contact_usersymptom.id) as count
+                    FROM
+                        contact_usersymptom
+                    LEFT JOIN
+                        contact_symptom
+                    ON
+                        symptom_id=contact_symptom.id
+                    WHERE
+                        insert_timestamp < %(time_last)s
+                        %(selected_ids_where)s
+                        %(incognitouser_where)s
+                    GROUP BY
+                        name
+                    ORDER BY
+                        count
+                """ % dict(
+                    time_last=time_last,
+                    selected_ids_where=selected_ids_where,
+                    incognitouser_where=incognitouser_where,
+                )
+                with connection.cursor() as cursor:
+                    cursor.execute(req_str)
+                    symptoms = dictfetchall(cursor)
+                for symptom in symptoms:
+                    s_dict[symptom['name']] = dict(
+                        count_all=symptom['count'],
+                    )
+
             if selected_ids_str != '()':
                 req_str = """
                     SELECT
@@ -369,9 +411,11 @@ class LogLike(models.Model):
                     cursor.execute(req_str)
                     symptoms = dictfetchall(cursor)
                 for symptom in symptoms:
-                    s_dict[symptom['name']] = dict(
-                        count_48h=symptom['count'],
-                    )
+                    s_dict[symptom['name']]['count_48h'] = symptom['count']
+                for name in s_dict:
+                    if not s_dict[name].get('count_48h'):
+                        s_dict[name]['count_48h'] = 0
+
                 req_str = """
                     SELECT
                         contact_symptom.name AS name,
@@ -408,20 +452,23 @@ class LogLike(models.Model):
 
             s_list = []
             for name in s_dict:
-                title = '%s (%s, %s)' % (
+                title = '%s (%s, %s, %s)' % (
                     name,
+                    s_dict[name]['count_all'],
                     s_dict[name]['count_48h'],
                     s_dict[name]['count_24h'],
                 )
                 s_list.append(dict(
                     title=title,
+                    count_all=s_dict[name]['count_all'],
                     count_48h=s_dict[name]['count_48h'],
                     count_24h=s_dict[name]['count_24h'],
                 ))
-            s_list.sort(key = lambda d: d['count_48h'])
+            s_list.sort(key = lambda d: d['count_all'])
 
             for s in s_list:
                 data['titles'].append(s['title'])
+                data['counts_all'].append(s['count_all'])
                 data['counts_48h'].append(s['count_48h'])
                 data['counts_24h'].append(s['count_24h'])
             return data
