@@ -473,6 +473,39 @@ class LogLike(models.Model):
                 data['counts_24h'].append(s['count_24h'])
             return data
 
+
+        if kwargs.get('only') == 'symptoms_hist_data':
+
+            # Возвращает json, данные для гистогораммы
+            # за последние 48 часов, для отрисовки
+            # средстванми plotly на front end
+
+            symptom_ids = dict()
+            symptom_names = dict()
+            n = 0
+            for symptom in Symptom.objects.all().order_by('pk'):
+                symptom_ids[symptom.pk] = n
+                symptom_names[n] = symptom.name
+                n += 1
+            times = [[] for i in symptom_ids]
+            q = Q(
+                    insert_timestamp__lt=time_last,
+                    insert_timestamp__gte=time_1st,
+                )
+            if selected_ids_str:
+                q &= Q(symptom__pk__in=selected_ids_list)
+            if incognitouser:
+                q &= Q(incognitouser=incognitouser)
+            for usersymptom in UserSymptom.objects.filter(q).select_related('symptom'):
+                times[symptom_ids[usersymptom.symptom.pk]].append(usersymptom.insert_timestamp)
+
+            return dict(
+                time_1st=time_1st,
+                time_last=time_last,
+                times=times,
+                symptom_names=symptom_names,
+            )
+
         if kwargs.get('only') == 'symptoms_hist':
 
             # Возвращает json:
@@ -509,6 +542,8 @@ class LogLike(models.Model):
                 symptom_names[n] = symptom.name
                 n += 1
 
+            while len(colors) < len(symptom_ids):
+                colors += colors
             bins = []
             t = time_1st
             while t <= time_last:
