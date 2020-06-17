@@ -506,6 +506,56 @@ class LogLike(models.Model):
                 symptom_names=symptom_names,
             )
 
+        if kwargs.get('only') == 'symptoms_moon_bars_data':
+
+            # Возвращает json, данные для графика
+            # симптомов по лунным дням за все время
+            # наюлюдений для отрисовки
+            # средстванми plotly на front end
+
+            symptom_ids = dict()
+            symptom_names = dict()
+            n = 0
+            for symptom in Symptom.objects.all().order_by('pk'):
+                symptom_ids[symptom.pk] = n
+                symptom_names[n] = symptom.name
+                n += 1
+            moon_bars = [[0 for j in range(30)] for i in range(len(symptom_ids))]
+            if selected_ids_str != '()':
+                where = selected_ids_where + incognitouser_where
+                if where:
+                    where = re.sub(r'^\s*AND', '', where, flags=re.I)
+                    where = 'WHERE ' + where
+                req_str = """
+                    SELECT
+                        moon_day,
+                        symptom_id,
+                        Count(symptom_id) as count
+                    FROM
+                        contact_usersymptom
+                    %(where)s
+                    GROUP BY
+                        moon_day,
+                        symptom_id
+                """ % dict(
+                    where=where,
+                )
+                with connection.cursor() as cursor:
+                    cursor.execute(req_str)
+                    m = dictfetchall(cursor)
+                for r in m:
+                    moon_bars[symptom_ids[ r['symptom_id']] ] [r['moon_day']] = r['count']
+                for i, symptom_bar in enumerate(moon_bars):
+                    if not any(symptom_bar):
+                        moon_bars[i] = []
+                if not any(moon_bars):
+                    moon_bars = []
+            return dict(
+                current_moon_day = get_moon_day(time_current),
+                moon_bars= moon_bars,
+                symptom_names=symptom_names,
+            )
+
         if kwargs.get('only') == 'symptoms_hist':
 
             # Возвращает json:

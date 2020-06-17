@@ -35,7 +35,10 @@ urlpatterns = [
     url(r'^api/getstats/symptoms/hist/?$', views.api_get_stats, {'only': 'symptoms_hist'}),
     url(r'^api/getstats/symptoms/names/?$', views.api_get_stats, {'only': 'symptoms_names'}),
 
-    url(r'^api/getstats/symptoms/hist/data/?$', views.api_get_stats, {'only': 'symptoms_hist_data'}),
+    url(r'^api/getstats/symptoms/hist/data/?$',
+        views.api_get_stats, {'only': 'symptoms_hist_data'}),
+    url(r'^api/getstats/symptoms/moon/bars/data/?$',
+        views.api_get_stats, {'only': 'symptoms_moon_bars_data'}),
 
     url(r'^api/addusersymptom/?$', views.api_add_user_symptom),
     url(r'^api/add_user_symptom/?$', views.api_add_user_symptom, {'auth': True}),
