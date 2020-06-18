@@ -506,9 +506,9 @@ class LogLike(models.Model):
                 symptom_names=symptom_names,
             )
 
-        if kwargs.get('only') == 'symptoms_moon_bars_data':
+        if kwargs.get('only') == 'symptoms_moon_data':
 
-            # Возвращает json, данные для графика
+            # Возвращает json, данные для графиков
             # симптомов по лунным дням за все время
             # наюлюдений для отрисовки
             # средстванми plotly на front end
@@ -520,8 +520,9 @@ class LogLike(models.Model):
                 symptom_ids[symptom.pk] = n
                 symptom_names[n] = symptom.name
                 n += 1
-            moon_bars = [[0 for j in range(30)] for i in range(len(symptom_ids))]
+            moon_bars = []
             if selected_ids_str != '()':
+                moon_bars = [[0 for j in range(30)] for i in range(len(symptom_ids))]
                 where = selected_ids_where + incognitouser_where
                 if where:
                     where = re.sub(r'^\s*AND', '', where, flags=re.I)
@@ -550,9 +551,94 @@ class LogLike(models.Model):
                         moon_bars[i] = []
                 if not any(moon_bars):
                     moon_bars = []
+
+            moon_hour = []
+            if moon_bars:
+
+                # Получить примерно следующее по каждому симптому
+                # из массива симптомов, которые идут в порядке
+                # массива symptom_names. Итак, элемент для симптома
+                # из массива moon_hour:
+                #   [
+                #       {2: {'count': 2, 'pos': 7.389655172413794}},
+                #       {5: {'count': 8, 'pos': 4.5}},
+                #       {5: {'count': 1, 'pos': 5.466666666666666}},
+                #       {6: {'count': 2, 'pos': 22.380555555555556}},
+                #       ...
+                #   ]
+                # Здесь:
+                #   2, 5, 5, 6 -    лунные дни (ось x)
+                #   2, 8, 1, 2 -    сколько раз появлялся симптом в позиции
+                #                   pos (ось y). Например 7.38... - соответствует
+                #                   7-му часу. В 7-м часе 2-го дня есть еще
+                #                   симптомы, они будут располагаться
+                #                   кружками размером count с некоторым сдвигом
+                #                   по вертикали
+                #                   А в 4-м часу 5-го дня, наверное, один
+                #                   симптом, он будет располагаться посреди
+                #                   "квадратика" для 4-го часа 5-го дня.
+                #
+                req_str = """
+                    SELECT
+                        moon_day,
+                        ((insert_timestamp + timezone * 3600/100 + (timezone %% 100) * 60)/3600) %% 24 as hour,
+                        symptom_id,
+                        Count(DISTINCT id) as count
+                    FROM
+                        contact_usersymptom
+                    %(where)s
+                    GROUP BY
+                        moon_day,
+                        hour,
+                        symptom_id
+                    ORDER BY
+                        count
+                    DESC
+                """ % dict(
+                    where=where,
+                )
+                with connection.cursor() as cursor:
+                    cursor.execute(req_str)
+                    m = dictfetchall(cursor)
+                s_d_h = [ [ [{'count': 0, 'pos': 0.5} for i in range(24)] for j in range(30) ] for k in range(len(symptom_ids)) ]
+                d_h_s = [ [[] for i in range(24)] for j in range(30) ]
+                for r in m:
+                    if r['count']:
+                        s_d_h[symptom_ids[ r['symptom_id']]] [r['moon_day']] [r['hour']] ['count'] = r['count']
+                        d_h_s[r['moon_day']] [r['hour']].append({
+                            symptom_ids[r['symptom_id']]: r['count']
+                        })
+                for s in range(len(symptom_ids)):
+                    for d in range(30):
+                        for h in range(24):
+                            len_slist = len(d_h_s[d][h])
+                            if len_slist <= 1:
+                                continue
+                            step = 0.5 / len_slist
+                            y_current = 0.70
+                            for ss in d_h_s[d][h]:
+                                for k in ss.keys():
+                                    s_d_h[k][d][h]['pos'] = y_current
+                                    break
+                                y_current -= step
+
+                for s in range(len(symptom_ids)):
+                    items = []
+                    for d in range(30):
+                        for h in range(24):
+                            if s_d_h[s][d][h]['count']:
+                                items.append({
+                                    d: {
+                                        'count': s_d_h[s][d][h]['count'],
+                                        'pos': h + s_d_h[s][d][h]['pos']
+                                    }
+                                })
+                    moon_hour.append(items)
+
             return dict(
                 current_moon_day = get_moon_day(time_current),
-                moon_bars= moon_bars,
+                moon_bars=moon_bars,
+                moon_hour=moon_hour,
                 symptom_names=symptom_names,
             )
 
