@@ -553,6 +553,7 @@ class LogLike(models.Model):
                     moon_bars = []
 
             moon_hour = []
+            max_count_in_hour = 0
             if moon_bars:
 
                 # Получить примерно следующее по каждому симптому
@@ -627,6 +628,7 @@ class LogLike(models.Model):
                     for d in range(30):
                         for h in range(24):
                             if s_d_h[s][d][h]['count']:
+                                max_count_in_hour = max(max_count_in_hour, s_d_h[s][d][h]['count'])
                                 items.append({
                                     d: {
                                         'count': s_d_h[s][d][h]['count'],
@@ -640,6 +642,7 @@ class LogLike(models.Model):
                 moon_bars=moon_bars,
                 moon_hour=moon_hour,
                 symptom_names=symptom_names,
+                max_count_in_hour=max_count_in_hour,
             )
 
         if kwargs.get('only') == 'symptoms_hist':
