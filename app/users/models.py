@@ -1,6 +1,6 @@
 import datetime, string, random
 import urllib.request, urllib.error, urllib.parse
-import json
+import json, uuid
 
 from django.conf import settings
 from django.db import models, transaction, IntegrityError
@@ -8,7 +8,7 @@ from django.utils.translation import ugettext_lazy as _
 
 from django.contrib.auth.models import User
 
-from app.models import BaseModelInsertUpdateTimestamp
+from app.models import BaseModelInsertUpdateTimestamp, PhotoModel
 from django.contrib.auth.models import User
 from app.utils import ServiceException
 
@@ -176,11 +176,34 @@ class Oauth(BaseModelInsertUpdateTimestamp):
                 result['code'] = 400
         return result
 
+class Profile(PhotoModel):
+    user = models.OneToOneField('auth.User', on_delete=models.CASCADE)
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
+    middle_name = models.CharField(_("Отчество"), max_length=255, blank=True, default='')
+
+    class Meta:
+        ordering = ('user__last_name', 'user__first_name', 'middle_name', )
+
+    def __str__(self):
+        return self.full_name() or str(self.pk)
+
+    def full_name(self, put_middle_name=True):
+        name = ""
+        if self.user.last_name:
+            name = self.user.last_name
+            if self.user.first_name:
+                name = "{0} {1}".format(name, self.user.first_name)
+                if put_middle_name and self.middle_name:
+                    name = "{0} {1}".format(name, self.middle_name)
+        if not name:
+            name = self.user.get_full_name()
+        return name
+
 class CreateUserMixin(object):
 
     MSG_FAILED_CREATE_USER = 'Не удалось создать пользователя с уникальным именем. Попробуйте еще раз.'
 
-    def create_user(self, last_name='', first_name='', email=''):
+    def create_user(self, last_name='', first_name='', middle_name='', email=''):
         user = None
         random.seed()
         chars = string.ascii_lowercase + string.digits
@@ -200,6 +223,11 @@ class CreateUserMixin(object):
                     break
                 except IntegrityError:
                     continue
+        if user:
+            Profile.objects.create(
+                user=user,
+                middle_name=middle_name,
+            )
         return user
 
     def update_oauth(self, oauth, oauth_result):

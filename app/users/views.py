@@ -43,9 +43,10 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
         try:
             if signin:
                 user_id = request.data.get('user_id')
-                if not user_id:
+                user_uuid = request.data.get('user_uuid')
+                if not user_id and not user_uuid:
                     status_code = 400
-                    raise ServiceException('Не задан user_id')
+                    raise ServiceException('Не задан user_id или user_uuid')
 
             oauth_dict = request.data.get("oauth")
             if not oauth_dict:
@@ -101,12 +102,15 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
                             pass
             if signin:
                 if user:
-                    if str(user.pk) != str(user_id):
+                    if user_id and str(user.pk) != str(user_id):
                         status_code = 401
                         raise ServiceException('Не совпадает user_id')
+                    if user_uuid and str(user.profile.uuid) != user_uuid:
+                        status_code = 401
+                        raise ServiceException('Не совпадает user_uuid')
                 else:
                     status_code = 401
-                    raise ServiceException('Не найден user_id c таким Id от %s' % oauth_dict['provider'])
+                    raise ServiceException('Не найден пользователь c таким Id от %s' % oauth_dict['provider'])
 
             if not oauth:
                 # Даже при signin, если user есть в ключах,
@@ -120,7 +124,10 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
             token, created_ = Token.objects.get_or_create(user=user)
             data = dict(token=token.key,)
             if signup:
-                data.update(user_id=user.pk,)
+                data.update(
+                    user_id=user.pk,
+                    user_uuid=str(user.profile.uuid)
+                )
             status_code = 200
         except ServiceException as excpt:
             transaction.set_rollback(True)
@@ -138,7 +145,7 @@ class ApiAuthDummy(APIView):
             "iss": "https://accounts.google.com",
             "azp": "dummy",
             "aud": "dummy",
-            "sub": "100407860688573256450",
+            "sub": "100407860688573256455",
             "email": "someone@gmail.com",
             "email_verified": "true",
             "name": "dummy",
