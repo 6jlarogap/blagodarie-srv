@@ -43,11 +43,11 @@ class Oauth(BaseModelInsertUpdateTimestamp):
     }
 
     OAUTH_EXTRA_FIELDS = (
-        #'first_name',
-        #'last_name',
-        #'display_name',
-        #'email',
-        #'photo',
+        'first_name',
+        'last_name',
+        'display_name',
+        # 'email',
+        'photo',
     )
 
     user = models.ForeignKey('auth.User', on_delete=models.CASCADE)
@@ -166,10 +166,6 @@ class Oauth(BaseModelInsertUpdateTimestamp):
                     result[key] = data.get(real_key, '')
                     if isinstance(result[key], str):
                         result[key] = result[key].strip()
-                    if result[key]:
-                        if key == 'photo':
-                            if provider == Oauth.PROVIDER_GOOGLE:
-                                result[key] = "%s?sz=200" % result[key]
         except ServiceException as excpt:
             result['message'] = excpt.args[0]
             if result['code'] == 200:

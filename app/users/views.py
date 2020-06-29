@@ -126,7 +126,11 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
             if signup:
                 data.update(
                     user_id=user.pk,
-                    user_uuid=str(user.profile.uuid)
+                    user_uuid=str(user.profile.uuid),
+                    last_name=user.last_name,
+                    first_name=user.first_name,
+                    middle_name=user.profile.middle_name,
+                    photo=oauth.photo,
                 )
             status_code = 200
         except ServiceException as excpt:
