@@ -34,7 +34,42 @@ from users.models import IncognitoUser
 
 class KeyType(models.Model):
 
+    CREDIT_CARD_ID = 4
+
     title = models.CharField(_("Код ключа"), max_length=255, unique=True)
+
+class OperationType(models.Model):
+
+    THANK = 1
+    TRUSTLESS = 2
+    TRUSTLESS_CANCEL = 3
+
+    title = models.CharField(_("Тип операции"), max_length=255, unique=True)
+
+class Journal(BaseModelInsertTimestamp):
+
+    user_from = models.ForeignKey('auth.User',
+                    verbose_name=_("От кого"), on_delete=models.CASCADE,
+                    related_name='journal_user_from_set')
+    user_to = models.ForeignKey('auth.User',
+                    verbose_name=_("Кому"), on_delete=models.CASCADE,
+                    related_name='journal_user_to_set')
+    operationtype = models.ForeignKey(OperationType,
+                    verbose_name=_("Тип операции"), on_delete=models.CASCADE)
+
+class CurrentState(BaseModelInsertUpdateTimestamp):
+
+    user_from = models.ForeignKey('auth.User',
+                    verbose_name=_("От кого"), on_delete=models.CASCADE,
+                    related_name='currentstate_user_from_set')
+    user_to = models.ForeignKey('auth.User',
+                    verbose_name=_("Кому"), on_delete=models.CASCADE,
+                    related_name='currentstate_user_to_set')
+    thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
+    is_trust = models.BooleanField(_("Доверие"), default=True)
+
+    class Meta:
+        unique_together = ('user_from', 'user_to', )
 
 class Key(BaseModelInsertTimestamp):
 

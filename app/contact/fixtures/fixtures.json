@@ -15,9 +15,31 @@
   },
   {
     "model": "contact.keytype",
+    "pk": 4,
+    "fields": {
+      "title": "CreditCard"
+    }
+  },
+
+  {
+    "model": "contact.operationtype",
+    "pk": 1,
+    "fields": {
+      "title": "Thank"
+    }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 2,
+    "fields": {
+      "title": "Trustless"
+    }
+  },
+  {
+    "model": "contact.operationtype",
     "pk": 3,
     "fields": {
-      "title": "GoogleAccountId"
+      "title": "Trustless cancel"
     }
   }
 ]

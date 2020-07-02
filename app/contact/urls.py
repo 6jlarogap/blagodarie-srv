@@ -6,8 +6,7 @@ from django.conf import settings
 from . import views
 
 urlpatterns = [
-    url(r'^api/adduser/?$', views.api_add_user),
-    url(r'^api/getorcreateuser/?$', views.api_get_or_create_user),
+    url(r'^api/addoperation/?$', views.api_add_operation),
 
     url(r'^api/deleteuserkeyz/?$', views.api_delete_user_keys),
  

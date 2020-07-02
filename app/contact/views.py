@@ -6,6 +6,7 @@ from django.db.models import F, Sum
 from django.db.models.query_utils import Q
 from django.views.generic.base import View
 from django.http import Http404
+from django.core.exceptions import ValidationError
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -14,39 +15,133 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.permissions import IsAuthenticated
 
 from app.utils import ServiceException
 
 from contact.models import KeyType, Key, UserKey, LikeKey, Like, LogLike, \
-                           Symptom, UserSymptom, SymptomChecksumManage
-from users.models import CreateUserMixin, IncognitoUser
+                           Symptom, UserSymptom, SymptomChecksumManage, \
+                           Journal, CurrentState, OperationType
+from users.models import CreateUserMixin, IncognitoUser, Profile
 
 MSG_NO_PARM = 'Не задан или не верен какой-то из параметров в связке номер %s (начиная с 0)'
 
-class ApiAddUserView(CreateUserMixin, APIView):
+class ApiAddOperationView(APIView):
+    permission_classes = (IsAuthenticated, )
     
+    @transaction.atomic
     def post(self, request):
         """
-        Добавить пользователя
+        Добавление операции
+
+        Добавляет запись в таблицу Journal. Если тип операции Thank,
+        то инкрементировать значение столбца sum_thanks_count для пользователя user_id_to,
+        и инкрементировать значение столбца thanks_count в таблице CurrentState
+        для user_id_from и user_id_to, если в таблице CurrentState
+        не существует записи с такими user_id_from и user_id_to,
+        то добавить ее.
+        Если тип операции Trustless то инкрементировать значение столбца trustless_count
+        и установить значение is_trust в таблице CurrentState в значение False.
+        Если тип операции Trustless cancel, то декрементировать значение столбца
+        trustless_count и установить значение is_trust в таблице CurrentState в значение True
 
         Пример исходных данных:
-            нет исходных данных
-        Возвращает:
         {
-            server_id: pk созданного пользователя
+            "user_id_to": "825b031e-95a2-4fdd-a70b-b446a52c4498",
+            "operation_type_id": 1,
+            "timestamp": 1593527855
         }
         """
-        user = self.create_user()
-        data = dict()
-        if user:
-            data['server_id'] = user.pk
+
+        try:
+            data = dict()
             status_code = status.HTTP_200_OK
-        else:
-            data['message'] = CreateUserMixin.MSG_FAILED_CREATE_USER
+            user_from = request.user
+            user_to_uuid = request.data.get("user_id_to")
+            operationtype_id = request.data.get("operation_type_id")
+            if not user_to_uuid or not operationtype_id:
+                raise ServiceException('Не заданы user_id_to и/или operation_type_id')
+            try:
+                profile_to = Profile.objects.select_for_update().get(uuid=user_to_uuid)
+                user_to = profile_to.user
+            except Profile.DoesNotExist:
+                raise ServiceException('Не найден пользователь, uuid = "%s"' % user_to_uuid)
+            except ValidationError:
+                raise ServiceException('Неверный uuid = "%s"' % user_to_uuid)
+            try:
+                operationtype_id = int(operationtype_id)
+                operationtype = OperationType.objects.get(pk=operationtype_id)
+            except (ValueError, OperationType.DoesNotExist,):
+                raise ServiceException('Неизвестный operation_type_id = %s' % operationtype_id)
+            insert_timestamp = request.data.get('timestamp', int(time.time()))
+
+            Journal.objects.create(
+                user_from=user_from,
+                user_to=user_to,
+                operationtype=operationtype,
+                insert_timestamp=insert_timestamp,
+            )
+
+            if operationtype_id == OperationType.THANK:
+                currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
+                    user_from=user_from,
+                    user_to=user_to,
+                    defaults=dict(
+                        thanks_count=1,
+                ))
+                if not created_:
+                    currentstate.thanks_count = F('thanks_count') + 1
+                    currentstate.save(update_fields=('thanks_count',))
+                fame = user_to.currentstate_user_to_set.filter(
+                    Q(thanks_count__gt=0) | Q(is_trust=False)
+                ).distinct().count()
+                profile_to.sum_thanks_count += 1
+                profile_to.fame = fame
+                profile_to.save(update_fields=('fame', 'sum_thanks_count',))
+
+            elif operationtype_id == OperationType.TRUSTLESS:
+                currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
+                    user_from=user_from,
+                    user_to=user_to,
+                    defaults=dict(
+                        is_trust=False,
+                ))
+                if created_ or currentstate.is_trust:
+                    if not created_:
+                        currentstate.is_trust = False
+                        currentstate.save(update_fields=('is_trust',))
+                    fame = user_to.currentstate_user_to_set.filter(
+                        Q(thanks_count__gt=0) | Q(is_trust=False)
+                    ).distinct().count()
+                    profile_to.trustless_count += 1
+                    profile_to.fame = fame
+                    profile_to.save(update_fields=('fame', 'trustless_count',))
+
+            elif operationtype_id == OperationType.TRUSTLESS_CANCEL:
+                currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
+                    user_from=user_from,
+                    user_to=user_to,
+                    defaults=dict(
+                        is_trust=True,
+                ))
+                if not created_ and not currentstate.is_trust:
+                    currentstate.is_trust = True
+                    currentstate.save(update_fields=('is_trust',))
+                    fame = user_to.currentstate_user_to_set.filter(
+                        Q(thanks_count__gt=0) | Q(is_trust=False)
+                    ).distinct().count()
+                    if profile_to.trustless_count:
+                        profile_to.trustless_count -= 1
+                    profile_to.fame = fame
+                    profile_to.save(update_fields=('fame', 'trustless_count',))
+
+        except ServiceException as excpt:
+            transaction.set_rollback(True)
+            data = dict(message=excpt.args[0])
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
-api_add_user = ApiAddUserView.as_view()
+api_add_operation = ApiAddOperationView.as_view()
 
 class ApiAddKeyView(APIView):
     
@@ -237,70 +332,6 @@ class ApiGetOrCreateKey(APIView):
         return Response(data=data, status=status_code)
 
 get_or_create_key = ApiGetOrCreateKey.as_view()
-
-class ApiGetOrCreateUser(CreateUserMixin, APIView):
-
-    def get_key_value(self, request_get):
-        key_type = key_value = None
-        for get_key in request_get.keys():
-            try:
-                key_type = KeyType.objects.get(title__iexact=get_key)
-                key_value = request_get[get_key]
-            except KeyType.DoesNotExist:
-                pass
-        return key_type, key_value
-
-    @transaction.atomic
-    def get(self, request):
-        """
-        Создать и/или получить данные пользователя по googleaccountid.
-
-        *
-            Если существует пользователь подписанный на key (type=GoogleAccountId)
-            с заданным value, то вернуть данные о пользователе и ключе
-        *
-            Если существует key (type=GoogleAccountId) с заданным value,
-            но не существует пользователя, подписанного на него,
-            то создать пользователя, подписать на него key с заданным value
-            и вернуть данные о пользователе и ключе
-        *
-            Если не существует ключа (type=GoogleAccountId) с заданным value,
-            то создать пользователя, создать keyz, с owner_id равным id
-            новосозданного пользователя и вернуть данные о пользователе и ключе.
-        Возвращает:
-            {
-                "user":{"server_id":231},
-                "keyz":{"server_id":62534}
-            }
-        """
-        try:
-            key_type, key_value = self.get_key_value(request.GET)
-            if not (key_type and key_value):
-                raise ServiceException("Не задан или не верен параметр")
-            key_object, created_ = Key.objects.select_for_update().get_or_create(
-                type=key_type,
-                value=key_value,
-                defaults = dict(
-                    owner=None,
-                ))
-            if key_object.owner is None:
-                user = self.create_user()
-                if not user:
-                    raise ServiceException(CreateUserMixin.MSG_FAILED_CREATE_USER)
-                key_object.owner = user
-                key_object.save(update_fields=('owner',))
-            data = dict(
-                user=dict(server_id=key_object.owner.pk),
-                keyz=dict(server_id=key_object.pk)
-            )
-            status_code = status.HTTP_200_OK
-        except ServiceException as excpt:
-            transaction.set_rollback(True)
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
-
-api_get_or_create_user = ApiGetOrCreateUser.as_view()
 
 class ApiAddLIke(APIView):
 

@@ -2,17 +2,199 @@ import os, re, hmac, hashlib, json
 import urllib.request, urllib.error
 
 from django.shortcuts import render
-from django.db import transaction, IntegrityError
+from django.db import transaction, IntegrityError, connection
 from django.conf import settings
+from django.core.exceptions import ValidationError
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 
-from app.utils import ServiceException
+from app.utils import ServiceException, dictfetchall
 
-from users.models import Oauth, CreateUserMixin, IncognitoUser
-from contact.models import Key, KeyType
+from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile
+from contact.models import Key, KeyType, CurrentState, OperationType
+
+class ApiGetProfileInfo(APIView):
+
+    def get(self, request):
+        """
+        Получение информации о профиле пользователя
+
+        Возвращает информацию о пользователе, заданным get- параметром
+        uuid: ФИО, кредитную карту, фото, известность,
+        общее количество благодарностей, количество утрат доверия.
+        Если в запросе присутствует токен авторизации, то нужно вернуть и
+        текущее состояние между пользователем, который запрашивает информацию,
+        и пользователем, о котором он запрашивает информацию.
+        То есть информацию из таблицы CurrentState,
+        где user_id_from = id_пользователя_из_токена,
+        а user_id_to = id_пользователя_из_запроса.
+        Если в CurrentState нет записи по заданным пользователям,
+        то возвратить thanks_count = null и is_trust = null.
+        Также нужно возвратить массив пользователей (их фото и UUID),
+        которые благодарили, либо были благодаримы пользователем,
+        о котором запрашивается информация.
+        Массив пользователей должен быть отсортирован по убыванию
+        известности пользователей.
+
+        Пример вызова:
+        /api/getprofileinfo?uuid=9e936638-3c48-4e7b-bab4-7f968824acd5
+
+        Пример возвращаемых данных:
+        {
+            "first_name": "Иван",
+            "middle_name": "Иванович",
+            "last_name": "Иванов",
+            "photo": "photo/url",
+            "credit_card": "1111222233334444",
+            "sum_thanks_count": 300,
+            "fame": 3,
+            "trustless_count": 1,
+            "thanks_count": 12, // только при авторизованном запросе
+            "is_trust": true,   // только при авторизованном запросе
+            "thanks_users": [
+                {
+                "photo": "photo/url",
+                "user_uuid": "6e14d54b-9371-431f-8bf0-6688f2cf2451"
+                },
+                {
+                "photo": "photo/url",
+                "user_uuid": "5548a8ba-ac47-400e-96f3-f3c9caa75383"
+                },
+                {
+                "photo": "photo/url",
+                "user_uuid": "7ced71b2-3b55-45bf-a622-57311dbc6c9f"
+                }
+            ]
+        }
+
+        """
+
+        try:
+            uuid=request.GET.get('uuid')
+            if not uuid:
+                raise ServiceException("Не задан uuid")
+            try:
+                profile = Profile.objects.get(uuid=uuid)
+            except (ValidationError, Profile.DoesNotExist, ):
+                raise ServiceException("Не найден пользователь с uuid = %s или uuid неверен" % uuid)
+            user = profile.user
+            credit_card = None
+            try:
+                key = Key.objects.get(owner=user, type__pk=KeyType.CREDIT_CARD_ID)
+                credit_card = key.value
+            except Key.DoesNotExist:
+                pass
+            data = dict(
+                last_name=user.last_name,
+                first_name=user.first_name,
+                middle_name=profile.middle_name,
+                photo=profile.choose_photo(),
+                credit_card=credit_card,
+                sum_thanks_count=profile.sum_thanks_count,
+                fame=profile.fame,
+                trustless_count=profile.trustless_count,
+            )
+            user_from = request.user
+            if user_from.is_authenticated:
+                thanks_count = is_trust = None
+                try:
+                    currentstate = CurrentState.objects.get(
+                        user_from=user_from,
+                        user_to=user,
+                    )
+                    thanks_count = currentstate.thanks_count
+                    is_trust = currentstate.is_trust
+                except CurrentState.DoesNotExist:
+                    pass
+                data.update(
+                    thanks_count=thanks_count,
+                    is_trust=is_trust,
+                )
+            thanks_users = []
+            req_str = """
+                SELECT
+                    uuid, photo, photo_url
+                FROM
+                    users_profile
+                WHERE
+                    user_id IN (
+                        SELECT
+                            DISTINCT user_from_id AS id_
+                        FROM
+                            contact_journal
+                        WHERE
+                            user_to_id = %(user_id)s AND
+                            operationtype_id = %(thank_id)s
+                        UNION
+                        SELECT
+                            DISTINCT user_to_id as id_
+                        FROM
+                            contact_journal
+                        WHERE
+                            user_from_id = %(user_id)s AND
+                            operationtype_id = %(thank_id)s
+                    )
+                ORDER BY fame DESC
+            """ % dict(
+                user_id=user.pk,
+                thank_id=OperationType.THANK,
+            )
+            with connection.cursor() as cursor:
+                cursor.execute(req_str)
+                recs = dictfetchall(cursor)
+                for rec in recs:
+                    thanks_users.append(dict(
+                        photo = Profile.choose_photo_of(rec['photo'], rec['photo_url']),
+                        user_uuid=str(rec['uuid'])
+                    ))
+            data.update(
+                thanks_users=thanks_users
+            )
+            status_code = 200
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+api_get_profileinfo = ApiGetProfileInfo.as_view()
+
+class ApiUpdateProfileInfo(APIView):
+    permission_classes = (IsAuthenticated, )
+    parser_classes = (FormParser, MultiPartParser, JSONParser,)
+
+    @transaction.atomic
+    def post(self, request, signin=False):
+        """
+        Обновить информацию о пользователе
+
+        Пока только credit_card
+        """
+        try:
+            credit_card = request.data.get('credit_card')
+            if credit_card:
+                keytype = KeyType.objects.get(pk=KeyType.CREDIT_CARD_ID)
+                key, created_ = Key.objects.get_or_create(
+                    owner=request.user,
+                    type=keytype,
+                    defaults=dict(
+                        value=credit_card,
+                ))
+                if not created_:
+                    key.value = credit_card
+                    key.save(update_fields=('value',))
+            status_code = 200
+            data = dict()
+        except ServiceException as excpt:
+            transaction.set_rollback(True)
+            status_code = 400
+            data = dict(message=excpt.args[0])
+        return Response(data=data, status=status_code)
+
+api_update_profileinfo = ApiUpdateProfileInfo.as_view()
 
 class ApiAuthSignUp(CreateUserMixin, APIView):
     """
@@ -120,17 +302,17 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
                     uid=oauth_result['uid'],
                     user=user,
                 )
-            self.update_oauth(oauth, oauth_result)
             token, created_ = Token.objects.get_or_create(user=user)
             data = dict(token=token.key,)
             if signup:
+                self.update_oauth(oauth, oauth_result)
                 data.update(
                     user_id=user.pk,
                     user_uuid=str(user.profile.uuid),
                     last_name=user.last_name,
                     first_name=user.first_name,
                     middle_name=user.profile.middle_name,
-                    photo=oauth.photo,
+                    photo=user.profile.choose_photo(),
                 )
             status_code = 200
         except ServiceException as excpt:
@@ -153,9 +335,9 @@ class ApiAuthDummy(APIView):
             "email": "someone@gmail.com",
             "email_verified": "true",
             "name": "dummy",
-            "picture": "https://lh5.googleusercontent.com/dummy/photo.jpg",
+            "picture": "https://lh5.googleusercontent.com/dummy/photo3.jpg",
             "given_name": "Сергей",
-            "family_name": "dummy",
+            "family_name": "Неизвестный",
             "locale": "ru",
             "iat": "1587538141",
             "exp": "1587541741",

@@ -38,7 +38,7 @@ class Oauth(BaseModelInsertUpdateTimestamp):
             # Это не от oauth провайдера, а из нашей таблицы ключей,
             # где может быть уже пользователь с таким ид от oauth,
             #
-            'key_type_title': 'GoogleAccountId',
+            'key_type_title': None,
         },
     }
 
@@ -176,6 +176,10 @@ class Profile(PhotoModel):
     user = models.OneToOneField('auth.User', on_delete=models.CASCADE)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
     middle_name = models.CharField(_("Отчество"), max_length=255, blank=True, default='')
+    photo_url = models.URLField(_("Фото из соц. сети"), max_length=255, default='')
+    fame = models.PositiveIntegerField(_("Известность"), default=0)
+    sum_thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
+    trustless_count = models.PositiveIntegerField(_("Число утрат доверия"), default=0)
 
     class Meta:
         ordering = ('user__last_name', 'user__first_name', 'middle_name', )
@@ -194,6 +198,25 @@ class Profile(PhotoModel):
         if not name:
             name = self.user.get_full_name()
         return name
+
+    @classmethod
+    def choose_photo_of(cls, photo, photo_url):
+        result = ''
+        if photo:
+            result = photo
+        elif photo_url:
+            result = photo_url
+        return result
+
+    def choose_photo(self):
+        """
+        Выбрать фото пользователя
+
+        Если есть выданное пользователем фото (photo), то оно,
+        иначе photo_url
+        """
+        return Profile.choose_photo_of(self.photo, self.photo_url)
+
 
 class CreateUserMixin(object):
 
@@ -243,6 +266,13 @@ class CreateUserMixin(object):
                 for f in user_fields:
                     setattr(oauth.user, f, oauth_result[f])
                 oauth.user.save()
+        if 'photo' in oauth_result:
+            try:
+                profile = Profile.objects.get(user=oauth.user)
+                profile.photo_url = oauth_result['photo'] or ''
+                profile.save(update_fields=('photo_url',))
+            except Profile.DoesNotExist:
+                pass
 
 class IncognitoUser(BaseModelInsertUpdateTimestamp):
 
