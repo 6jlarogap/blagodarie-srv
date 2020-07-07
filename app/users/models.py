@@ -1,6 +1,6 @@
 import datetime, string, random
 import urllib.request, urllib.error, urllib.parse
-import json, uuid
+import json, uuid, re
 
 from django.conf import settings
 from django.db import models, transaction, IntegrityError
@@ -173,6 +173,7 @@ class Oauth(BaseModelInsertUpdateTimestamp):
         return result
 
 class Profile(PhotoModel):
+
     user = models.OneToOneField('auth.User', on_delete=models.CASCADE)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
     middle_name = models.CharField(_("Отчество"), max_length=255, blank=True, default='')
@@ -200,22 +201,43 @@ class Profile(PhotoModel):
         return name
 
     @classmethod
-    def choose_photo_of(cls, photo, photo_url):
+    def choose_photo_of(cls, photo, photo_url, photo_size=None):
         result = ''
         if photo:
             result = photo
         elif photo_url:
             result = photo_url
+            if not photo_size:
+                photo_size = settings.GOOGLE_PHOTO_SIZE
+            m = re.search(
+                #      1       2     3      4     5
+                r'^(https?://)(\S*)(google)(\S+)(\=s\d+\-c)$',
+                result,
+                flags=re.I
+            )
+            if m:
+                result = m.group(1) + m.group(2) + m.group(3) + m.group(4) + \
+                        '=s' + str(photo_size) + '-c'
+            else:
+                m = re.search(
+                    #     1        2     3      4     5         6
+                    r'^(https?://)(\S*)(google)(\S+)(/s\d+\-c/)(\S*)$',
+                    result,
+                    flags=re.I
+                )
+                if m:
+                    result = m.group(1) + m.group(2) + m.group(3) + m.group(4) + \
+                             '/s' + str(photo_size) + '-c/' + m.group(6)
         return result
 
-    def choose_photo(self):
+    def choose_photo(self, photo_size=None):
         """
         Выбрать фото пользователя
 
         Если есть выданное пользователем фото (photo), то оно,
         иначе photo_url
         """
-        return Profile.choose_photo_of(self.photo, self.photo_url)
+        return Profile.choose_photo_of(self.photo, self.photo_url, photo_size)
 
 
 class CreateUserMixin(object):

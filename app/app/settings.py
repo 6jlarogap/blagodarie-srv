@@ -194,6 +194,10 @@ TIME_START_GET_SYMPTOMS = 1586459348
 #
 MOON_MONTH_LONG = 2551442.82048     # 29.5305882 * 86400
 
+# Приводить google photos к такому размеру
+#
+GOOGLE_PHOTO_SIZE = 200
+
 # Давать ли доступ к Django Admin,
 # по умолчанию - не давать
 #
