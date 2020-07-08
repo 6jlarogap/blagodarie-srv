@@ -361,7 +361,13 @@ class LogLike(models.Model):
                 counts_24h=[]
             )
             if not incognitouser:
-                count_users_all = UserSymptom.objects.all().distinct('incognitouser').count()
+                if selected_ids_str:
+                    count_users_all = UserSymptom.objects.filter(
+                        symptom__pk__in=selected_ids_list
+                    ).distinct('incognitouser').count()
+                else:
+                    count_users_all = UserSymptom.objects.all(
+                    ).distinct('incognitouser').count()
                 q = Q(
                         insert_timestamp__lt=time_last,
                         insert_timestamp__gte=time_1st,
