@@ -21,7 +21,7 @@ from app.utils import ServiceException
 
 from contact.models import KeyType, Key, UserKey, LikeKey, Like, LogLike, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
-                           Journal, CurrentState, OperationType
+                           Journal, CurrentState, OperationType, Wish
 from users.models import CreateUserMixin, IncognitoUser, Profile
 
 MSG_NO_PARM = 'Не задан или не верен какой-то из параметров в связке номер %s (начиная с 0)'
@@ -1108,6 +1108,152 @@ class ApiGetSymptoms(APIView):
         return Response(data=data, status=status_code)
 
 api_getsymptoms = ApiGetSymptoms.as_view()
+
+class ApiAddOrUpdateWish(APIView):
+    permission_classes = (IsAuthenticated, )
+
+    # TODO
+    # Удалить обработку incognito_id, когда пользователи обновят свои апк
+
+    @transaction.atomic
+    def post(self, request, *args, **kwargs,):
+        """
+        Создать либо обновить желание uuid
+
+        Пример исходных данных:
+        * Создать желание (uuid не задан)
+            {
+                "text": "Хочу, хочу, хочу...",
+                "last_edit": 154230840234
+            }
+        * Обновить желание (uuid задан)
+            {
+                "uuid": "e17a34d0-c6c4-4755-a67b-7e7d13e4bd4b",
+                "text": "Хочу, хочу, хочу...",
+                "last_edit": 154230840234
+            }
+        Возвращает: {}
+        """
+        try:
+            text = request.data.get('text')
+            if not text:
+                raise ServiceException('Желание без текста')
+            update_timestamp = request.data.get('last_edit', int(time.time()))
+            uuid = request.data.get('uuid')
+            if uuid:
+                try:
+                    wish = Wish.objects.get(uuid=uuid, owner=request.user)
+                except ValidationError:
+                    raise ServiceException('Неверный uuid = %s' % uuid)
+                except Wish.DoesNotExist:
+                    raise ServiceException('Не найдено желание этого пользователя с uuid = %s' % uuid)
+                wish.text = text
+                wish.update_timestamp = update_timestamp
+                wish.save()
+            else:
+                Wish.objects.create(
+                    owner=request.user,
+                    text=text,
+                    update_timestamp=update_timestamp,
+                )
+            data = dict()
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            transaction.set_rollback(True)
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_add_or_update_wish = ApiAddOrUpdateWish.as_view()
+
+class ApiGetWishInfo(APIView):
+
+    def get(self, request, *args, **kwargs):
+        """
+        Возвращает информацию о желании
+
+        Пример исходных данных:
+        /api/getwishinfo?uuid=4d02e22c-b6eb-4307-a440-ccafdeedd9b8
+        Возвращает:
+        {
+            "owner_id":"e17a34d0-c6c4-4755-a67b-7e7d13e4bd4b",
+            "text":"Хочу хочу хочу...",
+            "last_edit":384230840234
+        }
+
+        """
+        try:
+            uuid = request.GET.get('uuid')
+            if uuid:
+                try:
+                    wish = Wish.objects.get(uuid=uuid)
+                except ValidationError:
+                    raise ServiceException('Неверный uuid = %s' % uuid)
+                except Wish.DoesNotExist:
+                    raise ServiceException('Не найдено желание с uuid = %s' % uuid)
+                data = dict(
+                    owner_id=wish.owner.profile.uuid,
+                    text=wish.text,
+                    last_edit=wish.update_timestamp,
+                )
+                status_code = status.HTTP_200_OK
+            else:
+                raise ServiceException('Не задан uuid желания')
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_get_wish_info = ApiGetWishInfo.as_view()
+
+class ApiGetUserWishes(APIView):
+
+    def get(self, request, *args, **kwargs):
+        """
+        Возвращает список желаний пользователя
+
+        Пример исходных данных:
+        /api/getuserwishes?uuid=172da3fe-dd30-4cb8-8df3-46f69785d30a
+        Возвращает:
+        {
+            "wishes": [
+                {
+                    "uuid": "e17a34d0-c6c4-4755-a67b-7e7d13e4bd4b",
+                    "text": "Хочу, хочу, хочу...",
+                    "last_edit": 184230840234
+                },
+                ...
+            ]
+        }
+
+        """
+        try:
+            uuid = request.GET.get('uuid')
+            if uuid:
+                try:
+                    owner = Profile.objects.get(uuid=uuid).user
+                except ValidationError:
+                    raise ServiceException('Неверный uuid = %s' % uuid)
+                except Profile.DoesNotExist:
+                    raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
+                data = dict(
+                    wishes = [
+                        dict(
+                            uuid=wish.uuid,
+                            text=wish.text,
+                            last_edit=wish.update_timestamp,
+                        ) for wish in Wish.objects.filter(owner=owner).order_by('update_timestamp')
+                    ]
+                )
+                status_code = status.HTTP_200_OK
+            else:
+                raise ServiceException('Не задан uuid пользователя')
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_get_user_wishes = ApiGetUserWishes.as_view()
 
 class MergeSymptomsView(View):
 

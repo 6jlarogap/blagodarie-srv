@@ -45,5 +45,9 @@ urlpatterns = [
 
     url(r'^api/getsymptoms/?$', views.api_getsymptoms),
 
+    url(r'^api/addorupdatewish/?$', views.api_add_or_update_wish),
+    url(r'^api/getwishinfo/?$', views.api_get_wish_info),
+    url(r'^api/getuserwishes/?$', views.api_get_user_wishes),
+
     url(r'^admin/merge_symptoms/?$', views.merge_symptoms),
 ]

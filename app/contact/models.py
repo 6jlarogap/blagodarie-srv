@@ -1,6 +1,6 @@
 import time, datetime, json, hashlib, re
 import numpy as np
-import os
+import os, uuid
 from collections import OrderedDict
 import matplotlib as mpl
 if os.environ.get('DISPLAY','') == '':
@@ -236,6 +236,12 @@ class UserSymptom(BaseModelInsertTimestamp, GeoPointModel):
         if self.moon_day is None:
             self.moon_day = get_moon_day(self.insert_timestamp)
         return super(UserSymptom, self).save(*args, **kwargs)
+
+class Wish(BaseModelInsertUpdateTimestamp):
+
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True)
+    owner = models.ForeignKey('auth.User', verbose_name=_("Владелец"), on_delete=models.CASCADE)
+    text = models.TextField(verbose_name=_("Текст"))
 
 class LogLike(models.Model):
     """
