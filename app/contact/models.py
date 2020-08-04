@@ -325,25 +325,21 @@ class LogLike(models.Model):
             # Возвращает json:
             #   {
             #       "titles": [
-            #           "Пользователи (всего, <число с симптомами за LAST_STAT_HOURS>, <число с симптомами за 24ч>)",
             #           "симптом1 (всего, <за LAST_STAT_HOURS>, <за 24 HOURS>)",
             #           ...
             #           "симптомN (всего, <за LAST_STAT_HOURS>, <за 24 HOURS>)",
             #       ],
             #       "counts_all": [
-            #           <число пользователей с симптомами всего>,
             #           "<всего симптомов1>",
             #           ...
             #           "<всего симптомовN>"
             #       ],
             #       "counts_48h": [
-            #           <число пользователей с симптомами за LAST_STAT_HOURS>,
             #           "<за LAST_STAT_HOURS симптомов1>",
             #           ...
             #           "<за LAST_STAT_HOURS симптомовN>"
             #       ],
             #       "counts_24h": [
-            #           <пользователей за LAST_STAT_HOURS>,
             #           "<за 24 HOURS симптомов1>",
             #           ...
             #           "<за 24 HOURS симптомовN>"
@@ -360,34 +356,6 @@ class LogLike(models.Model):
                 counts_48h=[],
                 counts_24h=[]
             )
-            if not incognitouser:
-                if selected_ids_str:
-                    count_users_all = UserSymptom.objects.filter(
-                        symptom__pk__in=selected_ids_list
-                    ).distinct('incognitouser').count()
-                else:
-                    count_users_all = UserSymptom.objects.all(
-                    ).distinct('incognitouser').count()
-                q = Q(
-                        insert_timestamp__lt=time_last,
-                        insert_timestamp__gte=time_1st,
-                    )
-                if selected_ids_str:
-                    q &= Q(symptom__pk__in=selected_ids_list)
-                count_users_48h = UserSymptom.objects.filter(q).distinct('incognitouser').count()
-
-                q = Q(
-                        insert_timestamp__lt=time_last,
-                        insert_timestamp__gte=time_24h,
-                    )
-                if selected_ids_str:
-                    q &= Q(symptom__pk__in=selected_ids_list)
-                count_users_24h = UserSymptom.objects.filter(q).distinct('incognitouser').count()
-
-                data['titles'].append('Пользователи (%s, %s, %s)' % (count_users_all, count_users_48h, count_users_24h))
-                data['counts_all'].append(count_users_all)
-                data['counts_48h'].append(count_users_48h)
-                data['counts_24h'].append(count_users_24h)
 
             s_dict = dict()
             if selected_ids_str != '()':
