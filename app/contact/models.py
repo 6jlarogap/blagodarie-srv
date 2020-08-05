@@ -56,6 +56,7 @@ class Journal(BaseModelInsertTimestamp):
                     related_name='journal_user_to_set')
     operationtype = models.ForeignKey(OperationType,
                     verbose_name=_("Тип операции"), on_delete=models.CASCADE)
+    comment = models.TextField(verbose_name=_("Комментарий"), null=True)
 
 class CurrentState(BaseModelInsertUpdateTimestamp):
 

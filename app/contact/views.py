@@ -59,6 +59,7 @@ class ApiAddOperationView(APIView):
             user_from = request.user
             user_to_uuid = request.data.get("user_id_to")
             operationtype_id = request.data.get("operation_type_id")
+            comment = request.data.get("comment", None)
             if not user_to_uuid or not operationtype_id:
                 raise ServiceException('Не заданы user_id_to и/или operation_type_id')
             try:
@@ -80,6 +81,7 @@ class ApiAddOperationView(APIView):
                 user_to=user_to,
                 operationtype=operationtype,
                 insert_timestamp=insert_timestamp,
+                comment=comment,
             )
 
             if operationtype_id == OperationType.THANK:
