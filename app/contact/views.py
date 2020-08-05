@@ -1112,21 +1112,23 @@ api_getsymptoms = ApiGetSymptoms.as_view()
 class ApiAddOrUpdateWish(APIView):
     permission_classes = (IsAuthenticated, )
 
-    # TODO
-    # Удалить обработку incognito_id, когда пользователи обновят свои апк
-
     @transaction.atomic
     def post(self, request, *args, **kwargs,):
         """
         Создать либо обновить желание uuid
 
+        Если желание с заданным uuid существует,
+        то проверить принадлежит ли оно пользователю,
+        пославшему запрос, и если принадлежит, то обновить его.
+        Если же не принадлежит, то вернуть сообщение об ошибке.
+        Если желания с таким uuid не существует, то создать
         Пример исходных данных:
         * Создать желание (uuid не задан)
             {
                 "text": "Хочу, хочу, хочу...",
                 "last_edit": 154230840234
             }
-        * Обновить желание (uuid задан)
+        * Обновить или обновить желание (uuid задан)
             {
                 "uuid": "e17a34d0-c6c4-4755-a67b-7e7d13e4bd4b",
                 "text": "Хочу, хочу, хочу...",
@@ -1141,15 +1143,26 @@ class ApiAddOrUpdateWish(APIView):
             update_timestamp = request.data.get('last_edit', int(time.time()))
             uuid = request.data.get('uuid')
             if uuid:
+                do_create = False
                 try:
-                    wish = Wish.objects.get(uuid=uuid, owner=request.user)
+                    wish = Wish.objects.get(uuid=uuid)
                 except ValidationError:
                     raise ServiceException('Неверный uuid = %s' % uuid)
                 except Wish.DoesNotExist:
-                    raise ServiceException('Не найдено желание этого пользователя с uuid = %s' % uuid)
-                wish.text = text
-                wish.update_timestamp = update_timestamp
-                wish.save()
+                    do_create = True
+                    Wish.objects.create(
+                        uuid=uuid,
+                        owner=request.user,
+                        text=text,
+                        update_timestamp=update_timestamp,
+                    )
+                if not do_create:
+                    if wish.owner == request.user:
+                        wish.text = text
+                        wish.update_timestamp = update_timestamp
+                        wish.save()
+                    else:
+                        raise ServiceException('Желание с uuid = %s принадлежит другому пользователю' % uuid)
             else:
                 Wish.objects.create(
                     owner=request.user,
@@ -1165,6 +1178,42 @@ class ApiAddOrUpdateWish(APIView):
         return Response(data=data, status=status_code)
 
 api_add_or_update_wish = ApiAddOrUpdateWish.as_view()
+
+class ApiDeleteWish(APIView):
+    permission_classes = (IsAuthenticated, )
+
+    def get(self, request, *args, **kwargs,):
+        """
+        Удалить желание uuid
+
+        Проверить, принадлежит ли желание пользователю, пославшему запрос,
+        если принадлежит, то удалить его, иначе вернуть сообщение об ошибке.
+        Пример исходных данных:
+        /api/deletewish?uuid=4d02e22c-b6eb-4307-a440-ccafdeedd9b8
+        Возвращает: {}
+        """
+        try:
+            uuid = request.GET.get('uuid')
+            if uuid:
+                try:
+                    wish = Wish.objects.get(uuid=uuid, owner=request.user)
+                except ValidationError:
+                    raise ServiceException('Неверный uuid = %s' % uuid)
+                except Wish.DoesNotExist:
+                    raise ServiceException(
+                        'Желание с uuid = %s не найдено или принадлежит другому пользователю' % uuid
+                    )
+                wish.delete()
+            else:
+                raise ServiceException('Не задан uuid желания')
+            data = dict()
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_delete_wish = ApiDeleteWish.as_view()
 
 class ApiGetWishInfo(APIView):
 
