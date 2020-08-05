@@ -65,10 +65,10 @@ class ApiAddOperationView(APIView):
             try:
                 profile_to = Profile.objects.select_for_update().get(uuid=user_to_uuid)
                 user_to = profile_to.user
-            except Profile.DoesNotExist:
-                raise ServiceException('Не найден пользователь, uuid = "%s"' % user_to_uuid)
             except ValidationError:
                 raise ServiceException('Неверный uuid = "%s"' % user_to_uuid)
+            except Profile.DoesNotExist:
+                raise ServiceException('Не найден пользователь, uuid = "%s"' % user_to_uuid)
             try:
                 operationtype_id = int(operationtype_id)
                 operationtype = OperationType.objects.get(pk=operationtype_id)
@@ -144,6 +144,80 @@ class ApiAddOperationView(APIView):
         return Response(data=data, status=status_code)
 
 api_add_operation = ApiAddOperationView.as_view()
+
+class ApiGetUserOperationsView(APIView):
+
+    def post(self, request):
+        """
+        Получение журнала операций
+
+
+        Вернуть список из таблицы Journal, где user_id_to = "uuid".
+        Записи должны быть отсортированы по полю insert_timestamp
+        в убывающем порядке (т. е. сначала последние).
+        И необходимо вернуть только count записей с "from"
+        (постраничная загрузка).
+        Запрос:
+            {
+                "uuid": "c01ee6a8-b6a1-4718-a6ef-de44a6dc54e9",
+                "from": 0,
+                "count": 20
+            }
+            from нет или null: сначала
+            count нет или null: до конца
+        Возвращает:
+        {
+            "operations":
+            [
+                {
+                "user_id_from": "31f6a5b2-94a2-4993-9b13-f289318891e6",
+                "operation_type_id": 1,
+                "timestamp": 384230840234,
+                "comment": "Хороший человек"
+                },
+                …
+            ]
+        }
+        """
+
+        try:
+            user_to_uuid = request.data.get("uuid")
+            if not user_to_uuid:
+                raise ServiceException('Не задан uuid')
+            try:
+                profile_to = Profile.objects.get(uuid=user_to_uuid)
+                user_to = profile_to.user
+            except ValidationError:
+                raise ServiceException('Неверный uuid = "%s"' % user_to_uuid)
+            except Profile.DoesNotExist:
+                raise ServiceException('Не найден пользователь, uuid = "%s"' % user_to_uuid)
+            from_ = request.data.get("from")
+            if not from_:
+                from_ = 0
+            count = request.data.get("count")
+            qs = Journal.objects.filter(user_to=user_to). \
+                    order_by('-insert_timestamp'). \
+                    select_related('user_from__profile')
+            if count:
+                qs = qs[from_ : from_ + count]
+            else:
+                qs = qs[from_:]
+            data = [
+                dict(
+                    user_id_from=j.user_from.profile.uuid,
+                    operation_type_id=j.operationtype.pk,
+                    timestamp=j.insert_timestamp,
+                    comment=j.comment,
+                ) for j in qs
+            ]
+            status_code = status.HTTP_200_OK
+            data = dict(operations=data)
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_get_user_operations = ApiGetUserOperationsView.as_view()
 
 class ApiAddKeyView(APIView):
     
