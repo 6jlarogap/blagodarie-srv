@@ -205,6 +205,9 @@ class ApiGetUserOperationsView(APIView):
             data = [
                 dict(
                     user_id_from=j.user_from.profile.uuid,
+                    first_name=j.user_from.first_name,
+                    last_name=j.user_from.last_name,
+                    photo=j.user_from.profile.choose_photo(),
                     operation_type_id=j.operationtype.pk,
                     timestamp=j.insert_timestamp,
                     comment=j.comment,
