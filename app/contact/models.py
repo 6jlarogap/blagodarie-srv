@@ -272,6 +272,36 @@ class LogLike(models.Model):
                 likes=Like.objects.all().count(),
             )
 
+        if kwargs.get('only') == 'user_connections':
+            # Вернуть:
+            # {
+            #   "users": [...],     # список пользователей с профилями (и uuid)
+            #   "connections": [
+            #       [3, 4],         # user_id=3 сделал thank user_id=4 или наоборот
+            #       [5, 6],
+            #       ...
+            #   [
+            # }
+
+            users = dict()
+            for user in User.objects.filter(is_superuser=False):
+                initials = ''
+                first_name = user.first_name.strip()
+                if first_name:
+                    initials += first_name[0]
+                last_name = user.last_name.strip()
+                if last_name:
+                    initials += last_name[0]
+                users[user.pk] = dict(initials=initials)
+            connections = []
+            for cs in CurrentState.objects.filter(thanks_count__gt=0):
+                connection_fvd = [cs.user_from.pk, cs.user_to.pk]
+                connection_rev = [cs.user_to.pk, cs.user_from.pk]
+                if not (connection_fvd in connections or connection_rev in connections):
+                    connections.append(connection_fvd)
+
+            return dict(users=users, connections=connections)
+
         if kwargs.get('only') == 'users':
             # Вернуть число пользователей и симтомов
             #

@@ -40,6 +40,8 @@ urlpatterns = [
     url(r'^api/getstats/symptoms/moon/data/?$',
         views.api_get_stats, {'only': 'symptoms_moon_data'}),
 
+    url(r'^api/getstats/user_connections/?$', views.api_get_stats, {'only': 'user_connections'}),
+
     url(r'^api/addusersymptom/?$', views.api_add_user_symptom),
     url(r'^api/add_user_symptom/?$', views.api_add_user_symptom, {'auth': True}),
     url(r'^api/addincognitosymptom/?$', views.api_add_user_symptom, {'auth': False}),
