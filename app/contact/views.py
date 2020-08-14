@@ -1364,13 +1364,25 @@ class ApiGetUserWishes(APIView):
                     raise ServiceException('Неверный uuid = %s' % uuid)
                 except Profile.DoesNotExist:
                     raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
+                qs = Wish.objects.filter(owner=owner).order_by('update_timestamp')
+                try:
+                    from_ = request.GET.get("from", 0)
+                    from_ = int(from_)
+                    count = request.GET.get("count", 0)
+                    count = int(count)
+                except ValueError:
+                    raise ServiceException('Неверный from или count')
+                if count:
+                    qs = qs[from_ : from_ + count]
+                else:
+                    qs = qs[from_:]
                 data = dict(
                     wishes = [
                         dict(
                             uuid=wish.uuid,
                             text=wish.text,
                             last_edit=wish.update_timestamp,
-                        ) for wish in Wish.objects.filter(owner=owner).order_by('update_timestamp')
+                        ) for wish in qs
                     ]
                 )
                 status_code = status.HTTP_200_OK
