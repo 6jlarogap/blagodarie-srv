@@ -1367,9 +1367,9 @@ class ApiGetUserWishes(APIView):
                 qs = Wish.objects.filter(owner=owner).order_by('update_timestamp')
                 try:
                     from_ = request.GET.get("from", 0)
-                    from_ = int(from_)
+                    from_ = int(from_) if from_ else 0
                     count = request.GET.get("count", 0)
-                    count = int(count)
+                    count = int(count) if count else 0
                 except ValueError:
                     raise ServiceException('Неверный from или count')
                 if count:
