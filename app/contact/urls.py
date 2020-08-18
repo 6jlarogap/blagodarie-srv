@@ -9,6 +9,8 @@ urlpatterns = [
     url(r'^api/addoperation/?$', views.api_add_operation),
     url(r'^api/getuseroperations/?$', views.api_get_user_operations),
 
+    url(r'^api/addtextoperation/?$', views.api_add_text_operation),
+
     url(r'^api/deleteuserkeyz/?$', views.api_delete_user_keys),
  
     url(r'^api/addkeyz/?$', views.api_add_key),

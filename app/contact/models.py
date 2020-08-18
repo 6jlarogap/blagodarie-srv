@@ -46,14 +46,24 @@ class OperationType(models.Model):
 
     title = models.CharField(_("Тип операции"), max_length=255, unique=True)
 
+class AnyText(BaseModelInsertTimestamp):
+
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
+    text = models.CharField(_("Значение"), max_length=2048, unique=True, db_index=True)
+    fame = models.PositiveIntegerField(_("Известность"), default=0)
+    sum_thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
+    trustless_count = models.PositiveIntegerField(_("Число утрат доверия"), default=0)
+
 class Journal(BaseModelInsertTimestamp):
 
     user_from = models.ForeignKey('auth.User',
                     verbose_name=_("От кого"), on_delete=models.CASCADE,
                     related_name='journal_user_from_set')
     user_to = models.ForeignKey('auth.User',
-                    verbose_name=_("Кому"), on_delete=models.CASCADE,
+                    verbose_name=_("Кому"), on_delete=models.CASCADE, null=True,
                     related_name='journal_user_to_set')
+    anytext = models.ForeignKey(AnyText,
+                    verbose_name=_("Текст"), on_delete=models.CASCADE, null=True)
     operationtype = models.ForeignKey(OperationType,
                     verbose_name=_("Тип операции"), on_delete=models.CASCADE)
     comment = models.TextField(verbose_name=_("Комментарий"), null=True)
@@ -64,13 +74,18 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
                     verbose_name=_("От кого"), on_delete=models.CASCADE,
                     related_name='currentstate_user_from_set')
     user_to = models.ForeignKey('auth.User',
-                    verbose_name=_("Кому"), on_delete=models.CASCADE,
+                    verbose_name=_("Кому"), on_delete=models.CASCADE, null=True,
                     related_name='currentstate_user_to_set')
+    anytext = models.ForeignKey(AnyText,
+                    verbose_name=_("Текст"), on_delete=models.CASCADE, null=True)
     thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
     is_trust = models.BooleanField(_("Доверие"), default=True)
 
     class Meta:
-        unique_together = ('user_from', 'user_to', )
+        unique_together = (
+            ('user_from', 'user_to', ),
+            ('user_from', 'anytext', ),
+        )
 
 class Key(BaseModelInsertTimestamp):
 
@@ -294,7 +309,7 @@ class LogLike(models.Model):
                     initials += last_name[0]
                 users[user.pk] = dict(initials=initials)
             connections = []
-            for cs in CurrentState.objects.filter(thanks_count__gt=0):
+            for cs in CurrentState.objects.filter(user_to__isnull=False, thanks_count__gt=0):
                 connection_fvd = [cs.user_from.pk, cs.user_to.pk]
                 connection_rev = [cs.user_to.pk, cs.user_from.pk]
                 if not (connection_fvd in connections or connection_rev in connections):
