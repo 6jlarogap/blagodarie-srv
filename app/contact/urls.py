@@ -10,6 +10,8 @@ urlpatterns = [
     url(r'^api/getuseroperations/?$', views.api_get_user_operations),
 
     url(r'^api/addtextoperation/?$', views.api_add_text_operation),
+    url(r'^api/gettextinfo/?$', views.api_get_textinfo),
+    url(r'^api/gettextoperations/?$', views.api_get_text_operations),
 
     url(r'^api/deleteuserkeyz/?$', views.api_delete_user_keys),
  

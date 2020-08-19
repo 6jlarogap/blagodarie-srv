@@ -17,7 +17,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import IsAuthenticated
 
-from app.utils import ServiceException
+from app.utils import ServiceException, dictfetchall
 
 from contact.models import KeyType, Key, UserKey, LikeKey, Like, LogLike, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
@@ -299,12 +299,210 @@ class ApiAddTextOperationView(APIView):
 
 api_add_text_operation = ApiAddTextOperationView.as_view()
 
+class ApiGetTextInfo(APIView):
+
+    def get(self, request):
+        """
+        Получение информации о тексте
+
+        Возвращает информацию о тексте, если такой текст существует в поле text
+        таблицы AnyText: идентификатор, известность, общее количество благодарностей,
+        количество утрат доверия. Если такого текста не существует,
+        то вернуть все поля null.
+
+        Если в запросе присутствует токен авторизации, то нужно вернуть
+        и текущее состояние между пользователем, который запрашивает информацию,
+        и текстом, о котором он запрашивает информацию.
+        То есть информацию из таблицы CurrentAtate, где user_from =
+        id_пользователя_из_токена, а text_id = id_текста_из_запроса.
+        Если в CurrentState нет записи по заданным пользователям,
+        то "thanks_count" = null и "is_trust" = null.
+        Также нужно возвратить массив пользователей (их фото и UUID),
+        которые благодарили текст, о котором запрашивается информация.
+        Массив пользователей должен быть отсортирован по убыванию известности пользователей.
+        Пример вызова:
+        /api/getprofileinfo?base_url/gettextinfo?text=ЛЮБОЙ_ТЕКСТ ИЛИ http://ссылка.ком
+
+        Пример возвращаемых данных:
+        {
+            "uuid": "3d20c185-388a-4e38-9fe1-6df8a31c7c31",
+            "sum_thanks_count": 300,
+            "fame": 3,
+            "trustless_count": 1,
+            "thanks_count": 12, // только при авторизованном запросе
+            "is_trust": true,   // только при авторизованном запросе
+            "thanks_users": [
+                {
+                "photo": "photo/url",
+                "user_uuid": "6e14d54b-9371-431f-8bf0-6688f2cf2451"
+                },
+                {
+                "photo": "photo/url",
+                "user_uuid": "5548a8ba-ac47-400e-96f3-f3c9caa75383"
+                },
+                {
+                "photo": "photo/url",
+                "user_uuid": "7ced71b2-3b55-45bf-a622-57311dbc6c9f"
+                }
+            ]
+        }
+
+        """
+
+        try:
+            text = request.GET.get('text')
+            if not text:
+                raise ServiceException("Не задан text")
+            try:
+                anytext = AnyText.objects.get(text=text)
+            except AnyText.DoesNotExist:
+                raise ServiceException("Не найден text: %s" % text)
+            data = dict(
+                uuid=anytext.uuid,
+                sum_thanks_count=anytext.sum_thanks_count,
+                fame=anytext.fame,
+                trustless_count=anytext.trustless_count,
+            )
+            user_from = request.user
+            if user_from.is_authenticated:
+                thanks_count = is_trust = None
+                try:
+                    currentstate = CurrentState.objects.get(
+                        user_from=user_from,
+                        anytext=anytext,
+                    )
+                    thanks_count = currentstate.thanks_count
+                    is_trust = currentstate.is_trust
+                except CurrentState.DoesNotExist:
+                    pass
+                data.update(
+                    thanks_count=thanks_count,
+                    is_trust=is_trust,
+                )
+            thanks_users = []
+            req_str = """
+                SELECT
+                    uuid, photo, photo_url
+                FROM
+                    users_profile
+                WHERE
+                    user_id IN (
+                        SELECT
+                            DISTINCT user_from_id AS id_
+                        FROM
+                            contact_journal
+                        WHERE
+                            anytext_id = %(anytext_id)s AND
+                            operationtype_id = %(thank_id)s
+                    )
+                ORDER BY fame DESC
+            """ % dict(
+                anytext_id=anytext.pk,
+                thank_id=OperationType.THANK,
+            )
+            with connection.cursor() as cursor:
+                cursor.execute(req_str)
+                recs = dictfetchall(cursor)
+                for rec in recs:
+                    thanks_users.append(dict(
+                        photo = Profile.choose_photo_of(rec['photo'], rec['photo_url']),
+                        user_uuid=str(rec['uuid'])
+                    ))
+            data.update(
+                thanks_users=thanks_users
+            )
+            status_code = 200
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+api_get_textinfo = ApiGetTextInfo.as_view()
+
+class ApiGetTextOperationsView(APIView):
+
+    def post(self, request):
+        """
+        Получение журнала операций по тексту
+
+        Вернуть список из таблицы Journal, где anytext_id = “uuid”
+        из запроса.
+        Записи должны быть отсортированы по полю inseert_timestamp в
+        убывающем порядке (т. е. сначала последние).
+        И необходимо вернуть только count записей с "from"
+        (постраничная загрузка).
+        Запрос:
+            {
+                "uuid": "c01ee6a8-b6a1-4718-a6ef-de44a6dc54e9",
+                "from": 0,
+                "count": 20
+            }
+            from нет или null: сначала
+            count нет или null: до конца
+        Возвращает:
+        {
+            "operations":
+            [
+                {
+                "user_id_from": "31f6a5b2-94a2-4993-9b13-f289318891e6",
+                "photo": "/url",
+                "first_name": "Видомина",
+                "last_name": "Павлова-Аксёнова",
+                "operation_type_id": 1,
+                "timestamp": 384230840234,
+                "comment": "Хороший человек"
+                },
+                …
+            ]
+        }
+        """
+
+        try:
+            anytext_uuid = request.data.get("uuid")
+            if not anytext_uuid:
+                raise ServiceException('Не задан uuid')
+            try:
+                anytext = AnyText.objects.get(uuid=anytext_uuid)
+            except ValidationError:
+                raise ServiceException('Неверный uuid = %s' % anytext_uuid)
+            except AnyText.DoesNotExist:
+                raise ServiceException('Не найден текст, uuid = %s' % anytext_uuid)
+            from_ = request.data.get("from")
+            if not from_:
+                from_ = 0
+            count = request.data.get("count")
+            qs = Journal.objects.filter(anytext=anytext). \
+                    order_by('-insert_timestamp'). \
+                    select_related('user_from__profile')
+            if count:
+                qs = qs[from_ : from_ + count]
+            else:
+                qs = qs[from_:]
+            data = [
+                dict(
+                    user_id_from=j.user_from.profile.uuid,
+                    first_name=j.user_from.first_name,
+                    last_name=j.user_from.last_name,
+                    photo=j.user_from.profile.choose_photo(),
+                    operation_type_id=j.operationtype.pk,
+                    timestamp=j.insert_timestamp,
+                    comment=j.comment,
+                ) for j in qs
+            ]
+            status_code = status.HTTP_200_OK
+            data = dict(operations=data)
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_get_text_operations = ApiGetTextOperationsView.as_view()
+
 class ApiGetUserOperationsView(APIView):
 
     def post(self, request):
         """
-        Получение журнала операций
-
+        Получение журнала операций по пользователю
 
         Вернуть список из таблицы Journal, где user_id_to = "uuid".
         Записи должны быть отсортированы по полю insert_timestamp
@@ -325,6 +523,9 @@ class ApiGetUserOperationsView(APIView):
             [
                 {
                 "user_id_from": "31f6a5b2-94a2-4993-9b13-f289318891e6",
+                "photo": "/url",
+                "first_name": "Видомина",
+                "last_name": "Павлова-Аксёнова",
                 "operation_type_id": 1,
                 "timestamp": 384230840234,
                 "comment": "Хороший человек"
@@ -342,9 +543,9 @@ class ApiGetUserOperationsView(APIView):
                 profile_to = Profile.objects.get(uuid=user_to_uuid)
                 user_to = profile_to.user
             except ValidationError:
-                raise ServiceException('Неверный uuid = "%s"' % user_to_uuid)
+                raise ServiceException('Неверный uuid = %s' % user_to_uuid)
             except Profile.DoesNotExist:
-                raise ServiceException('Не найден пользователь, uuid = "%s"' % user_to_uuid)
+                raise ServiceException('Не найден пользователь, uuid = %s' % user_to_uuid)
             from_ = request.data.get("from")
             if not from_:
                 from_ = 0
