@@ -523,6 +523,46 @@ class ApiDownloadRatingApkDetails(APIView):
 
 api_download_rating_apk_details = ApiDownloadRatingApkDetails.as_view()
 
+class ApiGetRatingLatestVersion(APIView):
+
+    def get(self, request):
+        """
+        Получить последнюю версию кода апк Rating
+        """
+        rating_apk_options_download = settings.RATING_APK_OPTIONS_DOWNLOAD % dict(
+            branch=settings.RATING_APK_BRANCH,
+        )
+        try:
+            try:
+                with open(os.path.join(settings.MEDIA_ROOT, rating_apk_options_download), 'r') as f:
+                    raw_output = f.read()
+            except IOError:
+                raise ServiceException('Не нашел, не смог прочитать output-metadata.json')
+            try:
+                output = json.loads(raw_output)
+            except ValueError:
+                raise ServiceException('Неверные данные в output-metadata.json')
+            try:
+                apk_fname = output['elements'][0]['outputFile']
+                rating_apk_url = settings.RATING_APK_URL % dict(
+                    branch=settings.RATING_APK_BRANCH,
+                    apk_fname=apk_fname
+                )
+                data = dict(
+                    path=rating_apk_url,
+                    version_code=output['elements'][0]['versionCode'],
+                    version_name=output['elements'][0]['versionName'],
+                    rating_google_play_update=settings.RATING_GOOGLE_PLAY_UPDATE,
+                )
+            except (KeyError, IndexError,):
+                raise ServiceException('Не нашел данные о версии мобильного приложения в output.json')
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 500
+        return Response(data=data, status=200)
+
+api_rating_latest_version = ApiGetRatingLatestVersion.as_view()
+
 class ApiAuthSignUpIncognito(APIView):
 
     @transaction.atomic
