@@ -157,12 +157,11 @@ CORS_ORIGIN_ALLOW_ALL = True
 #
 CORS_ALLOW_CREDENTIALS = True
 
-# Webhook ключ от github репозитория. Webhook обеспечивает при каждом
-# push в репозиторий отправку запроса для получения данных о версии
+# Webhook ключ от github репозитория приложения Благодария.
+# Webhook обеспечивает при каждом push в репозиторий
+# отправку запроса для получения данных о версии
 # мобильного приложения.
 #
-GITHUB_WEBHOOK_SECRET = 'secret'
-
 # Где можно скачать последнюю версию мобильного приложения
 #
 APK_URL = 'https://github.com/6jlarogap/blagodarie/raw/master/app/latest/blagodarie-latest.apk'
@@ -183,6 +182,50 @@ GOOGLE_PLAY_URL = 'https://play.google.com/store/apps/details?id=org.blagodarie'
 # Хранится ли апк в google play
 #
 GOOGLE_PLAY_UPDATE = False
+
+GITHUB_WEBHOOK_SECRET = 'secret'
+
+# Для получения версии Rating apk ------------------------------------------
+#
+
+# Вветка репозитория апк, с которой работает это апи
+#
+RATING_APK_BRANCH = 'master'
+
+# Ветки версии апк Rating, работающего с этим апи,
+# регулярное выражение выбора. Дело в том, что
+# github не отдает webhooks по веткам, так что
+# запрос на обновление dev версии может прийти
+# в апи, работающим с master (production) apk
+#
+RATING_APK_BRANCHES = r'master|dev'
+
+# Webhook ключ от github репозитория приложения Rating.
+# Webhook обеспечивает при каждом push в репозиторий
+# отправку запроса для получения данных о версии
+# мобильного приложения.
+#
+RATING_GITHUB_WEBHOOK_SECRET = 'secret'
+
+RATING_APK_OPTIONS_URL = 'https://raw.githubusercontent.com/6jlarogap/blagodari/%(branch)s/app/release/output-metadata.json'
+
+# Куда считываем данные о последней версии мобильного приложения,
+# относительно MEDIA_ROOT
+# %(branch)s - RATING_APK_BRANCHES (одно из)
+#
+RATING_APK_OPTIONS_DOWNLOAD = 'download/rating-apk-output/%(branch)s/output-metadata.json'
+
+# Откуда брать апк, если из файла на сервере
+# %(branch)s - RATING_APK_BRANCHES (одно из)
+# %(apk)s - имя файла апк, полученного из считанного из RATING_APK_OPTIONS_URL
+#
+RATING_APK_URL = 'https://raw.githubusercontent.com/6jlarogap/blagodari/%(branch)s/app/release/%(apk)s'
+
+# Хранится ли апк Rating в google play
+#
+RATING_GOOGLE_PLAY_UPDATE = False
+
+# --------------------------------------------------------------------------
 
 # Время начала наблюдений (приема симптомов ощущений):
 # начало первого лунного дня, в котором появились

@@ -457,6 +457,72 @@ class ApiGetLatestVersion(APIView):
 
 api_latest_version = ApiGetLatestVersion.as_view()
 
+class ApiDownloadRatingApkDetails(APIView):
+    """
+    Получить с github каталога данные о последней версии мобильного приложения rating
+    """
+
+    def post(self, request):
+        try:
+            header_signature = 'X-Hub-Signature'
+            encoding_eq_signature = request.headers.get('X-Hub-Signature')
+            if not encoding_eq_signature:
+                raise ServiceException('No "%s" header with signature' % header_signature)
+            encoding_eq_signature = encoding_eq_signature.lower()
+            payload = request.body
+            # Do not use any request.data stuff after that!
+
+            # Example of encoding_signature:
+            # 'sha1=5aaabbbcccdddeeefff11122233344455fffaaaa'
+            #
+            m = re.search(r'^([^\=]+)\=([^\=]+)$', encoding_eq_signature)
+            if not m:
+                raise ServiceException('Invalid "%s" header' % header_signature)
+            encoding = getattr(hashlib, m.group(1), None)
+            if not encoding:
+                raise ServiceException('No "<encoding>=" in "%s" header' % header_signature)
+            key = settings.RATING_GITHUB_WEBHOOK_SECRET
+            key = key.encode('utf-8')
+            if hmac.new(key, payload, encoding).hexdigest().lower() != m.group(2):
+                raise ServiceException('Request is not properly signed')
+
+            try:
+                ref = json.loads(payload)['ref']
+            except (ValueError, KeyError,):
+                raise ServiceException('No ref element in payload or invalid payload')
+            m = re.search(r'^refs/heads/(%s)$' % settings.RATING_APK_BRANCHES, ref)
+            if not m:
+                raise ServiceException('Invalid ref element in payload or invalid branch value in ref')
+            branch = m.group(1)
+
+            apk_options_url = settings.RATING_APK_OPTIONS_URL % dict(branch=branch)
+            apk_options_download = settings.RATING_APK_OPTIONS_DOWNLOAD % dict(branch=branch)
+            try:
+                req = urllib.request.Request(apk_options_url)
+                response = urllib.request.urlopen(req, timeout=20)
+                raw_data = response.read()
+            except urllib.error.HTTPError as excpt:
+                raise ServiceException('HTTPError: %s' % apk_options_url)
+            except urllib.error.URLError as excpt:
+                raise ServiceException('URLError: %s' % apk_options_url)
+            fname = os.path.join(settings.MEDIA_ROOT, apk_options_download)
+            try:
+                with open(fname, 'wb') as f:
+                    f.write(raw_data)
+            except IOError:
+                raise ServiceException('Ошибка настройки сервера, не удалось записать в файл: %s' % fname)
+            data = dict(message='Success: downloaded %s into %s' % (
+                apk_options_url,
+                fname,
+            ))
+            status_code = 200
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+api_download_rating_apk_details = ApiDownloadRatingApkDetails.as_view()
+
 class ApiAuthSignUpIncognito(APIView):
 
     @transaction.atomic
