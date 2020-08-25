@@ -495,7 +495,10 @@ class ApiDownloadRatingApkDetails(APIView):
                 raise ServiceException('Invalid ref element in payload or invalid branch value in ref')
             branch = m.group(1)
 
-            apk_options_url = settings.RATING_APK_OPTIONS_URL % dict(branch=branch)
+            apk_options_url = settings.RATING_APK_OPTIONS_URL % dict(
+                branch=branch,
+                build='debug' if settings.RATING_APK_BRANCH == 'dev' else 'release',
+            )
             apk_options_download = settings.RATING_APK_OPTIONS_DOWNLOAD % dict(branch=branch)
             try:
                 req = urllib.request.Request(apk_options_url)
@@ -546,7 +549,8 @@ class ApiGetRatingLatestVersion(APIView):
                 apk_fname = output['elements'][0]['outputFile']
                 rating_apk_url = settings.RATING_APK_URL % dict(
                     branch=settings.RATING_APK_BRANCH,
-                    apk_fname=apk_fname
+                    apk_fname=apk_fname,
+                    build='debug' if settings.RATING_APK_BRANCH == 'dev' else 'release',
                 )
                 data = dict(
                     path=rating_apk_url,

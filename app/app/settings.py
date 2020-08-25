@@ -211,11 +211,12 @@ RATING_GITHUB_WEBHOOK_SECRET = 'secret'
 # относительно MEDIA_ROOT
 # %(branch)s - RATING_APK_BRANCHES (одно из, какой придет в запрос от GitHub)
 #
-RATING_APK_OPTIONS_URL = 'https://raw.githubusercontent.com/6jlarogap/blagodari/%(branch)s/app/release/output-metadata.json'
+RATING_APK_OPTIONS_URL = 'https://raw.githubusercontent.com/6jlarogap/blagodari/%(branch)s/app/%(build)s/output-metadata.json'
 
 # Куда считываем данные о последней версии мобильного приложения Rating,
 # относительно MEDIA_ROOT
 # %(branch)s - RATING_APK_BRANCHES (одно из, какой придет в запрос от GitHub)
+# %(build)s  - 'debug', если RATING_APK_BRANCH == 'dev', иначе 'release'
 #
 # А также:
 #
@@ -227,9 +228,10 @@ RATING_APK_OPTIONS_DOWNLOAD = 'download/rating-apk-output/%(branch)s/output-meta
 
 # Откуда брать апк, если из файла на сервере
 # %(branch)s - RATING_APK_BRANCH
+# %(build)s  - 'debug', если RATING_APK_BRANCH == 'dev', иначе 'release'
 # %(apk_fname)s - имя файла апк, полученного из считанного из RATING_APK_OPTIONS_URL
 #
-RATING_APK_URL = 'https://raw.githubusercontent.com/6jlarogap/blagodari/%(branch)s/app/release/%(apk_fname)s'
+RATING_APK_URL = 'https://raw.githubusercontent.com/6jlarogap/blagodari/%(branch)s/app/%(build)s/%(apk_fname)s'
 
 # Хранится ли апк Rating в google play
 #
