@@ -497,7 +497,7 @@ class ApiDownloadRatingApkDetails(APIView):
 
             apk_options_url = settings.RATING_APK_OPTIONS_URL % dict(
                 branch=branch,
-                build='debug' if settings.RATING_APK_BRANCH == 'dev' else 'release',
+                build='debug' if branch == 'dev' else 'release',
             )
             apk_options_download = settings.RATING_APK_OPTIONS_DOWNLOAD % dict(branch=branch)
             try:
