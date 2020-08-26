@@ -20,6 +20,13 @@
       "title": "CreditCard"
     }
   },
+  {
+    "model": "contact.keytype",
+    "pk": 5,
+    "fields": {
+      "title": "Link"
+    }
+  },
 
   {
     "model": "contact.operationtype",
