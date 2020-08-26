@@ -577,7 +577,7 @@ class ApiGetUserOperationsView(APIView):
 
 api_get_user_operations = ApiGetUserOperationsView.as_view()
 
-class ApiAddKeyView(APIView):
+class ApiAddKeyzView(APIView):
     
     @transaction.atomic
     def post(self, request):
@@ -673,7 +673,7 @@ class ApiAddKeyView(APIView):
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
-api_add_key = ApiAddKeyView.as_view()
+api_add_keyz = ApiAddKeyzView.as_view()
 
 class ApiGetOrCreateKey(APIView):
     
@@ -1831,3 +1831,49 @@ class ApiGetUserKeys(APIView):
         return Response(data=data, status=status_code)
 
 api_get_user_keys = ApiGetUserKeys.as_view()
+
+class ApiAddKeyView(APIView):
+    permission_classes = (IsAuthenticated, )
+
+    @transaction.atomic
+    def post(self, request):
+        """
+        Добавление ключа
+
+        Добавить ключ в таблицу tbl_key. Если такой ключ уже существует (пара значение-тип ключа),
+        то вернуть ошибку. Owner_id - id пользователя из токена авторизации
+
+        Пример исходных данных:
+        {
+            "value": "56648",
+            "type_id": 1
+        }
+        """
+
+        try:
+            owner = request.user
+            value = request.data.get("value")
+            type_id = request.data.get("type_id")
+            if not value or not type_id:
+                raise ServiceException('Не задан(ы) value и/или type_id')
+            try:
+                keytype = KeyType.objects.get(pk=int(type_id))
+            except KeyType.DoesNotExist:
+                raise ServiceException('Не найден тип ключа type_id = %s' % type_id)
+            key, created_ = Key.objects.get_or_create(
+                type=keytype,
+                value=value,
+                defaults=dict(
+                    owner=owner,
+            ))
+            if not created_:
+                raise ServiceException('Такой ключ уже существует')
+            data = dict()
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            transaction.set_rollback(True)
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_add_key = ApiAddKeyView.as_view()
