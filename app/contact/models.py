@@ -30,7 +30,7 @@ from app.models import BaseModelInsertTimestamp, BaseModelInsertUpdateTimestamp,
 
 from app.utils import dictfetchall
 
-from users.models import IncognitoUser
+from users.models import IncognitoUser, Profile
 
 class KeyType(models.Model):
 
@@ -288,7 +288,9 @@ class LogLike(models.Model):
             )
 
         if kwargs.get('only') == 'user_connections':
+
             # Вернуть:
+            #
             # {
             #   "users": [...],     # список пользователей с профилями (и uuid)
             #   "connections": [
@@ -309,11 +311,62 @@ class LogLike(models.Model):
                     initials += last_name[0]
                 users[user.pk] = dict(initials=initials)
             connections = []
-            for cs in CurrentState.objects.filter(user_to__isnull=False, thanks_count__gt=0):
+            for cs in CurrentState.objects.filter(user_to__isnull=False, thanks_count__gt=0). \
+                        select_related('user_from', 'user_to'):
                 connection_fvd = [cs.user_from.pk, cs.user_to.pk]
                 connection_rev = [cs.user_to.pk, cs.user_from.pk]
                 if not (connection_fvd in connections or connection_rev in connections):
                     connections.append(connection_fvd)
+
+            return dict(users=users, connections=connections)
+
+        if kwargs.get('only') == 'user_connections_graph':
+
+            # Вернуть:
+            #
+            # {
+            #   "users": [
+            #       {
+            #           "id": "8b0cc02d-b6bb-4444-ae40-1b3a00aa9499",
+            #           "first_name": "Иван",
+            #           "last_name": "Иванов",
+            #           "photo": "..."
+            #       },
+            #       ...
+            # ],
+            #   "current_states": [
+            #       {
+            #           "from": "8b0cc02d-b6bb-4444-ae40-1b3a00aa9499",
+            #           "to": "a8fc8a5b-5687-43e6-b0e6-a043750c2ede",
+            #           "thanks_count": 1,
+            #           "is_trust": true
+            #       },
+            #       ...
+            #   ]
+            # }
+
+            users = [
+                dict(
+                    uuid=profile.uuid,
+                    first_name=profile.user.first_name,
+                    last_name=profile.user.last_name,
+                    photo = profile.choose_photo(),
+                )
+                    for profile in Profile.objects.filter(user__is_superuser=False). \
+                        select_related('user')
+            ]
+            connections = [
+                {
+                    'from': cs.user_from.profile.uuid,
+                    'to': cs.user_to.profile.uuid,
+                    'thanks_count': cs.thanks_count,
+                    'is_trust': cs.is_trust,
+                } \
+                for cs in CurrentState.objects.filter(user_to__isnull=False,).select_related(
+                    'user_from', 'user_to',
+                    'user_from__profile', 'user_to__profile',
+                )
+            ]
 
             return dict(users=users, connections=connections)
 
