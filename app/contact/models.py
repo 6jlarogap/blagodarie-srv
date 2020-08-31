@@ -336,8 +336,8 @@ class LogLike(models.Model):
             # ],
             #   "current_states": [
             #       {
-            #           "from": "8b0cc02d-b6bb-4444-ae40-1b3a00aa9499",
-            #           "to": "a8fc8a5b-5687-43e6-b0e6-a043750c2ede",
+            #           "source": "8b0cc02d-b6bb-4444-ae40-1b3a00aa9499",
+            #           "target": "a8fc8a5b-5687-43e6-b0e6-a043750c2ede",
             #           "thanks_count": 1,
             #           "is_trust": true
             #       },
@@ -357,8 +357,8 @@ class LogLike(models.Model):
             ]
             connections = [
                 {
-                    'from': cs.user_from.profile.uuid,
-                    'to': cs.user_to.profile.uuid,
+                    'source': cs.user_from.profile.uuid,
+                    'target': cs.user_to.profile.uuid,
                     'thanks_count': cs.thanks_count,
                     'is_trust': cs.is_trust,
                 } \
