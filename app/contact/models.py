@@ -345,28 +345,39 @@ class LogLike(models.Model):
             #   ]
             # }
 
-            users = [
-                dict(
-                    uuid=profile.uuid,
-                    first_name=profile.user.first_name,
-                    last_name=profile.user.last_name,
-                    photo = profile.choose_photo(),
-                )
-                    for profile in Profile.objects.filter(user__is_superuser=False). \
-                        select_related('user')
-            ]
-            connections = [
-                {
+            users = []
+            user_pks = []
+            connections = []
+            for cs in CurrentState.objects.filter(user_to__isnull=False,).select_related(
+                    'user_from', 'user_to',
+                    'user_from__profile', 'user_to__profile',
+                ):
+                connections.append({
                     'source': cs.user_from.profile.uuid,
                     'target': cs.user_to.profile.uuid,
                     'thanks_count': cs.thanks_count,
                     'is_trust': cs.is_trust,
-                } \
-                for cs in CurrentState.objects.filter(user_to__isnull=False,).select_related(
-                    'user_from', 'user_to',
-                    'user_from__profile', 'user_to__profile',
-                )
-            ]
+                })
+                user = cs.user_from
+                if user.pk not in user_pks:
+                    profile = user.profile
+                    users.append(dict(
+                        uuid=profile.uuid,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                        photo = profile.choose_photo(),
+                    ))
+                    user_pks.append(user.pk)
+                user = cs.user_to
+                if user.pk not in user_pks:
+                    profile = user.profile
+                    users.append(dict(
+                        uuid=profile.uuid,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                        photo = profile.choose_photo(),
+                    ))
+                    user_pks.append(user.pk)
 
             return dict(users=users, connections=connections)
 
