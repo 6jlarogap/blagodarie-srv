@@ -19,6 +19,8 @@ urlpatterns = [
     url(r'^api/getorcreatekeyz/?$', views.get_or_create_key),
     url(r'^api/getuserkeys/?$', views.api_get_user_keys),
     url(r'^api/addkey/?$', views.api_add_key),
+    url(r'^api/updatekey/?$', views.api_update_key),
+    url(r'^api/deletekey/?$', views.api_delete_key),
 
     url(r'^api/getlikes/?$', views.api_get_likes),
     url(r'^api/getlikesbykeyz/?$', views.api_get_all_likes, {'by': 'keys'}),

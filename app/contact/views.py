@@ -1,7 +1,7 @@
 import os, datetime, time
 
 from django.shortcuts import redirect
-from django.db import transaction, connection
+from django.db import transaction, IntegrityError, connection
 from django.db.models import F, Sum
 from django.db.models.query_utils import Q
 from django.views.generic.base import View
@@ -1835,13 +1835,12 @@ api_get_user_keys = ApiGetUserKeys.as_view()
 class ApiAddKeyView(APIView):
     permission_classes = (IsAuthenticated, )
 
-    @transaction.atomic
     def post(self, request):
         """
         Добавление ключа
 
         Добавить ключ в таблицу tbl_key. Если такой ключ уже существует (пара значение-тип ключа),
-        то вернуть ошибку. Owner_id - id пользователя из токена авторизации
+        то вернуть ошибку.
 
         Пример исходных данных:
         {
@@ -1849,7 +1848,6 @@ class ApiAddKeyView(APIView):
             "type_id": 1
         }
         """
-
         try:
             owner = request.user
             value = request.data.get("value")
@@ -1871,9 +1869,91 @@ class ApiAddKeyView(APIView):
             data = dict()
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
-            transaction.set_rollback(True)
             data = dict(message=excpt.args[0])
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
 api_add_key = ApiAddKeyView.as_view()
+
+class ApiUpdateKeyView(APIView):
+    permission_classes = (IsAuthenticated, )
+
+    def post(self, request):
+        """
+        Обновление ключа
+
+        Обновить ключ в таблице Key. Если такого ключа не существует или
+        если пользователь пытается обновить ключ, который ему не принадлежит,
+        то вернуть ошибку
+
+        Пример исходных данных:
+        {
+            "id": 4654645,
+            "value": "56648",
+            "type_id": 1
+        }
+        """
+        try:
+            id_ = request.data.get("id")
+            value = request.data.get("value")
+            type_id = request.data.get("type_id")
+            if not value or not type_id or not id_:
+                raise ServiceException('Не задан(ы) id и/или value и/или type_id')
+            try:
+                keytype = KeyType.objects.get(pk=int(type_id))
+            except KeyType.DoesNotExist:
+                raise ServiceException('Не найден тип ключа type_id = %s' % type_id)
+            try:
+                key = Key.objects.get(pk=id_)
+            except (ValueError, Key.DoesNotExist):
+                raise ServiceException('Не найден ключ id = %s' % id_)
+            if key.owner != request.user:
+                raise ServiceException('Ключ id = %s не Вам принадлежит' % id_)
+            try:
+                key.type = keytype
+                key.value = value
+                key.save()
+            except IntegrityError:
+                raise ServiceException('Попытка замены ключа на уже существующий')
+            data = dict()
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_update_key = ApiUpdateKeyView.as_view()
+
+class ApiDeleteKeyView(APIView):
+    permission_classes = (IsAuthenticated, )
+
+    def get(self, request):
+        """
+        Удаление ключа
+
+        Удалить ключ в таблице Key. Если такого ключа не существует или
+        если пользователь пытается обновить ключ, который ему не принадлежит,
+        то вернуть ошибку
+
+        Пример исходных данных:
+        /api/deletekey?id=324342
+        """
+        try:
+            id_ = request.GET.get("id")
+            if not id_:
+                raise ServiceException('Не задан id ключа')
+            try:
+                key = Key.objects.get(pk=id_)
+            except (ValueError, Key.DoesNotExist):
+                raise ServiceException('Не найден ключ id = %s' % id_)
+            if key.owner != request.user:
+                raise ServiceException('Ключ id = %s не Вам принадлежит' % id_)
+            key.delete()
+            data = dict()
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_delete_key = ApiDeleteKeyView.as_view()
