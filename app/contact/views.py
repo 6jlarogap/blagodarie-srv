@@ -1,4 +1,4 @@
-import os, datetime, time
+import os, datetime, time, json
 
 from django.shortcuts import redirect
 from django.db import transaction, IntegrityError, connection
@@ -18,6 +18,8 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import IsAuthenticated
 
 from app.utils import ServiceException, dictfetchall
+
+from pyfcm import FCMNotification
 
 from contact.models import KeyType, Key, UserKey, LikeKey, Like, LogLike, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
@@ -84,7 +86,6 @@ class ApiAddOperationView(APIView):
                 insert_timestamp=insert_timestamp,
                 comment=comment,
             )
-
             if operationtype_id == OperationType.THANK:
                 currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
                     user_from=user_from,
@@ -140,6 +141,20 @@ class ApiAddOperationView(APIView):
                         profile_to.trustless_count -= 1
                     profile_to.fame = fame
                     profile_to.save(update_fields=('fame', 'trustless_count',))
+
+            fcm_topic_name = 'user_%s' % profile_to.uuid
+            fcm_data_message = dict(
+                first_name=user_from.first_name,
+                last_name=user_from.last_name,
+                photo=user_from.profile.choose_photo(),
+                operation_type_id=operationtype_id,
+                comment=comment,
+            )
+            push_service = FCMNotification(api_key=settings.FCM_SERVER_KEY)
+            fcm_result = push_service.topic_subscribers_data_message(
+                topic_name=fcm_topic_name,
+                data_message=fcm_data_message,
+            )
 
         except ServiceException as excpt:
             transaction.set_rollback(True)

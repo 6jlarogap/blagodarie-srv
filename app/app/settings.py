@@ -258,6 +258,8 @@ GOOGLE_PHOTO_SIZE = 200
 #
 ADMIN_ENABLED = False
 
+FCM_SERVER_KEY = 'fcm_server_Key'
+
 # ------------------------------------------------
 try:
     from app.local_settings import *
