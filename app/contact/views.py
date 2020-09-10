@@ -1972,3 +1972,124 @@ class ApiDeleteKeyView(APIView):
         return Response(data=data, status=status_code)
 
 api_delete_key = ApiDeleteKeyView.as_view()
+
+class ApiProfileGraph(APIView):
+
+    def get(self, request, *args, **kwargs):
+        """
+        Возвращает связи пользователя, его желания и ключи
+
+        Пример вызова:
+        /api/profile_graph?uuid=91c49fe2-3f74-49a8-906e-f4f711f8e3a1
+        Возвращает:
+        {
+            "users": [
+                    {
+                        "uuid": "8d2db918-9a81-4537-ab69-1c3d2d19a00d",
+                        "first_name": "Олег",
+                        "last_name": ".",
+                        "photo": "https://...jpg"
+                    },
+                    ...
+            ],
+            "connections": [
+                    {
+                        "source": "8d2db918-9a81-4537-ab69-1c3d2d19a00d",
+                        "target": "1085113f-d4d8-4de6-8d80-916e85576fc6",
+                        "thanks_count": 1,
+                        "is_trust": true
+                    },
+                    ...
+            ],
+            “wishes”:[
+                {
+                    “uuid”:1,
+                    “text”: “хочу то…”
+                },
+                ...
+            ],
+            “keys”:[
+                {
+                    “id”:1,
+                    “value”: “asdf@fdas.com”
+                    “type_id”: 2
+                },
+                ...
+            ]
+        }
+        """
+        try:
+            uuid = request.GET.get('uuid')
+            if not uuid:
+                raise ServiceException('Не задан uuid пользователя')
+            try:
+                user_q = Profile.objects.select_related('user').get(uuid=uuid).user
+            except ValidationError:
+                raise ServiceException('Неверный uuid = %s' % uuid)
+            except Profile.DoesNotExist:
+                raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
+
+            users = []
+            user_pks = []
+            connections = []
+            q = Q(user_from=user_q) | Q(user_to=user_q)
+            q &= Q(user_to__isnull=False)
+            for cs in CurrentState.objects.filter(q).distinct().select_related(
+                    'user_from', 'user_to',
+                    'user_from__profile', 'user_to__profile',
+                ):
+                connections.append({
+                    'source': cs.user_from.profile.uuid,
+                    'target': cs.user_to.profile.uuid,
+                    'thanks_count': cs.thanks_count,
+                    'is_trust': cs.is_trust,
+                })
+                user = cs.user_from
+                if user != user_q and user.pk not in user_pks:
+                    profile = user.profile
+                    users.append(dict(
+                        uuid=profile.uuid,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                        photo = profile.choose_photo(),
+                    ))
+                    user_pks.append(user.pk)
+                user = cs.user_to
+                if user != user_q and user.pk not in user_pks:
+                    profile = user.profile
+                    users.append(dict(
+                        uuid=profile.uuid,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                        photo = profile.choose_photo(),
+                    ))
+                    user_pks.append(user.pk)
+
+            keys = [
+                {
+                    'id': key.pk,
+                    'type_id': key.type.pk,
+                    'value': key.value,
+                } \
+                for key in Key.objects.filter(owner=user_q).select_related('type')
+            ]
+            wishes = [
+                {
+                    'uuid': wish.uuid,
+                    'text': wish.text,
+                } \
+                for wish in Wish.objects.filter(owner=user_q)
+            ]
+            data = dict(
+                users=users,
+                connections=connections,
+                keys=keys,
+                wishes=wishes,
+            )
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_profile_graph = ApiProfileGraph.as_view()
