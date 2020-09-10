@@ -2045,7 +2045,7 @@ class ApiProfileGraph(APIView):
                     'is_trust': cs.is_trust,
                 })
                 user = cs.user_from
-                if user != user_q and user.pk not in user_pks:
+                if user.pk not in user_pks:
                     profile = user.profile
                     users.append(dict(
                         uuid=profile.uuid,
@@ -2055,7 +2055,7 @@ class ApiProfileGraph(APIView):
                     ))
                     user_pks.append(user.pk)
                 user = cs.user_to
-                if user != user_q and user.pk not in user_pks:
+                if user.pk not in user_pks:
                     profile = user.profile
                     users.append(dict(
                         uuid=profile.uuid,
