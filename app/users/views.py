@@ -207,14 +207,14 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
         "id":"234234234234234231413",
         "token":"ajjjkelr8k4234msfsdf898fs6fs3sd8"
         },
-        "user_id": 123
+        "user_uuid": "6e14d54b-9371-431f-8bf0-6688f2cf2451"
                 //  только для signin. Будет проверка,
                 //  что существующий в системе пользователь
-                //  имеет тот же Id
+                //  имеет тот же uuid
     }
     Возвращает JSON:
     {
-        "user_id":2,
+        "user_uuid":"6e14d54b-9371-431f-8bf0-6688f2cf2451",
         "token":"po4r4i9340tut4093uirf9340fi9340it"
     }
     """
@@ -224,11 +224,10 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
         signup = not signin
         try:
             if signin:
-                user_id = request.data.get('user_id')
                 user_uuid = request.data.get('user_uuid')
-                if not user_id and not user_uuid:
+                if not user_uuid:
                     status_code = 400
-                    raise ServiceException('Не задан user_id или user_uuid')
+                    raise ServiceException('Не задан user_uuid')
 
             oauth_dict = request.data.get("oauth")
             if not oauth_dict:
@@ -260,7 +259,7 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
                         ).owner
                         # Если существует пользователь с таким ключом,
                         # то что при signup регистрируем, а при
-                        # signin проверяем user_id
+                        # signin проверяем user_uuid
                     except Key.DoesNotExist:
                         pass
                 if signup:
@@ -284,10 +283,7 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
                             pass
             if signin:
                 if user:
-                    if user_id and str(user.pk) != str(user_id):
-                        status_code = 401
-                        raise ServiceException('Не совпадает user_id')
-                    if user_uuid and str(user.profile.uuid) != user_uuid:
+                    if str(user.profile.uuid) != user_uuid:
                         status_code = 401
                         raise ServiceException('Не совпадает user_uuid')
                 else:
@@ -307,7 +303,6 @@ class ApiAuthSignUp(CreateUserMixin, APIView):
             if signup:
                 self.update_oauth(oauth, oauth_result)
                 data.update(
-                    user_id=user.pk,
                     user_uuid=str(user.profile.uuid),
                     last_name=user.last_name,
                     first_name=user.first_name,
