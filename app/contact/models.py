@@ -72,20 +72,52 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
 
     user_from = models.ForeignKey('auth.User',
                     verbose_name=_("От кого"), on_delete=models.CASCADE,
+                    db_index=True,
                     related_name='currentstate_user_from_set')
     user_to = models.ForeignKey('auth.User',
                     verbose_name=_("Кому"), on_delete=models.CASCADE, null=True,
+                    db_index=True,
                     related_name='currentstate_user_to_set')
     anytext = models.ForeignKey(AnyText,
                     verbose_name=_("Текст"), on_delete=models.CASCADE, null=True)
     thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
     is_trust = models.BooleanField(_("Доверие"), default=True)
 
+    # Для построения графов связей между пользователями, где надо учитывать
+    # связь - это не только что пользователь 1 отблагодарил пользователя 2,
+    # но если 2-й не благодарил 1-го, 1-й должен иметь связь со 2-м.
+    # В этом случае в таблице появится запись:
+    #   user_to:        2
+    #   user_from:      1
+    #   is_reverse      True
+    #   thanks_count, is_trust: из записи, где user_from=1, user_to=2
+    #
+    #   Если же 2-й таки отблагодарит 1-го, то is_reverse станет False,
+    #   а thanks_count, is_trust примут действительные значения:
+    #   числа благодарностей 2-го 1-му и доверия
+    #
+    is_reverse = models.BooleanField(_("Обратное отношение"), default=False)
+
     class Meta:
         unique_together = (
             ('user_from', 'user_to', ),
             ('user_from', 'anytext', ),
         )
+
+class TemplateTmp1(models.Model):
+    """
+    Для поиска связей пользователя рекурсивно
+    """
+    level = models.IntegerField(blank=True, null=True)
+    user_from_id = models.IntegerField(blank=True, null=True)
+    user_to_id = models.IntegerField(blank=True, null=True)
+    thanks_count = models.IntegerField(blank=True, null=True)
+    is_trust = models.BooleanField(blank=True, null=True)
+    is_reverse = models.BooleanField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'template_tmp1'
 
 class Key(BaseModelInsertTimestamp):
 
@@ -311,8 +343,11 @@ class LogLike(models.Model):
                     initials += last_name[0]
                 users[user.pk] = dict(initials=initials)
             connections = []
-            for cs in CurrentState.objects.filter(user_to__isnull=False, thanks_count__gt=0). \
-                        select_related('user_from', 'user_to'):
+            for cs in CurrentState.objects.filter(
+                        user_to__isnull=False,
+                        thanks_count__gt=0,
+                        is_reverse=False,
+                    ).select_related('user_from', 'user_to'):
                 connection_fvd = [cs.user_from.pk, cs.user_to.pk]
                 connection_rev = [cs.user_to.pk, cs.user_from.pk]
                 if not (connection_fvd in connections or connection_rev in connections):
@@ -348,7 +383,10 @@ class LogLike(models.Model):
             users = []
             user_pks = []
             connections = []
-            for cs in CurrentState.objects.filter(user_to__isnull=False,).select_related(
+            for cs in CurrentState.objects.filter(
+                        user_to__isnull=False,
+                        is_reverse=False,
+                    ).select_related(
                     'user_from', 'user_to',
                     'user_from__profile', 'user_to__profile',
                 ):

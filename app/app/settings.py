@@ -258,7 +258,13 @@ GOOGLE_PHOTO_SIZE = 200
 #
 ADMIN_ENABLED = False
 
-FCM_SERVER_KEY = 'fcm_server_Key'
+# С ложным ключом отправки уведомления не будет
+#
+FCM_SERVER_KEY = None
+
+# Глубина прохода по графу связей
+#
+CONNECTIONS_LEVEL = 5
 
 # ------------------------------------------------
 try:

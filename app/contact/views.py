@@ -72,6 +72,8 @@ class ApiAddOperationView(APIView):
                 raise ServiceException('Неверный uuid = "%s"' % user_to_uuid)
             except Profile.DoesNotExist:
                 raise ServiceException('Не найден пользователь, uuid = "%s"' % user_to_uuid)
+            if user_to == user_from:
+                raise ServiceException('Операция на самого себя не предусмотрена')
             try:
                 operationtype_id = int(operationtype_id)
                 operationtype = OperationType.objects.get(pk=operationtype_id)
@@ -94,11 +96,30 @@ class ApiAddOperationView(APIView):
                         thanks_count=1,
                 ))
                 if not created_:
-                    currentstate.thanks_count = F('thanks_count') + 1
                     currentstate.update_timestamp = int(time.time())
-                    currentstate.save(update_fields=('thanks_count', 'update_timestamp'))
+                    if currentstate.is_reverse:
+                        # то же что created
+                        currentstate.insert_timestamp = insert_timestamp
+                        currentstate.is_reverse = False
+                        currentstate.thanks_count = 1
+                    else:
+                        currentstate.thanks_count = F('thanks_count') + 1
+                    currentstate.save()
+                    thanks_count_new = CurrentState.objects.get(pk=currentstate.pk).thanks_count
+
+                reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
+                    user_to=user_from,
+                    user_from=user_to,
+                    defaults=dict(
+                        is_reverse=True,
+                        thanks_count=thanks_count_new,
+                ))
+                if not reverse_created and reverse_cs.is_reverse:
+                    reverse_cs.thanks_count = thanks_count_new
+                    reverse_cs.save()
+
                 fame = user_to.currentstate_user_to_set.filter(
-                    Q(thanks_count__gt=0) | Q(is_trust=False)
+                    Q(is_reverse=False) & (Q(thanks_count__gt=0) | Q(is_trust=False))
                 ).distinct().count()
                 profile_to.sum_thanks_count += 1
                 profile_to.fame = fame
@@ -111,13 +132,38 @@ class ApiAddOperationView(APIView):
                     defaults=dict(
                         is_trust=False,
                 ))
-                if created_ or currentstate.is_trust:
-                    if not created_:
+                do_fame = True
+                if not created_:
+                    currentstate.update_timestamp = int(time.time())
+                    if currentstate.is_reverse:
+                        # то же что created
+                        currentstate.insert_timestamp = insert_timestamp
+                        currentstate.is_reverse = False
                         currentstate.is_trust = False
-                        currentstate.update_timestamp = int(time.time())
-                        currentstate.save(update_fields=('is_trust', 'update_timestamp'))
+                        currentstate.save()
+                    else:
+                        if currentstate.is_trust:
+                            currentstate.is_trust = False
+                            currentstate.save()
+                        else:
+                            do_fame = False
+
+                reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
+                    user_to=user_from,
+                    user_from=user_to,
+                    defaults=dict(
+                        is_reverse=True,
+                        is_trust=False,
+                        thanks_count=currentstate.thanks_count,
+                ))
+                if not reverse_created and reverse_cs.is_reverse and reverse_cs.is_trust:
+                    reverse_cs.is_trust = False
+                    reverse_cs.save()
+
+                if do_fame:
+                    # created or was is_trust=True
                     fame = user_to.currentstate_user_to_set.filter(
-                        Q(thanks_count__gt=0) | Q(is_trust=False)
+                        Q(is_reverse=False) & (Q(thanks_count__gt=0) | Q(is_trust=False))
                     ).distinct().count()
                     profile_to.trustless_count += 1
                     profile_to.fame = fame
@@ -130,31 +176,53 @@ class ApiAddOperationView(APIView):
                     defaults=dict(
                         is_trust=True,
                 ))
-                if not created_ and not currentstate.is_trust:
-                    currentstate.is_trust = True
+                if not created_:
                     currentstate.update_timestamp = int(time.time())
-                    currentstate.save(update_fields=('is_trust', 'update_timestamp'))
-                    fame = user_to.currentstate_user_to_set.filter(
-                        Q(thanks_count__gt=0) | Q(is_trust=False)
-                    ).distinct().count()
-                    if profile_to.trustless_count:
-                        profile_to.trustless_count -= 1
-                    profile_to.fame = fame
-                    profile_to.save(update_fields=('fame', 'trustless_count',))
+                    if currentstate.is_reverse:
+                        # то же что created
+                        currentstate.insert_timestamp = insert_timestamp
+                        currentstate.is_reverse = False
+                        currentstate.is_trust = True
+                        currentstate.save()
+                    else:
+                        if not currentstate.is_trust:
+                            currentstate.is_trust = True
+                            currentstate.save()
+                            # not created and was not is_trust
+                            fame = user_to.currentstate_user_to_set.filter(
+                                Q(is_reverse=False) & (Q(thanks_count__gt=0) | Q(is_trust=False))
+                            ).distinct().count()
+                            if profile_to.trustless_count:
+                                profile_to.trustless_count -= 1
+                            profile_to.fame = fame
+                            profile_to.save(update_fields=('fame', 'trustless_count',))
 
-            fcm_topic_name = 'user_%s' % profile_to.uuid
-            fcm_data_message = dict(
-                first_name=user_from.first_name,
-                last_name=user_from.last_name,
-                photo=user_from.profile.choose_photo(),
-                operation_type_id=operationtype_id,
-                comment=comment,
-            )
-            push_service = FCMNotification(api_key=settings.FCM_SERVER_KEY)
-            fcm_result = push_service.topic_subscribers_data_message(
-                topic_name=fcm_topic_name,
-                data_message=fcm_data_message,
-            )
+                reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
+                    user_to=user_from,
+                    user_from=user_to,
+                    defaults=dict(
+                        is_reverse=True,
+                        is_trust=True,
+                        thanks_count=currentstate.thanks_count,
+                ))
+                if not reverse_created and reverse_cs.is_reverse and not reverse_cs.is_trust:
+                    reverse_cs.is_trust = True
+                    reverse_cs.save()
+
+            if settings.FCM_SERVER_KEY:
+                fcm_topic_name = 'user_%s' % profile_to.uuid
+                fcm_data_message = dict(
+                    first_name=user_from.first_name,
+                    last_name=user_from.last_name,
+                    photo=user_from.profile.choose_photo(),
+                    operation_type_id=operationtype_id,
+                    comment=comment,
+                )
+                push_service = FCMNotification(api_key=settings.FCM_SERVER_KEY)
+                fcm_result = push_service.topic_subscribers_data_message(
+                    topic_name=fcm_topic_name,
+                    data_message=fcm_data_message,
+                )
 
         except ServiceException as excpt:
             transaction.set_rollback(True)
@@ -328,7 +396,7 @@ class ApiGetTextInfo(APIView):
         Если в запросе присутствует токен авторизации, то нужно вернуть
         и текущее состояние между пользователем, который запрашивает информацию,
         и текстом, о котором он запрашивает информацию.
-        То есть информацию из таблицы CurrentAtate, где user_from =
+        То есть информацию из таблицы CurrentState, где user_from =
         id_пользователя_из_токена, а text_id = id_текста_из_запроса.
         Если в CurrentState нет записи по заданным пользователям,
         то "thanks_count" = null и "is_trust" = null.
@@ -1973,7 +2041,9 @@ class ApiDeleteKeyView(APIView):
 
 api_delete_key = ApiDeleteKeyView.as_view()
 
-class ApiProfileGraph(APIView):
+class ApiProfileGraphOld(APIView):
+
+    #TODO   Удалить это, когда отладится новый метод
 
     def get(self, request, *args, **kwargs):
         """
@@ -2033,7 +2103,7 @@ class ApiProfileGraph(APIView):
             user_pks = []
             connections = []
             q = Q(user_from=user_q) | Q(user_to=user_q)
-            q &= Q(user_to__isnull=False)
+            q &= Q(user_to__isnull=False) & Q(is_reverse=False)
             for cs in CurrentState.objects.filter(q).distinct().select_related(
                     'user_from', 'user_to',
                     'user_from__profile', 'user_to__profile',
@@ -2064,6 +2134,135 @@ class ApiProfileGraph(APIView):
                         photo = profile.choose_photo(),
                     ))
                     user_pks.append(user.pk)
+
+            keys = [
+                {
+                    'id': key.pk,
+                    'type_id': key.type.pk,
+                    'value': key.value,
+                } \
+                for key in Key.objects.filter(owner=user_q).select_related('type')
+            ]
+            wishes = [
+                {
+                    'uuid': wish.uuid,
+                    'text': wish.text,
+                } \
+                for wish in Wish.objects.filter(owner=user_q)
+            ]
+            data = dict(
+                users=users,
+                connections=connections,
+                keys=keys,
+                wishes=wishes,
+            )
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_profile_graph_old = ApiProfileGraphOld.as_view()
+
+class ApiProfileGraph(APIView):
+
+    #   Новый метод, есть старый.
+    #   Удалить его, когда отладится этот метод
+
+    def get(self, request, *args, **kwargs):
+        """
+        Возвращает связи пользователя, его желания и ключи
+
+        Пример вызова:
+        /api/profile_graph?uuid=91c49fe2-3f74-49a8-906e-f4f711f8e3a1
+        Возвращает:
+        {
+            "users": [
+                    {
+                        "uuid": "8d2db918-9a81-4537-ab69-1c3d2d19a00d",
+                        "first_name": "Олег",
+                        "last_name": ".",
+                        "photo": "https://...jpg"
+                    },
+                    ...
+            ],
+            "connections": [
+                    {
+                        "source": "8d2db918-9a81-4537-ab69-1c3d2d19a00d",
+                        "target": "1085113f-d4d8-4de6-8d80-916e85576fc6",
+                        "thanks_count": 1,
+                        "is_trust": true
+                    },
+                    ...
+            ],
+            “wishes”:[
+                {
+                    “uuid”:1,
+                    “text”: “хочу то…”
+                },
+                ...
+            ],
+            “keys”:[
+                {
+                    “id”:1,
+                    “value”: “asdf@fdas.com”
+                    “type_id”: 2
+                },
+                ...
+            ]
+        }
+        """
+        try:
+            uuid = request.GET.get('uuid')
+            if not uuid:
+                raise ServiceException('Не задан uuid пользователя')
+            try:
+                user_q = Profile.objects.select_related('user').get(uuid=uuid).user
+            except ValidationError:
+                raise ServiceException('Неверный uuid = %s' % uuid)
+            except Profile.DoesNotExist:
+                raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
+
+            connections = []
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    'select * from find_rel(%(user_id)s, %(connection_level)s)' % dict(
+                        user_id=user_q.pk,
+                        connection_level=settings.CONNECTIONS_LEVEL
+                ))
+                recs = dictfetchall(cursor)
+            user_pks = set()
+            pairs = []
+            for rec in recs:
+                if rec['is_reverse']:
+                    user_from_id = rec['user_to_id']
+                    user_to_id = rec['user_from_id']
+                else:
+                    user_from_id = rec['user_from_id']
+                    user_to_id = rec['user_to_id']
+                pair = '%s/%s' % (user_from_id, user_to_id)
+                if pair not in pairs:
+                    pairs.append(pair)
+                    user_pks.add(user_from_id)
+                    user_pks.add(user_to_id)
+                    connections.append(dict(
+                        source=user_from_id,
+                        target=user_to_id,
+                        thanks_count=rec['thanks_count'],
+                        is_trust=rec['is_trust'],
+                    ))
+            profiles_dict = dict()
+            for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user'):
+                profiles_dict[profile.user.pk] = dict(
+                    uuid=profile.uuid,
+                    first_name=profile.user.first_name,
+                    last_name=profile.user.last_name,
+                    photo = profile.choose_photo(),
+                )
+            users = [profiles_dict[p] for p in profiles_dict]
+            for c in connections:
+                c['source'] = profiles_dict[c['source']]['uuid']
+                c['target'] = profiles_dict[c['target']]['uuid']
 
             keys = [
                 {

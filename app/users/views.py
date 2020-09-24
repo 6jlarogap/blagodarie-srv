@@ -105,6 +105,7 @@ class ApiGetProfileInfo(APIView):
                     currentstate = CurrentState.objects.get(
                         user_from=user_from,
                         user_to=user,
+                        is_reverse=False,
                     )
                     thanks_count = currentstate.thanks_count
                     is_trust = currentstate.is_trust
