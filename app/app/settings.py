@@ -262,9 +262,9 @@ ADMIN_ENABLED = False
 #
 FCM_SERVER_KEY = None
 
-# Глубина прохода по графу связей
+# Глубина прохода по графу связей рекурсивно
 #
-CONNECTIONS_LEVEL = 5
+CONNECTIONS_LEVEL = 2
 
 # ------------------------------------------------
 try:

@@ -2041,14 +2041,14 @@ class ApiDeleteKeyView(APIView):
 
 api_delete_key = ApiDeleteKeyView.as_view()
 
-class ApiProfileGraphOld(APIView):
-
-    #TODO   Удалить это, когда отладится новый метод
+class ApiProfileGraphTwoLevels(APIView):
 
     def get(self, request, *args, **kwargs):
         """
         Возвращает связи пользователя, его желания и ключи
 
+        Кроме связей пользователя, вернуть еще связи его ближайших контактов
+        между собой.
         Пример вызова:
         /api/profile_graph?uuid=91c49fe2-3f74-49a8-906e-f4f711f8e3a1
         Возвращает:
@@ -2123,7 +2123,8 @@ class ApiProfileGraphOld(APIView):
                         last_name=user.last_name,
                         photo = profile.choose_photo(),
                     ))
-                    user_pks.append(user.pk)
+                    if user != user_q:
+                        user_pks.append(user.pk)
                 user = cs.user_to
                 if user.pk not in user_pks:
                     profile = user.profile
@@ -2133,7 +2134,22 @@ class ApiProfileGraphOld(APIView):
                         last_name=user.last_name,
                         photo = profile.choose_photo(),
                     ))
-                    user_pks.append(user.pk)
+                    if user != user_q:
+                        user_pks.append(user.pk)
+
+            if user_pks:
+                q = Q(user_from__pk__in=user_pks) & Q(user_to__pk__in=user_pks)
+                q &= Q(is_reverse=False)
+                for cs in CurrentState.objects.filter(q).distinct().select_related(
+                        'user_from', 'user_to',
+                        'user_from__profile', 'user_to__profile',
+                    ):
+                    connections.append({
+                        'source': cs.user_from.profile.uuid,
+                        'target': cs.user_to.profile.uuid,
+                        'thanks_count': cs.thanks_count,
+                        'is_trust': cs.is_trust,
+                    })
 
             keys = [
                 {
@@ -2162,17 +2178,18 @@ class ApiProfileGraphOld(APIView):
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
-api_profile_graph_old = ApiProfileGraphOld.as_view()
+api_profile_graph_two_levels = ApiProfileGraphTwoLevels.as_view()
 
-class ApiProfileGraph(APIView):
+class ApiProfileGraphRecursion(APIView):
 
-    #   Новый метод, есть старый.
-    #   Удалить его, когда отладится этот метод
+    #   TODO Убрать этот метод, он оказался не востребованным
 
     def get(self, request, *args, **kwargs):
         """
         Возвращает связи пользователя, его желания и ключи
 
+        Пройти рекурсивно по цепочкам от пользователя,
+        вплоть до settings.CONNECTIONS_LEVEL.
         Пример вызова:
         /api/profile_graph?uuid=91c49fe2-3f74-49a8-906e-f4f711f8e3a1
         Возвращает:
@@ -2291,4 +2308,4 @@ class ApiProfileGraph(APIView):
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
-api_profile_graph = ApiProfileGraph.as_view()
+api_profile_graph_recursion = ApiProfileGraphRecursion.as_view()
