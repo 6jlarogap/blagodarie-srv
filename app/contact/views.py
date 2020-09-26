@@ -102,6 +102,7 @@ class ApiAddOperationView(APIView):
                         currentstate.insert_timestamp = insert_timestamp
                         currentstate.is_reverse = False
                         currentstate.thanks_count = 1
+                        currentstate.is_trust = True
                     else:
                         currentstate.thanks_count = F('thanks_count') + 1
                     currentstate.save()
@@ -140,6 +141,7 @@ class ApiAddOperationView(APIView):
                         currentstate.insert_timestamp = insert_timestamp
                         currentstate.is_reverse = False
                         currentstate.is_trust = False
+                        currentstate.thanks_count = 0
                         currentstate.save()
                     else:
                         if currentstate.is_trust:
@@ -183,6 +185,7 @@ class ApiAddOperationView(APIView):
                         currentstate.insert_timestamp = insert_timestamp
                         currentstate.is_reverse = False
                         currentstate.is_trust = True
+                        currentstate.thanks_count = 0
                         currentstate.save()
                     else:
                         if not currentstate.is_trust:
