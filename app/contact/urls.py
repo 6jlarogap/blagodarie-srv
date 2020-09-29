@@ -58,6 +58,7 @@ urlpatterns = [
     url(r'^api/addincognitosymptom/?$', views.api_add_user_symptom, {'auth': False}),
 
     url(r'^api/getsymptoms/?$', views.api_getsymptoms),
+    url(r'^api/getincognitomessages/?$', views.api_getincognitomessages),
 
     url(r'^api/addorupdatewish/?$', views.api_add_or_update_wish),
     url(r'^api/getwishinfo/?$', views.api_get_wish_info),

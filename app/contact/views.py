@@ -2312,3 +2312,57 @@ class ApiProfileGraphRecursion(APIView):
         return Response(data=data, status=status_code)
 
 api_profile_graph_recursion = ApiProfileGraphRecursion.as_view()
+
+class ApiGetIncognitoMessages(APIView):
+
+    def post(self, request):
+        """
+        Постраничное получение списка сообщений
+
+        Вернуть список сообщений пользователя,
+        заданного типа, с записи from количеством count.
+        Записи должны быть отсортированы по убыванию timestamp
+        Запрос:
+            {
+                "incognito_id":”a20928d3-76f6-4874-8af7-7bacb0fc1853”,
+                "message_type_id": 2,
+                "from": 0,
+                "count": 20
+            }
+            from нет или null: сначала
+            count нет или null: до конца
+        Возвращает:
+        {
+        "user_messages": [
+            {"timestamp": 142342342342},
+            ...
+        }
+        """
+
+        try:
+            incognito_id = request.data.get("incognito_id")
+            message_type_id = request.data.get("message_type_id")
+            if not (incognito_id and message_type_id):
+                raise ServiceException('Не задан(ы) incognito_id и/или message_type_id')
+            from_ = request.data.get("from")
+            if not from_:
+                from_ = 0
+            count = request.data.get("count")
+            qs = UserSymptom.objects.filter(
+                incognitouser__public_key=incognito_id,
+                symptom__pk=message_type_id,
+            )
+            qs = qs.distinct().order_by('-insert_timestamp')
+            if count:
+                qs = qs[from_ : from_ + count]
+            else:
+                qs = qs[from_:]
+            data = [ dict(timestamp=s.insert_timestamp,) for s in qs ]
+            status_code = status.HTTP_200_OK
+            data = dict(user_messages=data)
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_getincognitomessages = ApiGetIncognitoMessages.as_view()
