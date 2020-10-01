@@ -95,7 +95,9 @@ class ApiAddOperationView(APIView):
                     defaults=dict(
                         thanks_count=1,
                 ))
-                if not created_:
+                if created_:
+                    thanks_count_new = 1
+                else:
                     currentstate.update_timestamp = int(time.time())
                     if currentstate.is_reverse:
                         # то же что created
@@ -113,6 +115,7 @@ class ApiAddOperationView(APIView):
                     user_from=user_to,
                     defaults=dict(
                         is_reverse=True,
+                        is_trust=True,
                         thanks_count=thanks_count_new,
                 ))
                 if not reverse_created and reverse_cs.is_reverse:
