@@ -429,8 +429,8 @@ class ApiGetLatestVersion(APIView):
                 raise ServiceException('Неверные данные в output.json')
             try:
                 data.update(
-                    version_code=output[0]['apkData']['versionCode'],
-                    version_name=output[0]['apkData']['versionName'],
+                    version_code=output['elements'][0]['versionCode'],
+                    version_name=output['elements'][0]['versionName'],
                     google_play_url=settings.GOOGLE_PLAY_URL,
                     google_play_update=settings.GOOGLE_PLAY_UPDATE,
                 )
