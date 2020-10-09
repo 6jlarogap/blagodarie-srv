@@ -21,7 +21,7 @@ def operation(apps, schema_editor):
         if created_:
             n += 1
         n_all += 1
-    print("%s cussentState's fake reverse records inserted. All records: %s" % (n, n_all,))
+    print("%s currentState's fake reverse records inserted. All records: %s" % (n, n_all,))
 
 class Migration(migrations.Migration):
 

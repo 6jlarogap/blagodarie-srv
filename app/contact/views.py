@@ -95,9 +95,7 @@ class ApiAddOperationView(APIView):
                     defaults=dict(
                         thanks_count=1,
                 ))
-                if created_:
-                    thanks_count_new = 1
-                else:
+                if not created_:
                     currentstate.update_timestamp = int(time.time())
                     if currentstate.is_reverse:
                         # то же что created
@@ -106,9 +104,8 @@ class ApiAddOperationView(APIView):
                         currentstate.thanks_count = 1
                         currentstate.is_trust = True
                     else:
-                        currentstate.thanks_count = F('thanks_count') + 1
+                        currentstate.thanks_count += 1
                     currentstate.save()
-                    thanks_count_new = CurrentState.objects.get(pk=currentstate.pk).thanks_count
 
                 reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
                     user_to=user_from,
@@ -116,18 +113,19 @@ class ApiAddOperationView(APIView):
                     defaults=dict(
                         is_reverse=True,
                         is_trust=True,
-                        thanks_count=thanks_count_new,
+                        thanks_count=currentstate.thanks_count,
                 ))
                 if not reverse_created and reverse_cs.is_reverse:
-                    reverse_cs.thanks_count = thanks_count_new
+                    reverse_cs.thanks_count = currentstate.thanks_count
                     reverse_cs.save()
 
-                fame = user_to.currentstate_user_to_set.filter(
-                    Q(is_reverse=False) & (Q(thanks_count__gt=0) | Q(is_trust=False))
-                ).distinct().count()
+                if created_:
+                    fame = user_to.currentstate_user_to_set.filter(
+                        is_reverse=False
+                    ).distinct().count()
+                    profile_to.fame = fame
                 profile_to.sum_thanks_count += 1
-                profile_to.fame = fame
-                profile_to.save(update_fields=('fame', 'sum_thanks_count',))
+                profile_to.save()
 
             elif operationtype_id == OperationType.TRUSTLESS:
                 currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
@@ -167,12 +165,13 @@ class ApiAddOperationView(APIView):
 
                 if do_fame:
                     # created or was is_trust=True
-                    fame = user_to.currentstate_user_to_set.filter(
-                        Q(is_reverse=False) & (Q(thanks_count__gt=0) | Q(is_trust=False))
-                    ).distinct().count()
+                    if created_:
+                        fame = user_to.currentstate_user_to_set.filter(
+                            is_reverse=False
+                        ).distinct().count()
+                        profile_to.fame = fame
                     profile_to.trustless_count += 1
-                    profile_to.fame = fame
-                    profile_to.save(update_fields=('fame', 'trustless_count',))
+                    profile_to.save()
 
             elif operationtype_id == OperationType.TRUSTLESS_CANCEL:
                 currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
@@ -195,13 +194,9 @@ class ApiAddOperationView(APIView):
                             currentstate.is_trust = True
                             currentstate.save()
                             # not created and was not is_trust
-                            fame = user_to.currentstate_user_to_set.filter(
-                                Q(is_reverse=False) & (Q(thanks_count__gt=0) | Q(is_trust=False))
-                            ).distinct().count()
                             if profile_to.trustless_count:
                                 profile_to.trustless_count -= 1
-                            profile_to.fame = fame
-                            profile_to.save(update_fields=('fame', 'trustless_count',))
+                                profile_to.save()
 
                 reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
                     user_to=user_from,
