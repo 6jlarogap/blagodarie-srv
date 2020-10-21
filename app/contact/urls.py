@@ -65,5 +65,7 @@ urlpatterns = [
     url(r'^api/getuserwishes/?$', views.api_get_user_wishes),
     url(r'^api/deletewish/?$', views.api_delete_wish),
 
+    url(r'^api/getthanksusers/?$', views.api_get_thanks_users),
+
     url(r'^admin/merge_symptoms/?$', views.merge_symptoms),
 ]

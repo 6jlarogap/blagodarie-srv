@@ -2364,3 +2364,87 @@ class ApiGetIncognitoMessages(APIView):
         return Response(data=data, status=status_code)
 
 api_getincognitomessages = ApiGetIncognitoMessages.as_view()
+
+class ApiGetThanksUsers(APIView):
+
+    def get(self, request, *args, **kwargs):
+        """
+        Постраничное получение списка поблагодаривших и поблагодаренных
+
+        Возвратить массив пользователей (их фото и UUID), которые благодарили,
+        либо были благодаримы пользователем, о котором запрашивается информация.
+        Массив пользователей должен быть отсортирован
+        по убыванию известности пользователей.
+        Нужно получить count записей начиная с записи from.
+        Пример вызова:
+        /api/getthanksusers?uuid=91c49fe2-3f74-49a8-906e-f4f711f8e3a1
+        Возвращает:
+        {
+        "thanks_users": [
+                {
+                    "photo": "photo/url",
+                    "user_uuid": "6e14d54b-9371-431f-8bf0-6688f2cf2451"
+                },
+            ...
+            ]
+        }
+
+        """
+        try:
+            uuid = request.GET.get('uuid')
+            if not uuid:
+                raise ServiceException('Не задан uuid пользователя')
+            try:
+                user = Profile.objects.select_related('user').get(uuid=uuid).user
+            except ValidationError:
+                raise ServiceException('Неверный uuid = %s' % uuid)
+            except Profile.DoesNotExist:
+                raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
+
+            req_str = """
+                SELECT
+                    uuid, photo, photo_url
+                FROM
+                    users_profile
+                WHERE
+                    user_id IN (
+                        SELECT
+                            DISTINCT user_from_id AS id_
+                        FROM
+                            contact_currentstate
+                        WHERE
+                            user_to_id = %(user_id)s AND
+                            thanks_count > 0 AND
+                            is_reverse = false
+                        UNION
+                        SELECT
+                            DISTINCT user_to_id as id_
+                        FROM
+                            contact_currentstate
+                        WHERE
+                            user_from_id = %(user_id)s AND
+                            user_to_id is not null AND
+                            thanks_count > 0 AND
+                            is_reverse = false
+                    )
+                ORDER BY fame DESC
+            """ % dict(user_id=user.pk,)
+            thanks_users = []
+            with connection.cursor() as cursor:
+                cursor.execute(req_str)
+                recs = dictfetchall(cursor)
+                for rec in recs:
+                    thanks_users.append(dict(
+                        photo = Profile.choose_photo_of(rec['photo'], rec['photo_url']),
+                        user_uuid=str(rec['uuid'])
+                    ))
+            data = dict(
+                thanks_users=thanks_users
+            )
+            status_code = 200
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+api_get_thanks_users = ApiGetThanksUsers.as_view()
