@@ -2400,6 +2400,8 @@ class ApiGetThanksUsers(APIView):
                 raise ServiceException('Неверный uuid = %s' % uuid)
             except Profile.DoesNotExist:
                 raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
+            limit = request.GET.get('count', 'all')
+            offset = request.GET.get('from', 0)
 
             req_str = """
                 SELECT
@@ -2428,7 +2430,13 @@ class ApiGetThanksUsers(APIView):
                             is_reverse = false
                     )
                 ORDER BY fame DESC
-            """ % dict(user_id=user.pk,)
+                LIMIT %(limit)s
+                OFFSET %(offset)s
+            """ % dict(
+                user_id=user.pk,
+                limit=limit,
+                offset=offset,
+            )
             thanks_users = []
             with connection.cursor() as cursor:
                 cursor.execute(req_str)
