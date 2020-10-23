@@ -24,7 +24,7 @@ from pyfcm import FCMNotification
 from contact.models import KeyType, Key, UserKey, LikeKey, Like, LogLike, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
                            Journal, CurrentState, OperationType, Wish, \
-                           AnyText
+                           AnyText, Ability
 from users.models import CreateUserMixin, IncognitoUser, Profile
 
 MSG_NO_PARM = 'Не задан или не верен какой-то из параметров в связке номер %s (начиная с 0)'
@@ -1798,7 +1798,7 @@ class ApiGetUserWishes(APIView):
             uuid = request.GET.get('uuid')
             if uuid:
                 try:
-                    owner = Profile.objects.get(uuid=uuid).user
+                    owner = Profile.objects.select_related('user').get(uuid=uuid).user
                 except ValidationError:
                     raise ServiceException('Неверный uuid = %s' % uuid)
                 except Profile.DoesNotExist:
@@ -2456,3 +2456,199 @@ class ApiGetThanksUsers(APIView):
         return Response(data=data, status=status_code)
 
 api_get_thanks_users = ApiGetThanksUsers.as_view()
+
+class ApiGetThanksUsersForAnytext(APIView):
+
+    def get(self, request, *args, **kwargs):
+        """
+        Постраничное получение списка поблагодаривших и поблагодаренных
+
+        Возвратить массив пользователей (их фото и UUID),
+        которые благодарили текст.
+        Массив пользователей должен быть отсортирован по
+        убыванию известности пользователей.
+        Нужно получить count записей начиная с записи from.
+
+        Пример вызова:
+        /api/getthanksusersforanytext?text=ТЕКСТ,ЛА,ЛА,ЛА...&from=...&count=..
+        Возвращает:
+        {
+        "thanks_users": [
+                {
+                    "photo": "photo/url",
+                    "user_uuid": "6e14d54b-9371-431f-8bf0-6688f2cf2451"
+                },
+            ...
+            ]
+        }
+
+        """
+        try:
+            text = request.GET.get('text')
+            if not text:
+                raise ServiceException('Не задан текст')
+            qs = CurrentState.objects.select_related(
+                    'user_from__profile',
+                ).filter(
+                    anytext__text=text,
+                    is_reverse=False,
+                )
+            try:
+                from_ = request.GET.get("from", 0)
+                from_ = int(from_) if from_ else 0
+                count = request.GET.get("count", 0)
+                count = int(count) if count else 0
+            except ValueError:
+                raise ServiceException('Неверный from или count')
+            if count:
+                qs = qs[from_ : from_ + count]
+            else:
+                qs = qs[from_:]
+            thanks_users = []
+            for currentstate in qs:
+                profile = currentstate.user_from.profile
+                thanks_users.append(dict(
+                    photo = profile.choose_photo(),
+                    user_uuid=str(profile.uuid)
+                ))
+            data = dict(
+                thanks_users=thanks_users
+            )
+            status_code = 200
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+api_get_thanks_users_for_anytext = ApiGetThanksUsersForAnytext.as_view()
+
+class ApiAddOrUpdateAbility(APIView):
+    permission_classes = (IsAuthenticated, )
+
+    @transaction.atomic
+    def post(self, request, *args, **kwargs,):
+        """
+        Создать либо обновить возможность uuid
+
+        Если возможность с заданным uuid существует,
+        то проверить принадлежит ли оно пользователю,
+        пославшему запрос, и если принадлежит, то обновить ее.
+        Если же не принадлежит, то вернуть сообщение об ошибке.
+        Если возможности с таким uuid не существует, то создать.
+        Пример исходных данных:
+        * Создать возможность (uuid не задан)
+            {
+                "text": "Могу, Могу, Могу...",
+                "last_edit": 154230840234
+            }
+        * Обновить или обновить возможность (uuid задан)
+            {
+                "uuid": "e17a34d0-c6c4-4755-a67b-7e7d13e4bd4b",
+                "text": "Могу, Могу, Могу...",
+                "last_edit": 154230840234
+            }
+        Возвращает: {}
+        """
+        try:
+            text = request.data.get('text')
+            if not text:
+                raise ServiceException('Возможность без текста')
+            update_timestamp = request.data.get('last_edit', int(time.time()))
+            uuid = request.data.get('uuid')
+            if uuid:
+                do_create = False
+                try:
+                    ability = Ability.objects.get(uuid=uuid)
+                except ValidationError:
+                    raise ServiceException('Неверный uuid = %s' % uuid)
+                except Ability.DoesNotExist:
+                    do_create = True
+                    Ability.objects.create(
+                        uuid=uuid,
+                        owner=request.user,
+                        text=text,
+                        update_timestamp=update_timestamp,
+                    )
+                if not do_create:
+                    if ability.owner == request.user:
+                        ability.text = text
+                        ability.update_timestamp = update_timestamp
+                        ability.save()
+                    else:
+                        raise ServiceException('Возможность с uuid = %s принадлежит другому пользователю' % uuid)
+            else:
+                Ability.objects.create(
+                    owner=request.user,
+                    text=text,
+                    update_timestamp=update_timestamp,
+                )
+            data = dict()
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            transaction.set_rollback(True)
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_add_or_update_ability = ApiAddOrUpdateAbility.as_view()
+
+class ApiGetUserAbilities(APIView):
+
+    def get(self, request, *args, **kwargs):
+        """
+        Возвращает список возможностей пользователя
+
+        Пример исходных данных:
+        /api/getuserabilities?uuid=172da3fe-dd30-4cb8-8df3-46f69785d30a
+        Возвращает:
+        {
+            "abilities": [
+                {
+                    "uuid": "e17a34d0-c6c4-4755-a67b-7e7d13e4bd4b",
+                    "text": "Хочу, хочу, хочу...",
+                    "last_edit": 184230840234
+                },
+                ...
+            ]
+        }
+
+        """
+        try:
+            uuid = request.GET.get('uuid')
+            if uuid:
+                try:
+                    owner = Profile.objects.select_related('user').get(uuid=uuid).user
+                except ValidationError:
+                    raise ServiceException('Неверный uuid = %s' % uuid)
+                except Profile.DoesNotExist:
+                    raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
+                qs = Ability.objects.filter(owner=owner).order_by('update_timestamp')
+                try:
+                    from_ = request.GET.get("from", 0)
+                    from_ = int(from_) if from_ else 0
+                    count = request.GET.get("count", 0)
+                    count = int(count) if count else 0
+                except ValueError:
+                    raise ServiceException('Неверный from или count')
+                if count:
+                    qs = qs[from_ : from_ + count]
+                else:
+                    qs = qs[from_:]
+                data = dict(
+                    abilities = [
+                        dict(
+                            uuid=ability.uuid,
+                            text=ability.text,
+                            last_edit=ability.update_timestamp,
+                        ) for ability in qs
+                    ]
+                )
+                status_code = status.HTTP_200_OK
+            else:
+                raise ServiceException('Не задан uuid пользователя')
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_get_user_abilities = ApiGetUserAbilities.as_view()

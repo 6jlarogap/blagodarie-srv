@@ -291,6 +291,12 @@ class Wish(BaseModelInsertUpdateTimestamp):
     owner = models.ForeignKey('auth.User', verbose_name=_("Владелец"), on_delete=models.CASCADE)
     text = models.TextField(verbose_name=_("Текст"))
 
+class Ability(BaseModelInsertUpdateTimestamp):
+
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True)
+    owner = models.ForeignKey('auth.User', verbose_name=_("Владелец"), on_delete=models.CASCADE)
+    text = models.TextField(verbose_name=_("Текст"))
+
 class LogLike(models.Model):
     """
     Статистика

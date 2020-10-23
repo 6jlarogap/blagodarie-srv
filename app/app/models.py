@@ -24,7 +24,7 @@ class BaseModelInsertUpdateTimestamp(BaseModelInsertTimestamp):
     class Meta:
         abstract = True
 
-    update_timestamp = models.BigIntegerField(_("Когда изменено"), default=0)
+    update_timestamp = models.BigIntegerField(_("Когда изменено"), default=0, db_index=True)
 
     def fill_update_timestamp(self):
         if not self.update_timestamp:

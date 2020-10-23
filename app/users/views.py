@@ -49,7 +49,6 @@ class ApiGetProfileInfo(APIView):
             "middle_name": "Иванович",
             "last_name": "Иванов",
             "photo": "photo/url",
-            "credit_card": "1111222233334444",
             "sum_thanks_count": 300,
             "fame": 3,
             "trustless_count": 1,
@@ -78,22 +77,15 @@ class ApiGetProfileInfo(APIView):
             if not uuid:
                 raise ServiceException("Не задан uuid")
             try:
-                profile = Profile.objects.get(uuid=uuid)
+                profile = Profile.objects.select_related('user').get(uuid=uuid)
             except (ValidationError, Profile.DoesNotExist, ):
                 raise ServiceException("Не найден пользователь с uuid = %s или uuid неверен" % uuid)
             user = profile.user
-            credit_card = None
-            try:
-                key = Key.objects.get(owner=user, type__pk=KeyType.CREDIT_CARD_ID)
-                credit_card = key.value
-            except Key.DoesNotExist:
-                pass
             data = dict(
                 last_name=user.last_name,
                 first_name=user.first_name,
                 middle_name=profile.middle_name,
                 photo=profile.choose_photo(),
-                credit_card=credit_card,
                 sum_thanks_count=profile.sum_thanks_count,
                 fame=profile.fame,
                 trustless_count=profile.trustless_count,
@@ -115,46 +107,6 @@ class ApiGetProfileInfo(APIView):
                     thanks_count=thanks_count,
                     is_trust=is_trust,
                 )
-            thanks_users = []
-            req_str = """
-                SELECT
-                    uuid, photo, photo_url
-                FROM
-                    users_profile
-                WHERE
-                    user_id IN (
-                        SELECT
-                            DISTINCT user_from_id AS id_
-                        FROM
-                            contact_journal
-                        WHERE
-                            user_to_id = %(user_id)s AND
-                            operationtype_id = %(thank_id)s
-                        UNION
-                        SELECT
-                            DISTINCT user_to_id as id_
-                        FROM
-                            contact_journal
-                        WHERE
-                            user_from_id = %(user_id)s AND
-                            operationtype_id = %(thank_id)s
-                    )
-                ORDER BY fame DESC
-            """ % dict(
-                user_id=user.pk,
-                thank_id=OperationType.THANK,
-            )
-            with connection.cursor() as cursor:
-                cursor.execute(req_str)
-                recs = dictfetchall(cursor)
-                for rec in recs:
-                    thanks_users.append(dict(
-                        photo = Profile.choose_photo_of(rec['photo'], rec['photo_url']),
-                        user_uuid=str(rec['uuid'])
-                    ))
-            data.update(
-                thanks_users=thanks_users
-            )
             status_code = 200
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
