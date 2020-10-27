@@ -5,6 +5,7 @@ from django.shortcuts import render
 from django.db import transaction, IntegrityError, connection
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.db.models.query_utils import Q
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -14,6 +15,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 
 from app.utils import ServiceException, dictfetchall
 
+from django.contrib.auth.models import User
 from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile
 from contact.models import Key, KeyType, CurrentState, OperationType
 
@@ -565,3 +567,82 @@ class ApiAuthSignUpIncognito(APIView):
         return Response(data=data, status=status_code)
 
 api_auth_signup_incognito = ApiAuthSignUpIncognito.as_view()
+
+class ApiGetUsers(APIView):
+
+    def post(self, request):
+        """
+        Получение списка пользователей
+
+        Возвращает список пользователей.
+        Пользователи должны быть отфильтрованы по filter.text.
+        Совпадения необходимо искать в first_name и last_name без учета регистра
+        (типо такого: ...WHERE first_name LIKE ‘%’+filter+’%’ or last_name LIKE ‘%’+filter+’%’).
+        Пользователи должны быть отсортированы по алфавиту сначала
+        по last_name потом по first_name
+        (... ORDER BY last_name ASK, first_name ASK).
+        Нужно вернуть count записей начиная с записи from
+
+        Пример вызова:
+        {
+            "filter": {
+                "text": "ivan"
+            },
+            "from": 2,
+            "count": 34
+        }
+
+        Пример возвращаемых данных:
+            {
+            "users": [
+                {
+                "uuid": "9d2f21b3-2401-43e9-8409-eb3bcb780fe9",
+                "last_name": "Ivanov",
+                "first_name": "Ivan",
+                "photo": "/url/photo",
+                "fame": 32,
+                "sum_thanks_count": 32,
+                "trustless_count": 12
+                },
+            ...
+            ]
+        }
+        """
+
+        try:
+            text = ""
+            try:
+                text = request.data.get('filter', {})['text']
+            except KeyError:
+                pass
+            if not text:
+                raise ServiceException("Не задан filter.text")
+            q = Q(last_name__icontains=text) | Q(first_name__icontains=text)
+            qs = User.objects.filter(q).select_related('profile').distinct(
+                ).order_by('last_name', 'first_name',)
+            from_ = request.data.get("from", 0)
+            count = request.data.get("count")
+            if count:
+                qs = qs[from_ : from_ + count]
+            else:
+                qs = qs[from_:]
+            users = []
+            for user in qs:
+                profile = user.profile
+                users.append(dict(
+                    uuid=profile.uuid,
+                    last_name=user.last_name,
+                    first_name=user.first_name,
+                    photo=profile.choose_photo(),
+                    fame=profile.fame,
+                    sum_thanks_count=profile.sum_thanks_count,
+                    trustless_count=profile.trustless_count,
+                ))
+            data = dict(users=users)
+            status_code = 200
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+api_get_users = ApiGetUsers.as_view()

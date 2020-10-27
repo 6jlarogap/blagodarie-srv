@@ -21,4 +21,6 @@ urlpatterns = [
 
     url(r'^api/download\-rating\-apk\-details/?$', views.api_download_rating_apk_details),
     url(r'^api/getratinglatestversion/?$', views.api_rating_latest_version),
+
+    url(r'^api/getusers/?$', views.api_get_users),
 ]
