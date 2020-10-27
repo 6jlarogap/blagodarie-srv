@@ -581,6 +581,7 @@ class ApiGetUsers(APIView):
         Пользователи должны быть отсортированы по алфавиту сначала
         по last_name потом по first_name
         (... ORDER BY last_name ASK, first_name ASK).
+        Filter.text может быть пустым, тогда нужно вернуть всех пользователей.
         Нужно вернуть count записей начиная с записи from
 
         Пример вызова:
@@ -614,10 +615,10 @@ class ApiGetUsers(APIView):
             try:
                 text = request.data.get('filter', {})['text']
             except KeyError:
-                pass
-            if not text:
                 raise ServiceException("Не задан filter.text")
-            q = Q(last_name__icontains=text) | Q(first_name__icontains=text)
+            q = Q(is_superuser=False)
+            if text:
+                q &= Q(last_name__icontains=text) | Q(first_name__icontains=text)
             qs = User.objects.filter(q).select_related('profile').distinct(
                 ).order_by('last_name', 'first_name',)
             from_ = request.data.get("from", 0)
