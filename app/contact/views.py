@@ -327,9 +327,7 @@ class ApiAddTextOperationView(APIView):
                     currentstate.thanks_count = F('thanks_count') + 1
                     currentstate.update_timestamp = int(time.time())
                     currentstate.save(update_fields=('thanks_count', 'update_timestamp'))
-                fame = anytext.currentstate_set.filter(
-                    Q(thanks_count__gt=0) | Q(is_trust=False)
-                ).distinct().count()
+                fame = anytext.currentstate_set.all().distinct().count()
                 anytext.sum_thanks_count += 1
                 anytext.fame = fame
                 anytext.save(update_fields=('fame', 'sum_thanks_count',))
@@ -346,9 +344,7 @@ class ApiAddTextOperationView(APIView):
                         currentstate.is_trust = False
                         currentstate.update_timestamp = int(time.time())
                         currentstate.save(update_fields=('is_trust', 'update_timestamp'))
-                    fame = anytext.currentstate_set.filter(
-                        Q(thanks_count__gt=0) | Q(is_trust=False)
-                    ).distinct().count()
+                    fame = anytext.currentstate_set.all().distinct().count()
                     anytext.trustless_count += 1
                     anytext.fame = fame
                     anytext.save(update_fields=('fame', 'trustless_count',))
@@ -364,9 +360,7 @@ class ApiAddTextOperationView(APIView):
                     currentstate.is_trust = True
                     currentstate.update_timestamp = int(time.time())
                     currentstate.save(update_fields=('is_trust', 'update_timestamp'))
-                    fame = anytext.currentstate_set.filter(
-                        Q(thanks_count__gt=0) | Q(is_trust=False)
-                    ).distinct().count()
+                    fame = anytext.currentstate_set.all().distinct().count()
                     if anytext.trustless_count:
                         anytext.trustless_count -= 1
                     anytext.fame = fame

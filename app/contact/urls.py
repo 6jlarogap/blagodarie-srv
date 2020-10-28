@@ -22,17 +22,17 @@ urlpatterns = [
     url(r'^api/updatekey/?$', views.api_update_key),
     url(r'^api/deletekey/?$', views.api_delete_key),
 
-    url(r'^api/getlikes/?$', views.api_get_likes),
-    url(r'^api/getlikesbykeyz/?$', views.api_get_all_likes, {'by': 'keys'}),
-    url(r'^api/getlikesbykeyzid/?$', views.api_get_all_likes, {'by': 'ids'}),
+    #url(r'^api/getlikes/?$', views.api_get_likes),
+    #url(r'^api/getlikesbykeyz/?$', views.api_get_all_likes, {'by': 'keys'}),
+    #url(r'^api/getlikesbykeyzid/?$', views.api_get_all_likes, {'by': 'ids'}),
 
-    url(r'^api/addlikes/?$', views.api_add_like),
-    url(r'^api/cancellikes/?$', views.api_cancel_likes),
-    url(r'^api/deletelikes/?$', views.api_delete_likes),
+    #url(r'^api/addlikes/?$', views.api_add_like),
+    #url(r'^api/cancellikes/?$', views.api_cancel_likes),
+    #url(r'^api/deletelikes/?$', views.api_delete_likes),
 
-    url(r'^api/deletelikekeyz/?$', views.api_delete_like_keys),
+    #url(r'^api/deletelikekeyz/?$', views.api_delete_like_keys),
 
-    url(r'^api/getorcreatelikekeyz/?$', views.get_or_create_like_key),
+    #url(r'^api/getorcreatelikekeyz/?$', views.get_or_create_like_key),
 
     url(r'^api/getcontactsuminfo/?$', views.api_get_contacts_sum_info, {'by': 'values'}),
     url(r'^api/getcontactsuminfobyid/?$', views.api_get_contacts_sum_info, {'by': 'ids'}),
