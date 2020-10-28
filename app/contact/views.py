@@ -339,15 +339,14 @@ class ApiAddTextOperationView(APIView):
                     defaults=dict(
                         is_trust=False,
                 ))
-                if created_ or currentstate.is_trust:
-                    if not created_:
-                        currentstate.is_trust = False
-                        currentstate.update_timestamp = int(time.time())
-                        currentstate.save(update_fields=('is_trust', 'update_timestamp'))
-                    fame = anytext.currentstate_set.all().distinct().count()
-                    anytext.trustless_count += 1
-                    anytext.fame = fame
-                    anytext.save(update_fields=('fame', 'trustless_count',))
+                if not created_:
+                    currentstate.is_trust = False
+                    currentstate.update_timestamp = int(time.time())
+                    currentstate.save(update_fields=('is_trust', 'update_timestamp'))
+                fame = anytext.currentstate_set.all().distinct().count()
+                anytext.trustless_count += 1
+                anytext.fame = fame
+                anytext.save(update_fields=('fame', 'trustless_count',))
 
             elif operationtype_id == OperationType.TRUSTLESS_CANCEL:
                 currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
@@ -356,15 +355,15 @@ class ApiAddTextOperationView(APIView):
                     defaults=dict(
                         is_trust=True,
                 ))
-                if not created_ and not currentstate.is_trust:
+                if not created_:
                     currentstate.is_trust = True
                     currentstate.update_timestamp = int(time.time())
                     currentstate.save(update_fields=('is_trust', 'update_timestamp'))
-                    fame = anytext.currentstate_set.all().distinct().count()
-                    if anytext.trustless_count:
-                        anytext.trustless_count -= 1
-                    anytext.fame = fame
-                    anytext.save(update_fields=('fame', 'trustless_count',))
+                fame = anytext.currentstate_set.all().distinct().count()
+                if anytext.trustless_count:
+                    anytext.trustless_count -= 1
+                anytext.fame = fame
+                anytext.save(update_fields=('fame', 'trustless_count',))
 
             data = dict(text_id_to=anytext.uuid)
             status_code = status.HTTP_200_OK
