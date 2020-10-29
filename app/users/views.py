@@ -574,23 +574,42 @@ class ApiGetUsers(APIView):
         """
         Получение списка пользователей
 
-        Возвращает список пользователей.
-        Пользователи должны быть отфильтрованы по filter.text.
-        Совпадения необходимо искать в first_name и last_name без учета регистра
-        (типо такого: ...WHERE first_name LIKE ‘%’+filter+’%’ or last_name LIKE ‘%’+filter+’%’).
-        Пользователи должны быть отсортированы по алфавиту сначала
-        по last_name потом по first_name
-        (... ORDER BY last_name ASK, first_name ASK).
-        Filter.text может быть пустым, тогда нужно вернуть всех пользователей.
-        Нужно вернуть count записей начиная с записи from
+    Возвращает список пользователей.
+    Пользователи должны быть отфильтрованы.
+    Фильтры могут быть заданы, а могут быть и не заданы.
 
-        Пример вызова:
+    FILTER.TEXT
+    Совпадения необходимо искать в first_name и last_name без учета регистра
+    (типо такого: ...WHERE first_name LIKE ‘%’+filter+’%’ or last_name LIKE ‘%’+filter+’%’).
+    Если filter.text пустой, то игнорировать фильтр.
+
+    FILTER.KEYS
+    Необходимо найти только тех пользователей,
+    которые владеют заданными ключами.
+    Если массив ключей пустой, то игнорировать фильтр
+
+    Пользователи должны быть отсортированы по алфавиту
+    сначала по last_name потом по first_name
+    (... ORDER BY first_name ASK, last_name ASK).
+    Нужно вернуть count записей начиная с записи from.
+
+    Пример вызова:
         {
-            "filter": {
-                "text": "ivan"
+        "filter": {
+            "text": "ivan",
+            "keys": [
+            {
+                "type_id": 1,
+                "value": "3242342343"
             },
-            "from": 2,
-            "count": 34
+            {
+                "type_id": 2,
+                "value": "asdf@mail.ru"
+            }
+            ]
+        },
+        "from": 2,
+        "count": 34
         }
 
         Пример возвращаемых данных:
@@ -611,22 +630,39 @@ class ApiGetUsers(APIView):
         """
 
         try:
-            text = ""
-            try:
-                text = request.data.get('filter', {})['text']
-            except KeyError:
-                raise ServiceException("Не задан filter.text")
+            filter_ = request.data.get('filter', {})
             q = Q(is_superuser=False)
-            if text:
-                q &= Q(last_name__icontains=text) | Q(first_name__icontains=text)
+
+            text = filter_.get('text')
+            if text and isinstance(text, str):
+                q_text = Q(last_name__icontains=text) | Q(first_name__icontains=text)
+            else:
+                q_text = Q()
+            q &= q_text
+
+            keys = filter_.get('keys', {})
+            q_keys = Q()
+            if isinstance(keys, list):
+                for key in keys:
+                    if isinstance(key, dict):
+                        type_id = key.get('type_id')
+                        value = key.get('value')
+                        if type_id and value:
+                            q_keys |= Q(
+                                key__type__pk=type_id,
+                                key__value=value
+                            )
+            q &= q_keys
+
             qs = User.objects.filter(q).select_related('profile').distinct(
-                ).order_by('last_name', 'first_name',)
+                ).order_by('first_name', 'last_name',)
             from_ = request.data.get("from", 0)
             count = request.data.get("count")
             if count:
                 qs = qs[from_ : from_ + count]
             else:
                 qs = qs[from_:]
+
             users = []
             for user in qs:
                 profile = user.profile
