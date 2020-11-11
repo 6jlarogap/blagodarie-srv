@@ -39,14 +39,21 @@
     "model": "contact.operationtype",
     "pk": 2,
     "fields": {
-      "title": "Trustless"
+      "title": "Mistrust"
     }
   },
   {
     "model": "contact.operationtype",
     "pk": 3,
     "fields": {
-      "title": "Trustless cancel"
+      "title": "Trust"
+    }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 4,
+    "fields": {
+      "title": "Nullify trust"
     }
   }
 ]

@@ -180,7 +180,8 @@ class Profile(PhotoModel):
     photo_url = models.URLField(_("Фото из соц. сети"), max_length=255, default='')
     fame = models.PositiveIntegerField(_("Известность"), default=0)
     sum_thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
-    trustless_count = models.PositiveIntegerField(_("Число утрат доверия"), default=0)
+    trust_count = models.PositiveIntegerField(_("Число оказанных доверий"), default=0)
+    mistrust_count = models.PositiveIntegerField(_("Число утрат доверия"), default=0)
 
     class Meta:
         ordering = ('user__last_name', 'user__first_name', 'middle_name', )

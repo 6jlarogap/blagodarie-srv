@@ -32,21 +32,62 @@ MSG_NO_PARM = 'Не задан или не верен какой-то из па�
 class ApiAddOperationView(APIView):
     permission_classes = (IsAuthenticated, )
 
+    def profile_recount(self, profile_to, user_to):
+        profile_to.trust_count = CurrentState.objects.filter(
+            is_reverse=False,
+            user_to=user_to,
+            is_trust=True,
+        ).distinct().count()
+        profile_to.mistrust_count = CurrentState.objects.filter(
+            is_reverse=False,
+            user_to=user_to,
+            is_trust=False,
+        ).distinct().count()
+        profile_to.fame = profile_to.trust_count + profile_to.mistrust_count
+        profile_to.save()
+
     @transaction.atomic
     def post(self, request):
         """
         Добавление операции
 
-        Добавляет запись в таблицу Journal. Если тип операции Thank,
-        то инкрементировать значение столбца sum_thanks_count для пользователя user_id_to,
-        и инкрементировать значение столбца thanks_count в таблице CurrentState
-        для user_id_from и user_id_to, если в таблице CurrentState
-        не существует записи с такими user_id_from и user_id_to,
-        то добавить ее.
-        Если тип операции Trustless то инкрементировать значение столбца trustless_count
-        и установить значение is_trust в таблице CurrentState в значение False.
-        Если тип операции Trustless cancel, то декрементировать значение столбца
-        trustless_count и установить значение is_trust в таблице CurrentState в значение True
+        - если user_id_from == user_id_to, то вернуть ошибку (нельзя добавить операцию себе);
+        - иначе:
+            - если тип операции THANK:
+                - записать данные в таблицу tbl_journal;
+                - инкрементировать значение столбца sum_thanks_count для пользователя user_id_to;
+                - если не существует записи в tbl_current_state для заданных user_id_from и user_id_to, то создать ее;
+                - инкрементировать значение столбца thanks_count в таблице tbl_current_state для user_id_from и user_id_to;
+            - если тип операции MISTRUST:
+                - если есть запись в таблице tbl_current_state для заданных user_id_from и user_id_to;
+                    - если значение IS_TRUST == FALSE, вернуть ошибку (нельзя утратить доверие, если его и так нет);
+                - иначе:
+                    - создать запись в таблице tbl_current_state;
+                - записать данные в таблицу tbl_journal;
+                - если текущее IS_TRUST == NULL, то инкрементировать FAME и MISTRUST_COUNT для пользователя user_id_to;
+                - если текущее IS_TRUST == TRUE, то
+                  декрементировать TRUST_COUNT и инкрементировать FAME и MISTRUST_COUNT для пользователя user_id_to;
+                - в таблице tbl_current_state установить IS_TRUST = FALSE;
+            - если тип операции TRUST:
+                - если есть запись в таблице tbl_current_state для заданных user_id_from и user_id_to;
+                    - если значение IS_TRUST == TRUE, вернуть ошибку (нельзя установить доверие, если уже доверяешь);
+                - иначе:
+                    - создать запись в таблице tbl_current_state;
+                - записать данные в таблицу tbl_journal;
+                - если текущее IS_TRUST == NULL, то инкрементировать FAME и TRUST_COUNT для пользователя user_id_to;
+                - если текущее IS_TRUST == FALSE, то
+                  декрементировать MISTRUST_COUNT и инкрементировать FAME и TRUST_COUNT для пользователя user_id_to;
+                - в таблице tbl_current_state установить IS_TRUST = TRUE;
+            - если тип операции NULLIFY_TRUST:
+                - если есть запись в таблице tbl_current_state для заданных user_id_from и user_id_to;
+                    - если значение IS_TRUST == NULL, вернуть ошибку (нельзя обнулить доверие, если оно пустое);
+                    - иначе:
+                        - если текущее IS_TRUST == TRUE, то декрементировать TRUST_COUNT;
+                        - если текущее IS_TRUST == FALSE, то декрементировать MISTRUST_COUNT;
+                        - декрементировать FAME для user_id_to;
+                        - установить IS_TRUST = NULL;
+                        - записать данные в таблицу tbl_journal;
+                - иначе вернуть ошибку (нельзя обнулить доверие, если связи нет);
 
         Пример исходных данных:
         {
@@ -62,7 +103,6 @@ class ApiAddOperationView(APIView):
             user_from = request.user
             user_to_uuid = request.data.get("user_id_to")
             operationtype_id = request.data.get("operation_type_id")
-            comment = request.data.get("comment", None)
             if not user_to_uuid or not operationtype_id:
                 raise ServiceException('Не заданы user_id_to и/или operation_type_id')
             try:
@@ -79,15 +119,10 @@ class ApiAddOperationView(APIView):
                 operationtype = OperationType.objects.get(pk=operationtype_id)
             except (ValueError, OperationType.DoesNotExist,):
                 raise ServiceException('Неизвестный operation_type_id = %s' % operationtype_id)
-            insert_timestamp = request.data.get('timestamp', int(time.time()))
 
-            Journal.objects.create(
-                user_from=user_from,
-                user_to=user_to,
-                operationtype=operationtype,
-                insert_timestamp=insert_timestamp,
-                comment=comment,
-            )
+            update_timestamp = int(time.time())
+            insert_timestamp = request.data.get('timestamp', update_timestamp)
+
             if operationtype_id == OperationType.THANK:
                 currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
                     user_from=user_from,
@@ -96,13 +131,13 @@ class ApiAddOperationView(APIView):
                         thanks_count=1,
                 ))
                 if not created_:
-                    currentstate.update_timestamp = int(time.time())
+                    currentstate.update_timestamp = update_timestamp
                     if currentstate.is_reverse:
                         # то же что created
                         currentstate.insert_timestamp = insert_timestamp
                         currentstate.is_reverse = False
                         currentstate.thanks_count = 1
-                        currentstate.is_trust = True
+                        currentstate.is_trust = None
                     else:
                         currentstate.thanks_count += 1
                     currentstate.save()
@@ -112,31 +147,25 @@ class ApiAddOperationView(APIView):
                     user_from=user_to,
                     defaults=dict(
                         is_reverse=True,
-                        is_trust=True,
+                        is_trust=None,
                         thanks_count=currentstate.thanks_count,
                 ))
                 if not reverse_created and reverse_cs.is_reverse:
                     reverse_cs.thanks_count = currentstate.thanks_count
                     reverse_cs.save()
 
-                if created_:
-                    fame = user_to.currentstate_user_to_set.filter(
-                        is_reverse=False
-                    ).distinct().count()
-                    profile_to.fame = fame
                 profile_to.sum_thanks_count += 1
                 profile_to.save()
 
-            elif operationtype_id == OperationType.TRUSTLESS:
+            elif operationtype_id == OperationType.MISTRUST:
                 currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
                     user_from=user_from,
                     user_to=user_to,
                     defaults=dict(
                         is_trust=False,
                 ))
-                do_fame = True
                 if not created_:
-                    currentstate.update_timestamp = int(time.time())
+                    currentstate.update_timestamp = update_timestamp
                     if currentstate.is_reverse:
                         # то же что created
                         currentstate.insert_timestamp = insert_timestamp
@@ -145,11 +174,12 @@ class ApiAddOperationView(APIView):
                         currentstate.thanks_count = 0
                         currentstate.save()
                     else:
-                        if currentstate.is_trust:
+                        if currentstate.is_trust == False:
+                            raise ServiceException('Вы уже не доверяете пользователю')
+                        else:
+                            # True or None
                             currentstate.is_trust = False
                             currentstate.save()
-                        else:
-                            do_fame = False
 
                 reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
                     user_to=user_from,
@@ -159,21 +189,13 @@ class ApiAddOperationView(APIView):
                         is_trust=False,
                         thanks_count=currentstate.thanks_count,
                 ))
-                if not reverse_created and reverse_cs.is_reverse and reverse_cs.is_trust:
+                if not reverse_created and reverse_cs.is_reverse and not (reverse_cs.is_trust == False):
                     reverse_cs.is_trust = False
                     reverse_cs.save()
 
-                if do_fame:
-                    # created or was is_trust=True
-                    if created_:
-                        fame = user_to.currentstate_user_to_set.filter(
-                            is_reverse=False
-                        ).distinct().count()
-                        profile_to.fame = fame
-                    profile_to.trustless_count += 1
-                    profile_to.save()
+                self.profile_recount(profile_to, user_to)
 
-            elif operationtype_id == OperationType.TRUSTLESS_CANCEL:
+            elif operationtype_id == OperationType.TRUST:
                 currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
                     user_from=user_from,
                     user_to=user_to,
@@ -181,7 +203,7 @@ class ApiAddOperationView(APIView):
                         is_trust=True,
                 ))
                 if not created_:
-                    currentstate.update_timestamp = int(time.time())
+                    currentstate.update_timestamp = update_timestamp
                     if currentstate.is_reverse:
                         # то же что created
                         currentstate.insert_timestamp = insert_timestamp
@@ -190,13 +212,12 @@ class ApiAddOperationView(APIView):
                         currentstate.thanks_count = 0
                         currentstate.save()
                     else:
-                        if not currentstate.is_trust:
+                        if currentstate.is_trust == True:
+                            raise ServiceException('Вы уже доверяете пользователю')
+                        else:
+                            # False or None
                             currentstate.is_trust = True
                             currentstate.save()
-                            # not created and was not is_trust
-                            if profile_to.trustless_count:
-                                profile_to.trustless_count -= 1
-                                profile_to.save()
 
                 reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
                     user_to=user_from,
@@ -206,9 +227,51 @@ class ApiAddOperationView(APIView):
                         is_trust=True,
                         thanks_count=currentstate.thanks_count,
                 ))
-                if not reverse_created and reverse_cs.is_reverse and not reverse_cs.is_trust:
+                if not reverse_created and reverse_cs.is_reverse and not (reverse_cs.is_trust == True):
                     reverse_cs.is_trust = True
                     reverse_cs.save()
+
+                self.profile_recount(profile_to, user_to)
+
+            elif operationtype_id == OperationType.NULLIFY_TRUST:
+                err_message = 'У вас не было ни доверия, ни недоверия к пользователю'
+                try:
+                    currentstate = CurrentState.objects.select_for_update().get(
+                        user_from=user_from,
+                        user_to=user_to,
+                    )
+                except CurrentState.DoesNotExist:
+                    raise ServiceException(err_message)
+
+                if currentstate.is_reverse:
+                    # то же что created
+                    raise ServiceException(err_message)
+                else:
+                    if currentstate.is_trust == None:
+                        raise ServiceException(err_message)
+                    else:
+                        # False or True
+                        currentstate.update_timestamp = update_timestamp
+                        currentstate.is_trust = None
+                        currentstate.save()
+
+                reverse_cs = CurrentState.objects.filter(
+                    user_to=user_from,
+                    user_from=user_to,
+                    is_reverse=True,
+                    is_trust__isnull=False,
+                ).update(is_trust=None)
+
+                self.profile_recount(profile_to, user_to)
+
+            comment = request.data.get("comment", None)
+            Journal.objects.create(
+                user_from=user_from,
+                user_to=user_to,
+                operationtype=operationtype,
+                insert_timestamp=insert_timestamp,
+                comment=comment,
+            )
 
             if settings.FCM_SERVER_KEY:
                 fcm_topic_name = 'user_%s' % profile_to.uuid
@@ -236,31 +299,58 @@ api_add_operation = ApiAddOperationView.as_view()
 class ApiAddTextOperationView(APIView):
     permission_classes = (IsAuthenticated, )
 
+    def anytext_recount(self, anytext):
+        anytext.trust_count = CurrentState.objects.filter(
+            anytext=anytext,
+            is_trust=True,
+        ).distinct().count()
+        anytext.mistrust_count = CurrentState.objects.filter(
+            anytext=anytext,
+            is_trust=False,
+        ).distinct().count()
+        anytext.fame = anytext.trust_count + anytext.mistrust_count
+        anytext.save()
+
     @transaction.atomic
     def post(self, request):
         """
         Добавление операции для текста
 
-        Если полученный text_id_to не существует в таблице tbl_any_text,
-        то добавить запись в таблицу tbl_any_text.
-
-        Добавить запись в таблицу tbl_journal.
-
-        Если тип операции Thank, то инкрементировать значение столбца
-        sum_thanks_count для текста text_id_to, и инкрементировать
-        значение столбца thanks_count в таблице tbl_current_state
-        для user_id_from и text_id_to,
-        если в таблице tbl_current_state не существует записи
-        с такими user_id_from и text_id_to, то добавить ее.
-
-        Если тип операции Trustless то инкрементировать значение столбца
-        trustless_count и установить значение is_trust в таблице
-        tbl_current_state в значение false, но только если в настоящий есть доверие
-
-        Если тип операции Trustless cancel,
-        то декрементировать значение столбца trustless_count и
-        установить значение is_trust в таблице tbl_current_state
-        в значение true, но только если в настоящий момент нет доверия
+        - если тип операции THANK:
+            - записать данные в таблицу tbl_journal;
+            - инкрементировать значение столбца sum_thanks_count для текста text_id_to;
+            - если не существует записи в tbl_current_state для заданных user_id_from и text_id_to, то создать ее;
+            - инкрементировать значение столбца thanks_count в таблице tbl_current_state для user_id_from и text_id_to;
+        - если тип операции MISTRUST:
+            - если есть запись в таблице tbl_current_state для заданных user_id_from и text_id_to;
+                - если значение IS_TRUST == FALSE, вернуть ошибку (нельзя утратить доверие, если его и так нет);
+            - иначе:
+                - создать запись в таблице tbl_current_state;
+            - записать данные в таблицу tbl_journal;
+            - если текущее IS_TRUST == NULL, то инкрементировать FAME и MISTRUST_COUNT для текста text_id_to;
+            - если текущее IS_TRUST == TRUE, то
+              декрементировать TRUST_COUNT и инкрементировать FAME и MISTRUST_COUNT для текста text_id_to;
+            - в таблице tbl_current_state установить IS_TRUST = FALSE;
+        - если тип операции TRUST:
+            - если есть запись в таблице tbl_current_state для заданных user_id_from и text_id_to;
+                - если значение IS_TRUST == TRUE, вернуть ошибку (нельзя установить доверие, если уже доверяешь);
+            - иначе:
+                - создать запись в таблице tbl_current_state;
+            - записать данные в таблицу tbl_journal;
+            - если текущее IS_TRUST == NULL, то инкрементировать FAME и TRUST_COUNT для текста text_id_to;
+            - если текущее IS_TRUST == FALSE, то
+              декрементировать MISTRUST_COUNT и инкрементировать FAME и TRUST_COUNT для текста text_id_to;
+            - в таблице tbl_current_state установить IS_TRUST = TRUE;
+        - если тип операции NULLIFY_TRUST:
+            - если есть запись в таблице tbl_current_state для заданных user_id_from и text_id_to;
+                - если значение IS_TRUST == NULL, вернуть ошибку (нельзя обнулить доверие, если оно пустое);
+                    - иначе:
+                        - если текущее IS_TRUST == TRUE, то декрементировать TRUST_COUNT;
+                        - если текущее IS_TRUST == FALSE, то декрементировать MISTRUST_COUNT;
+                        - декрементировать FAME для text_id_to;
+                        - установить IS_TRUST = NULL;
+                        - записать данные в таблицу tbl_journal;
+            - иначе вернуть ошибку (нельзя обнулить доверие, если связи нет);
 
         Пример исходных данных:
         {
@@ -289,32 +379,32 @@ class ApiAddTextOperationView(APIView):
             if not text_to_uuid and not text:
                 raise ServiceException('Не заданы ни text_id_to, ни text')
             operationtype_id = request.data.get("operation_type_id")
-            if text_to_uuid:
-                # задан только text_id_to
-                try:
-                    anytext = AnyText.objects.get(uuid=text_to_uuid)
-                except ValidationError:
-                    raise ServiceException('Неверный uuid = "%s"' % text_to_uuid)
-                except AnyText.DoesNotExist:
-                    raise ServiceException('Не найден текст, text_id_to = "%s"' % user_to_uuid)
-            else:
-                # задан только text
-                anytext, created_ = AnyText.objects.get_or_create(text=text)
             try:
                 operationtype_id = int(operationtype_id)
                 operationtype = OperationType.objects.get(pk=operationtype_id)
             except (ValueError, OperationType.DoesNotExist,):
                 raise ServiceException('Неизвестный operation_type_id = %s' % operationtype_id)
 
-            insert_timestamp = request.data.get('timestamp', int(time.time()))
-            comment = request.data.get("comment", None)
-            Journal.objects.create(
-                user_from=user_from,
-                anytext=anytext,
-                operationtype=operationtype,
-                insert_timestamp=insert_timestamp,
-                comment=comment,
-            )
+            if text_to_uuid:
+                # задан только text_id_to
+                try:
+                    anytext = AnyText.objects.select_for_update().get(uuid=text_to_uuid)
+                except ValidationError:
+                    raise ServiceException('Неверный uuid = "%s"' % text_to_uuid)
+                except AnyText.DoesNotExist:
+                    raise ServiceException('Не найден текст, text_id_to = "%s"' % text_to_uuid)
+            else:
+                # задан только text
+                if operationtype_id == OperationType.NULLIFY_TRUST:
+                    try:
+                        anytext = AnyText.objects.select_for_update().get(text=text)
+                    except AnyText.DoesNotExist:
+                        raise ServiceException('Не найден текст, к которому хотите снять доверие или недоверие')
+                else:
+                    anytext, created_ = AnyText.objects.select_for_update().get_or_create(text=text)
+
+            update_timestamp = int(time.time())
+            insert_timestamp = request.data.get('timestamp', update_timestamp)
 
             if operationtype_id == OperationType.THANK:
                 currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
@@ -325,14 +415,12 @@ class ApiAddTextOperationView(APIView):
                 ))
                 if not created_:
                     currentstate.thanks_count = F('thanks_count') + 1
-                    currentstate.update_timestamp = int(time.time())
+                    currentstate.update_timestamp = update_timestamp
                     currentstate.save(update_fields=('thanks_count', 'update_timestamp'))
-                fame = anytext.currentstate_set.all().distinct().count()
                 anytext.sum_thanks_count += 1
-                anytext.fame = fame
-                anytext.save(update_fields=('fame', 'sum_thanks_count',))
+                anytext.save(update_fields=('sum_thanks_count',))
 
-            elif operationtype_id == OperationType.TRUSTLESS:
+            elif operationtype_id == OperationType.MISTRUST:
                 currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
                     user_from=user_from,
                     anytext=anytext,
@@ -340,15 +428,14 @@ class ApiAddTextOperationView(APIView):
                         is_trust=False,
                 ))
                 if not created_:
+                    if currentstate.is_trust == False:
+                        raise ServiceException('Вы уже не доверяете тексту')
                     currentstate.is_trust = False
-                    currentstate.update_timestamp = int(time.time())
+                    currentstate.update_timestamp = update_timestamp
                     currentstate.save(update_fields=('is_trust', 'update_timestamp'))
-                fame = anytext.currentstate_set.all().distinct().count()
-                anytext.trustless_count += 1
-                anytext.fame = fame
-                anytext.save(update_fields=('fame', 'trustless_count',))
+                self.anytext_recount(anytext)
 
-            elif operationtype_id == OperationType.TRUSTLESS_CANCEL:
+            elif operationtype_id == OperationType.TRUST:
                 currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
                     user_from=user_from,
                     anytext=anytext,
@@ -356,18 +443,39 @@ class ApiAddTextOperationView(APIView):
                         is_trust=True,
                 ))
                 if not created_:
+                    if currentstate.is_trust == True:
+                        raise ServiceException('Вы уже доверяете тексту')
                     currentstate.is_trust = True
-                    currentstate.update_timestamp = int(time.time())
+                    currentstate.update_timestamp = update_timestamp
                     currentstate.save(update_fields=('is_trust', 'update_timestamp'))
-                fame = anytext.currentstate_set.all().distinct().count()
-                if anytext.trustless_count:
-                    anytext.trustless_count -= 1
-                anytext.fame = fame
-                anytext.save(update_fields=('fame', 'trustless_count',))
+                self.anytext_recount(anytext)
 
+            elif operationtype_id == OperationType.NULLIFY_TRUST:
+                err_message = 'У вас не было ни доверия, ни недоверия к тексту'
+                try:
+                    currentstate = CurrentState.objects.select_for_update().get(
+                        user_from=user_from,
+                        anytext=anytext,
+                    )
+                except CurrentState.DoesNotExist:
+                    raise ServiceException(err_message)
+                if currentstate.is_trust == None:
+                    raise ServiceException(err_message)
+                currentstate.is_trust = None
+                currentstate.update_timestamp = update_timestamp
+                currentstate.save(update_fields=('is_trust', 'update_timestamp'))
+                self.anytext_recount(anytext)
+
+            comment = request.data.get("comment", None)
+            Journal.objects.create(
+                user_from=user_from,
+                anytext=anytext,
+                operationtype=operationtype,
+                insert_timestamp=insert_timestamp,
+                comment=comment,
+            )
             data = dict(text_id_to=anytext.uuid)
             status_code = status.HTTP_200_OK
-
         except ServiceException as excpt:
             transaction.set_rollback(True)
             data = dict(message=excpt.args[0])
@@ -405,7 +513,8 @@ class ApiGetTextInfo(APIView):
             "uuid": "3d20c185-388a-4e38-9fe1-6df8a31c7c31",
             "sum_thanks_count": 300,
             "fame": 3,
-            "trustless_count": 1,
+            "mistrust_count": 1,
+            "trust_count": 2,
             "thanks_count": 12, // только при авторизованном запросе
             "is_trust": true,   // только при авторизованном запросе
             "thanks_users": [
@@ -438,7 +547,9 @@ class ApiGetTextInfo(APIView):
                 uuid=anytext.uuid,
                 sum_thanks_count=anytext.sum_thanks_count,
                 fame=anytext.fame,
-                trustless_count=anytext.trustless_count,
+                mistrust_count=anytext.mistrust_count,
+                trustless_count=anytext.mistrust_count,
+                trust_count=anytext.trust_count,
             )
             user_from = request.user
             if user_from.is_authenticated:

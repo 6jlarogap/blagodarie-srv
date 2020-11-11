@@ -41,8 +41,9 @@ class KeyType(models.Model):
 class OperationType(models.Model):
 
     THANK = 1
-    TRUSTLESS = 2
-    TRUSTLESS_CANCEL = 3
+    MISTRUST = 2
+    TRUST = 3
+    NULLIFY_TRUST = 4
 
     title = models.CharField(_("Тип операции"), max_length=255, unique=True)
 
@@ -52,7 +53,8 @@ class AnyText(BaseModelInsertTimestamp):
     text = models.CharField(_("Значение"), max_length=2048, unique=True, db_index=True)
     fame = models.PositiveIntegerField(_("Известность"), default=0)
     sum_thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
-    trustless_count = models.PositiveIntegerField(_("Число утрат доверия"), default=0)
+    trust_count = models.PositiveIntegerField(_("Число оказанных доверий"), default=0)
+    mistrust_count = models.PositiveIntegerField(_("Число утрат доверия"), default=0)
 
 class Journal(BaseModelInsertTimestamp):
 
@@ -81,7 +83,7 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
     anytext = models.ForeignKey(AnyText,
                     verbose_name=_("Текст"), on_delete=models.CASCADE, null=True)
     thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
-    is_trust = models.BooleanField(_("Доверие"), default=True)
+    is_trust = models.NullBooleanField(_("Доверие"), default=None)
 
     # Для построения графов связей между пользователями, где надо учитывать
     # связь - это не только что пользователь 1 отблагодарил пользователя 2,

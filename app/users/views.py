@@ -53,7 +53,8 @@ class ApiGetProfileInfo(APIView):
             "photo": "photo/url",
             "sum_thanks_count": 300,
             "fame": 3,
-            "trustless_count": 1,
+            "mistrust_count": 1,
+            "trust_count": 3,
             "thanks_count": 12, // только при авторизованном запросе
             "is_trust": true,   // только при авторизованном запросе
             "thanks_users": [
@@ -90,7 +91,9 @@ class ApiGetProfileInfo(APIView):
                 photo=profile.choose_photo(),
                 sum_thanks_count=profile.sum_thanks_count,
                 fame=profile.fame,
-                trustless_count=profile.trustless_count,
+                mistrust_count=profile.mistrust_count,
+                trustless_count=profile.mistrust_count,
+                trust_count=profile.trust_count,
             )
             user_from = request.user
             if user_from.is_authenticated:
@@ -622,7 +625,8 @@ class ApiGetUsers(APIView):
                 "photo": "/url/photo",
                 "fame": 32,
                 "sum_thanks_count": 32,
-                "trustless_count": 12
+                "mistrust_count": 12
+                "trust_count": 20
                 },
             ...
             ]
@@ -673,7 +677,9 @@ class ApiGetUsers(APIView):
                     photo=profile.choose_photo(),
                     fame=profile.fame,
                     sum_thanks_count=profile.sum_thanks_count,
-                    trustless_count=profile.trustless_count,
+                    mistrust_count=profile.mistrust_count,
+                    trustless_count=profile.mistrust_count,
+                    trust_count=profile.trust_count,
                 ))
             data = dict(users=users)
             status_code = 200
