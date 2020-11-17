@@ -394,6 +394,7 @@ class LogLike(models.Model):
             for cs in CurrentState.objects.filter(
                         user_to__isnull=False,
                         is_reverse=False,
+                        is_trust__isnull=False,
                     ).select_related(
                     'user_from', 'user_to',
                     'user_from__profile', 'user_to__profile',

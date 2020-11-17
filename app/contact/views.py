@@ -2208,7 +2208,7 @@ class ApiProfileGraphTwoLevels(APIView):
             user_pks = []
             connections = []
             q = Q(user_from=user_q) | Q(user_to=user_q)
-            q &= Q(user_to__isnull=False) & Q(is_reverse=False)
+            q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust__isnull=False)
             for cs in CurrentState.objects.filter(q).distinct().select_related(
                     'user_from', 'user_to',
                     'user_from__profile', 'user_to__profile',
