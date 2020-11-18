@@ -2475,10 +2475,11 @@ class ApiGetThanksUsers(APIView):
         """
         Постраничное получение списка поблагодаривших и поблагодаренных
 
-        Возвратить массив пользователей (их фото и UUID), которые благодарили,
-        либо были благодаримы пользователем, о котором запрашивается информация.
+        Нужно возвратить массив пользователей (их фото и UUID),
+        которые доверяют, либо которым доверяет пользователь
+        (is_trust == true), о котором запрашивается информация.
         Массив пользователей должен быть отсортирован
-        по убыванию известности пользователей.
+        по убыванию времени создания записи в tbl_current_state.
         Нужно получить count записей начиная с записи from.
         Пример вызова:
         /api/getthanksusers?uuid=91c49fe2-3f74-49a8-906e-f4f711f8e3a1
@@ -2499,57 +2500,50 @@ class ApiGetThanksUsers(APIView):
             if not uuid:
                 raise ServiceException('Не задан uuid пользователя')
             try:
-                user = Profile.objects.select_related('user').get(uuid=uuid).user
+                user_q = Profile.objects.select_related('user').get(uuid=uuid).user
             except ValidationError:
                 raise ServiceException('Неверный uuid = %s' % uuid)
             except Profile.DoesNotExist:
                 raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
-            limit = request.GET.get('count', 'all')
-            offset = request.GET.get('from', 0)
-
-            req_str = """
-                SELECT
-                    uuid, photo, photo_url
-                FROM
-                    users_profile
-                WHERE
-                    user_id IN (
-                        SELECT
-                            DISTINCT user_from_id AS id_
-                        FROM
-                            contact_currentstate
-                        WHERE
-                            user_to_id = %(user_id)s AND
-                            thanks_count > 0 AND
-                            is_reverse = false
-                        UNION
-                        SELECT
-                            DISTINCT user_to_id as id_
-                        FROM
-                            contact_currentstate
-                        WHERE
-                            user_from_id = %(user_id)s AND
-                            user_to_id is not null AND
-                            thanks_count > 0 AND
-                            is_reverse = false
-                    )
-                ORDER BY fame DESC
-                LIMIT %(limit)s
-                OFFSET %(offset)s
-            """ % dict(
-                user_id=user.pk,
-                limit=limit,
-                offset=offset,
+            try:
+                from_ = request.GET.get("from", 0)
+                from_ = int(from_) if from_ else 0
+                count = request.GET.get("count", 0)
+                count = int(count) if count else 0
+            except ValueError:
+                raise ServiceException('Неверный from или count')
+            q = Q(
+                user_to__isnull=False,
+                is_reverse=False,
+                is_trust=True,
             )
+            q &= Q(user_to=user_q) | Q(user_from=user_q)
+            qs = CurrentState.objects.filter(q
+                ).distinct().select_related(
+                    'user_from', 'user_to',
+                    'user_from__profile', 'user_to__profile',
+                ).order_by('-insert_timestamp');
             thanks_users = []
-            with connection.cursor() as cursor:
-                cursor.execute(req_str)
-                recs = dictfetchall(cursor)
-                for rec in recs:
-                    thanks_users.append(dict(
-                        photo = Profile.choose_photo_of(rec['photo'], rec['photo_url']),
-                        user_uuid=str(rec['uuid'])
-                    ))
+            user_pks = []
+            n = 0
+            for cs in qs:
+                user = cs.user_to
+                if user == user_q:
+                    user = cs.user_from
+                if user.pk in user_pks:
+                    continue
+                user_pks.append(user.pk)
+                if n < from_:
+                    n += 1
+                    continue
+                if count and n >= from_ + count:
+                    break
+                profile = user.profile
+                thanks_users.append(dict(
+                    photo = profile.choose_photo(),
+                    user_uuid=str(profile.uuid)
+                ))
+                n += 1
             data = dict(
                 thanks_users=thanks_users
             )
