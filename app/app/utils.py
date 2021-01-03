@@ -38,7 +38,7 @@ def get_moon_day(utc_time=None):
     if not utc_time:
         utc_time = int(time.time())
 
-    ts = load.timescale(builtin=True)
+    ts = load.timescale()
     d = datetime.datetime.utcfromtimestamp(utc_time)
     t = ts.utc(d.year, d.month, d.day, d.hour, d.minute, d.second)
 

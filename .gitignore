@@ -7,7 +7,5 @@ ENV
 app/media
 app/static
 
-app/*.bsp
-app/*.data
-app/*.dat
-app/*.preds
+app/de421.bsp
+app/finals2000A.all
