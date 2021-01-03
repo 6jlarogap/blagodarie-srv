@@ -93,9 +93,16 @@ install-readme.txt
     !!! Проверим работу сервера разработчика:
         cd /home/www-data/django/project/app
         ./manage.py runserver 0.0.0.0:8000
-        http://site.name:8000 : что-то должно быть
+            http://site.name:8000 : что-то должно быть
         Ctrl-C
     
+    * Загрузка данных для вычисления фаз луны
+        cd /home/www-data/django/project/app
+        ./manage.py shell
+        load.timescale(builtin=False)
+        load('de421.bsp')
+        exit()
+
     * chown -R www-data:www-data ~/venv/project
       chown -R www-data:www-data /home/www-data/django/project
       chown -R www-data:www-data /home/www-data/django/MEDIA/project
