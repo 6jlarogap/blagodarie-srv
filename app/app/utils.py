@@ -34,7 +34,7 @@ def get_moon_day(utc_time):
     Из unix timestamp получить номер дня по лунному календарю, 0 - 27
     """
 
-    ts = load.timescale()
+    ts = load.timescale(builtin=True)
     d = datetime.datetime.utcfromtimestamp(utc_time)
     t = ts.utc(d.year, d.month, d.day, d.hour, d.minute, d.second)
 

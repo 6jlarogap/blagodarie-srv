@@ -8,4 +8,6 @@ psycopg2-binary
 
 pytils
 
-skyfield==1.19
+skyfield==1.35
+
+pyfcm==1.4.7
