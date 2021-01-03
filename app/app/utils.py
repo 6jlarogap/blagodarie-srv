@@ -1,5 +1,6 @@
 import datetime, time
 from skyfield.api import load
+from skyfield.framelib import ecliptic_frame
 
 class ServiceException(Exception):
     """
@@ -29,10 +30,13 @@ def dictfetchall(cursor):
         for row in cursor.fetchall()
     ]
 
-def get_moon_day(utc_time):
+def get_moon_day(utc_time=None):
     """
     Из unix timestamp получить номер дня по лунному календарю, 0 - 27
     """
+
+    if not utc_time:
+        utc_time = int(time.time())
 
     ts = load.timescale(builtin=True)
     d = datetime.datetime.utcfromtimestamp(utc_time)
@@ -42,8 +46,8 @@ def get_moon_day(utc_time):
     sun, moon, earth = eph['sun'], eph['moon'], eph['earth']
 
     e = earth.at(t)
-    _, slon, _ = e.observe(sun).apparent().ecliptic_latlon()
-    _, mlon, _ = e.observe(moon).apparent().ecliptic_latlon()
+    _, slon, _ = e.observe(sun).apparent().frame_latlon(ecliptic_frame)
+    _, mlon, _ = e.observe(moon).apparent().frame_latlon(ecliptic_frame)
     phase = (mlon.degrees - slon.degrees) % 360.0
     if phase >= 360:
         phase = phase % 360.
