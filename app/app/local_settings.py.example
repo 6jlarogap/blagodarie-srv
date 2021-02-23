@@ -1,6 +1,10 @@
 DEBUG = False
 ADMIN_ENABLED = False
 
+# SECURITY WARNING: keep the secret key used in production secret!
+# Секретный ключ Django, например, назначенный, при создании проекта
+SECRET_KEY = 'secret'
+
 MEDIA_ROOT = '/path/to/media/'
 
 DATABASES = {
