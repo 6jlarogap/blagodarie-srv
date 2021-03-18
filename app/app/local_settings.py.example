@@ -32,3 +32,15 @@ GITHUB_WEBHOOK_SECRET = 'secret'
 # мобильного приложения.
 #
 RATING_GITHUB_WEBHOOK_SECRET = 'secret'
+
+# Для телеграм авторизации. Неправильный или отсутсвующий токен
+# не позволит авторизацию через телеграм
+#
+TELEGRAM_BOT_TOKEN = 'secret'
+
+# Отсутствующий (ложный) FCM_SERVER_KEY:
+#   апи не будет отправлять push уведомления
+# Неправильный FCM_SERVER_KEY:
+#   push уведомления не будут приняты
+#
+FCM_SERVER_KEY = 'secret'

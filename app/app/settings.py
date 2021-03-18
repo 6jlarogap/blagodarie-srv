@@ -254,7 +254,10 @@ GOOGLE_PHOTO_SIZE = 200
 #
 ADMIN_ENABLED = False
 
-# С ложным ключом отправки уведомления не будет
+# Отсутствующий (ложный) FCM_SERVER_KEY:
+#   апи не будет отправлять push уведомления
+# Неправильный FCM_SERVER_KEY:
+#   push уведомления не будут приняты
 #
 FCM_SERVER_KEY = None
 
@@ -263,6 +266,21 @@ FCM_SERVER_KEY = None
 CONNECTIONS_LEVEL = 2
 
 # ------------------------------------------------
+
+# Для телеграм авторизации. Неправильный или отсутсвующий токен
+# не позволит авторизацию через телеграм
+#
+# Должен быть задан в local_settings.py
+#
+TELEGRAM_BOT_TOKEN = None
+
+# Данные для регистрации от телеграма,
+# старше этого срока, в секундах, считаются устаревшими
+#
+TELEGRAM_AUTH_DATA_OUTDATED = 3600
+
+# ------------------------------------------------
+
 try:
     from app.local_settings import *
 except ModuleNotFoundError:

@@ -2228,8 +2228,7 @@ class ApiProfileGraphTwoLevels(APIView):
                         last_name=user.last_name,
                         photo = profile.choose_photo(),
                     ))
-                    if user != user_q:
-                        user_pks.append(user.pk)
+                    user_pks.append(user.pk)
                 user = cs.user_to
                 if user.pk not in user_pks:
                     profile = user.profile
@@ -2239,8 +2238,7 @@ class ApiProfileGraphTwoLevels(APIView):
                         last_name=user.last_name,
                         photo = profile.choose_photo(),
                     ))
-                    if user != user_q:
-                        user_pks.append(user.pk)
+                    user_pks.append(user.pk)
 
             if user_pks:
                 q = Q(user_from__pk__in=user_pks) & Q(user_to__pk__in=user_pks)

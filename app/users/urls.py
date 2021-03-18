@@ -23,4 +23,6 @@ urlpatterns = [
     url(r'^api/getratinglatestversion/?$', views.api_rating_latest_version),
 
     url(r'^api/getusers/?$', views.api_get_users),
+
+    url(r'^api/auth/telegram/?$', views.api_auth_telegram),
 ]

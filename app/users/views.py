@@ -1,4 +1,4 @@
-import os, re, hmac, hashlib, json
+import os, re, hmac, hashlib, json, time
 import urllib.request, urllib.error
 
 from django.shortcuts import render
@@ -77,13 +77,20 @@ class ApiGetProfileInfo(APIView):
 
         try:
             uuid=request.GET.get('uuid')
+            user = None
             if not uuid:
-                raise ServiceException("Не задан uuid")
-            try:
-                profile = Profile.objects.select_related('user').get(uuid=uuid)
-            except (ValidationError, Profile.DoesNotExist, ):
-                raise ServiceException("Не найден пользователь с uuid = %s или uuid неверен" % uuid)
-            user = profile.user
+                if request.user.is_authenticated:
+                    user = request.user
+                    profile = user.profile
+                    uuid = profile.uuid
+                else:
+                    raise ServiceException("Не задан uuid или пользователь не вошел в систему")
+            if not user:
+                try:
+                    profile = Profile.objects.select_related('user').get(uuid=uuid)
+                    user = profile.user
+                except (ValidationError, Profile.DoesNotExist, ):
+                    raise ServiceException("Не найден пользователь с uuid = %s или uuid неверен" % uuid)
             data = dict(
                 last_name=user.last_name,
                 first_name=user.first_name,
@@ -689,3 +696,140 @@ class ApiGetUsers(APIView):
         return Response(data=data, status=status_code)
 
 api_get_users = ApiGetUsers.as_view()
+
+class ApiAuthTelegram(CreateUserMixin, APIView):
+    """
+    Callback функция авторизации через telegram
+
+     Принимает:
+     {
+        "id": 78342834,
+        "first_name": Иван",
+        "last_name": "Петров",
+        "username": "petrov",
+        "photo_url": "https://t.me/i/userpic/320/92dcFhXhdjdjdjFwsiBzo1_M9HT-fyfAxJhoY.jpg",
+        "auth_date": 1615848699,
+        "hash": "bfdd33573729c511ad5bb969487b2e2ce9714e88cd8268929c010711ede3ed5d"
+     }
+
+    Проверяет правильность данных по hash,
+    создает нового пользователя из telegram с id, при необходимости,
+    выполняет его login()
+    """
+
+    @transaction.atomic
+    def post(self, request):
+        try:
+            tg = request.data
+            if not tg or not tg.get('auth_date') or not tg.get('hash') or not tg.get('id'):
+                raise ServiceException('Неверный запрос')
+
+            if not settings.TELEGRAM_BOT_TOKEN:
+                raise ServiceException('В системе не определен TELEGRAM_BOT_TOKEN')
+
+            request_data = tg.copy()
+            unix_time_now = int(time.time())
+            unix_time_auth_date = int(tg['auth_date'])
+            if unix_time_now - unix_time_auth_date > settings.TELEGRAM_AUTH_DATA_OUTDATED:
+                raise ServiceException('Неверный запрос, данные устарели')
+
+            request_data.pop("hash", None)
+            request_data_alphabetical_order = sorted(request_data.items(), key=lambda x: x[0])
+            data_check_string = []
+            for data_pair in request_data_alphabetical_order:
+                key, value = data_pair[0], data_pair[1]
+                data_check_string.append(key + "=" + str(value))
+            data_check_string = "\n".join(data_check_string)
+            secret_key = hashlib.sha256(settings.TELEGRAM_BOT_TOKEN.encode()).digest()
+            calculated_hash = hmac.new(
+                secret_key,
+                msg=data_check_string.encode(),
+                digestmod=hashlib.sha256,
+            ).hexdigest()
+            if calculated_hash != tg['hash']:
+                raise ServiceException('Неверный запрос, данные не прошли проверку на hash')
+
+            try:
+                oauth = Oauth.objects.select_related('user', 'user__profile').get(
+                    provider = Oauth.PROVIDER_TELEGRAM,
+                    uid=tg['id'],
+                )
+                # При повторном логине проверяется, не изменились ли данные пользователя
+                #
+                user = oauth.user
+                profile = user.profile
+
+                oauth_tg_field_map = dict(
+                    last_name='last_name',
+                    first_name='first_name',
+                    username='username',
+                    photo='photo_url',
+                )
+                changed = False
+                for f in oauth_tg_field_map:
+                    if getattr(oauth, f) != tg.get(oauth_tg_field_map[f], ''):
+                        changed = True
+                        break
+                if changed:
+                    for f in oauth_tg_field_map:
+                        setattr(oauth, f, tg.get(oauth_tg_field_map[f], ''))
+                    oauth.save()
+
+                user_tg_field_map = dict(
+                    last_name='last_name',
+                    first_name='first_name',
+                )
+                changed = False
+                for f in user_tg_field_map:
+                    if getattr(user, f) != tg.get(user_tg_field_map[f], ''):
+                        changed = True
+                        break
+                if changed:
+                    for f in user_tg_field_map:
+                        setattr(user, f, tg.get(user_tg_field_map[f], ''))
+                    user.save()
+
+                profile_tg_field_map = dict(
+                    photo_url='photo_url',
+                )
+                changed = False
+                for f in profile_tg_field_map:
+                    if getattr(profile, f) != tg.get(profile_tg_field_map[f], ''):
+                        changed = True
+                        break
+                if changed:
+                    for f in profile_tg_field_map:
+                        setattr(profile, f, tg.get(profile_tg_field_map[f], ''))
+                    profile.save()
+            except Oauth.DoesNotExist:
+                last_name = tg.get('last_name', '')
+                first_name = tg.get('first_name', '')
+                photo_url = tg.get('photo_url', '')
+                user = self.create_user(
+                    last_name=last_name,
+                    first_name=first_name,
+                    photo_url=photo_url,
+                )
+                oauth = Oauth.objects.create(
+                    provider = Oauth.PROVIDER_TELEGRAM,
+                    uid=tg['id'],
+                    user=user,
+                    last_name=last_name,
+                    first_name=first_name,
+                    username=tg.get('username', ''),
+                    photo=photo_url,
+                )
+            token, created_token = Token.objects.get_or_create(user=user)
+
+            data = dict(
+                user_uuid=user.profile.uuid,
+                auth_token=token.key,
+            )
+            status_code = 200
+
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+api_auth_telegram = ApiAuthTelegram.as_view()

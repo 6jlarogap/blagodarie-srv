@@ -15,9 +15,11 @@ from app.utils import ServiceException
 class Oauth(BaseModelInsertUpdateTimestamp):
 
     PROVIDER_GOOGLE = 'google'
+    PROVIDER_TELEGRAM = 'telegram'
 
     OAUTH_PROVIDERS = (
         (PROVIDER_GOOGLE, _("Google")),
+        (PROVIDER_TELEGRAM, _("Telegram")),
     )
 
     PROVIDER_DETAILS = {
@@ -58,6 +60,8 @@ class Oauth(BaseModelInsertUpdateTimestamp):
     #
     last_name = models.CharField(_("Фамилия у провайдера"), max_length=255, default='')
     first_name = models.CharField(_("Имя у провайдера"), max_length=255, default='')
+    # Это только в телеграме
+    username = models.CharField(_("Логин у провайдера"), max_length=255, default='')
     display_name = models.CharField(_("Отображаемое имя у провайдера"), max_length=255, default='')
     email = models.EmailField(_("Email у провайдера"), max_length=255, default='')
     photo = models.URLField(_("Фото у провайдера"), max_length=255, default='')
@@ -245,7 +249,7 @@ class CreateUserMixin(object):
 
     MSG_FAILED_CREATE_USER = 'Не удалось создать пользователя с уникальным именем. Попробуйте еще раз.'
 
-    def create_user(self, last_name='', first_name='', middle_name='', email=''):
+    def create_user(self, last_name='', first_name='', middle_name='', email='', photo_url=''):
         user = None
         random.seed()
         chars = string.ascii_lowercase + string.digits
@@ -269,6 +273,7 @@ class CreateUserMixin(object):
             Profile.objects.create(
                 user=user,
                 middle_name=middle_name,
+                photo_url=photo_url,
             )
         return user
 
