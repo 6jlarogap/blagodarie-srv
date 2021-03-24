@@ -2,6 +2,9 @@ install-readme.txt
 ------------------
 
 Установка Django проекта project на сервер Apache в Ubuntu Linux.
+----------------------------------------------------------------
+
+    (Здесь каталог app)
 
     * Полагаем:
 
@@ -64,7 +67,7 @@ install-readme.txt
 
     * Должен быть запущен postgresql сервер
 
-    * mkdir ~/venv; cd ~/venv
+    * mkdir -p ~/venv; cd ~/venv
     * virtualenv -p `which python3` project
     *   sudo mkdir -p /home/www-data/django/
         cd /home/www-data/django/
@@ -73,13 +76,13 @@ install-readme.txt
     * git clone https://USERNAME@github.com/USERNAME_GIT/project.git
     * cd /home/www-data/django/project
     * source ~/venv/project/bin/activate
-    * pip install -r pip.txt
+    * pip install -r pip-app.txt
     * deactivate
     * cd /home/www-data/django/project/app/app
     * cp local_settings.py.example local_settings.py
-    * внести правки в local_settings.py, но если необходимо.
-      Например, прописать путь к медии:
-          MEDIA_ROOT = '/home/www-data/django/MEDIA/project'
+    * внести правки в local_settings.py, в особенности:
+        ! SECRET_KEY = '50-значный случайный набор ascii- символов'
+        - MEDIA_ROOT = '/home/www-data/django/MEDIA/project'
     * cd /home/www-data/django/project
       ln -s /home/LINUX-USER-NAME/venv/project ENV
             : virtual env, запускаемое из ./manage.py
@@ -104,6 +107,7 @@ install-readme.txt
         exit()
 
     * chown -R www-data:www-data ~/venv/project
+      chmod 0600 /home/www-data/django/project/app/local_settings.py
       chown -R www-data:www-data /home/www-data/django/project
       chown -R www-data:www-data /home/www-data/django/MEDIA/project
 
@@ -200,3 +204,69 @@ install-readme.txt
     * Очистка "мусора"
       В /etc/crontab такого типа строки:
           15 2 * * * www-data   cd /home/www-data/django/project/app && ./manage.py clearsessions
+
+Установка Websockets server на сервер Apache в Ubuntu Linux.
+----------------------------------------------------------------
+
+    (Здесь каталог websockets-server)
+
+    mkdir -p ~/venv; cd ~/venv
+    virtualenv -p `which python3` websocket-server
+    cd websocket-server
+    source ./bin/activate
+    pip install -r /путь/к/pip-websockets-server.txt
+    deactivate
+    sudo chown -R www-data:www-data .
+
+    #   В git каталоге:
+    cd websockets-server
+    sudo ln -s /home/LINUX-USER-NAME/venv/websocket-server ENV
+    sudo chown -R www-data:www-data .
+    # В local_settings.py, возможно, надо подправить SERVER_PORT,
+    # полагаем его 6789
+
+    # Запуск websocket-server через systemd
+    #
+    cd /etc/systemd/systemId
+    # Создать там файл с именем websocket-prod.service 
+    [Unit]
+    Description=Start websocket server for blagodarie.org
+    After=network.target
+    Before=apache2.service
+
+    [Service]
+    Type=simple
+    Restart=always
+    User=www-data
+    ExecStart=/home/www-data/django/api_blagodarie_org/websockets-server/ENV/bin/python3 /home/www-data/django/api_blagodarie_org/websockets-server/websockets-server.py
+    
+    # /home/www-data/django/api_blagodarie_org/websockets-server/ENV/bin/python3 :
+    #   путь и python в виртуальном окружении
+    #
+    # /home/www-data/django/api_blagodarie_org/websockets-server/websockets-server.py :
+    #   исполняемый файл сервиса
+
+    [Install]
+    WantedBy=multi-user.target
+
+    
+    
+    # Настройка apache2 на работу c websocket-server через systemd
+    #
+    # Файл конфигурации виртуального хоста apache2
+    #
+    <VirtualHost *:443>
+        ServerName wss.blagodarie.org
+
+        SSLEngine on
+        SSLProtocol all -SSLv2
+        SSLCipherSuite ALL:!ADH:!EXPORT:!SSLv2:RC4+RSA:+HIGH:+MEDIUM
+
+        SSLCertificateFile /home/www-data/ssl-certificates/sslforfree/wildcard.blagodarie.org/certificate.crt
+        SSLCertificateKeyFile /home/www-data/ssl-certificates/sslforfree/wildcard.blagodarie.org/private.key
+        SSLCertificateChainFile /home/www-data/ssl-certificates/sslforfree/wildcard.blagodarie.org/ca_bundle.crt
+
+        ProxyPass "/" "ws://127.0.0.1:6789/"
+        ProxyPassReverse "/" "ws://127.0.0.1:6789/"
+
+    </VirtualHost>
