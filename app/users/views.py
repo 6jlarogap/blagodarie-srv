@@ -720,7 +720,6 @@ class ApiAuthTelegram(CreateUserMixin, APIView):
     @transaction.atomic
     def post(self, request):
         try:
-            print(request.body)
             tg = request.data
             if not tg or not tg.get('auth_date') or not tg.get('hash') or not tg.get('id'):
                 raise ServiceException('Неверный запрос')
@@ -748,8 +747,7 @@ class ApiAuthTelegram(CreateUserMixin, APIView):
                 digestmod=hashlib.sha256,
             ).hexdigest()
             if calculated_hash != tg['hash']:
-                pass
-                # raise ServiceException('Неверный запрос, данные не прошли проверку на hash')
+                raise ServiceException('Неверный запрос, данные не прошли проверку на hash')
 
             try:
                 oauth = Oauth.objects.select_related('user', 'user__profile').get(
