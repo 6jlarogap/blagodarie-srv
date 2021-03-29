@@ -70,6 +70,7 @@ urlpatterns = [
 
     url(r'^api/addorupdateability/?$', views.api_add_or_update_ability),
     url(r'^api/getuserabilities/?$', views.api_get_user_abilities),
+    url(r'^api/deleteability/?$', views.api_delete_ability),
 
     url(r'^admin/merge_symptoms/?$', views.merge_symptoms),
 ]

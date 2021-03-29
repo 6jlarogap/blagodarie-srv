@@ -2269,11 +2269,19 @@ class ApiProfileGraphTwoLevels(APIView):
                 } \
                 for wish in Wish.objects.filter(owner=user_q)
             ]
+            abilities = [
+                {
+                    'uuid': ability.uuid,
+                    'text': ability.text,
+                } \
+                for ability in Ability.objects.filter(owner=user_q)
+            ]
             data = dict(
                 users=users,
                 connections=connections,
                 keys=keys,
                 wishes=wishes,
+                abilities=abilities
             )
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
@@ -2748,3 +2756,39 @@ class ApiGetUserAbilities(APIView):
         return Response(data=data, status=status_code)
 
 api_get_user_abilities = ApiGetUserAbilities.as_view()
+
+class ApiDeleteAbility(APIView):
+    permission_classes = (IsAuthenticated, )
+
+    def get(self, request, *args, **kwargs,):
+        """
+        Удалить возможности uuid
+
+        Проверить, принадлежит ли возможность пользователю, пославшему запрос,
+        если принадлежит, то удалить ее, иначе вернуть сообщение об ошибке.
+        Пример исходных данных:
+        /api/deleteability?uuid=4d02e22c-b6eb-4307-a440-ccafdeedd9b8
+        Возвращает: {}
+        """
+        try:
+            uuid = request.GET.get('uuid')
+            if uuid:
+                try:
+                    ability = Ability.objects.get(uuid=uuid, owner=request.user)
+                except ValidationError:
+                    raise ServiceException('Неверный uuid = %s' % uuid)
+                except Ability.DoesNotExist:
+                    raise ServiceException(
+                        'Возможность с uuid = %s не найдена или принадлежит другому пользователю' % uuid
+                    )
+                ability.delete()
+            else:
+                raise ServiceException('Не задан uuid возможности')
+            data = dict()
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_delete_ability = ApiDeleteAbility.as_view()
