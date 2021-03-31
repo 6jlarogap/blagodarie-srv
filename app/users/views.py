@@ -1,7 +1,7 @@
 import os, re, hmac, hashlib, json, time
-import urllib.request, urllib.error
+import urllib.request, urllib.error, urllib.parse
 
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.db import transaction, IntegrityError, connection
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -13,7 +13,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 
-from app.utils import ServiceException, dictfetchall
+from app.utils import ServiceException, dictfetchall, FrontendMixin
 
 from django.contrib.auth.models import User
 from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile
@@ -833,3 +833,129 @@ class ApiAuthTelegram(CreateUserMixin, APIView):
         return Response(data=data, status=status_code)
 
 api_auth_telegram = ApiAuthTelegram.as_view()
+
+class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
+
+    OAUTH_PROVIDERS = {
+        'yandex': {
+            # В вызове от провайдера могут прийти get параметры
+            # имена которых для разных провайдеров могут отличаться
+            #   'm_error': 'error',
+            #   'm_error_description': 'error_description',
+
+            # Имена полей для запроса токена, если они
+            # отличаются от стандартных:
+            #   't_grant_type': 'grant_type',
+            #   't_authorization_code' = 'authorization_code',
+            #   't_code': 'code',
+            #   't_client_id': 'client_id',
+            #   't_client_secret': 'client_secret',
+
+            # Куда идём за токеном:
+            #
+            'request_token_url': 'https://oauth.yandex.ru/token',
+
+            # Как идём за токеном, GET или POST
+            #
+            # 'request_token_method': 'POST',
+
+            # В ответ ожидаем 'access_token': ..., но имя параметра
+            # может отличаться
+            #
+            #   't_access_token': 'access_token',
+        },
+    }
+
+    def get(self, request, provider):
+        """
+        Callback функция для различных Oauth2 провайдеров (yandex, vk...)
+        """
+
+        s_provider = settings.OAUTH_PROVIDERS.get(provider)
+        if not s_provider:
+            return redirect(settings.FRONTEND_ROOT + '?error=unknown_provider')
+        d_provider = self.OAUTH_PROVIDERS.get(provider)
+
+        redirect_from_callback = self.get_frontend_url(
+            s_provider.get('redirect_from_callback', '')
+        )
+
+        m_error = d_provider.get('m_error') or 'error'
+        m_error_description = d_provider.get('m_error_description') or 'error_description'
+        s_error = request.GET.get(m_error)
+        if s_error:
+            s_errors = '?error=%s' % urllib.parse.quote_plus(s_error)
+            s_error_description = request.GET.get(m_error_description)
+            if s_error_description:
+                s_errors += '&' + 'error_description=%s' % urllib.parse.quote_plus(s_error_description)
+            return redirect(redirect_from_callback + s_errors)
+
+        cookie_name = 'auth_data'
+        code = request.GET.get('code')
+        if not code:
+            return redirect(redirect_from_callback + '?error=no_code_received_in_callback')
+
+        d_post_for_token = {}
+        t_grant_type = d_provider.get('t_grant_type') or 'grant_type'
+        t_authorization_code = d_provider.get('t_authorization_code') or 'authorization_code'
+        d_post_for_token[t_grant_type] = t_authorization_code
+        t_code = d_provider.get('t_code') or 'code'
+        d_post_for_token[t_code] = code
+        t_client_id = d_provider.get('t_client_id') or 'client_id'
+        d_post_for_token[t_client_id] = s_provider['client_id']
+        t_client_secret = d_provider.get('t_client_secret') or 'client_secret'
+        d_post_for_token[t_client_secret] = s_provider['client_secret']
+
+        t_request_token_method = d_provider.get('t_request_token_method') or 'POST'
+
+        d_post_for_token = urllib.parse.urlencode(d_post_for_token)
+        d_post_for_token = d_post_for_token.encode()
+        if t_request_token_method == 'POST':
+            req_post_for_token = urllib.request.Request(
+                d_provider['request_token_url'],
+                d_post_for_token
+            )
+        else:
+            # GET, для vk
+            req_post_for_token = urllib.request.Request(
+                d_provider['request_token_url'] + '?' + \
+                d_post_for_token
+            )
+
+        s_errors = '?error=error_getting_token_from_%s' %provider
+        t_access_token = d_provider.get('t_access_token') or 'access_token'
+        try:
+            response_post_for_token = urllib.request.urlopen(req_post_for_token)
+            raw_data = response_post_for_token.read().decode(
+                response_post_for_token.headers.get_content_charset('utf-8')
+            )
+            data = json.loads(raw_data)
+            access_token = data.get(t_access_token)
+            if not access_token:
+                return redirect(redirect_from_callback + s_errors)
+        except (urllib.error.HTTPError, urllib.error.URLError, ValueError):
+            return redirect(redirect_from_callback + s_errors)
+
+        oauth_dict = dict(
+            provider=provider,
+            token=access_token,
+        )
+        try:
+            oauth_result = Oauth.check_token(oauth_dict)
+        except ServiceException as excpt:
+            s_errors = '?error=error_getting_user_data_by_token'
+            s_errors += '&' + 'error_description=%s' % urllib.parse.quote_plus(excpt.args[0])
+            return redirect(redirect_from_callback + s_errors)
+
+        response = redirect(redirect_from_callback)
+        to_cookie = dict(user_uuid='88888a', auth_token='token2')
+        response.set_cookie(
+            key=cookie_name,
+            value=json.dumps(to_cookie),
+            max_age=600,
+            path='/',
+            domain=self.get_frontend_name(),
+        )
+        return response
+
+api_oauth_callback = ApiOauthCallback.as_view()

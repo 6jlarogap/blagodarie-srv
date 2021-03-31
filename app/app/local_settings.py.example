@@ -44,3 +44,15 @@ TELEGRAM_BOT_TOKEN = 'secret'
 #   push уведомления не будут приняты
 #
 FCM_SERVER_KEY = 'secret'
+
+# Требуется для oauth аутентификации
+#
+FRONTEND_ROOT = 'https://blagodarie.org/'
+
+OAUTH_PROVIDERS = {
+    'yandex': {
+        'client_id': 'not_secret',
+        'client_secret': 'secret',
+    },
+    # ...
+}

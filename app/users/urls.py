@@ -25,4 +25,7 @@ urlpatterns = [
     url(r'^api/getusers/?$', views.api_get_users),
 
     url(r'^api/auth/telegram/?$', views.api_auth_telegram),
+
+    url(r'^api/oauth/callback/(?P<provider>yandex|vk|odnoklassniki)/?$', views.api_oauth_callback),
+
 ]

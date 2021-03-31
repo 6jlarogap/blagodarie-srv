@@ -16,10 +16,16 @@ class Oauth(BaseModelInsertUpdateTimestamp):
 
     PROVIDER_GOOGLE = 'google'
     PROVIDER_TELEGRAM = 'telegram'
+    PROVIDER_YANDEX = 'yandex'
+    PROVIDER_VKONTAKTE = 'vk'
+    PROVIDER_ODNOKLASSNIKI = 'odnoklassniki'
 
     OAUTH_PROVIDERS = (
         (PROVIDER_GOOGLE, _("Google")),
         (PROVIDER_TELEGRAM, _("Telegram")),
+        (PROVIDER_YANDEX, _("Яндекс")),
+        (PROVIDER_VKONTAKTE, _("ВКонтакте")),
+        (PROVIDER_ODNOKLASSNIKI, _("Одноклассники")),
     )
 
     PROVIDER_DETAILS = {
@@ -41,13 +47,68 @@ class Oauth(BaseModelInsertUpdateTimestamp):
             # где может быть уже пользователь с таким ид от oauth,
             #
             'key_type_title': None,
+
+            # Получаем от google:
+
+            #"iss": "https://accounts.google.com",
+            #"azp": "dummy",
+            #"aud": "dummy",
+            #"sub": "100407860688573256455",
+            #"email": "someone@gmail.com",
+            #"email_verified": "true",
+            #"name": "dummy",
+            #"picture": "https://lh5.googleusercontent.com/dummy/photo3.jpg",
+            #"given_name": "Сергей",
+            #"family_name": "Неизвестный",
+            #"locale": "ru",
+            #"iat": "1587538141",
+            #"exp": "1587541741",
+            #"alg": "RS256",
+            #"kid": "dummy",
+            #"typ": "JWT"
+        },
+
+        PROVIDER_YANDEX: {
+            'url': "https://login.yandex.ru/info?format=json&oauth_token=%(token)s",
+            'uid': 'id',
+            'first_name': "first_name",
+            'last_name': "last_name",
+            'display_name': "real_name",
+            'email': 'default_email',
+            'username': 'login',
+            'photo': 'default_avatar_id',
+            'photo_template': 'https://avatars.yandex.net/get-yapic/%(photo_id)s/islands-200',
+            'no_photo_re': r'^[0\-\/]+$',
+
+            # Получаем от yandex:
+                #{
+                    #"id": "2731235527",
+                    #"login": "supdghhdhd",
+                    #"client_id": "cf3f076367fda00041eaa223761237623476",
+                    #"display_name": "ivanov",
+                    #"real_name": "Иван Иванов",
+                    #"first_name": "Иван",
+                    #"last_name": "Иванов",
+                    #"sex": "male",
+                    #"default_email": "shjhashsh@yandex.by",
+                    #"emails": [
+                        #"supsdhdh@yandex.by"
+                    #],
+                    #"birthday": "1999-06-20",
+                    #"default_avatar_id": "45848/6ZJ0cT3Y3c3cDasdgjasdghasd0oqHevdVQ-1",
+                    #"is_avatar_empty": false,
+                    #"psuid": "1.AAcEbg.0ezg0dsfjsdfjhsdfRA4qpCA.tR78f2grSo0kZfx5IZlOqQ"
+                #}
         },
     }
+
+    # Поля, кроме uid, provider, которые запоминаем в таблицах
 
     OAUTH_EXTRA_FIELDS = (
         'first_name',
         'last_name',
         'display_name',
+        'username',
         # 'email',
         'photo',
     )
@@ -60,7 +121,6 @@ class Oauth(BaseModelInsertUpdateTimestamp):
     #
     last_name = models.CharField(_("Фамилия у провайдера"), max_length=255, default='')
     first_name = models.CharField(_("Имя у провайдера"), max_length=255, default='')
-    # Это только в телеграме
     username = models.CharField(_("Логин у провайдера"), max_length=255, default='')
     display_name = models.CharField(_("Отображаемое имя у провайдера"), max_length=255, default='')
     email = models.EmailField(_("Email у провайдера"), max_length=255, default='')
@@ -90,7 +150,6 @@ class Oauth(BaseModelInsertUpdateTimestamp):
         {
             "provider": "google",
             "token": ".....",
-            "id": "..." # ID у провайдера
         }
         Вернуть словарь из необходимого для записи в auth.User & users.Oauth:
             last_name, first_name, display_name, email, photo
@@ -107,6 +166,7 @@ class Oauth(BaseModelInsertUpdateTimestamp):
             display_name='',
             email='',
             photo='',
+            username='',
 
             key_type_title = None,
             message='',
@@ -116,7 +176,7 @@ class Oauth(BaseModelInsertUpdateTimestamp):
             try:
                 provider = oauth_dict['provider']
                 provider_details = Oauth.PROVIDER_DETAILS[oauth_dict['provider']]
-                oauth_dict['token'] = urllib.parse.quote(oauth_dict['token'])
+                oauth_dict['token'] = urllib.parse.quote_plus(oauth_dict['token'])
             except KeyError:
                 raise ServiceException(_('Провайдер Oauth не задан или не поддерживается, или не задан token'))
 
@@ -167,9 +227,23 @@ class Oauth(BaseModelInsertUpdateTimestamp):
             for key in Oauth.OAUTH_EXTRA_FIELDS:
                 real_key = provider_details.get(key)
                 if real_key:
-                    result[key] = data.get(real_key, '')
-                    if isinstance(result[key], str):
-                        result[key] = result[key].strip()
+                    result[key] = data.get(real_key)
+                    if result[key]:
+                        if isinstance(result[key], str):
+                            result[key] = result[key].strip()
+                        if key == 'photo':
+                            if provider == Oauth.PROVIDER_YANDEX:
+                                if data.get('is_avatar_empty') or \
+                                   re.search(provider_details['no_photo_re'], result[key]):
+                                    del result[key]
+                                else:
+                                    result[key] = provider_details['photo_template'] % \
+                                                        dict(photo_id=result[key])
+                            elif provider == Oauth.PROVIDER_VKONTAKTE:
+                                if re.search(provider_details['no_photo_re'], result[key]):
+                                    del result[key]
+                    else:
+                        del result[key]
         except ServiceException as excpt:
             result['message'] = excpt.args[0]
             if result['code'] == 200:

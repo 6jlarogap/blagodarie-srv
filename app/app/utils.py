@@ -1,6 +1,8 @@
-import datetime, time
+import datetime, time, re
 from skyfield.api import load
 from skyfield.framelib import ecliptic_frame
+
+from django.conf import settings
 
 class ServiceException(Exception):
     """
@@ -54,3 +56,21 @@ def get_moon_day(utc_time=None):
     elif phase < 0:
         phase = 0
     return int(phase * 30 / 360)
+
+class FrontendMixin(object):
+
+    def get_frontend_url(self, path=''):
+        """
+        Получить полный путь к path на front-end
+        """
+        fe_site = settings.FRONTEND_ROOT.rstrip('/')
+        fe_path = path.strip('/')
+        return "%(fe_site)s/%(fe_path)s" % dict(fe_site=fe_site, fe_path=fe_path)
+
+    def get_frontend_name(self):
+        """
+        Получить полный путь к path на front-end
+        """
+        return re.sub(r'\:\d+$', '',
+            re.sub(r'^https?://', '', settings.FRONTEND_ROOT.rstrip('/'))
+        )
