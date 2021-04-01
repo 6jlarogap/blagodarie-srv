@@ -285,24 +285,27 @@ TELEGRAM_AUTH_DATA_OUTDATED = 3600
 #
 FRONTEND_ROOT = 'https://blagodarie.org/'
 
-# Это полностью надо переписать в local_settings.py:
+# Относительный путь к settings.FRONTEND_ROOT,
+# куда ouauth2 callback возвращает пользователя
+# на frontend.
+#
+REDIRECT_FROM_CALLBACK = 'oauth-landing'
+
+# Это надо полностью переписать в local_settings.py:
 #
 OAUTH_PROVIDERS = {
     'yandex': {
         'client_id': 'not_secret',
         'client_secret': 'secret',
-
-        # здесь относительный путь к settings.FRONTEND_ROOT,
-        # куда callback возвращает пользователя
-        # на frontend. если параметр не задан или пустой,
-        # redirect отправляется в корень.
-        #
-        # Это согласовывается с разработчиком front-end
-        #
-        'redirect_from_callback': 'landing',
-
     },
-    # to be continued...
+    'vk': {
+        'client_id': 'not_secret',
+        'client_secret': 'secret',
+    },
+    'odnoklassniki': {
+        'client_id': 'not_secret',
+        'client_secret': 'secret',
+    },
 }
 
 try:

@@ -59,13 +59,17 @@ def get_moon_day(utc_time=None):
 
 class FrontendMixin(object):
 
-    def get_frontend_url(self, path=''):
+    def get_frontend_url(self, path='', ending_slash='/'):
         """
         Получить полный путь к path на front-end
         """
         fe_site = settings.FRONTEND_ROOT.rstrip('/')
         fe_path = path.strip('/')
-        return "%(fe_site)s/%(fe_path)s" % dict(fe_site=fe_site, fe_path=fe_path)
+        return "%(fe_site)s/%(fe_path)s%(ending_slash)s" % dict(
+            fe_site=fe_site,
+            fe_path=fe_path,
+            ending_slash=ending_slash,
+        )
 
     def get_frontend_name(self):
         """

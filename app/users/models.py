@@ -102,7 +102,7 @@ class Oauth(BaseModelInsertUpdateTimestamp):
         },
     }
 
-    # Поля, кроме uid, provider, которые запоминаем в таблицах
+    # Поля, кроме provider, uid, user, которые запоминаем в таблице Oauth
 
     OAUTH_EXTRA_FIELDS = (
         'first_name',
@@ -227,23 +227,22 @@ class Oauth(BaseModelInsertUpdateTimestamp):
             for key in Oauth.OAUTH_EXTRA_FIELDS:
                 real_key = provider_details.get(key)
                 if real_key:
-                    result[key] = data.get(real_key)
+                    result[key] = data.get(real_key) or ''
+                    if isinstance(result[key], str):
+                        result[key] = result[key].strip()
                     if result[key]:
-                        if isinstance(result[key], str):
-                            result[key] = result[key].strip()
                         if key == 'photo':
                             if provider == Oauth.PROVIDER_YANDEX:
                                 if data.get('is_avatar_empty') or \
                                    re.search(provider_details['no_photo_re'], result[key]):
-                                    del result[key]
+                                    result[key] = ''
                                 else:
                                     result[key] = provider_details['photo_template'] % \
                                                         dict(photo_id=result[key])
                             elif provider == Oauth.PROVIDER_VKONTAKTE:
                                 if re.search(provider_details['no_photo_re'], result[key]):
-                                    del result[key]
-                    else:
-                        del result[key]
+                                    result[key] = ''
+            result['photo_url'] = result['photo']
         except ServiceException as excpt:
             result['message'] = excpt.args[0]
             if result['code'] == 200:
@@ -353,28 +352,32 @@ class CreateUserMixin(object):
 
     def update_oauth(self, oauth, oauth_result):
         changed = False
-        user_data_changed = False
-        user_fields = ('last_name', 'first_name', 'email',)
         for f in Oauth.OAUTH_EXTRA_FIELDS:
             if getattr(oauth, f) != oauth_result[f]:
-                changed = True
-                if f in user_fields:
-                    user_data_changed = True
-        if changed:
-            for f in Oauth.OAUTH_EXTRA_FIELDS:
                 setattr(oauth, f, oauth_result[f])
-            oauth.save()
-            if user_data_changed:
-                for f in user_fields:
-                    setattr(oauth.user, f, oauth_result[f])
-                oauth.user.save()
-        if 'photo' in oauth_result:
-            try:
-                profile = Profile.objects.get(user=oauth.user)
-                profile.photo_url = oauth_result['photo'] or ''
-                profile.save(update_fields=('photo_url',))
-            except Profile.DoesNotExist:
-                pass
+                changed = True
+        if changed:
+            oauth.save(update_fields=Oauth.OAUTH_EXTRA_FIELDS)
+
+        user = oauth.user
+        user_fields = ('last_name', 'first_name', 'email',)
+        changed = False
+        for f in user_fields:
+            if getattr(user, f) != oauth_result[f]:
+                setattr(user, f, oauth_result[f])
+                changed = True
+        if changed:
+            user.save(update_fields=user_fields)
+
+        profile = user.profile
+        profile_fields = ('photo_url',)
+        changed = False
+        for f in profile_fields:
+            if getattr(profile, f) != oauth_result[f]:
+                setattr(profile, f, oauth_result[f])
+                changed = True
+        if changed:
+            profile.save(update_fields=profile_fields)
 
 class IncognitoUser(BaseModelInsertUpdateTimestamp):
 

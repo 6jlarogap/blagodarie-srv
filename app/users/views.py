@@ -884,9 +884,7 @@ class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
             return redirect(settings.FRONTEND_ROOT + '?error=unknown_provider')
         d_provider = self.OAUTH_PROVIDERS.get(provider)
 
-        redirect_from_callback = self.get_frontend_url(
-            s_provider.get('redirect_from_callback', '')
-        )
+        redirect_from_callback = self.get_frontend_url(settings.REDIRECT_FROM_CALLBACK)
 
         m_error = d_provider.get('m_error') or 'error'
         m_error_description = d_provider.get('m_error_description') or 'error_description'
@@ -953,8 +951,32 @@ class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
             s_errors += '&' + 'error_description=%s' % urllib.parse.quote_plus(excpt.args[0])
             return redirect(redirect_from_callback + s_errors)
 
+        try:
+            oauth = Oauth.objects.select_related(
+                'user',
+                'user__profile',
+                'user__auth_token',
+            ).get(
+                provider=provider,
+                uid=oauth_result['uid'],
+            )
+            user = oauth.user
+        except Oauth.DoesNotExist:
+            user = self.create_user()
+            oauth = Oauth.objects.create(
+                provider=provider,
+                uid=oauth_result['uid'],
+                user=user,
+            )
+            Token.objects.create(user=user)
+        self.update_oauth(oauth, oauth_result)
+
         response = redirect(redirect_from_callback)
-        to_cookie = dict(user_uuid='88888a', auth_token='token2')
+        to_cookie = dict(
+            provider=provider,
+            user_uuid=str(user.profile.uuid),
+            auth_token=user.auth_token.key
+        )
         response.set_cookie(
             key='auth_data',
             value=json.dumps(to_cookie),

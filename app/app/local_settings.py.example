@@ -49,19 +49,27 @@ FCM_SERVER_KEY = 'secret'
 #
 FRONTEND_ROOT = 'https://blagodarie.org/'
 
+# Относительный путь к settings.FRONTEND_ROOT,
+# куда ouauth2 callback возвращает пользователя
+# на frontend.
+#
+# Это согласовывается с разработчиком front-end
+#
+REDIRECT_FROM_CALLBACK = 'oauth-landing'
+
+# Это надо полностью переписать в local_settings.py:
+#
 OAUTH_PROVIDERS = {
     'yandex': {
         'client_id': 'not_secret',
         'client_secret': 'secret',
-
-        # здесь относительный путь к settings.FRONTEND_ROOT,
-        # куда callback возвращает пользователя
-        # на frontend. если параметр не задан или пустой,
-        # redirect отправляется в корень.
-        #
-        # Это согласовывается с разработчиком front-end
-        #
-        'redirect_from_callback': 'landing',
     },
-    # ...
+    'vk': {
+        'client_id': 'not_secret',
+        'client_secret': 'secret',
+    },
+    'odnoklassniki': {
+        'client_id': 'not_secret',
+        'client_secret': 'secret',
+    },
 }
