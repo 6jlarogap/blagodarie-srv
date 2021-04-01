@@ -132,7 +132,7 @@ class ApiUpdateProfileInfo(APIView):
     parser_classes = (FormParser, MultiPartParser, JSONParser,)
 
     @transaction.atomic
-    def post(self, request, signin=False):
+    def post(self, request):
         """
         Обновить информацию о пользователе
 
@@ -158,6 +158,14 @@ class ApiUpdateProfileInfo(APIView):
             status_code = 400
             data = dict(message=excpt.args[0])
         return Response(data=data, status=status_code)
+
+    @transaction.atomic
+    def delete(self, request):
+        """
+        Удалить пользователя
+        """
+        request.user.delete()
+        return Response(data={}, status=200)
 
 api_update_profileinfo = ApiUpdateProfileInfo.as_view()
 
@@ -890,7 +898,6 @@ class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
                 s_errors += '&' + 'error_description=%s' % urllib.parse.quote_plus(s_error_description)
             return redirect(redirect_from_callback + s_errors)
 
-        cookie_name = 'auth_data'
         code = request.GET.get('code')
         if not code:
             return redirect(redirect_from_callback + '?error=no_code_received_in_callback')
@@ -907,7 +914,6 @@ class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
         d_post_for_token[t_client_secret] = s_provider['client_secret']
 
         t_request_token_method = d_provider.get('t_request_token_method') or 'POST'
-
         d_post_for_token = urllib.parse.urlencode(d_post_for_token)
         d_post_for_token = d_post_for_token.encode()
         if t_request_token_method == 'POST':
@@ -950,7 +956,7 @@ class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
         response = redirect(redirect_from_callback)
         to_cookie = dict(user_uuid='88888a', auth_token='token2')
         response.set_cookie(
-            key=cookie_name,
+            key='auth_data',
             value=json.dumps(to_cookie),
             max_age=600,
             path='/',
