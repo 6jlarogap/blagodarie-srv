@@ -100,6 +100,50 @@ class Oauth(BaseModelInsertUpdateTimestamp):
                     #"psuid": "1.AAcEbg.0ezg0dsfjsdfjhsdfRA4qpCA.tR78f2grSo0kZfx5IZlOqQ"
                 #}
         },
+        PROVIDER_VKONTAKTE: {
+            'url': "https://api.vk.com/method/users.get?access_token=%(token)s"
+                   "&fields=uid,first_name,last_name,photo_200"
+                   "&v=5.89",
+            'uid': 'id',
+            'first_name': "first_name",
+            'last_name': "last_name",
+            'display_name': None,
+            'photo': 'photo_200',
+            # Если такое приходит в фото, то это заглушка под отсутствие фото,
+            # например, http://vk.com/images/camera_200.png
+            'no_photo_re': r'/images/camera_\S*\.\S{3}$',
+            'site': 'site',
+
+            # Получаем от vkontakte
+            #{
+                #"response":[
+                    #{
+                        #"first_name":"Евгений",
+                        #"id":56262662627,
+                        #"last_name":"Супрун",
+                        #"can_access_closed":True,
+                        #"is_closed":False,
+                        #"photo_200":"https://sun2.beltelecom-by-minsk.userapi.com/hshshsh.jpg"
+                                    #"?size=200x0&quality=96&crop=113,101,593,593&ava=1"
+                    #}
+                #]
+            #}
+        },
+        PROVIDER_ODNOKLASSNIKI: {
+            # Внимание! Именно http://
+            'url': "http://api.odnoklassniki.ru/fb.do?method=users.getCurrentUser&"
+                   "access_token=%(token)s&"
+                   "application_key=%(public_key)s&"
+                   "fields=user.*&"
+                   "format=json&"
+                   "sig=%(signature)s",
+            'uid': 'uid',
+            'first_name': "first_name",
+            'last_name': "last_name",
+            'display_name': "name",
+            'email': 'email',
+            'photo': 'pic190x190',
+        },
     }
 
     # Поля, кроме provider, uid, user, которые запоминаем в таблице Oauth
@@ -206,7 +250,9 @@ class Oauth(BaseModelInsertUpdateTimestamp):
 
             try:
                 data = json.loads(raw_data)
-            except ValueError:
+                if provider == Oauth.PROVIDER_VKONTAKTE:
+                    data = data['response'][0]
+            except (KeyError, ValueError, IndexError,):
                 msg_debug = " DEBUG: Request: %s. Response: %s" % (url, raw_data, ) \
                             if settings.DEBUG else ""
                 raise ServiceException(

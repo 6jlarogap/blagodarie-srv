@@ -845,7 +845,7 @@ api_auth_telegram = ApiAuthTelegram.as_view()
 class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
 
     OAUTH_PROVIDERS = {
-        'yandex': {
+        Oauth.PROVIDER_YANDEX: {
             # В вызове от провайдера могут прийти get параметры
             # имена которых для разных провайдеров могут отличаться
             #   'm_error': 'error',
@@ -867,22 +867,34 @@ class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
             #
             # 'request_token_method': 'POST',
 
+            # Нужно ли добавлять redirect_uri и как может называться
+            # redirect_uri.
+            # Если не задан или пуст, то redirect_uri=<redirect_uri>
+            # не добавляется в запрос токена
+            #   't_redirect_uri': None,
+
             # В ответ ожидаем 'access_token': ..., но имя параметра
             # может отличаться
             #
             #   't_access_token': 'access_token',
         },
+        Oauth.PROVIDER_VKONTAKTE: {
+            'request_token_url': 'https://oauth.vk.com/access_token',
+            'request_token_method': 'GET',
+            't_redirect_uri': 'redirect_uri',
+        },
     }
 
+    @transaction.atomic
     def get(self, request, provider):
         """
         Callback функция для различных Oauth2 провайдеров (yandex, vk...)
         """
 
         s_provider = settings.OAUTH_PROVIDERS.get(provider)
-        if not s_provider:
-            return redirect(settings.FRONTEND_ROOT + '?error=unknown_provider')
         d_provider = self.OAUTH_PROVIDERS.get(provider)
+        if not s_provider or not d_provider:
+            return redirect(settings.FRONTEND_ROOT + '?error=provider_not_implemetnted')
 
         redirect_from_callback = self.get_frontend_url(settings.REDIRECT_FROM_CALLBACK)
 
@@ -901,15 +913,23 @@ class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
             return redirect(redirect_from_callback + '?error=no_code_received_in_callback')
 
         d_post_for_token = {}
-        t_grant_type = d_provider.get('t_grant_type') or 'grant_type'
-        t_authorization_code = d_provider.get('t_authorization_code') or 'authorization_code'
-        d_post_for_token[t_grant_type] = t_authorization_code
+        if provider in (Oauth.PROVIDER_YANDEX,):
+            t_grant_type = d_provider.get('t_grant_type') or 'grant_type'
+            t_authorization_code = d_provider.get('t_authorization_code') or 'authorization_code'
+            d_post_for_token[t_grant_type] = t_authorization_code
+
         t_code = d_provider.get('t_code') or 'code'
         d_post_for_token[t_code] = code
         t_client_id = d_provider.get('t_client_id') or 'client_id'
         d_post_for_token[t_client_id] = s_provider['client_id']
         t_client_secret = d_provider.get('t_client_secret') or 'client_secret'
         d_post_for_token[t_client_secret] = s_provider['client_secret']
+
+        t_redirect_uri = d_provider.get('t_redirect_uri')
+        if t_redirect_uri:
+            redirect_uri = request.build_absolute_uri()
+            redirect_uri = re.sub(r'\?.*$', '', redirect_uri)
+            d_post_for_token[t_redirect_uri] = redirect_uri
 
         t_request_token_method = d_provider.get('t_request_token_method') or 'POST'
         d_post_for_token = urllib.parse.urlencode(d_post_for_token)
@@ -944,11 +964,12 @@ class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
             provider=provider,
             token=access_token,
         )
-        try:
-            oauth_result = Oauth.check_token(oauth_dict)
-        except ServiceException as excpt:
+
+        oauth_result = Oauth.check_token(oauth_dict)
+        if oauth_result['message']:
             s_errors = '?error=error_getting_user_data_by_token'
-            s_errors += '&' + 'error_description=%s' % urllib.parse.quote_plus(excpt.args[0])
+            s_errors += '&' + 'error_description=%s' % \
+                    urllib.parse.quote_plus(oauth_result['message'])
             return redirect(redirect_from_callback + s_errors)
 
         try:
