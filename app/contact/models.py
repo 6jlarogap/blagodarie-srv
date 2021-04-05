@@ -388,44 +388,31 @@ class LogLike(models.Model):
             #   ]
             # }
 
-            users = []
-            user_pks = []
-            connections = []
-            for cs in CurrentState.objects.filter(
-                        user_to__isnull=False,
-                        is_reverse=False,
-                        is_trust__isnull=False,
-                    ).select_related(
-                    'user_from', 'user_to',
-                    'user_from__profile', 'user_to__profile',
-                ):
-                connections.append({
+            users = [
+                dict(
+                        uuid=user.profile.uuid,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                        photo = user.profile.choose_photo(),
+                    ) \
+                for user in User.objects.filter(is_superuser=False).select_related('profile')
+            ]
+            connections = [
+                {
                     'source': cs.user_from.profile.uuid,
                     'target': cs.user_to.profile.uuid,
                     'thanks_count': cs.thanks_count,
                     'is_trust': cs.is_trust,
-                })
-                user = cs.user_from
-                if user.pk not in user_pks:
-                    profile = user.profile
-                    users.append(dict(
-                        uuid=profile.uuid,
-                        first_name=user.first_name,
-                        last_name=user.last_name,
-                        photo = profile.choose_photo(),
-                    ))
-                    user_pks.append(user.pk)
-                user = cs.user_to
-                if user.pk not in user_pks:
-                    profile = user.profile
-                    users.append(dict(
-                        uuid=profile.uuid,
-                        first_name=user.first_name,
-                        last_name=user.last_name,
-                        photo = profile.choose_photo(),
-                    ))
-                    user_pks.append(user.pk)
-
+                } \
+                for cs in CurrentState.objects.filter(
+                            user_to__isnull=False,
+                            is_reverse=False,
+                            is_trust__isnull=False,
+                        ).select_related(
+                        'user_from', 'user_to',
+                        'user_from__profile', 'user_to__profile',
+                    )
+            ]
             return dict(users=users, connections=connections)
 
         if kwargs.get('only') == 'users':

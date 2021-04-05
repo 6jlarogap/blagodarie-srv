@@ -2206,6 +2206,17 @@ class ApiProfileGraphTwoLevels(APIView):
 
             users = []
             user_pks = []
+
+            user = user_q
+            profile = user.profile
+            users.append(dict(
+                uuid=profile.uuid,
+                first_name=user.first_name,
+                last_name=user.last_name,
+                photo = profile.choose_photo(),
+            ))
+            user_pks.append(user.pk)
+
             connections = []
             q = Q(user_from=user_q) | Q(user_to=user_q)
             q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust__isnull=False)
