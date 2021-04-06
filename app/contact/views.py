@@ -32,20 +32,6 @@ MSG_NO_PARM = 'Не задан или не верен какой-то из па�
 class ApiAddOperationView(APIView):
     permission_classes = (IsAuthenticated, )
 
-    def profile_recount(self, profile_to, user_to):
-        profile_to.trust_count = CurrentState.objects.filter(
-            is_reverse=False,
-            user_to=user_to,
-            is_trust=True,
-        ).distinct().count()
-        profile_to.mistrust_count = CurrentState.objects.filter(
-            is_reverse=False,
-            user_to=user_to,
-            is_trust=False,
-        ).distinct().count()
-        profile_to.fame = profile_to.trust_count + profile_to.mistrust_count
-        profile_to.save()
-
     @transaction.atomic
     def post(self, request):
         """
@@ -193,7 +179,7 @@ class ApiAddOperationView(APIView):
                     reverse_cs.is_trust = False
                     reverse_cs.save()
 
-                self.profile_recount(profile_to, user_to)
+                profile_to.recount_trust_fame()
 
             elif operationtype_id == OperationType.TRUST:
                 currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
@@ -231,7 +217,7 @@ class ApiAddOperationView(APIView):
                     reverse_cs.is_trust = True
                     reverse_cs.save()
 
-                self.profile_recount(profile_to, user_to)
+                profile_to.recount_trust_fame()
 
             elif operationtype_id == OperationType.NULLIFY_TRUST:
                 err_message = 'У вас не было ни доверия, ни недоверия к пользователю'
@@ -262,7 +248,7 @@ class ApiAddOperationView(APIView):
                     is_trust__isnull=False,
                 ).update(is_trust=None)
 
-                self.profile_recount(profile_to, user_to)
+                profile_to.recount_trust_fame()
 
             comment = request.data.get("comment", None)
             Journal.objects.create(

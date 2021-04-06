@@ -4,12 +4,15 @@ import json, uuid, re
 
 from django.conf import settings
 from django.db import models, transaction, IntegrityError
+from django.db.models import Sum, F
+from django.db.models.query_utils import Q
 from django.utils.translation import ugettext_lazy as _
 
 from django.contrib.auth.models import User
+from django.apps import apps
+get_model = apps.get_model
 
 from app.models import BaseModelInsertUpdateTimestamp, PhotoModel
-from django.contrib.auth.models import User
 from app.utils import ServiceException
 
 class Oauth(BaseModelInsertUpdateTimestamp):
@@ -312,6 +315,126 @@ class Profile(PhotoModel):
     def __str__(self):
         return self.full_name() or str(self.pk)
 
+    def merge(self, profile_from):
+        # Проверку на один и тот же профиль производить
+        # в вызывающей этот метод функции!
+        #
+        if self == profile_from:
+            return
+
+        CurrentState = get_model('contact', 'CurrentState')
+        Journal = get_model('contact', 'Journal')
+
+        Wish = get_model('contact', 'Wish')
+        Ability = get_model('contact', 'Ability')
+
+        Key = get_model('contact', 'Key')
+        UseKey = get_model('contact', 'UserKey')
+        Like = get_model('contact', 'Like')
+
+        user = self.user
+        user_from = profile_from.user
+        Oauth.objects.filter(user=user_from).update(user=user)
+        Journal.objects.filter(user_to=user_from).update(user_to=user)
+        Journal.objects.filter(user_from=user, user_to=user).delete()
+
+        q = Q(user_from=user_from) | Q(user_from=user) | Q(user_to=user_from) | Q(user_to=user)
+        q &= Q(user_to__isnull=False) & Q(is_reverse=True)
+        CurrentState.objects.filter(q).distinct().delete()
+
+        for cs in CurrentState.objects.filter(user_from=user_from, user_to__isnull=False):
+            try:
+                with transaction.atomic():
+                    thanks_count = cs.thanks_count
+                    user_to = cs.user_to
+                    CurrentState.objects.filter(pk=cs.pk).update(user_from=user)
+            except IntegrityError:
+                CurrentState.objects.filter(pk=cs.pk).delete()
+                CurrentState.objects.filter(
+                    user_from=user,
+                    user_to=user_to
+                ).update(thanks_count=F('thanks_count') + thanks_count)
+        CurrentState.objects.filter(user_from=user, user_to=user).delete()
+
+        for cs in CurrentState.objects.filter(user_to=user_from):
+            try:
+                with transaction.atomic():
+                    thanks_count = cs.thanks_count
+                    user_from_ = cs.user_from
+                    CurrentState.objects.filter(pk=cs.pk).update(user_to=user)
+            except IntegrityError:
+                CurrentState.objects.filter(pk=cs.pk).delete()
+                CurrentState.objects.filter(
+                    user_from=user_from_,
+                    user_to=user
+                ).update(thanks_count=F('thanks_count') + thanks_count)
+        CurrentState.objects.filter(user_from=user, user_to=user).delete()
+
+        for cs in CurrentState.objects.filter(user_from=user_from, anytext__isnull=False):
+            try:
+                with transaction.atomic():
+                    anytext = cs.anytext
+                    thanks_count = cs.thanks_count
+                    CurrentState.objects.filter(pk=cs.pk).update(user_from=user)
+            except IntegrityError:
+                CurrentState.objects.filter(pk=cs.pk).delete()
+                CurrentState.objects.filter(
+                    user_from=user,
+                    anytext=anytext
+                ).update(thanks_count=F('thanks_count') + thanks_count)
+
+        q = Q(user_from=user) | Q(user_to=user)
+        q &= Q(user_to__isnull=False) & Q(is_reverse=False)
+        for cs in CurrentState.objects.filter(q).distinct():
+            cs_reverse, created_ = CurrentState.objects.get_or_create(
+                user_to=cs.user_from,
+                user_from=cs.user_to,
+                defaults=dict(
+                    is_reverse=True,
+                    thanks_count=cs.thanks_count,
+                    is_trust=cs.is_trust
+            ))
+
+        Wish.objects.filter(owner=user_from).update(owner=user)
+        Ability.objects.filter(owner=user_from).update(owner=user)
+        for key in Key.objects.filter(owner=user_from):
+            try:
+                with transaction.atomic():
+                    Key.objects.filter(pk=key.pk).update(owner=user)
+            except IntegrityError:
+                Key.objects.filter(pk=key.pk).delete()
+        Like.objects.filter(owner=user_from).update(owner=user)
+        self.recount_sum_thanks_count()
+        self.recount_trust_fame()
+        user_from.delete()
+
+    def recount_sum_thanks_count(self, do_save=True):
+        CurrentState = get_model('contact', 'CurrentState')
+        user = self.user
+        sum_thanks_count = CurrentState.objects.filter(
+            is_reverse=False,
+            user_to=user,
+        ).distinct().aggregate(Sum('thanks_count'))['thanks_count__sum']
+        if do_save:
+            self.save(update_fields=('sum_thanks_count',))
+
+    def recount_trust_fame(self, do_save=True):
+        CurrentState = get_model('contact', 'CurrentState')
+        user = self.user
+        self.trust_count = CurrentState.objects.filter(
+            is_reverse=False,
+            user_to=user,
+            is_trust=True,
+        ).distinct().count()
+        self.mistrust_count = CurrentState.objects.filter(
+            is_reverse=False,
+            user_to=user,
+            is_trust=False,
+        ).distinct().count()
+        self.fame = self.trust_count + self.mistrust_count
+        if do_save:
+            self.save(update_fields=('fame', 'trust_count', 'mistrust_count',))
+
     def full_name(self, put_middle_name=True):
         name = ""
         if self.user.last_name:
@@ -409,7 +532,7 @@ class CreateUserMixin(object):
         user_fields = ('last_name', 'first_name', 'email',)
         changed = False
         for f in user_fields:
-            if getattr(user, f) != oauth_result[f]:
+            if oauth_result[f] and getattr(user, f) != oauth_result[f]:
                 setattr(user, f, oauth_result[f])
                 changed = True
         if changed:
@@ -419,7 +542,7 @@ class CreateUserMixin(object):
         profile_fields = ('photo_url',)
         changed = False
         for f in profile_fields:
-            if getattr(profile, f) != oauth_result[f]:
+            if oauth_result[f] and getattr(profile, f) != oauth_result[f]:
                 setattr(profile, f, oauth_result[f])
                 changed = True
         if changed:
