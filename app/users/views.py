@@ -883,6 +883,10 @@ class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
             'request_token_method': 'GET',
             't_redirect_uri': 'redirect_uri',
         },
+        Oauth.PROVIDER_ODNOKLASSNIKI: {
+            'request_token_url': 'https://api.ok.ru/oauth/token.do',
+            't_redirect_uri': 'redirect_uri',
+        },
     }
 
     @transaction.atomic
@@ -913,7 +917,7 @@ class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
             return redirect(redirect_from_callback + '?error=no_code_received_in_callback')
 
         d_post_for_token = {}
-        if provider in (Oauth.PROVIDER_YANDEX,):
+        if provider in (Oauth.PROVIDER_YANDEX, Oauth.PROVIDER_ODNOKLASSNIKI):
             t_grant_type = d_provider.get('t_grant_type') or 'grant_type'
             t_authorization_code = d_provider.get('t_authorization_code') or 'authorization_code'
             d_post_for_token[t_grant_type] = t_authorization_code

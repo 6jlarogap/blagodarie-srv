@@ -71,5 +71,6 @@ OAUTH_PROVIDERS = {
     'odnoklassniki': {
         'client_id': 'not_secret',
         'client_secret': 'secret',
+        'public_key': 'another_secret',
     },
 }

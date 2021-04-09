@@ -1,6 +1,6 @@
 import datetime, string, random
 import urllib.request, urllib.error, urllib.parse
-import json, uuid, re
+import json, uuid, re, hashlib
 
 from django.conf import settings
 from django.db import models, transaction, IntegrityError
@@ -134,7 +134,7 @@ class Oauth(BaseModelInsertUpdateTimestamp):
         },
         PROVIDER_ODNOKLASSNIKI: {
             # Внимание! Именно http://
-            'url': "http://api.odnoklassniki.ru/fb.do?method=users.getCurrentUser&"
+            'url': "http://api.ok.ru/fb.do?method=users.getCurrentUser&"
                    "access_token=%(token)s&"
                    "application_key=%(public_key)s&"
                    "fields=user.*&"
@@ -147,6 +147,48 @@ class Oauth(BaseModelInsertUpdateTimestamp):
             'email': 'email',
             'photo': 'pic190x190',
         },
+
+        # Получаем от одноклассников
+        #{
+            #'uid': '5626262',
+            #'birthday': '1978-06-22',
+            #'birthdaySet': True,
+            #'age': 42,
+            #'first_name': 'Петр',
+            #'last_name': 'Иванов',
+            #'name': 'Петр Иванов',
+            #'locale': 'ru',
+            #'gender': 'male',
+            #'has_email': True,
+            #'location': {
+                #'city': 'Минск',
+                #'country': 'BELARUS',
+                #'countryCode': 'BY',
+                #'countryName': 'Беларусь'
+                #},
+            #'online': 'web',
+            #'photo_id': '8363576312366123',
+            #'pic_1': 'https://pic_1',
+            #'pic_2': 'https://pic_2',
+            #'pic_3': 'https://pic_3',
+            #'pic_4': 'https://pic_4',
+            #'pic_5': 'https://pic_5',
+            #'pic50x50': 'https://pic_1',
+            #'pic128x128': 'https://pic_5',
+            #'pic128max': 'https://pic_2',
+            #'pic180min': 'https://pic180min',
+            #'pic240min': 'https://pic240min',
+            #'pic320min': 'https://pic320min',
+            #'pic190x190': 'https://pic_3',
+            #'pic640x480': 'https://pic_4',
+            #'pic1024x768': 'https://pic1024x768',
+            #'pic_full': 'https://pic_full',
+            #'pic_base': 'https://pic_base',
+            #'url_profile': 'https://ok.ru/profile/56105959595',
+            #'url_profile_mobile': 'https://m.ok.ru/profile/56105959595',
+            #'premium': False,
+            #'has_phone': True
+        #}
     }
 
     # Поля, кроме provider, uid, user, которые запоминаем в таблице Oauth
@@ -226,6 +268,29 @@ class Oauth(BaseModelInsertUpdateTimestamp):
                 oauth_dict['token'] = urllib.parse.quote_plus(oauth_dict['token'])
             except KeyError:
                 raise ServiceException(_('Провайдер Oauth не задан или не поддерживается, или не задан token'))
+
+            if provider == Oauth.PROVIDER_ODNOKLASSNIKI:
+                oauth_dict['public_key'] = settings.OAUTH_PROVIDERS[provider]['public_key']
+                #
+                # <signature> = md5(
+                #    "application_key={$public_key}format=jsonmethod=users.getCurrentUser" .
+                #     md5("{$tokenInfo['access_token']}{$client_secret}")) (php код)
+                #
+                m = hashlib.md5()
+                m.update(("%s%s" % (
+                        oauth_dict['token'],
+                        settings.OAUTH_PROVIDERS[provider]['client_secret'],
+                    )).encode()
+                )
+                m2 = m.hexdigest()
+                m = hashlib.md5()
+                m.update((
+                    "application_key=%sfields=user.*format=jsonmethod=users.getCurrentUser%s" % (
+                        settings.OAUTH_PROVIDERS[provider]['public_key'],
+                        m2,
+                    )).encode()
+                )
+                oauth_dict['signature'] = m.hexdigest()
 
             url = provider_details['url'] % oauth_dict
 
