@@ -47,6 +47,7 @@ begin
                     contact_currentstate
                 where
                     user_from_id=v_user_from_id and
+                    is_trust is not null and
                     user_to_id is not null
         returning *;
     else
@@ -63,6 +64,7 @@ begin
                     contact_currentstate
                 where
                     user_from_id=v_user_from_id and
+                    is_trust is not null and
                     user_to_id is not null and
                     is_reverse = false
         returning *;
