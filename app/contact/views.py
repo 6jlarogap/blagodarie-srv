@@ -2162,21 +2162,25 @@ class ApiProfileGraphTwoLevels(APIView):
                     },
                     ...
             ],
-            “wishes”:[
+            "wishes":[
                 {
-                    “uuid”:1,
-                    “text”: “хочу то…”
+                    "uuid":1,
+                    "text": "хочу то…"
                 },
-                ...
             ],
-            “keys”:[
+            "keys":[
                 {
-                    “id”:1,
-                    “value”: “asdf@fdas.com”
-                    “type_id”: 2
+                    "id":1,
+                    "value": "asdf@fdas.com"
+                    "type_id": 2
                 },
-                ...
             ]
+            "abilities":[
+                {
+                    "uuid":"1085113f-d4d8-4de6-8d80-916bbbbbbbb",
+                    "text": "могу то…"
+            ]
+            ...
         }
         """
         try:
@@ -2278,7 +2282,7 @@ class ApiProfileGraphTwoLevels(APIView):
                 connections=connections,
                 keys=keys,
                 wishes=wishes,
-                abilities=abilities
+                abilities=abilities,
             )
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
@@ -2289,8 +2293,6 @@ class ApiProfileGraphTwoLevels(APIView):
 api_profile_graph_two_levels = ApiProfileGraphTwoLevels.as_view()
 
 class ApiProfileGraphRecursion(APIView):
-
-    #   TODO Убрать этот метод, он оказался не востребованным
 
     def get(self, request, *args, **kwargs):
         """
@@ -2320,21 +2322,25 @@ class ApiProfileGraphRecursion(APIView):
                     },
                     ...
             ],
-            “wishes”:[
+            "wishes":[
                 {
-                    “uuid”:1,
-                    “text”: “хочу то…”
+                    "uuid":1,
+                    "text": "хочу то…"
                 },
-                ...
             ],
-            “keys”:[
+            "keys":[
                 {
-                    “id”:1,
-                    “value”: “asdf@fdas.com”
-                    “type_id”: 2
+                    "id":1,
+                    "value": "asdf@fdas.com"
+                    "type_id": 2
                 },
-                ...
             ]
+            "abilities":[
+                {
+                    "uuid":"1085113f-d4d8-4de6-8d80-916bbbbbbbb",
+                    "text": "могу то…"
+            ]
+            ...
         }
         """
         try:
@@ -2351,12 +2357,14 @@ class ApiProfileGraphRecursion(APIView):
             connections = []
             with connection.cursor() as cursor:
                 cursor.execute(
-                    'select * from find_rel(%(user_id)s, %(connection_level)s)' % dict(
+                    'select * from find_rel(%(user_id)s, %(connection_level)s, %(connections_do_reverse)s)' % dict(
                         user_id=user_q.pk,
-                        connection_level=settings.CONNECTIONS_LEVEL
+                        connection_level=settings.CONNECTIONS_LEVEL,
+                        connections_do_reverse=settings.CONNECTIONS_DO_REVERSE,
                 ))
                 recs = dictfetchall(cursor)
             user_pks = set()
+            user_pks.add(user_q.pk)
             pairs = []
             for rec in recs:
                 if rec['is_reverse']:
@@ -2404,11 +2412,19 @@ class ApiProfileGraphRecursion(APIView):
                 } \
                 for wish in Wish.objects.filter(owner=user_q)
             ]
+            abilities = [
+                {
+                    'uuid': ability.uuid,
+                    'text': ability.text,
+                } \
+                for ability in Ability.objects.filter(owner=user_q)
+            ]
             data = dict(
                 users=users,
                 connections=connections,
                 keys=keys,
                 wishes=wishes,
+                abilities=abilities,
             )
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:

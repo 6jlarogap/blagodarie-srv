@@ -51,7 +51,8 @@ urlpatterns = [
     url(r'^api/getstats/user_connections/?$', views.api_get_stats, {'only': 'user_connections'}),
     url(r'^api/getstats/user_connections_graph/?$', views.api_get_stats, {'only': 'user_connections_graph'}),
 
-    url(r'^api/profile_graph/?$', views.api_profile_graph_two_levels),
+    # url(r'^api/profile_graph/?$', views.api_profile_graph_two_levels),
+    url(r'^api/profile_graph/?$', views.api_profile_graph_recursion),
 
     url(r'^api/addusersymptom/?$', views.api_add_user_symptom),
     url(r'^api/add_user_symptom/?$', views.api_add_user_symptom, {'auth': True}),
