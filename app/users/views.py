@@ -1012,3 +1012,56 @@ class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
         return response
 
 api_oauth_callback = ApiOauthCallback.as_view()
+
+class ApiUpdateFrontendSite(APIView):
+    """
+    Получить с github каталога сигнал об обновлении ветки frontend site и обновить эту ветку
+    """
+
+    def post(self, request):
+        try:
+            header_signature = 'X-Hub-Signature'
+            encoding_eq_signature = request.headers.get('X-Hub-Signature')
+            if not encoding_eq_signature:
+                raise ServiceException('No "%s" header with signature' % header_signature)
+            encoding_eq_signature = encoding_eq_signature.lower()
+            payload = request.body
+            # Do not use any request.data stuff after that!
+
+            # Example of encoding_signature:
+            # 'sha1=5aaabbbcccdddeeefff11122233344455fffaaaa'
+            #
+            m = re.search(r'^([^\=]+)\=([^\=]+)$', encoding_eq_signature)
+            if not m:
+                raise ServiceException('Invalid "%s" header' % header_signature)
+            encoding = getattr(hashlib, m.group(1), None)
+            if not encoding:
+                raise ServiceException('No "<encoding>=" in "%s" header' % header_signature)
+            key = settings.FRONTEND_GITHUB_WEBHOOK_SECRET
+            key = key.encode('utf-8')
+            if hmac.new(key, payload, encoding).hexdigest().lower() != m.group(2):
+                raise ServiceException('Request is not properly signed')
+
+            try:
+                ref = json.loads(payload)['ref']
+            except (ValueError, KeyError,):
+                raise ServiceException('No ref key in payload or invalid payload')
+            m = re.search(r'^refs/heads/([\w\-]+)$', ref)
+            if not m:
+                raise ServiceException("Invalid 'ref' value")
+            branch = m.group(1)
+            script = settings.FRONTEND_UPDATE_SCRIPT.get(branch)
+            if not script:
+                raise ServiceException("Unknown branch '%s' in frontend github repository" % branch)
+            rc = os.system(script)
+            if rc:
+                raise ServiceException("Update script '%s' failed, rc = %s" % (script, rc,))
+            data = dict(message="Success: updated branch '%s'" % branch)
+            print(data['message'])
+            status_code = 200
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+api_update_frontend_site = ApiUpdateFrontendSite.as_view()

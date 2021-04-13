@@ -233,6 +233,14 @@ RATING_APK_URL = 'https://raw.githubusercontent.com/6jlarogap/blagodari/%(branch
 #
 RATING_GOOGLE_PLAY_UPDATE = False
 
+# Обновление frontend из github webhook ------------------------------------
+
+FRONTEND_UPDATE_SCRIPT = {
+    'master': '/home/www-data/webhook-scripts/blagodari.rf/master/update.sh',
+    'dev-site': '/home/www-data/webhook-scripts/blagodari.rf/dev-site/update.sh',
+}
+FRONTEND_GITHUB_WEBHOOK_SECRET = 'secret'
+
 # --------------------------------------------------------------------------
 
 # Время начала наблюдений (приема симптомов ощущений):
@@ -269,7 +277,7 @@ CONNECTIONS_LEVEL = 100
 # (связи 2->3)
 # то показывать ли связь 3->2 и продолжать ли далее ( 4->3, 5-4,...)
 #
-CONNECTIONS_DO_REVERSE = False
+CONNECTIONS_DO_REVERSE = True
 
 # ------------------------------------------------
 
