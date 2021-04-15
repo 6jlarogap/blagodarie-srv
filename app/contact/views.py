@@ -2132,84 +2132,61 @@ class ApiDeleteKeyView(APIView):
 
 api_delete_key = ApiDeleteKeyView.as_view()
 
-class ApiProfileGraphTwoLevels(APIView):
+class ApiProfileGraphMixin(object):
 
-    def get(self, request, *args, **kwargs):
-        """
-        Возвращает связи пользователя, его желания и ключи
+    def get_two_levels(self, user_q, profile_q):
+        users = []
+        connections = []
 
-        Кроме связей пользователя, вернуть еще связи его ближайших контактов
-        между собой.
-        Пример вызова:
-        /api/profile_graph?uuid=91c49fe2-3f74-49a8-906e-f4f711f8e3a1
-        Возвращает:
-        {
-            "users": [
-                    {
-                        "uuid": "8d2db918-9a81-4537-ab69-1c3d2d19a00d",
-                        "first_name": "Олег",
-                        "last_name": ".",
-                        "photo": "https://...jpg"
-                    },
-                    ...
-            ],
-            "connections": [
-                    {
-                        "source": "8d2db918-9a81-4537-ab69-1c3d2d19a00d",
-                        "target": "1085113f-d4d8-4de6-8d80-916e85576fc6",
-                        "thanks_count": 1,
-                        "is_trust": true
-                    },
-                    ...
-            ],
-            "wishes":[
-                {
-                    "uuid":1,
-                    "text": "хочу то…"
-                },
-            ],
-            "keys":[
-                {
-                    "id":1,
-                    "value": "asdf@fdas.com"
-                    "type_id": 2
-                },
-            ]
-            "abilities":[
-                {
-                    "uuid":"1085113f-d4d8-4de6-8d80-916bbbbbbbb",
-                    "text": "могу то…"
-            ]
-            ...
-        }
-        """
-        try:
-            uuid = request.GET.get('uuid')
-            if not uuid:
-                raise ServiceException('Не задан uuid пользователя')
-            try:
-                user_q = Profile.objects.select_related('user').get(uuid=uuid).user
-            except ValidationError:
-                raise ServiceException('Неверный uuid = %s' % uuid)
-            except Profile.DoesNotExist:
-                raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
+        users.append(dict(
+            uuid=profile_q.uuid,
+            first_name=user_q.first_name,
+            last_name=user_q.last_name,
+            photo = profile_q.choose_photo(),
+        ))
 
-            users = []
-            user_pks = []
+        # Здесь будут pk всех пользователей
+        # в непосредственных связях user_q одного уровня,
+        # (!) исключая самого user_q
+        #
+        user_pks = []
 
-            user = user_q
-            profile = user.profile
-            users.append(dict(
-                uuid=profile.uuid,
-                first_name=user.first_name,
-                last_name=user.last_name,
-                photo = profile.choose_photo(),
-            ))
-            user_pks.append(user.pk)
+        q = Q(user_from=user_q) | Q(user_to=user_q)
+        q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust__isnull=False)
+        for cs in CurrentState.objects.filter(q).distinct().select_related(
+                'user_from', 'user_to',
+                'user_from__profile', 'user_to__profile',
+            ):
+            connections.append({
+                'source': cs.user_from.profile.uuid,
+                'target': cs.user_to.profile.uuid,
+                'thanks_count': cs.thanks_count,
+                'is_trust': cs.is_trust,
+            })
+            user = cs.user_from
+            if user.pk != user_q.pk and user.pk not in user_pks:
+                profile = user.profile
+                users.append(dict(
+                    uuid=profile.uuid,
+                    first_name=user.first_name,
+                    last_name=user.last_name,
+                    photo = profile.choose_photo(),
+                ))
+                user_pks.append(user.pk)
+            user = cs.user_to
+            if user.pk != user_q.pk and user.pk not in user_pks:
+                profile = user.profile
+                users.append(dict(
+                    uuid=profile.uuid,
+                    first_name=user.first_name,
+                    last_name=user.last_name,
+                    photo = profile.choose_photo(),
+                ))
+                user_pks.append(user.pk)
 
-            connections = []
-            q = Q(user_from=user_q) | Q(user_to=user_q)
-            q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust__isnull=False)
+        if user_pks:
+            q = Q(user_from__pk__in=user_pks) & Q(user_to__pk__in=user_pks)
+            q &= Q(is_reverse=False)
             for cs in CurrentState.objects.filter(q).distinct().select_related(
                     'user_from', 'user_to',
                     'user_from__profile', 'user_to__profile',
@@ -2220,86 +2197,66 @@ class ApiProfileGraphTwoLevels(APIView):
                     'thanks_count': cs.thanks_count,
                     'is_trust': cs.is_trust,
                 })
-                user = cs.user_from
-                if user.pk not in user_pks:
-                    profile = user.profile
-                    users.append(dict(
-                        uuid=profile.uuid,
-                        first_name=user.first_name,
-                        last_name=user.last_name,
-                        photo = profile.choose_photo(),
-                    ))
-                    user_pks.append(user.pk)
-                user = cs.user_to
-                if user.pk not in user_pks:
-                    profile = user.profile
-                    users.append(dict(
-                        uuid=profile.uuid,
-                        first_name=user.first_name,
-                        last_name=user.last_name,
-                        photo = profile.choose_photo(),
-                    ))
-                    user_pks.append(user.pk)
+        return dict(users=users, connections=connections)
 
-            if user_pks:
-                q = Q(user_from__pk__in=user_pks) & Q(user_to__pk__in=user_pks)
-                q &= Q(is_reverse=False)
-                for cs in CurrentState.objects.filter(q).distinct().select_related(
-                        'user_from', 'user_to',
-                        'user_from__profile', 'user_to__profile',
-                    ):
-                    connections.append({
-                        'source': cs.user_from.profile.uuid,
-                        'target': cs.user_to.profile.uuid,
-                        'thanks_count': cs.thanks_count,
-                        'is_trust': cs.is_trust,
-                    })
-
-            keys = [
-                {
-                    'id': key.pk,
-                    'type_id': key.type.pk,
-                    'value': key.value,
-                } \
-                for key in Key.objects.filter(owner=user_q).select_related('type')
-            ]
-            wishes = [
-                {
-                    'uuid': wish.uuid,
-                    'text': wish.text,
-                } \
-                for wish in Wish.objects.filter(owner=user_q)
-            ]
-            abilities = [
-                {
-                    'uuid': ability.uuid,
-                    'text': ability.text,
-                } \
-                for ability in Ability.objects.filter(owner=user_q)
-            ]
-            data = dict(
-                users=users,
-                connections=connections,
-                keys=keys,
-                wishes=wishes,
-                abilities=abilities,
+    def get_recursed(self, user_q):
+        connections = []
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'select * from find_rel(%(user_id)s, %(connection_level)s, True)' % dict(
+                    user_id=user_q.pk,
+                    connection_level=settings.CONNECTIONS_LEVEL,
+            ))
+            recs = dictfetchall(cursor)
+        user_pks = set()
+        user_pks.add(user_q.pk)
+        pairs = []
+        for rec in recs:
+            if rec['is_reverse']:
+                user_from_id = rec['user_to_id']
+                user_to_id = rec['user_from_id']
+            else:
+                user_from_id = rec['user_from_id']
+                user_to_id = rec['user_to_id']
+            pair = '%s/%s' % (user_from_id, user_to_id)
+            if pair not in pairs:
+                pairs.append(pair)
+                user_pks.add(user_from_id)
+                user_pks.add(user_to_id)
+                connections.append(dict(
+                    source=user_from_id,
+                    target=user_to_id,
+                    thanks_count=rec['thanks_count'],
+                    is_trust=rec['is_trust'],
+                ))
+        profiles_dict = dict()
+        for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user'):
+            profiles_dict[profile.user.pk] = dict(
+                uuid=profile.uuid,
+                first_name=profile.user.first_name,
+                last_name=profile.user.last_name,
+                photo = profile.choose_photo(),
             )
-            status_code = status.HTTP_200_OK
-        except ServiceException as excpt:
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
+        users = [profiles_dict[p] for p in profiles_dict]
+        for c in connections:
+            c['source'] = profiles_dict[c['source']]['uuid']
+            c['target'] = profiles_dict[c['target']]['uuid']
 
-api_profile_graph_two_levels = ApiProfileGraphTwoLevels.as_view()
+        return dict(users=users, connections=connections)
 
-class ApiProfileGraphRecursion(APIView):
+class ApiProfileGraph(ApiProfileGraphMixin, APIView):
 
     def get(self, request, *args, **kwargs):
         """
         Возвращает связи пользователя, его желания и ключи
 
-        Пройти рекурсивно по цепочкам от пользователя,
-        вплоть до settings.CONNECTIONS_LEVEL.
+        Для авторизованного пользователя:
+            Пройти рекурсивно по цепочкам от пользователя,
+            вплоть до settings.CONNECTIONS_LEVEL.
+        Для прочих:
+            Кроме связей пользователя, вернуть еще связи
+            его ближайших контактов между собой.
+
         Пример вызова:
         /api/profile_graph?uuid=91c49fe2-3f74-49a8-906e-f4f711f8e3a1
         Возвращает:
@@ -2348,55 +2305,16 @@ class ApiProfileGraphRecursion(APIView):
             if not uuid:
                 raise ServiceException('Не задан uuid пользователя')
             try:
-                user_q = Profile.objects.select_related('user').get(uuid=uuid).user
+                profile_q = Profile.objects.select_related('user').get(uuid=uuid)
+                user_q = profile_q.user
             except ValidationError:
                 raise ServiceException('Неверный uuid = %s' % uuid)
             except Profile.DoesNotExist:
                 raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
-
-            connections = []
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    'select * from find_rel(%(user_id)s, %(connection_level)s, %(connections_do_reverse)s)' % dict(
-                        user_id=user_q.pk,
-                        connection_level=settings.CONNECTIONS_LEVEL,
-                        connections_do_reverse=settings.CONNECTIONS_DO_REVERSE,
-                ))
-                recs = dictfetchall(cursor)
-            user_pks = set()
-            user_pks.add(user_q.pk)
-            pairs = []
-            for rec in recs:
-                if rec['is_reverse']:
-                    user_from_id = rec['user_to_id']
-                    user_to_id = rec['user_from_id']
-                else:
-                    user_from_id = rec['user_from_id']
-                    user_to_id = rec['user_to_id']
-                pair = '%s/%s' % (user_from_id, user_to_id)
-                if pair not in pairs:
-                    pairs.append(pair)
-                    user_pks.add(user_from_id)
-                    user_pks.add(user_to_id)
-                    connections.append(dict(
-                        source=user_from_id,
-                        target=user_to_id,
-                        thanks_count=rec['thanks_count'],
-                        is_trust=rec['is_trust'],
-                    ))
-            profiles_dict = dict()
-            for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user'):
-                profiles_dict[profile.user.pk] = dict(
-                    uuid=profile.uuid,
-                    first_name=profile.user.first_name,
-                    last_name=profile.user.last_name,
-                    photo = profile.choose_photo(),
-                )
-            users = [profiles_dict[p] for p in profiles_dict]
-            for c in connections:
-                c['source'] = profiles_dict[c['source']]['uuid']
-                c['target'] = profiles_dict[c['target']]['uuid']
-
+            if request.user.is_authenticated and request.user == user_q:
+                data = self.get_recursed(user_q)
+            else:
+                data = self.get_two_levels(user_q, profile_q)
             keys = [
                 {
                     'id': key.pk,
@@ -2419,20 +2337,18 @@ class ApiProfileGraphRecursion(APIView):
                 } \
                 for ability in Ability.objects.filter(owner=user_q)
             ]
-            data = dict(
-                users=users,
-                connections=connections,
+            data.update(dict(
                 keys=keys,
                 wishes=wishes,
                 abilities=abilities,
-            )
+            ))
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
-api_profile_graph_recursion = ApiProfileGraphRecursion.as_view()
+api_profile_graph = ApiProfileGraph.as_view()
 
 class ApiGetIncognitoMessages(APIView):
 
