@@ -65,6 +65,8 @@ class FrontendMixin(object):
         """
         fe_site = settings.FRONTEND_ROOT.rstrip('/')
         fe_path = path.strip('/')
+        if not fe_path:
+            ending_slash = ''
         return "%(fe_site)s/%(fe_path)s%(ending_slash)s" % dict(
             fe_site=fe_site,
             fe_path=fe_path,

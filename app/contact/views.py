@@ -2311,7 +2311,7 @@ class ApiProfileGraph(ApiProfileGraphMixin, APIView):
                 raise ServiceException('Неверный uuid = %s' % uuid)
             except Profile.DoesNotExist:
                 raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
-            if request.user.is_authenticated and request.user == user_q:
+            if request.user.is_authenticated and request.user != user_q:
                 data = self.get_recursed(user_q)
             else:
                 data = self.get_two_levels(user_q, profile_q)
