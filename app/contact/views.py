@@ -25,11 +25,195 @@ from contact.models import KeyType, Key, UserKey, LikeKey, Like, LogLike, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
                            Journal, CurrentState, OperationType, Wish, \
                            AnyText, Ability
-from users.models import CreateUserMixin, IncognitoUser, Profile
+from users.models import CreateUserMixin, IncognitoUser, Profile, TempToken
 
 MSG_NO_PARM = 'Не задан или не верен какой-то из параметров в связке номер %s (начиная с 0)'
 
-class ApiAddOperationView(APIView):
+class ApiAddOperationMixin(object):
+
+    def add_operation(self,
+        user_from,
+        profile_to,
+        operationtype_id,
+        comment,
+        insert_timestamp,
+    ):
+        try:
+            operationtype_id = int(operationtype_id)
+            operationtype = OperationType.objects.get(pk=operationtype_id)
+        except (ValueError, OperationType.DoesNotExist,):
+            raise ServiceException('Неизвестный operation_type_id = %s' % operationtype_id)
+
+        data = dict()
+        update_timestamp = int(time.time())
+        user_to = profile_to.user
+
+        if operationtype_id == OperationType.THANK:
+            currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
+                user_from=user_from,
+                user_to=user_to,
+                defaults=dict(
+                    thanks_count=1,
+            ))
+            if not created_:
+                currentstate.update_timestamp = update_timestamp
+                if currentstate.is_reverse:
+                    # то же что created
+                    currentstate.insert_timestamp = insert_timestamp
+                    currentstate.is_reverse = False
+                    currentstate.thanks_count = 1
+                    currentstate.is_trust = None
+                else:
+                    currentstate.thanks_count += 1
+                currentstate.save()
+
+            reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
+                user_to=user_from,
+                user_from=user_to,
+                defaults=dict(
+                    is_reverse=True,
+                    is_trust=None,
+                    thanks_count=currentstate.thanks_count,
+            ))
+            if not reverse_created and reverse_cs.is_reverse:
+                reverse_cs.thanks_count = currentstate.thanks_count
+                reverse_cs.save()
+
+            profile_to.sum_thanks_count += 1
+            profile_to.save()
+
+        elif operationtype_id == OperationType.MISTRUST:
+            currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
+                user_from=user_from,
+                user_to=user_to,
+                defaults=dict(
+                    is_trust=False,
+            ))
+            if not created_:
+                currentstate.update_timestamp = update_timestamp
+                if currentstate.is_reverse:
+                    # то же что created
+                    currentstate.insert_timestamp = insert_timestamp
+                    currentstate.is_reverse = False
+                    currentstate.is_trust = False
+                    currentstate.thanks_count = 0
+                    currentstate.save()
+                else:
+                    if currentstate.is_trust == False:
+                        raise ServiceException('Вы уже не доверяете пользователю')
+                    else:
+                        # True or None
+                        currentstate.is_trust = False
+                        currentstate.save()
+
+            reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
+                user_to=user_from,
+                user_from=user_to,
+                defaults=dict(
+                    is_reverse=True,
+                    is_trust=False,
+                    thanks_count=currentstate.thanks_count,
+            ))
+            if not reverse_created and reverse_cs.is_reverse and not (reverse_cs.is_trust == False):
+                reverse_cs.is_trust = False
+                reverse_cs.save()
+
+            profile_to.recount_trust_fame()
+
+        elif operationtype_id == OperationType.TRUST:
+            currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
+                user_from=user_from,
+                user_to=user_to,
+                defaults=dict(
+                    is_trust=True,
+            ))
+            if not created_:
+                currentstate.update_timestamp = update_timestamp
+                if currentstate.is_reverse:
+                    # то же что created
+                    currentstate.insert_timestamp = insert_timestamp
+                    currentstate.is_reverse = False
+                    currentstate.is_trust = True
+                    currentstate.thanks_count = 0
+                    currentstate.save()
+                else:
+                    if currentstate.is_trust == True:
+                        raise ServiceException('Вы уже доверяете пользователю')
+                    else:
+                        # False or None
+                        currentstate.is_trust = True
+                        currentstate.save()
+
+            reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
+                user_to=user_from,
+                user_from=user_to,
+                defaults=dict(
+                    is_reverse=True,
+                    is_trust=True,
+                    thanks_count=currentstate.thanks_count,
+            ))
+            if not reverse_created and reverse_cs.is_reverse and not (reverse_cs.is_trust == True):
+                reverse_cs.is_trust = True
+                reverse_cs.save()
+
+            profile_to.recount_trust_fame()
+
+        elif operationtype_id == OperationType.NULLIFY_TRUST:
+            err_message = 'У вас не было ни доверия, ни недоверия к пользователю'
+            try:
+                currentstate = CurrentState.objects.select_for_update().get(
+                    user_from=user_from,
+                    user_to=user_to,
+                )
+            except CurrentState.DoesNotExist:
+                raise ServiceException(err_message)
+
+            if currentstate.is_reverse:
+                # то же что created
+                raise ServiceException(err_message)
+            else:
+                if currentstate.is_trust == None:
+                    raise ServiceException(err_message)
+                else:
+                    # False or True
+                    currentstate.update_timestamp = update_timestamp
+                    currentstate.is_trust = None
+                    currentstate.save()
+
+            reverse_cs = CurrentState.objects.filter(
+                user_to=user_from,
+                user_from=user_to,
+                is_reverse=True,
+                is_trust__isnull=False,
+            ).update(is_trust=None)
+
+            profile_to.recount_trust_fame()
+
+        Journal.objects.create(
+            user_from=user_from,
+            user_to=user_to,
+            operationtype=operationtype,
+            insert_timestamp=insert_timestamp,
+            comment=comment,
+        )
+
+        if settings.FCM_SERVER_KEY:
+            fcm_topic_name = 'user_%s' % profile_to.uuid
+            fcm_data_message = dict(
+                first_name=user_from.first_name,
+                last_name=user_from.last_name,
+                photo=user_from.profile.choose_photo(),
+                operation_type_id=operationtype_id,
+                comment=comment,
+            )
+            push_service = FCMNotification(api_key=settings.FCM_SERVER_KEY)
+            fcm_result = push_service.topic_subscribers_data_message(
+                topic_name=fcm_topic_name,
+                data_message=fcm_data_message,
+            )
+        return data
+
+class ApiAddOperationView(ApiAddOperationMixin, APIView):
     permission_classes = (IsAuthenticated, )
 
     @transaction.atomic
@@ -84,15 +268,16 @@ class ApiAddOperationView(APIView):
         """
 
         try:
-            data = dict()
-            status_code = status.HTTP_200_OK
             user_from = request.user
             user_to_uuid = request.data.get("user_id_to")
             operationtype_id = request.data.get("operation_type_id")
+            comment = request.data.get("comment", None)
+            insert_timestamp = request.data.get('timestamp', int(time.time()))
+
             if not user_to_uuid or not operationtype_id:
                 raise ServiceException('Не заданы user_id_to и/или operation_type_id')
             try:
-                profile_to = Profile.objects.select_for_update().get(uuid=user_to_uuid)
+                profile_to = Profile.objects.select_for_update().select_related('user').get(uuid=user_to_uuid)
                 user_to = profile_to.user
             except ValidationError:
                 raise ServiceException('Неверный uuid = "%s"' % user_to_uuid)
@@ -100,179 +285,15 @@ class ApiAddOperationView(APIView):
                 raise ServiceException('Не найден пользователь, uuid = "%s"' % user_to_uuid)
             if user_to == user_from:
                 raise ServiceException('Операция на самого себя не предусмотрена')
-            try:
-                operationtype_id = int(operationtype_id)
-                operationtype = OperationType.objects.get(pk=operationtype_id)
-            except (ValueError, OperationType.DoesNotExist,):
-                raise ServiceException('Неизвестный operation_type_id = %s' % operationtype_id)
 
-            update_timestamp = int(time.time())
-            insert_timestamp = request.data.get('timestamp', update_timestamp)
-
-            if operationtype_id == OperationType.THANK:
-                currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
-                    user_from=user_from,
-                    user_to=user_to,
-                    defaults=dict(
-                        thanks_count=1,
-                ))
-                if not created_:
-                    currentstate.update_timestamp = update_timestamp
-                    if currentstate.is_reverse:
-                        # то же что created
-                        currentstate.insert_timestamp = insert_timestamp
-                        currentstate.is_reverse = False
-                        currentstate.thanks_count = 1
-                        currentstate.is_trust = None
-                    else:
-                        currentstate.thanks_count += 1
-                    currentstate.save()
-
-                reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
-                    user_to=user_from,
-                    user_from=user_to,
-                    defaults=dict(
-                        is_reverse=True,
-                        is_trust=None,
-                        thanks_count=currentstate.thanks_count,
-                ))
-                if not reverse_created and reverse_cs.is_reverse:
-                    reverse_cs.thanks_count = currentstate.thanks_count
-                    reverse_cs.save()
-
-                profile_to.sum_thanks_count += 1
-                profile_to.save()
-
-            elif operationtype_id == OperationType.MISTRUST:
-                currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
-                    user_from=user_from,
-                    user_to=user_to,
-                    defaults=dict(
-                        is_trust=False,
-                ))
-                if not created_:
-                    currentstate.update_timestamp = update_timestamp
-                    if currentstate.is_reverse:
-                        # то же что created
-                        currentstate.insert_timestamp = insert_timestamp
-                        currentstate.is_reverse = False
-                        currentstate.is_trust = False
-                        currentstate.thanks_count = 0
-                        currentstate.save()
-                    else:
-                        if currentstate.is_trust == False:
-                            raise ServiceException('Вы уже не доверяете пользователю')
-                        else:
-                            # True or None
-                            currentstate.is_trust = False
-                            currentstate.save()
-
-                reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
-                    user_to=user_from,
-                    user_from=user_to,
-                    defaults=dict(
-                        is_reverse=True,
-                        is_trust=False,
-                        thanks_count=currentstate.thanks_count,
-                ))
-                if not reverse_created and reverse_cs.is_reverse and not (reverse_cs.is_trust == False):
-                    reverse_cs.is_trust = False
-                    reverse_cs.save()
-
-                profile_to.recount_trust_fame()
-
-            elif operationtype_id == OperationType.TRUST:
-                currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
-                    user_from=user_from,
-                    user_to=user_to,
-                    defaults=dict(
-                        is_trust=True,
-                ))
-                if not created_:
-                    currentstate.update_timestamp = update_timestamp
-                    if currentstate.is_reverse:
-                        # то же что created
-                        currentstate.insert_timestamp = insert_timestamp
-                        currentstate.is_reverse = False
-                        currentstate.is_trust = True
-                        currentstate.thanks_count = 0
-                        currentstate.save()
-                    else:
-                        if currentstate.is_trust == True:
-                            raise ServiceException('Вы уже доверяете пользователю')
-                        else:
-                            # False or None
-                            currentstate.is_trust = True
-                            currentstate.save()
-
-                reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
-                    user_to=user_from,
-                    user_from=user_to,
-                    defaults=dict(
-                        is_reverse=True,
-                        is_trust=True,
-                        thanks_count=currentstate.thanks_count,
-                ))
-                if not reverse_created and reverse_cs.is_reverse and not (reverse_cs.is_trust == True):
-                    reverse_cs.is_trust = True
-                    reverse_cs.save()
-
-                profile_to.recount_trust_fame()
-
-            elif operationtype_id == OperationType.NULLIFY_TRUST:
-                err_message = 'У вас не было ни доверия, ни недоверия к пользователю'
-                try:
-                    currentstate = CurrentState.objects.select_for_update().get(
-                        user_from=user_from,
-                        user_to=user_to,
-                    )
-                except CurrentState.DoesNotExist:
-                    raise ServiceException(err_message)
-
-                if currentstate.is_reverse:
-                    # то же что created
-                    raise ServiceException(err_message)
-                else:
-                    if currentstate.is_trust == None:
-                        raise ServiceException(err_message)
-                    else:
-                        # False or True
-                        currentstate.update_timestamp = update_timestamp
-                        currentstate.is_trust = None
-                        currentstate.save()
-
-                reverse_cs = CurrentState.objects.filter(
-                    user_to=user_from,
-                    user_from=user_to,
-                    is_reverse=True,
-                    is_trust__isnull=False,
-                ).update(is_trust=None)
-
-                profile_to.recount_trust_fame()
-
-            comment = request.data.get("comment", None)
-            Journal.objects.create(
-                user_from=user_from,
-                user_to=user_to,
-                operationtype=operationtype,
-                insert_timestamp=insert_timestamp,
-                comment=comment,
+            data = self.add_operation(
+                user_from,
+                profile_to,
+                operationtype_id,
+                comment,
+                insert_timestamp,
             )
-
-            if settings.FCM_SERVER_KEY:
-                fcm_topic_name = 'user_%s' % profile_to.uuid
-                fcm_data_message = dict(
-                    first_name=user_from.first_name,
-                    last_name=user_from.last_name,
-                    photo=user_from.profile.choose_photo(),
-                    operation_type_id=operationtype_id,
-                    comment=comment,
-                )
-                push_service = FCMNotification(api_key=settings.FCM_SERVER_KEY)
-                fcm_result = push_service.topic_subscribers_data_message(
-                    topic_name=fcm_topic_name,
-                    data_message=fcm_data_message,
-                )
+            status_code = status.HTTP_200_OK
 
         except ServiceException as excpt:
             transaction.set_rollback(True)
@@ -2721,3 +2742,46 @@ class ApiDeleteAbility(APIView):
         return Response(data=data, status=status_code)
 
 api_delete_ability = ApiDeleteAbility.as_view()
+
+class ApiInviteUseToken(ApiAddOperationMixin, APIView):
+    permission_classes = (IsAuthenticated, )
+
+    @transaction.atomic
+    def post(self, request):
+        try:
+            token = None
+            token_s = request.data.get('token')
+            if not token_s:
+                raise ServiceException('Не задан token')
+            try:
+                token = TempToken.objects.get(type=TempToken.TYPE_INVITE, token=token_s)
+            except TempToken.DoesNotExist:
+                raise ServiceException('Не найден token приглашения')
+            try:
+                user_from = User.objects.get(pk=token.obj_id)
+            except User.DoesNotExist:
+                raise ServiceException('Пригласивший пользователь уже не существует')
+            if token.insert_timestamp + token.ttl < time.time():
+                raise ServiceException('Время действия токена истекло')
+            profile_to = Profile.objects.select_for_update().select_related('user').get(user=request.user)
+            try:
+                self.add_operation(
+                    user_from,
+                    profile_to,
+                    operationtype_id=OperationType.TRUST,
+                    comment=None,
+                    insert_timestamp=int(time.time()),
+                )
+            except ServiceException:
+                # Уже установлено доверие
+                pass
+            token.delete()
+            data = dict()
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            transaction.set_rollback(True)
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_invite_use_token = ApiInviteUseToken.as_view()

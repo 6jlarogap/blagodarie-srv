@@ -29,4 +29,6 @@ urlpatterns = [
     url(r'^api/oauth/callback/(?P<provider>yandex|vk|odnoklassniki)/?$', views.api_oauth_callback),
 
     url(r'^api/update\-frontend\-site/?$', views.api_update_frontend_site),
+
+    url(r'^api/invite/gettoken/?$', views.api_invite_get_token),
 ]

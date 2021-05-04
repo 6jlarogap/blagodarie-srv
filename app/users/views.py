@@ -12,11 +12,12 @@ from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
+from rest_framework import status
 
 from app.utils import ServiceException, dictfetchall, FrontendMixin
 
 from django.contrib.auth.models import User
-from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile
+from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TempToken
 from contact.models import Key, KeyType, CurrentState, OperationType
 
 class ApiGetProfileInfo(APIView):
@@ -1065,3 +1066,19 @@ class ApiUpdateFrontendSite(APIView):
         return Response(data=data, status=status_code)
 
 api_update_frontend_site = ApiUpdateFrontendSite.as_view()
+
+class ApiInviteGetToken(APIView):
+    permission_classes = (IsAuthenticated, )
+
+    def post(self, request):
+        token = TempToken.create(
+            type_=TempToken.TYPE_INVITE,
+            obj=request.user,
+            ttl=86400*31,
+        )
+        token.save(force_insert=True)
+        data = dict(token=token.token)
+        status_code = status.HTTP_200_OK
+        return Response(data=data, status=status_code)
+
+api_invite_get_token = ApiInviteGetToken.as_view()

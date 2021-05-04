@@ -1,4 +1,4 @@
-import datetime, string, random
+import datetime, string, random, os, binascii
 import urllib.request, urllib.error, urllib.parse
 import json, uuid, re, hashlib
 
@@ -8,11 +8,14 @@ from django.db.models import Sum, F
 from django.db.models.query_utils import Q
 from django.utils.translation import ugettext_lazy as _
 
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
+
 from django.contrib.auth.models import User
 from django.apps import apps
 get_model = apps.get_model
 
-from app.models import BaseModelInsertUpdateTimestamp, PhotoModel
+from app.models import BaseModelInsertUpdateTimestamp, BaseModelInsertTimestamp, PhotoModel
 from app.utils import ServiceException
 
 class Oauth(BaseModelInsertUpdateTimestamp):
@@ -617,3 +620,31 @@ class IncognitoUser(BaseModelInsertUpdateTimestamp):
 
     private_key = models.CharField(_("Личный ключ"), max_length=36, unique=True, db_index=True)
     public_key = models.CharField(_("Публичный ключ"), max_length=36, null=True, unique=True, db_index=True)
+
+class TempToken(BaseModelInsertTimestamp):
+    """
+    Для разного рода временных токенов
+    """
+
+    TYPE_INVITE = 1
+
+    type = models.PositiveIntegerField(editable=False, db_index=True)
+    ct = models.ForeignKey('contenttypes.ContentType', editable=False, on_delete=models.CASCADE)
+    obj_id = models.PositiveIntegerField(editable=False, db_index=True)
+    obj = GenericForeignKey(ct_field='ct', fk_field='obj_id')
+    token = models.CharField(max_length=40, primary_key=True)
+    ttl = models.PositiveIntegerField(editable=False)
+
+    @classmethod
+    def create(cls, type_, obj, ttl):
+        temptoken = cls(
+            type = type_,
+            ct=ContentType.objects.get_for_model(obj),
+            obj_id=obj.pk,
+            token=binascii.hexlify(os.urandom(20)).decode(),
+            ttl=ttl,
+        )
+        return temptoken
+
+    def __str__(self):
+        return "%s - %s" % (self.type, self.token, )

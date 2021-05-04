@@ -72,5 +72,7 @@ urlpatterns = [
     url(r'^api/getuserabilities/?$', views.api_get_user_abilities),
     url(r'^api/deleteability/?$', views.api_delete_ability),
 
+    url(r'^api/invite/usetoken/?$', views.api_invite_use_token),
+
     url(r'^admin/merge_symptoms/?$', views.merge_symptoms),
 ]
