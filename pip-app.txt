@@ -1,13 +1,1 @@
-Django==2.2.4
-django-debug-toolbar
-
-djangorestframework
-django-cors-headers
-
-psycopg2-binary
-
-pytils
-
-skyfield==1.35
-
-pyfcm==1.4.7
+pip-app-django30.txt
