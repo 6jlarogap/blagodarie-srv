@@ -15,7 +15,7 @@ from app.utils import get_moon_day
 
 from django.conf import settings
 from django.db import models, connection
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 from django.db.models.query_utils import Q
 
 from django.contrib.auth.models import User

@@ -6,7 +6,7 @@ from django.conf import settings
 from django.db import models, transaction, IntegrityError
 from django.db.models import Sum, F
 from django.db.models.query_utils import Q
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType

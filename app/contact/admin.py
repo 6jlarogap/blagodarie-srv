@@ -1,7 +1,7 @@
 import time
 
 from django.contrib import admin, messages
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 from django.template.response import TemplateResponse
 
 from app.admin import PreventBulkDeleteInAdmin
