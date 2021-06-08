@@ -83,7 +83,7 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
     anytext = models.ForeignKey(AnyText,
                     verbose_name=_("Текст"), on_delete=models.CASCADE, null=True)
     thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
-    is_trust = models.NullBooleanField(_("Доверие"), default=None)
+    is_trust = models.BooleanField(_("Доверие"), default=None, null=True)
 
     # Для построения графов связей между пользователями, где надо учитывать
     # связь - это не только что пользователь 1 отблагодарил пользователя 2,

@@ -50,14 +50,21 @@ install-readme.txt
             * в т.ч. для разработчика:
               sudo apt install postgresql postgresql-server-dev-all
             полагаем, что используется база postgresql на localhost,
-            в которой пользователю postgres всё дозволено. Это достигается
-            в /etc/postgresql/10/main/
+            в которой postgres- пользователь blagodarie будет владельцем
+            базы данных blagodarieвсё дозволено. Это достигается в
 
-            заменой строки:
-                local all postgres peer
-            на:
-                local all postgres trust
+            /etc/postgresql/<версия-postgresql>/main/
+
+            добавлением строки в начале:
+                local all blagodarie password
             с перезагрузкой postgresql (service postgresql restart)
+            sudo -u postgres psql -U postgres
+            CREATE USER blagodarie CREATEDB;
+            ALTER USER blagodarie WITH PASSWORD 'пароль';
+            \q
+                пароль должен быть в local_settings.py, в
+                DATABASE['default']['password']
+            createdb -U blagodarie blagodarie_dev
 
          - web сервер apache2:
             sudo apt install apache2  apache2-utils
@@ -83,6 +90,7 @@ install-readme.txt
     * внести правки в local_settings.py, в особенности:
         ! SECRET_KEY = '50-значный случайный набор ascii- символов'
         - MEDIA_ROOT = '/home/www-data/django/MEDIA/project'
+        - возможно, надо поправить и другие настройки
     * cd /home/www-data/django/project
       ln -s /home/LINUX-USER-NAME/venv/project ENV
             : virtual env, запускаемое из ./manage.py

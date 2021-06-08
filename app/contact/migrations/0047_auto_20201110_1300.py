@@ -23,6 +23,6 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='currentstate',
             name='is_trust',
-            field=models.NullBooleanField(default=None, verbose_name='Доверие'),
+            field=models.BooleanField(default=None, verbose_name='Доверие', null=True),
         ),
     ]
