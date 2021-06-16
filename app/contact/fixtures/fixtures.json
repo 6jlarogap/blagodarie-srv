@@ -55,5 +55,12 @@
     "fields": {
       "title": "Nullify trust"
     }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 5,
+    "fields": {
+      "title": "Trust and thank"
+    }
   }
 ]

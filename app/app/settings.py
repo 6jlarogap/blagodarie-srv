@@ -317,6 +317,11 @@ OAUTH_PROVIDERS = {
     },
 }
 
+# From Django 3.2 this is BigAutofield
+# To avoid unnecessary migrations in future:
+#
+DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
+
 try:
     from app.local_settings import *
 except ModuleNotFoundError:

@@ -44,6 +44,7 @@ class OperationType(models.Model):
     MISTRUST = 2
     TRUST = 3
     NULLIFY_TRUST = 4
+    TRUST_AND_THANK = 5
 
     title = models.CharField(_("Тип операции"), max_length=255, unique=True)
 

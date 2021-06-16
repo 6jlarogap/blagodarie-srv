@@ -72,7 +72,7 @@ class ApiAddOperationMixin(object):
                 user_from=user_to,
                 defaults=dict(
                     is_reverse=True,
-                    is_trust=None,
+                    is_trust=currentstate.is_trust,
                     thanks_count=currentstate.thanks_count,
             ))
             if not reverse_created and reverse_cs.is_reverse:
@@ -156,6 +156,45 @@ class ApiAddOperationMixin(object):
                 reverse_cs.is_trust = True
                 reverse_cs.save()
 
+            profile_to.recount_trust_fame()
+
+        elif operationtype_id == OperationType.TRUST_AND_THANK:
+            currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
+                user_from=user_from,
+                user_to=user_to,
+                defaults=dict(
+                    is_trust=True,
+                    thanks_count=1,
+            ))
+            if not created_:
+                currentstate.update_timestamp = update_timestamp
+                if currentstate.is_reverse:
+                    # то же что created
+                    currentstate.insert_timestamp = insert_timestamp
+                    currentstate.is_reverse = False
+                    currentstate.is_trust = True
+                    currentstate.thanks_count = 1
+                    currentstate.save()
+                else:
+                    currentstate.is_trust = True
+                    currentstate.thanks_count += 1
+                    currentstate.save()
+
+            reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
+                user_to=user_from,
+                user_from=user_to,
+                defaults=dict(
+                    is_reverse=True,
+                    is_trust=True,
+                    thanks_count=currentstate.thanks_count,
+            ))
+            if not reverse_created and reverse_cs.is_reverse:
+                reverse_cs.is_trust = True
+                reverse_cs.thanks_count = currentstate.thanks_count
+                reverse_cs.save()
+
+            profile_to.sum_thanks_count += 1
+            profile_to.save()
             profile_to.recount_trust_fame()
 
         elif operationtype_id == OperationType.NULLIFY_TRUST:
