@@ -364,19 +364,25 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 comment,
                 insert_timestamp,
             )
+
             if user_to.profile.is_notified:
                 message = None
                 if operationtype_id in (OperationType.THANK, OperationType.TRUST_AND_THANK, ):
                     message = 'Получена благодарность от '
+                    message += self.profile_link(user_from.profile)
                 elif operationtype_id == OperationType.MISTRUST:
                     message = 'Получена утрата доверия от '
+                    message += self.profile_link(user_from.profile)
                 elif operationtype_id == OperationType.TRUST:
                     message = 'Получено доверие от '
-                #elif operationtype_id == OperationType.NULLIFY_TRUST:
-                    #message = 'Отмена утраты доверия от '
-                if message:
                     message += self.profile_link(user_from.profile)
+                elif operationtype_id == OperationType.NULLIFY_TRUST:
+                    message = 'Доверие от ' + self.profile_link(user_from.profile) + ' обнулено'
+                    #message = 'Отмена утраты доверия от '
+                    #message += self.profile_link(user_from.profile)
+                if message:
                     self.send_to_telegram(user_to, message)
+
             status_code = status.HTTP_200_OK
 
         except ServiceException as excpt:
