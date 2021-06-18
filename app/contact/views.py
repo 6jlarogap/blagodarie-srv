@@ -1,4 +1,6 @@
 import os, datetime, time, json
+import urllib.request, urllib.error
+from urllib.parse import urlencode
 
 from django.shortcuts import redirect
 from django.db import transaction, IntegrityError, connection
@@ -17,7 +19,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import IsAuthenticated
 
-from app.utils import ServiceException, dictfetchall
+from app.utils import ServiceException, dictfetchall, FrontendMixin
 
 from pyfcm import FCMNotification
 
@@ -25,9 +27,39 @@ from contact.models import KeyType, Key, UserKey, LikeKey, Like, LogLike, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
                            Journal, CurrentState, OperationType, Wish, \
                            AnyText, Ability
-from users.models import CreateUserMixin, IncognitoUser, Profile, TempToken
+from users.models import CreateUserMixin, IncognitoUser, Profile, TempToken, Oauth
 
 MSG_NO_PARM = 'Не задан или не верен какой-то из параметров в связке номер %s (начиная с 0)'
+
+class SendMessageMixin(FrontendMixin):
+
+    def profile_link(self, profile):
+        url_profile = self.get_frontend_url('profile') + '?id=%s' % profile.uuid
+        full_name = profile.full_name(last_name_first=False) or 'Без имени'
+        link = '<a href="%(url_profile)s">%(full_name)s</a>' % dict(
+            url_profile=url_profile,
+            full_name=full_name,
+        )
+        return link
+
+    def send_to_telegram(self, user, message):
+        try:
+            uid = Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)[0].uid
+        except IndexError:
+            # У пользователя нет аккаунта в телеграме
+            return
+        url = 'https://api.telegram.org/bot%s/sendMessage?' % settings.TELEGRAM_BOT_TOKEN
+        parms = dict(
+            chat_id=uid,
+            parse_mode='html',
+            text=message
+        )
+        url += urlencode(parms)
+        try:
+            req = urllib.request.Request(url)
+            urllib.request.urlopen(req, timeout=20)
+        except (urllib.error.URLError, ):
+            pass
 
 class ApiAddOperationMixin(object):
 
@@ -252,7 +284,7 @@ class ApiAddOperationMixin(object):
             )
         return data
 
-class ApiAddOperationView(ApiAddOperationMixin, APIView):
+class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
     permission_classes = (IsAuthenticated, )
 
     @transaction.atomic
@@ -332,6 +364,19 @@ class ApiAddOperationView(ApiAddOperationMixin, APIView):
                 comment,
                 insert_timestamp,
             )
+            if user_to.profile.is_notified:
+                message = None
+                if operationtype_id in (OperationType.THANK, OperationType.TRUST_AND_THANK, ):
+                    message = 'Получена благодарность от '
+                elif operationtype_id == OperationType.MISTRUST:
+                    message = 'Получена утрата доверия от '
+                elif operationtype_id == OperationType.TRUST:
+                    message = 'Получено доверие от '
+                #elif operationtype_id == OperationType.NULLIFY_TRUST:
+                    #message = 'Отмена утраты доверия от '
+                if message:
+                    message += self.profile_link(user_from.profile)
+                    self.send_to_telegram(user_to, message)
             status_code = status.HTTP_200_OK
 
         except ServiceException as excpt:
@@ -2782,7 +2827,7 @@ class ApiDeleteAbility(APIView):
 
 api_delete_ability = ApiDeleteAbility.as_view()
 
-class ApiInviteUseToken(ApiAddOperationMixin, APIView):
+class ApiInviteUseToken(ApiAddOperationMixin, SendMessageMixin, APIView):
     permission_classes = (IsAuthenticated, )
 
     @transaction.atomic
@@ -2803,17 +2848,16 @@ class ApiInviteUseToken(ApiAddOperationMixin, APIView):
             if token.insert_timestamp + token.ttl < time.time():
                 raise ServiceException('Время действия токена истекло')
             profile_to = Profile.objects.select_for_update().select_related('user').get(user=request.user)
-            try:
-                self.add_operation(
-                    user_from,
-                    profile_to,
-                    operationtype_id=OperationType.TRUST,
-                    comment=None,
-                    insert_timestamp=int(time.time()),
-                )
-            except ServiceException:
-                # Уже установлено доверие
-                pass
+            self.add_operation(
+                user_from,
+                profile_to,
+                operationtype_id=OperationType.TRUST_AND_THANK,
+                comment=None,
+                insert_timestamp=int(time.time()),
+            )
+            if profile_to.is_notified:
+                message = self.profile_link(profile_to) + ' принял Вашу благодарность'
+                self.send_to_telegram(user_from, message)
             token.delete()
             data = dict()
             status_code = status.HTTP_200_OK

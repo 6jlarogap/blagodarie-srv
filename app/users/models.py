@@ -372,6 +372,7 @@ class Profile(PhotoModel):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
     middle_name = models.CharField(_("Отчество"), max_length=255, blank=True, default='')
     photo_url = models.URLField(_("Фото из соц. сети"), max_length=255, default='')
+    is_notified = models.BooleanField(_("Принимает уведомления"), default=True)
     fame = models.PositiveIntegerField(_("Известность"), default=0)
     sum_thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
     trust_count = models.PositiveIntegerField(_("Число оказанных доверий"), default=0)
@@ -503,14 +504,23 @@ class Profile(PhotoModel):
         if do_save:
             self.save(update_fields=('fame', 'trust_count', 'mistrust_count',))
 
-    def full_name(self, put_middle_name=True):
+    def full_name(self, put_middle_name=True, last_name_first=True):
         name = ""
-        if self.user.last_name:
-            name = self.user.last_name
-            if self.user.first_name:
-                name = "{0} {1}".format(name, self.user.first_name)
-                if put_middle_name and self.middle_name:
-                    name = "{0} {1}".format(name, self.middle_name)
+        if last_name_first:
+            if self.user.last_name:
+                name = self.user.last_name
+                if self.user.first_name:
+                    name = "{0} {1}".format(name, self.user.first_name)
+                    if put_middle_name and self.middle_name:
+                        name = "{0} {1}".format(name, self.middle_name)
+        else:
+            if self.user.last_name:
+                f = self.user.last_name.strip()
+                i_o = self.user.first_name.strip()
+                if i_o and self.middle_name and put_middle_name:
+                    i_o += ' ' + self.middle_name
+                name = i_o + ' ' + f
+                name = name.strip()
         if not name:
             name = self.user.get_full_name()
         return name

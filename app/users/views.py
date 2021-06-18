@@ -55,6 +55,7 @@ class ApiGetProfileInfo(APIView):
             "sum_thanks_count": 300,
             "fame": 3,
             "mistrust_count": 1,
+            "is_notified": True,
             "trust_count": 3,
             "thanks_count": 12, // только при авторизованном запросе
             "is_trust": true,   // только при авторизованном запросе
@@ -97,6 +98,7 @@ class ApiGetProfileInfo(APIView):
                 first_name=user.first_name,
                 middle_name=profile.middle_name,
                 photo=profile.choose_photo(),
+                is_notified=profile.is_notified,
                 sum_thanks_count=profile.sum_thanks_count,
                 fame=profile.fame,
                 mistrust_count=profile.mistrust_count,
@@ -139,26 +141,26 @@ class ApiUpdateProfileInfo(APIView):
 
         Пока только credit_card
         """
-        try:
-            credit_card = request.data.get('credit_card')
-            if credit_card:
-                keytype = KeyType.objects.get(pk=KeyType.CREDIT_CARD_ID)
-                key, created_ = Key.objects.get_or_create(
-                    owner=request.user,
-                    type=keytype,
-                    defaults=dict(
-                        value=credit_card,
-                ))
-                if not created_:
-                    key.value = credit_card
-                    key.save(update_fields=('value',))
-            status_code = 200
-            data = dict()
-        except ServiceException as excpt:
-            transaction.set_rollback(True)
-            status_code = 400
-            data = dict(message=excpt.args[0])
-        return Response(data=data, status=status_code)
+        for key in request.data:
+            key = key.lower()
+            if key == 'credit_card':
+                credit_card = request.data.get('credit_card')
+                if credit_card:
+                    keytype = KeyType.objects.get(pk=KeyType.CREDIT_CARD_ID)
+                    key, created_ = Key.objects.get_or_create(
+                        owner=request.user,
+                        type=keytype,
+                        defaults=dict(
+                            value=credit_card,
+                    ))
+                    if not created_:
+                        key.value = credit_card
+                        key.save(update_fields=('value',))
+            elif key in ('is_notified',):
+                profile = request.user.profile
+                setattr(profile, key, request.data.get(key))
+                profile.save()
+        return Response(data=dict(), status=200)
 
     @transaction.atomic
     def delete(self, request):
