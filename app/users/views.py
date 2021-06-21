@@ -19,6 +19,7 @@ from app.utils import ServiceException, dictfetchall, FrontendMixin
 from django.contrib.auth.models import User
 from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TempToken
 from contact.models import Key, KeyType, CurrentState, OperationType
+from contact.views import SendMessageMixin
 
 class ApiGetProfileInfo(APIView):
 
@@ -130,7 +131,7 @@ class ApiGetProfileInfo(APIView):
 
 api_get_profileinfo = ApiGetProfileInfo.as_view()
 
-class ApiUpdateProfileInfo(APIView):
+class ApiUpdateProfileInfo(SendMessageMixin, APIView):
     permission_classes = (IsAuthenticated, )
     parser_classes = (FormParser, MultiPartParser, JSONParser,)
 
@@ -167,7 +168,20 @@ class ApiUpdateProfileInfo(APIView):
         """
         Удалить пользователя
         """
-        request.user.delete()
+
+        user = request.user
+        message = telegram_uid = None
+        profile = user.profile
+        if profile.is_notified:
+            try:
+                telegram_uid = Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)[0].uid
+                fio = profile.full_name(last_name_first=False) or 'Без имени'
+                message = "Cвязанный профиль '%s' удалён пользователем" % fio
+            except IndexError:
+                pass
+        user.delete()
+        if message:
+            self.send_to_telegram(message, telegram_uid=telegram_uid)
         return Response(data={}, status=200)
 
 api_update_profileinfo = ApiUpdateProfileInfo.as_view()

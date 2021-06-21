@@ -42,24 +42,33 @@ class SendMessageMixin(FrontendMixin):
         )
         return link
 
-    def send_to_telegram(self, user, message):
-        try:
-            uid = Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)[0].uid
-        except IndexError:
-            # У пользователя нет аккаунта в телеграме
-            return
-        url = 'https://api.telegram.org/bot%s/sendMessage?' % settings.TELEGRAM_BOT_TOKEN
-        parms = dict(
-            chat_id=uid,
-            parse_mode='html',
-            text=message
-        )
-        url += urlencode(parms)
-        try:
-            req = urllib.request.Request(url)
-            urllib.request.urlopen(req, timeout=20)
-        except (urllib.error.URLError, ):
-            pass
+    def send_to_telegram(self, message, user=None, telegram_uid=None):
+        """
+        Сообщение в телеграм или пользователю user, или по telegram uid
+        """
+        uid = None
+        if user:
+            try:
+                uid = Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)[0].uid
+            except IndexError:
+                # У пользователя нет аккаунта в телеграме
+                pass
+        elif telegram_uid:
+            uid = telegram_uid
+
+        if uid:
+            url = 'https://api.telegram.org/bot%s/sendMessage?' % settings.TELEGRAM_BOT_TOKEN
+            parms = dict(
+                chat_id=uid,
+                parse_mode='html',
+                text=message
+            )
+            url += urlencode(parms)
+            try:
+                req = urllib.request.Request(url)
+                urllib.request.urlopen(req, timeout=20)
+            except (urllib.error.URLError, ):
+                pass
 
 class ApiAddOperationMixin(object):
 
@@ -381,7 +390,7 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                     #message = 'Отмена утраты доверия от '
                     #message += self.profile_link(user_from.profile)
                 if message:
-                    self.send_to_telegram(user_to, message)
+                    self.send_to_telegram(message, user=user_to)
 
             status_code = status.HTTP_200_OK
 
@@ -2863,7 +2872,7 @@ class ApiInviteUseToken(ApiAddOperationMixin, SendMessageMixin, APIView):
             )
             if profile_to.is_notified:
                 message = self.profile_link(profile_to) + ' принял Вашу благодарность'
-                self.send_to_telegram(user_from, message)
+                self.send_to_telegram(message, user=user_from)
             token.delete()
             data = dict()
             status_code = status.HTTP_200_OK
