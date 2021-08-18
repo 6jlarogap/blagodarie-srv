@@ -44,7 +44,6 @@ install-readme.txt
             * python3:
                   * sudo apt install python3-all-dev
                   * sudo apt install python3-virtualenv python3-pycurl virtualenv
-                  * sudo apt-get install python3-matplotlib
 
          - postgresql,
             * в т.ч. для разработчика:
@@ -235,7 +234,7 @@ install-readme.txt
 
     # Запуск websocket-server через systemd
     #
-    cd /etc/systemd/systemId
+    cd /etc/systemd/system
     # Создать там файл с именем websocket-prod.service 
     [Unit]
     Description=Start websocket server for blagodarie.org

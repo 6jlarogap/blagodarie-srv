@@ -40,7 +40,6 @@ urlpatterns = [
     re_path(r'^api/getstats/?$', views.api_get_stats),
     re_path(r'^api/getstats/users/?$', views.api_get_stats, {'only': 'users'}),
     re_path(r'^api/getstats/symptoms/?$', views.api_get_stats, {'only': 'symptoms'}),
-    re_path(r'^api/getstats/symptoms/hist/?$', views.api_get_stats, {'only': 'symptoms_hist'}),
     re_path(r'^api/getstats/symptoms/names/?$', views.api_get_stats, {'only': 'symptoms_names'}),
 
     re_path(r'^api/getstats/symptoms/hist/data/?$',
