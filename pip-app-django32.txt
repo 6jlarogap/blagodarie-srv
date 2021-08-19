@@ -1,4 +1,4 @@
-Django==3.0.14
+Django==3.2.6
 django-debug-toolbar
 
 djangorestframework
@@ -10,4 +10,6 @@ pytils
 
 skyfield==1.39
 
-pyfcm==1.5.1
+pyfcm==1.5.3
+
+Pillow
