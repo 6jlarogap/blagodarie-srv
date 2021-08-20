@@ -409,7 +409,7 @@ class Profile(PhotoModel):
 
         q = Q(user_from=user_from) | Q(user_from=user) | Q(user_to=user_from) | Q(user_to=user)
         q &= Q(user_to__isnull=False) & Q(is_reverse=True)
-        CurrentState.objects.filter(q).distinct().delete()
+        CurrentState.objects.filter(q).delete()
 
         for cs in CurrentState.objects.filter(user_from=user_from, user_to__isnull=False):
             try:
