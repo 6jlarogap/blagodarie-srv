@@ -10,6 +10,4 @@ pytils
 
 skyfield==1.39
 
-pyfcm==1.5.3
-
 Pillow

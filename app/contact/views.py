@@ -21,8 +21,6 @@ from rest_framework.permissions import IsAuthenticated
 
 from app.utils import ServiceException, dictfetchall, FrontendMixin
 
-from pyfcm import FCMNotification
-
 from contact.models import KeyType, Key, UserKey, LikeKey, Like, LogLike, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
                            Journal, CurrentState, OperationType, Wish, \
@@ -277,20 +275,6 @@ class ApiAddOperationMixin(object):
             comment=comment,
         )
 
-        if settings.FCM_SERVER_KEY:
-            fcm_topic_name = 'user_%s' % profile_to.uuid
-            fcm_data_message = dict(
-                first_name=user_from.first_name,
-                last_name=user_from.last_name,
-                photo=user_from.profile.choose_photo(),
-                operation_type_id=operationtype_id,
-                comment=comment,
-            )
-            push_service = FCMNotification(api_key=settings.FCM_SERVER_KEY)
-            fcm_result = push_service.topic_subscribers_data_message(
-                topic_name=fcm_topic_name,
-                data_message=fcm_data_message,
-            )
         return data
 
 class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):

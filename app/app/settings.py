@@ -262,13 +262,6 @@ GOOGLE_PHOTO_SIZE = 200
 #
 ADMIN_ENABLED = False
 
-# Отсутствующий (ложный) FCM_SERVER_KEY:
-#   апи не будет отправлять push уведомления
-# Неправильный FCM_SERVER_KEY:
-#   push уведомления не будут приняты
-#
-FCM_SERVER_KEY = None
-
 # Глубина прохода по графу связей рекурсивно
 #
 CONNECTIONS_LEVEL = 1000
