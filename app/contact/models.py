@@ -381,9 +381,7 @@ class LogLike(models.Model):
             # }
 
             users = []
-            user_pks = []
-            if request and request.user.is_authenticated:
-                user = request.user
+            for user in User.objects.select_related('profile').filter(is_superuser=False):
                 profile = user.profile
                 users.append(dict(
                     uuid=profile.uuid,
@@ -391,7 +389,6 @@ class LogLike(models.Model):
                     last_name=user.last_name,
                     photo = profile.choose_photo(),
                 ))
-                user_pks.append(user.pk)
 
             connections = []
             for cs in CurrentState.objects.filter(
@@ -399,7 +396,6 @@ class LogLike(models.Model):
                         is_reverse=False,
                         is_trust__isnull=False,
                     ).select_related(
-                    'user_from', 'user_to',
                     'user_from__profile', 'user_to__profile',
                 ):
                 connections.append({
@@ -408,27 +404,6 @@ class LogLike(models.Model):
                     'thanks_count': cs.thanks_count,
                     'is_trust': cs.is_trust,
                 })
-                user = cs.user_from
-                if user.pk not in user_pks:
-                    profile = user.profile
-                    users.append(dict(
-                        uuid=profile.uuid,
-                        first_name=user.first_name,
-                        last_name=user.last_name,
-                        photo = profile.choose_photo(),
-                    ))
-                    user_pks.append(user.pk)
-                user = cs.user_to
-                if user.pk not in user_pks:
-                    profile = user.profile
-                    users.append(dict(
-                        uuid=profile.uuid,
-                        first_name=user.first_name,
-                        last_name=user.last_name,
-                        photo = profile.choose_photo(),
-                    ))
-                    user_pks.append(user.pk)
-
             return dict(users=users, connections=connections)
 
         if kwargs.get('only') == 'users':
