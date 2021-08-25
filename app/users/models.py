@@ -35,45 +35,6 @@ class Oauth(BaseModelInsertUpdateTimestamp):
     )
 
     PROVIDER_DETAILS = {
-        PROVIDER_GOOGLE: {
-            'url': "https://oauth2.googleapis.com/tokeninfo?id_token=%(token)s",
-
-            # Для отладки разработчиком
-            #
-            # 'url': "http://127.0.0.1:8000/api/auth/dummy?token=%(token)s",
-
-            'uid': 'sub',
-            'first_name': "given_name",
-            'last_name': "family_name",
-            'display_name': "name",
-            'email': 'email',
-            'photo': 'picture',
-
-            # Это не от oauth провайдера, а из нашей таблицы ключей,
-            # где может быть уже пользователь с таким ид от oauth,
-            #
-            'key_type_title': None,
-
-            # Получаем от google:
-
-            #"iss": "https://accounts.google.com",
-            #"azp": "dummy",
-            #"aud": "dummy",
-            #"sub": "100407860688573256455",
-            #"email": "someone@gmail.com",
-            #"email_verified": "true",
-            #"name": "dummy",
-            #"picture": "https://lh5.googleusercontent.com/dummy/photo3.jpg",
-            #"given_name": "Сергей",
-            #"family_name": "Неизвестный",
-            #"locale": "ru",
-            #"iat": "1587538141",
-            #"exp": "1587541741",
-            #"alg": "RS256",
-            #"kid": "dummy",
-            #"typ": "JWT"
-        },
-
         PROVIDER_YANDEX: {
             'url': "https://login.yandex.ru/info?format=json&oauth_token=%(token)s",
             'uid': 'id',
@@ -260,7 +221,6 @@ class Oauth(BaseModelInsertUpdateTimestamp):
             photo='',
             username='',
 
-            key_type_title = None,
             message='',
             code=200,
         )
@@ -340,7 +300,6 @@ class Oauth(BaseModelInsertUpdateTimestamp):
                 raise ServiceException(_('Получен пустой (id) от провайдера'))
 
             result['uid'] = str(uid)
-            result['key_type_title'] = provider_details.get('key_type_title')
             for key in Oauth.OAUTH_EXTRA_FIELDS:
                 real_key = provider_details.get(key)
                 if real_key:

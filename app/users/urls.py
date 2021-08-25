@@ -6,15 +6,10 @@ from django.conf import settings
 from . import views
 
 urlpatterns = [
-    re_path(r'^api/auth/signup/?$', views.api_auth_signup),
-    re_path(r'^api/auth/signin/?$', views.api_auth_signup,  {'signin': True}),
-
     re_path(r'^api/auth/signup/incognito/?$', views.api_auth_signup_incognito),
 
     re_path(r'^api/getprofileinfo/?$', views.api_get_profileinfo),
     re_path(r'^api/updateprofileinfo/?$', views.api_update_profileinfo),
-
-    re_path(r'^api/auth/dummy/?$', views.api_auth_dummy),
 
     re_path(r'^api/download\-apk\-details/?$', views.api_download_apk_details),
     re_path(r'^api/getlatestversion/?$', views.api_latest_version),
