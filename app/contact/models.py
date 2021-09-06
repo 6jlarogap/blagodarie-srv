@@ -117,7 +117,7 @@ class Key(BaseModelInsertTimestamp):
 
     owner = models.ForeignKey('auth.User', verbose_name=_("Владелец"), null=True, on_delete=models.CASCADE)
     type = models.ForeignKey(KeyType, on_delete=models.CASCADE)
-    value = models.CharField(_("Значение"), max_length=255)
+    value = models.CharField(_("Значение"), max_length=255, db_index=True)
 
     class Meta:
         unique_together = ('type', 'value', )
@@ -283,13 +283,13 @@ class Wish(BaseModelInsertUpdateTimestamp):
 
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True)
     owner = models.ForeignKey('auth.User', verbose_name=_("Владелец"), on_delete=models.CASCADE)
-    text = models.TextField(verbose_name=_("Текст"))
+    text = models.TextField(verbose_name=_("Текст"), db_index=True)
 
 class Ability(BaseModelInsertUpdateTimestamp):
 
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True)
     owner = models.ForeignKey('auth.User', verbose_name=_("Владелец"), on_delete=models.CASCADE)
-    text = models.TextField(verbose_name=_("Текст"))
+    text = models.TextField(verbose_name=_("Текст"), db_index=True)
 
 class LogLike(models.Model):
     """
