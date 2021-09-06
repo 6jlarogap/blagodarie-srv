@@ -357,53 +357,119 @@ class LogLike(models.Model):
 
         if kwargs.get('only') == 'user_connections_graph':
 
-            # Вернуть:
-            #
-            # {
-            #   "users": [
-            #       {
-            #           "id": "8b0cc02d-b6bb-4444-ae40-1b3a00aa9499",
-            #           "first_name": "Иван",
-            #           "last_name": "Иванов",
-            #           "photo": "..."
-            #       },
-            #       ...
-            # ],
-            #   "current_states": [
-            #       {
-            #           "source": "8b0cc02d-b6bb-4444-ae40-1b3a00aa9499",
-            #           "target": "a8fc8a5b-5687-43e6-b0e6-a043750c2ede",
-            #           "thanks_count": 1,
-            #           "is_trust": true
-            #       },
-            #       ...
-            #   ]
-            # }
+            # Возвращает:
+            #   без параметров:
+            #       список всех пользователей, и связи,
+            #       где не обнулено доверие (currenstate.is_trust is not null).
+            #   с параметром query:
+            #       список всех пользователей у которых в
+            #           имени или
+            #           фамилии или
+            #           возможностях или
+            #           ключах или
+            #           желаниях
+            #       есть query, и их связи,
+            #       где не обнулено доверие (currenstate.is_trust is not null).
+            #       В списке пользователей найденные имеют filtered == true,
+            #       на front-end они выделяются, а связи,
+            #       не подпадающие под фильтр query: filtered == false.
+            #       В любом случае возвращаются в массиве users еще
+            #       данные пользователя, если он авторизовался.
+            #   с параметром count:
+            #       число пользователей, всех или найденных по фильтру query
 
+            q_users = Q(is_superuser=False)
+            query = request and request.GET.get('query')
+            if query:
+                q_users &= \
+                    Q(last_name__icontains=query) | \
+                    Q(first_name__icontains=query) | \
+                    Q(wish__text__icontains=query) | \
+                    Q(ability__text__icontains=query) | \
+                    Q(key__value__icontains=query)
+            users_selected = User.objects.filter(q_users).distinct()
+
+            count = request and request.GET.get('count')
+            if count:
+                return dict(count=users_selected.count())
+
+            users_selected = users_selected.select_related('profile')
             users = []
-            for user in User.objects.select_related('profile').filter(is_superuser=False):
+            user_pks = []
+            user_filtered_pks = []
+            if not query:
+                users_selected = users_selected.order_by('-date_joined')[:settings.LANDING_USERS_COUNT]
+            for user in users_selected:
                 profile = user.profile
-                users.append(dict(
+                d = dict(
                     uuid=profile.uuid,
                     first_name=user.first_name,
                     last_name=user.last_name,
                     photo = profile.choose_photo(),
-                ))
+                )
+                if query:
+                    d.update(dict(filtered=True))
+                users.append(d)
+                user_filtered_pks.append(user.pk)
+                user_pks.append(user.pk)
 
             connections = []
-            for cs in CurrentState.objects.filter(
-                        user_to__isnull=False,
-                        is_reverse=False,
-                        is_trust__isnull=False,
-                    ).select_related(
+            q_connections = Q(
+                is_reverse=False,
+                is_trust__isnull=False,
+                user_to__isnull=False,
+            )
+            q_connections &= Q(user_to__pk__in=user_filtered_pks) | Q(user_from__pk__in=user_filtered_pks)
+            for cs in CurrentState.objects.filter(q_connections).select_related(
                     'user_from__profile', 'user_to__profile',
-                ):
+                ).distinct():
                 connections.append({
                     'source': cs.user_from.profile.uuid,
                     'target': cs.user_to.profile.uuid,
                     'thanks_count': cs.thanks_count,
                     'is_trust': cs.is_trust,
                 })
+                if cs.user_to.pk not in user_pks:
+                    user = cs.user_to
+                    profile = user.profile
+                    d = dict(
+                        uuid=profile.uuid,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                        photo = profile.choose_photo(),
+                    )
+                    if query:
+                        d.update(dict(filtered=False))
+                    users.append(d)
+                    user_pks.append(user.pk)
+                if cs.user_from.pk not in user_pks:
+                    user = cs.user_from
+                    profile = user.profile
+                    d = dict(
+                        uuid=profile.uuid,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                        photo = profile.choose_photo(),
+                    )
+                    if query:
+                        d.update(dict(filtered=False))
+                    users.append(d)
+                    user_pks.append(user.pk)
+
+            if request and request.user and request.user.is_authenticated:
+                if request.user.pk not in user_pks:
+                    user = request.user
+                    profile = user.profile
+                    d = dict(
+                        uuid=profile.uuid,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                        photo = profile.choose_photo(),
+                    )
+                    if query:
+                        d.update(dict(filtered=False))
+                    users.append(d)
+
             return dict(users=users, connections=connections)
 
         if kwargs.get('only') == 'users':
