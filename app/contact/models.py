@@ -375,6 +375,10 @@ class LogLike(models.Model):
             #       не подпадающие под фильтр query: filtered == false.
             #       В любом случае возвращаются в массиве users еще
             #       данные пользователя, если он авторизовался.
+            #   список выдается по страницам найденных (или всех) пользователей,
+            #   в порядке убывания даты регистрации пользователя,
+            #   начало страницы -- параметр from (нумерация с 0), по умолчанию 0
+            #   сколько на странице -- параметр number, по умолчанию 50
             #   с параметром count:
             #       число пользователей, всех или найденных по фильтру query
 
@@ -397,8 +401,16 @@ class LogLike(models.Model):
             users = []
             user_pks = []
             user_filtered_pks = []
-            if not query:
-                users_selected = users_selected.order_by('-date_joined')[:settings.LANDING_USERS_COUNT]
+            try:
+                from_ = abs(int(request.GET.get("from")))
+            except (ValueError, TypeError, ):
+                from_ = 0
+            try:
+                number_ = abs(int(request.GET.get("number")))
+            except (ValueError, TypeError, ):
+                number_ = settings.PAGINATE_USERS_COUNT
+
+            users_selected = users_selected.order_by('-date_joined')[from_:from_ + number_]
             for user in users_selected:
                 profile = user.profile
                 d = dict(
@@ -406,9 +418,8 @@ class LogLike(models.Model):
                     first_name=user.first_name,
                     last_name=user.last_name,
                     photo = profile.choose_photo(),
+                    filtered=True,
                 )
-                if query:
-                    d.update(dict(filtered=True))
                 users.append(d)
                 user_filtered_pks.append(user.pk)
                 user_pks.append(user.pk)
@@ -437,9 +448,8 @@ class LogLike(models.Model):
                         first_name=user.first_name,
                         last_name=user.last_name,
                         photo = profile.choose_photo(),
+                        filtered=False,
                     )
-                    if query:
-                        d.update(dict(filtered=False))
                     users.append(d)
                     user_pks.append(user.pk)
                 if cs.user_from.pk not in user_pks:
@@ -450,9 +460,8 @@ class LogLike(models.Model):
                         first_name=user.first_name,
                         last_name=user.last_name,
                         photo = profile.choose_photo(),
+                        filtered=False,
                     )
-                    if query:
-                        d.update(dict(filtered=False))
                     users.append(d)
                     user_pks.append(user.pk)
 
@@ -465,9 +474,8 @@ class LogLike(models.Model):
                         first_name=user.first_name,
                         last_name=user.last_name,
                         photo = profile.choose_photo(),
+                        filtered=False,
                     )
-                    if query:
-                        d.update(dict(filtered=False))
                     users.append(d)
 
             return dict(users=users, connections=connections)
