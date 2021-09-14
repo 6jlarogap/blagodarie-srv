@@ -18,7 +18,7 @@ from app.utils import ServiceException, dictfetchall, FrontendMixin
 
 from django.contrib.auth.models import User
 from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TempToken
-from contact.models import Key, KeyType, CurrentState, OperationType
+from contact.models import Key, UserKey, KeyType, CurrentState, OperationType, Wish, Like, Ability
 from contact.views import SendMessageMixin
 
 class ApiGetProfileInfo(APIView):
@@ -58,6 +58,7 @@ class ApiGetProfileInfo(APIView):
             "mistrust_count": 1,
             "is_notified": True,
             "trust_count": 3,
+            "is_active": true,
             "thanks_count": 12, // только при авторизованном запросе
             "is_trust": true,   // только при авторизованном запросе
             "thanks_users": [
@@ -99,6 +100,7 @@ class ApiGetProfileInfo(APIView):
                 first_name=user.first_name,
                 middle_name=profile.middle_name,
                 photo=profile.choose_photo(),
+                is_active=user.is_active,
                 is_notified=profile.is_notified,
                 sum_thanks_count=profile.sum_thanks_count,
                 fame=profile.fame,
@@ -166,7 +168,15 @@ class ApiUpdateProfileInfo(SendMessageMixin, APIView):
     @transaction.atomic
     def delete(self, request):
         """
-        Удалить пользователя
+        Деактивировать профиль пользователя (обезличить)
+
+        Удалить:
+            ФИО, фото - в профиле и во всех профилях соцсетей
+            ключи
+            возможности
+            желания
+            токен авторизации
+        Отметить а auth_user пользователя is_active = False
         """
 
         user = request.user
@@ -176,10 +186,30 @@ class ApiUpdateProfileInfo(SendMessageMixin, APIView):
             try:
                 telegram_uid = Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)[0].uid
                 fio = profile.full_name(last_name_first=False) or 'Без имени'
-                message = "Cвязанный профиль '%s' удалён пользователем" % fio
+                message = "Cвязанный профиль '%s' обезличен пользователем" % fio
             except IndexError:
                 pass
-        user.delete()
+        UserKey.objects.filter(user=user).delete()
+        Key.objects.filter(owner=user).delete()
+        Like.objects.filter(owner=user).delete()
+        Ability.objects.filter(owner=user).delete()
+        Wish.objects.filter(owner=user).delete()
+        Token.objects.filter(user=user).delete()
+        for oauth in Oauth.objects.filter(user=user):
+            for f in ('last_name', 'first_name', 'display_name', 'email', 'photo', 'username'):
+                setattr(oauth, f, '')
+            oauth.update_timestamp = int(time.time())
+            oauth.save()
+        for f in ('photo', 'photo_original_filename', 'photo_url', 'middle_name'):
+            setattr(profile, f, '')
+        # default:
+        profile.is_notified = True
+        profile.save()
+        for f in ('first_name', 'email'):
+            setattr(user, f, '')
+        user.last_name = "Обезличен"
+        user.is_active = False
+        user.save()
         if message:
             self.send_to_telegram(message, telegram_uid=telegram_uid)
         return Response(data={}, status=200)
@@ -564,6 +594,7 @@ class ApiGetUsers(APIView):
                     mistrust_count=profile.mistrust_count,
                     trustless_count=profile.mistrust_count,
                     trust_count=profile.trust_count,
+                    is_active=user.is_active,
                 ))
             data = dict(users=users)
             status_code = 200
@@ -650,6 +681,7 @@ class ApiAuthTelegram(CreateUserMixin, APIView):
                 if changed:
                     for f in oauth_tg_field_map:
                         setattr(oauth, f, tg.get(oauth_tg_field_map[f], ''))
+                    oauth.update_timestamp = int(time.time())
                     oauth.save()
 
                 user_tg_field_map = dict(
@@ -661,6 +693,9 @@ class ApiAuthTelegram(CreateUserMixin, APIView):
                     if getattr(user, f) != tg.get(user_tg_field_map[f], ''):
                         changed = True
                         break
+                if not user.is_active:
+                    changed = True
+                    user.is_active = True
                 if changed:
                     for f in user_tg_field_map:
                         setattr(user, f, tg.get(user_tg_field_map[f], ''))

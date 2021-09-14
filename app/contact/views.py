@@ -806,7 +806,8 @@ class ApiGetUserOperationsView(APIView):
                 "last_name": "Павлова-Аксёнова",
                 "operation_type_id": 1,
                 "timestamp": 384230840234,
-                "comment": "Хороший человек"
+                "comment": "Хороший человек",
+                "is_active": true,
                 },
                 …
             ]
@@ -840,6 +841,7 @@ class ApiGetUserOperationsView(APIView):
                     user_id_from=j.user_from.profile.uuid,
                     first_name=j.user_from.first_name,
                     last_name=j.user_from.last_name,
+                    is_active=j.user_from.is_active,
                     photo=j.user_from.profile.choose_photo(),
                     operation_type_id=j.operationtype.pk,
                     timestamp=j.insert_timestamp,
@@ -2275,6 +2277,7 @@ class ApiProfileGraphMixin(object):
                     first_name=user.first_name,
                     last_name=user.last_name,
                     photo = profile.choose_photo(),
+                    is_active=user.is_active,
                 ))
                 user_pks.append(user.pk)
             user = cs.user_to
@@ -2285,6 +2288,7 @@ class ApiProfileGraphMixin(object):
                     first_name=user.first_name,
                     last_name=user.last_name,
                     photo = profile.choose_photo(),
+                    is_active=user.is_active,
                 ))
                 user_pks.append(user.pk)
 
@@ -2339,6 +2343,7 @@ class ApiProfileGraphMixin(object):
                 uuid=profile.uuid,
                 first_name=profile.user.first_name,
                 last_name=profile.user.last_name,
+                is_active=profile.user.is_active,
                 photo = profile.choose_photo(),
             )
         users = [profiles_dict[p] for p in profiles_dict]
@@ -2370,7 +2375,8 @@ class ApiProfileGraph(ApiProfileGraphMixin, APIView):
                         "uuid": "8d2db918-9a81-4537-ab69-1c3d2d19a00d",
                         "first_name": "Олег",
                         "last_name": ".",
-                        "photo": "https://...jpg"
+                        "photo": "https://...jpg",
+                        "is_active": true,
                     },
                     ...
             ],

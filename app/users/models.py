@@ -1,4 +1,4 @@
-import datetime, string, random, os, binascii
+import datetime, string, random, os, binascii, time
 import urllib.request, urllib.error, urllib.parse
 import json, uuid, re, hashlib
 
@@ -563,7 +563,8 @@ class CreateUserMixin(object):
                 setattr(oauth, f, oauth_result[f])
                 changed = True
         if changed:
-            oauth.save(update_fields=Oauth.OAUTH_EXTRA_FIELDS)
+            oauth.update_timestamp = int(time.time())
+            oauth.save(update_fields=Oauth.OAUTH_EXTRA_FIELDS + ('update_timestamp',))
 
         user = oauth.user
         user_fields = ('last_name', 'first_name', 'email',)
@@ -572,8 +573,11 @@ class CreateUserMixin(object):
             if oauth_result[f] and getattr(user, f) != oauth_result[f]:
                 setattr(user, f, oauth_result[f])
                 changed = True
+        if not user.is_active:
+            user.is_active = True
+            changed = True
         if changed:
-            user.save(update_fields=user_fields)
+            user.save(update_fields=user_fields + ('is_active',))
 
         profile = user.profile
         profile_fields = ('photo_url',)
