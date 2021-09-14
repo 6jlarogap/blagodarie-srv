@@ -2249,6 +2249,7 @@ class ApiProfileGraphMixin(object):
             first_name=user_q.first_name,
             last_name=user_q.last_name,
             photo = profile_q.choose_photo(),
+            is_active=user.is_active,
         ))
 
         # Здесь будут pk всех пользователей
