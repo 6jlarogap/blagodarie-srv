@@ -605,7 +605,7 @@ class ApiGetUsers(APIView):
 
 api_get_users = ApiGetUsers.as_view()
 
-class ApiAuthTelegram(CreateUserMixin, APIView):
+class ApiAuthTelegram(CreateUserMixin, SendMessageMixin, APIView):
     """
     Callback функция авторизации через telegram
 
@@ -693,9 +693,11 @@ class ApiAuthTelegram(CreateUserMixin, APIView):
                     if getattr(user, f) != tg.get(user_tg_field_map[f], ''):
                         changed = True
                         break
+                was_not_active = False
                 if not user.is_active:
                     changed = True
                     user.is_active = True
+                    was_not_active = True
                 if changed:
                     for f in user_tg_field_map:
                         setattr(user, f, tg.get(user_tg_field_map[f], ''))
@@ -713,6 +715,14 @@ class ApiAuthTelegram(CreateUserMixin, APIView):
                     for f in profile_tg_field_map:
                         setattr(profile, f, tg.get(profile_tg_field_map[f], ''))
                     profile.save()
+                if was_not_active:
+                    try:
+                        telegram_uid = Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)[0].uid
+                        fio = profile.full_name(last_name_first=False) or 'Без имени'
+                        message = "Cвязанный профиль '%s' восстановлен" % fio
+                        self.send_to_telegram(message, telegram_uid=telegram_uid)
+                    except IndexError:
+                        pass
             except Oauth.DoesNotExist:
                 last_name = tg.get('last_name', '')
                 first_name = tg.get('first_name', '')
