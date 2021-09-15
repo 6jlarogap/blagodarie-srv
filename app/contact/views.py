@@ -846,6 +846,8 @@ class ApiGetUserOperationsView(APIView):
                     operation_type_id=j.operationtype.pk,
                     timestamp=j.insert_timestamp,
                     comment=j.comment,
+                    latitude=j.user_from.profile.latitude,
+                    longitude=j.user_from.profile.longitude,
                 ) for j in qs
             ]
             status_code = status.HTTP_200_OK
@@ -2250,6 +2252,8 @@ class ApiProfileGraphMixin(object):
             last_name=user_q.last_name,
             photo = profile_q.choose_photo(),
             is_active=user_q.is_active,
+            latitude=profile_q.latitude,
+            longitude=profile_q.longitude,
         ))
 
         # Здесь будут pk всех пользователей
@@ -2279,6 +2283,8 @@ class ApiProfileGraphMixin(object):
                     last_name=user.last_name,
                     photo = profile.choose_photo(),
                     is_active=user.is_active,
+                    latitude=profile.latitude,
+                    longitude=profile.longitude,
                 ))
                 user_pks.append(user.pk)
             user = cs.user_to
@@ -2290,6 +2296,8 @@ class ApiProfileGraphMixin(object):
                     last_name=user.last_name,
                     photo = profile.choose_photo(),
                     is_active=user.is_active,
+                    latitude=profile.latitude,
+                    longitude=profile.longitude,
                 ))
                 user_pks.append(user.pk)
 
@@ -2345,6 +2353,8 @@ class ApiProfileGraphMixin(object):
                 first_name=profile.user.first_name,
                 last_name=profile.user.last_name,
                 is_active=profile.user.is_active,
+                latitude=profile.latitude,
+                longitude=profile.longitude,
                 photo = profile.choose_photo(),
             )
         users = [profiles_dict[p] for p in profiles_dict]

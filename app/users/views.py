@@ -159,7 +159,7 @@ class ApiUpdateProfileInfo(SendMessageMixin, APIView):
                     if not created_:
                         key.value = credit_card
                         key.save(update_fields=('value',))
-            elif key in ('is_notified',):
+            elif key in ('is_notified', 'latitude', 'longitude'):
                 profile = request.user.profile
                 setattr(profile, key, request.data.get(key))
                 profile.save()

@@ -420,6 +420,8 @@ class LogLike(models.Model):
                     photo = profile.choose_photo(),
                     filtered=True,
                     is_active=user.is_active,
+                    latitude=profile.latitude,
+                    longitude=profile.longitude,
                 )
                 users.append(d)
                 user_filtered_pks.append(user.pk)
@@ -451,6 +453,8 @@ class LogLike(models.Model):
                         photo = profile.choose_photo(),
                         filtered=False,
                         is_active=user.is_active,
+                        latitude=profile.latitude,
+                        longitude=profile.longitude,
                     )
                     users.append(d)
                     user_pks.append(user.pk)
@@ -464,6 +468,8 @@ class LogLike(models.Model):
                         photo = profile.choose_photo(),
                         filtered=False,
                         is_active=user.is_active,
+                        latitude=profile.latitude,
+                        longitude=profile.longitude,
                     )
                     users.append(d)
                     user_pks.append(user.pk)

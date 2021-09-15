@@ -15,7 +15,7 @@ from django.contrib.auth.models import User
 from django.apps import apps
 get_model = apps.get_model
 
-from app.models import BaseModelInsertUpdateTimestamp, BaseModelInsertTimestamp, PhotoModel
+from app.models import BaseModelInsertUpdateTimestamp, BaseModelInsertTimestamp, PhotoModel, GeoPointModel
 from app.utils import ServiceException
 
 class Oauth(BaseModelInsertUpdateTimestamp):
@@ -325,7 +325,7 @@ class Oauth(BaseModelInsertUpdateTimestamp):
                 result['code'] = 400
         return result
 
-class Profile(PhotoModel):
+class Profile(PhotoModel, GeoPointModel):
 
     user = models.OneToOneField('auth.User', on_delete=models.CASCADE)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
@@ -336,6 +336,7 @@ class Profile(PhotoModel):
     sum_thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
     trust_count = models.PositiveIntegerField(_("Число оказанных доверий"), default=0)
     mistrust_count = models.PositiveIntegerField(_("Число утрат доверия"), default=0)
+    ability = models.ForeignKey('contact.Ability', verbose_name=_("Способность"), null=True, on_delete=models.CASCADE)
 
     class Meta:
         ordering = ('user__last_name', 'user__first_name', 'middle_name', )
