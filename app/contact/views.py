@@ -596,7 +596,7 @@ class ApiGetTextInfo(APIView):
         которые благодарили текст, о котором запрашивается информация.
         Массив пользователей должен быть отсортирован по убыванию известности пользователей.
         Пример вызова:
-        /api/getprofileinfo?base_url/gettextinfo?text=ЛЮБОЙ_ТЕКСТ ИЛИ http://ссылка.ком
+        /api/gettextinfo?text=ЛЮБОЙ_ТЕКСТ ИЛИ http://ссылка.ком
 
         Пример возвращаемых данных:
         {
@@ -846,8 +846,6 @@ class ApiGetUserOperationsView(APIView):
                     operation_type_id=j.operationtype.pk,
                     timestamp=j.insert_timestamp,
                     comment=j.comment,
-                    latitude=j.user_from.profile.latitude,
-                    longitude=j.user_from.profile.longitude,
                 ) for j in qs
             ]
             status_code = status.HTTP_200_OK
@@ -2254,6 +2252,7 @@ class ApiProfileGraphMixin(object):
             is_active=user_q.is_active,
             latitude=profile_q.latitude,
             longitude=profile_q.longitude,
+            ability=profile_q.ability and profile_q.ability.text or None,
         ))
 
         # Здесь будут pk всех пользователей
@@ -2267,6 +2266,7 @@ class ApiProfileGraphMixin(object):
         for cs in CurrentState.objects.filter(q).distinct().select_related(
                 'user_from', 'user_to',
                 'user_from__profile', 'user_to__profile',
+                'user_from__profile__ability', 'user_to__profile__ability',
             ):
             connections.append({
                 'source': cs.user_from.profile.uuid,
@@ -2285,6 +2285,7 @@ class ApiProfileGraphMixin(object):
                     is_active=user.is_active,
                     latitude=profile.latitude,
                     longitude=profile.longitude,
+                    ability=profile.ability and profile.ability.text or None,
                 ))
                 user_pks.append(user.pk)
             user = cs.user_to
@@ -2298,6 +2299,7 @@ class ApiProfileGraphMixin(object):
                     is_active=user.is_active,
                     latitude=profile.latitude,
                     longitude=profile.longitude,
+                    ability=profile.ability and profile.ability.text or None,
                 ))
                 user_pks.append(user.pk)
 
@@ -2356,6 +2358,7 @@ class ApiProfileGraphMixin(object):
                 latitude=profile.latitude,
                 longitude=profile.longitude,
                 photo = profile.choose_photo(),
+                ability=profile.ability and profile.ability.text or None,
             )
         users = [profiles_dict[p] for p in profiles_dict]
         for c in connections:
@@ -2444,6 +2447,18 @@ class ApiProfileGraph(ApiProfileGraphMixin, APIView):
                 } \
                 for key in Key.objects.filter(owner=user_q).select_related('type')
             ]
+            try:
+                tg_username = Oauth.objects.filter(
+                    user=user_q, provider=Oauth.PROVIDER_TELEGRAM,
+                )[0].username
+            except IndexError:
+                tg_username = ''
+            if tg_username:
+                keys.append({
+                    'id': None,
+                    'type_id': KeyType.LINK_ID,
+                    'value': 'https://t.me/%s' % tg_username,
+                })
             wishes = [
                 {
                     'uuid': wish.uuid,
@@ -2717,7 +2732,7 @@ class ApiAddOrUpdateAbility(APIView):
                     raise ServiceException('Неверный uuid = %s' % uuid)
                 except Ability.DoesNotExist:
                     do_create = True
-                    Ability.objects.create(
+                    ability = Ability.objects.create(
                         uuid=uuid,
                         owner=request.user,
                         text=text,
@@ -2731,11 +2746,17 @@ class ApiAddOrUpdateAbility(APIView):
                     else:
                         raise ServiceException('Возможность с uuid = %s принадлежит другому пользователю' % uuid)
             else:
-                Ability.objects.create(
+                do_create = True
+                ability = Ability.objects.create(
                     owner=request.user,
                     text=text,
                     update_timestamp=update_timestamp,
                 )
+            if do_create:
+                profile = request.user.profile
+                if not profile.ability:
+                    profile.ability = ability
+                    profile.save(update_fields=('ability',))
             data = dict()
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
@@ -2810,6 +2831,7 @@ api_get_user_abilities = ApiGetUserAbilities.as_view()
 class ApiDeleteAbility(APIView):
     permission_classes = (IsAuthenticated, )
 
+    @transaction.atomic
     def get(self, request, *args, **kwargs,):
         """
         Удалить возможности uuid
@@ -2823,8 +2845,9 @@ class ApiDeleteAbility(APIView):
         try:
             uuid = request.GET.get('uuid')
             if uuid:
+                user = request.user
                 try:
-                    ability = Ability.objects.get(uuid=uuid, owner=request.user)
+                    ability = Ability.objects.get(uuid=uuid, owner=user)
                 except ValidationError:
                     raise ServiceException('Неверный uuid = %s' % uuid)
                 except Ability.DoesNotExist:
@@ -2832,6 +2855,15 @@ class ApiDeleteAbility(APIView):
                         'Возможность с uuid = %s не найдена или принадлежит другому пользователю' % uuid
                     )
                 ability.delete()
+                # Если это была единственная возможность, то profile.ability
+                # станет null, т.к. в этом поле: on_delete=models.SET_NULL
+                profile = user.profile
+                if not profile.ability:
+                    try:
+                        profile.ability = user.ability_set.all().order_by('insert_timestamp')[0]
+                        profile.save(update_fields=('ability',))
+                    except IndexError:
+                        pass
             else:
                 raise ServiceException('Не задан uuid возможности')
             data = dict()

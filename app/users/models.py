@@ -336,7 +336,7 @@ class Profile(PhotoModel, GeoPointModel):
     sum_thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
     trust_count = models.PositiveIntegerField(_("Число оказанных доверий"), default=0)
     mistrust_count = models.PositiveIntegerField(_("Число утрат доверия"), default=0)
-    ability = models.ForeignKey('contact.Ability', verbose_name=_("Способность"), null=True, on_delete=models.CASCADE)
+    ability = models.ForeignKey('contact.Ability', verbose_name=_("Способность"), null=True, on_delete=models.SET_NULL)
 
     class Meta:
         ordering = ('user__last_name', 'user__first_name', 'middle_name', )

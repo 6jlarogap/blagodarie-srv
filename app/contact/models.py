@@ -26,6 +26,7 @@ from users.models import IncognitoUser, Profile
 class KeyType(models.Model):
 
     CREDIT_CARD_ID = 4
+    LINK_ID = 5
 
     title = models.CharField(_("Код ключа"), max_length=255, unique=True)
 
@@ -397,7 +398,7 @@ class LogLike(models.Model):
             if count:
                 return dict(count=users_selected.count())
 
-            users_selected = users_selected.select_related('profile')
+            users_selected = users_selected.select_related('profile', 'profile__ability')
             users = []
             user_pks = []
             user_filtered_pks = []
@@ -422,6 +423,7 @@ class LogLike(models.Model):
                     is_active=user.is_active,
                     latitude=profile.latitude,
                     longitude=profile.longitude,
+                    ability=profile.ability and profile.ability.text or None,
                 )
                 users.append(d)
                 user_filtered_pks.append(user.pk)
@@ -436,6 +438,7 @@ class LogLike(models.Model):
             q_connections &= Q(user_to__pk__in=user_filtered_pks) | Q(user_from__pk__in=user_filtered_pks)
             for cs in CurrentState.objects.filter(q_connections).select_related(
                     'user_from__profile', 'user_to__profile',
+                    'user_from__profile__ability', 'user_to__profile__ability',
                 ).distinct():
                 connections.append({
                     'source': cs.user_from.profile.uuid,
@@ -455,6 +458,7 @@ class LogLike(models.Model):
                         is_active=user.is_active,
                         latitude=profile.latitude,
                         longitude=profile.longitude,
+                        ability=profile.ability and profile.ability.text or None,
                     )
                     users.append(d)
                     user_pks.append(user.pk)
@@ -470,6 +474,7 @@ class LogLike(models.Model):
                         is_active=user.is_active,
                         latitude=profile.latitude,
                         longitude=profile.longitude,
+                        ability=profile.ability and profile.ability.text or None,
                     )
                     users.append(d)
                     user_pks.append(user.pk)
@@ -485,6 +490,7 @@ class LogLike(models.Model):
                         photo = profile.choose_photo(),
                         filtered=False,
                         is_active=user.is_active,
+                        ability=profile.ability and profile.ability.text or None,
                     )
                     users.append(d)
 

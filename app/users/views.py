@@ -91,7 +91,7 @@ class ApiGetProfileInfo(APIView):
                     raise ServiceException("Не задан uuid или пользователь не вошел в систему")
             if not user:
                 try:
-                    profile = Profile.objects.select_related('user').get(uuid=uuid)
+                    profile = Profile.objects.select_related('user', 'ability',).get(uuid=uuid)
                     user = profile.user
                 except (ValidationError, Profile.DoesNotExist, ):
                     raise ServiceException("Не найден пользователь с uuid = %s или uuid неверен" % uuid)
@@ -100,13 +100,16 @@ class ApiGetProfileInfo(APIView):
                 first_name=user.first_name,
                 middle_name=profile.middle_name,
                 photo=profile.choose_photo(),
-                is_active=user.is_active,
                 is_notified=profile.is_notified,
                 sum_thanks_count=profile.sum_thanks_count,
                 fame=profile.fame,
                 mistrust_count=profile.mistrust_count,
                 trustless_count=profile.mistrust_count,
                 trust_count=profile.trust_count,
+                is_active=user.is_active,
+                latitude=profile.latitude,
+                longitude=profile.longitude,
+                ability=profile.ability and profile.ability.text or None,
             )
             user_from = request.user
             if user_from.is_authenticated:
@@ -189,22 +192,23 @@ class ApiUpdateProfileInfo(SendMessageMixin, APIView):
                 message = "Cвязанный профиль '%s' обезличен пользователем" % fio
             except IndexError:
                 pass
+        for f in ('photo', 'photo_original_filename', 'photo_url', 'middle_name'):
+            setattr(profile, f, '')
+        profile.ability = None
+        profile.save()
+
         UserKey.objects.filter(user=user).delete()
         Key.objects.filter(owner=user).delete()
         Like.objects.filter(owner=user).delete()
         Ability.objects.filter(owner=user).delete()
         Wish.objects.filter(owner=user).delete()
         Token.objects.filter(user=user).delete()
+
         for oauth in Oauth.objects.filter(user=user):
             for f in ('last_name', 'first_name', 'display_name', 'email', 'photo', 'username'):
                 setattr(oauth, f, '')
             oauth.update_timestamp = int(time.time())
             oauth.save()
-        for f in ('photo', 'photo_original_filename', 'photo_url', 'middle_name'):
-            setattr(profile, f, '')
-        # default:
-        profile.is_notified = True
-        profile.save()
         for f in ('first_name', 'email'):
             setattr(user, f, '')
         user.last_name = "Обезличен"
@@ -715,7 +719,7 @@ class ApiAuthTelegram(CreateUserMixin, SendMessageMixin, APIView):
                     for f in profile_tg_field_map:
                         setattr(profile, f, tg.get(profile_tg_field_map[f], ''))
                     profile.save()
-                if was_not_active:
+                if was_not_active and profile.is_notified:
                     try:
                         telegram_uid = Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)[0].uid
                         fio = profile.full_name(last_name_first=False) or 'Без имени'
