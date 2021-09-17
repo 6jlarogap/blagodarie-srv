@@ -144,25 +144,10 @@ class ApiUpdateProfileInfo(SendMessageMixin, APIView):
     def post(self, request):
         """
         Обновить информацию о пользователе
-
-        Пока только credit_card
         """
         for key in request.data:
             key = key.lower()
-            if key == 'credit_card':
-                credit_card = request.data.get('credit_card')
-                if credit_card:
-                    keytype = KeyType.objects.get(pk=KeyType.CREDIT_CARD_ID)
-                    key, created_ = Key.objects.get_or_create(
-                        owner=request.user,
-                        type=keytype,
-                        defaults=dict(
-                            value=credit_card,
-                    ))
-                    if not created_:
-                        key.value = credit_card
-                        key.save(update_fields=('value',))
-            elif key in ('is_notified', 'latitude', 'longitude'):
+            if key in ('is_notified', 'latitude', 'longitude'):
                 profile = request.user.profile
                 setattr(profile, key, request.data.get(key))
                 profile.save()

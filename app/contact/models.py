@@ -25,7 +25,6 @@ from users.models import IncognitoUser, Profile
 
 class KeyType(models.Model):
 
-    CREDIT_CARD_ID = 4
     LINK_ID = 5
 
     title = models.CharField(_("Код ключа"), max_length=255, unique=True)
