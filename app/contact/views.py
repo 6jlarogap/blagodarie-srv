@@ -2240,87 +2240,6 @@ api_delete_key = ApiDeleteKeyView.as_view()
 
 class ApiProfileGraph(APIView):
 
-    def get_two_levels(self, user_q, closest_users_pks):
-        users = []
-        connections = []
-
-        user_pks = [user_q.pk] + closest_users_pks
-        for user in User.objects.select_related('profile').filter(pk__in=user_pks).distinct():
-            profile = user.profile
-            users.append(dict(
-                uuid=profile.uuid,
-                first_name=user.first_name,
-                last_name=user.last_name,
-                photo = profile.choose_photo(),
-                is_active=user.is_active,
-                latitude=profile.latitude,
-                longitude=profile.longitude,
-                ability=profile.ability and profile.ability.text or None,
-                is_closest=True,
-            ))
-
-        q = Q(user_from__in=user_pks) & Q(user_to__in=user_pks)
-        q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust__isnull=False)
-        for cs in CurrentState.objects.filter(q).select_related(
-            'user_to__profile', 'user_from__profile',
-            ).distinct():
-            connections.append({
-                'source': cs.user_from.profile.uuid,
-                'target': cs.user_to.profile.uuid,
-                'thanks_count': cs.thanks_count,
-                'is_trust': cs.is_trust,
-            })
-        return dict(users=users, connections=connections)
-
-    def get_recursed(self, user_q):
-        connections = []
-        with connection.cursor() as cursor:
-            cursor.execute(
-                'select * from find_rel(%(user_id)s, %(connection_level)s, True)' % dict(
-                    user_id=user_q.pk,
-                    connection_level=settings.CONNECTIONS_LEVEL,
-            ))
-            recs = dictfetchall(cursor)
-        user_pks = set()
-        user_pks.add(user_q.pk)
-        pairs = []
-        for rec in recs:
-            if rec['is_reverse']:
-                user_from_id = rec['user_to_id']
-                user_to_id = rec['user_from_id']
-            else:
-                user_from_id = rec['user_from_id']
-                user_to_id = rec['user_to_id']
-            pair = '%s/%s' % (user_from_id, user_to_id)
-            if pair not in pairs:
-                pairs.append(pair)
-                user_pks.add(user_from_id)
-                user_pks.add(user_to_id)
-                connections.append(dict(
-                    source=user_from_id,
-                    target=user_to_id,
-                    thanks_count=rec['thanks_count'],
-                    is_trust=rec['is_trust'],
-                ))
-        profiles_dict = dict()
-        for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user'):
-            profiles_dict[profile.user.pk] = dict(
-                uuid=profile.uuid,
-                first_name=profile.user.first_name,
-                last_name=profile.user.last_name,
-                is_active=profile.user.is_active,
-                latitude=profile.latitude,
-                longitude=profile.longitude,
-                photo = profile.choose_photo(),
-                ability=profile.ability and profile.ability.text or None,
-            )
-        users = [profiles_dict[p] for p in profiles_dict]
-        for c in connections:
-            c['source'] = profiles_dict[c['source']]['uuid']
-            c['target'] = profiles_dict[c['target']]['uuid']
-
-        return dict(users=users, connections=connections)
-
     def get(self, request, *args, **kwargs):
         """
         Возвращает связи пользователя, его желания и ключи
@@ -2337,14 +2256,8 @@ class ApiProfileGraph(APIView):
 
         С параметром count возвращает лишь число ближайших связей запрашиваемого
 
-        Иначе возвращает одно из двух: 
-            1.  ближайшие связи пользователя, его желания и ключи.
-                Также возвращает связи между этими ближайшими связями
-            2.  Рекурсивно все возможные связи от пользователя к его ближайшим связям и далее
-        Если:
-            - пользователь авторизован и спрашивает о себе: вариант 1
-            - пользователь авторизован и спрашивает о другом: вариант 2
-            - пользователь не авторизован: вариант 1
+        Иначе возвращает ближайшие связи пользователя, его желания и ключи.
+        Также возвращает связи между этими ближайшими связями
 
         Ближайшие связи возвращаются постранично,
         в порядке убывания даты регистрации пользователя
@@ -2497,10 +2410,37 @@ class ApiProfileGraph(APIView):
                 recs = dictfetchall(cursor)
             closest_users_pks = [ r['id'] for r in recs]
 
-            if request.user.is_authenticated and request.user != user_q:
-                data = self.get_two_levels(user_q, closest_users_pks)
-            else:
-                data = self.get_two_levels(user_q, closest_users_pks)
+            users = []
+            connections = []
+
+            user_pks = [user_q.pk] + closest_users_pks
+            for user in User.objects.select_related('profile').filter(pk__in=user_pks).distinct():
+                profile = user.profile
+                users.append(dict(
+                    uuid=profile.uuid,
+                    first_name=user.first_name,
+                    last_name=user.last_name,
+                    photo = profile.choose_photo(),
+                    is_active=user.is_active,
+                    latitude=profile.latitude,
+                    longitude=profile.longitude,
+                    ability=profile.ability and profile.ability.text or None,
+                    is_closest=True,
+                ))
+
+            q = Q(user_from__in=user_pks) & Q(user_to__in=user_pks)
+            q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust__isnull=False)
+            for cs in CurrentState.objects.filter(q).select_related(
+                'user_to__profile', 'user_from__profile',
+                ).distinct():
+                connections.append({
+                    'source': cs.user_from.profile.uuid,
+                    'target': cs.user_to.profile.uuid,
+                    'thanks_count': cs.thanks_count,
+                    'is_trust': cs.is_trust,
+                })
+            data = dict(users=users, connections=connections)
+
             keys = [
                 {
                     'id': key.pk,

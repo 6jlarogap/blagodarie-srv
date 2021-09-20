@@ -2,6 +2,10 @@
 
 from django.db import migrations, connection
 
+# https://www.alibabacloud.com/blog/applying-postgresql-graph-database-to-social-scenarios_595035
+
+# TODO Удалить эту функцию, если до нее не дойдет необходимость
+
 def reverse_it(apps, schema_editor):
     pass
 
