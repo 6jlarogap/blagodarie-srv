@@ -358,8 +358,6 @@ class Profile(PhotoModel, GeoPointModel):
         Ability = get_model('contact', 'Ability')
 
         Key = get_model('contact', 'Key')
-        UseKey = get_model('contact', 'UserKey')
-        Like = get_model('contact', 'Like')
 
         user = self.user
         user_from = profile_from.user
@@ -432,7 +430,6 @@ class Profile(PhotoModel, GeoPointModel):
                     Key.objects.filter(pk=key.pk).update(owner=user)
             except IntegrityError:
                 Key.objects.filter(pk=key.pk).delete()
-        Like.objects.filter(owner=user_from).update(owner=user)
         self.recount_sum_thanks_count()
         self.recount_trust_fame()
         user_from.delete()

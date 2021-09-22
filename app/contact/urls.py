@@ -13,29 +13,11 @@ urlpatterns = [
     re_path(r'^api/gettextinfo/?$', views.api_get_textinfo),
     re_path(r'^api/gettextoperations/?$', views.api_get_text_operations),
 
-    re_path(r'^api/deleteuserkeyz/?$', views.api_delete_user_keys),
- 
     re_path(r'^api/addkeyz/?$', views.api_add_keyz),
     re_path(r'^api/getorcreatekeyz/?$', views.get_or_create_key),
-    re_path(r'^api/getuserkeys/?$', views.api_get_user_keys),
     re_path(r'^api/addkey/?$', views.api_add_key),
     re_path(r'^api/updatekey/?$', views.api_update_key),
     re_path(r'^api/deletekey/?$', views.api_delete_key),
-
-    #re_path(r'^api/getlikes/?$', views.api_get_likes),
-    #re_path(r'^api/getlikesbykeyz/?$', views.api_get_all_likes, {'by': 'keys'}),
-    #re_path(r'^api/getlikesbykeyzid/?$', views.api_get_all_likes, {'by': 'ids'}),
-
-    #re_path(r'^api/addlikes/?$', views.api_add_like),
-    #re_path(r'^api/cancellikes/?$', views.api_cancel_likes),
-    #re_path(r'^api/deletelikes/?$', views.api_delete_likes),
-
-    #re_path(r'^api/deletelikekeyz/?$', views.api_delete_like_keys),
-
-    #re_path(r'^api/getorcreatelikekeyz/?$', views.get_or_create_like_key),
-
-    re_path(r'^api/getcontactsuminfo/?$', views.api_get_contacts_sum_info, {'by': 'values'}),
-    re_path(r'^api/getcontactsuminfobyid/?$', views.api_get_contacts_sum_info, {'by': 'ids'}),
 
     re_path(r'^api/getstats/?$', views.api_get_stats),
     re_path(r'^api/getstats/users/?$', views.api_get_stats, {'only': 'users'}),
@@ -64,7 +46,6 @@ urlpatterns = [
     re_path(r'^api/getuserwishes/?$', views.api_get_user_wishes),
     re_path(r'^api/deletewish/?$', views.api_delete_wish),
 
-    re_path(r'^api/getthanksusers/?$', views.api_get_thanks_users),
     re_path(r'^api/getthanksusersforanytext/?$', views.api_get_thanks_users_for_anytext),
 
     re_path(r'^api/addorupdateability/?$', views.api_add_or_update_ability),

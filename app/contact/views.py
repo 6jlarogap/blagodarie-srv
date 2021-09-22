@@ -21,7 +21,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from app.utils import ServiceException, dictfetchall, FrontendMixin
 
-from contact.models import KeyType, Key, UserKey, LikeKey, Like, LogLike, \
+from contact.models import KeyType, Key, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
                            Journal, CurrentState, OperationType, Wish, \
                            AnyText, Ability
@@ -638,7 +638,6 @@ class ApiGetTextInfo(APIView):
                 sum_thanks_count=anytext.sum_thanks_count,
                 fame=anytext.fame,
                 mistrust_count=anytext.mistrust_count,
-                trustless_count=anytext.mistrust_count,
                 trust_count=anytext.trust_count,
             )
             user_from = request.user
@@ -965,10 +964,6 @@ class ApiGetOrCreateKey(APIView):
         Надо проверить, существует ли в базе ключ с такими value и type_id:
             Если не существует, то добавить запись в БД и вернуть его id.
             Если существует, вернуть его id.
-        Надо проверить проверить, существует ли в базе связь пользователь-ключ
-            с такими user_id и keyz_id:
-            Если не существует, то добавить запись в БД и вернуть его id.
-            Если существует, вернуть его id
 
         Пример исходных данных:
         {
@@ -984,14 +979,10 @@ class ApiGetOrCreateKey(APIView):
                 {"id":1,"server_id":2134},
                 {"id":2,"server_id":2135}
             ],
-            "user_keyz":[
-                {"keyz_id":1,"server_id":3566},
-                {"keyz_id":2,"server_id":3567}
-            ]
         }
         """
         try:
-            data = dict(keyz=[], user_keyz=[])
+            data = dict(keyz=[])
             keyz = request.data.get('keyz')
             if not isinstance(keyz, list):
                 raise ServiceException('Не заданы keyz')
@@ -1028,14 +1019,6 @@ class ApiGetOrCreateKey(APIView):
                     'id': id_,
                     'server_id': key_object.pk,
                 })
-                userkey_object, created_ = UserKey.objects.get_or_create(
-                    user=user,
-                    key=key_object,
-                )
-                data['user_keyz'].append({
-                    'keyz_id': id_,
-                    'server_id': userkey_object.pk,
-                })
                 n_key += 1
 
             status_code = status.HTTP_200_OK
@@ -1047,630 +1030,11 @@ class ApiGetOrCreateKey(APIView):
 
 get_or_create_key = ApiGetOrCreateKey.as_view()
 
-class ApiAddLIke(APIView):
-
-    @transaction.atomic
-    def post(self, request):
-        """
-        Запрос добавляет вставляет лайк и его связь с ключом в БД
-        и возвращает ID лайков и связей в БД
-
-        Пример исходных данных:
-        {
-            "likes":[
-                {"id":1,"owner_id":2313,"create_timestamp":1565599089},
-                {"id":2,"owner_id":2313,"create_timestamp":1565599090}
-            ],
-            "likekeyz": [
-                {"id":22,"like_id":1,"keyz_id":431},
-                {"id":23,"like_id":1,"keyz_id":432},
-                {"id":33,"like_id":2,"keyz_id":462}
-            ]
-        }
-        Возвращает:
-        {
-            "likes":[
-                {"id":1,"server_id":9586},
-                {"id":2,"server_id":9587}
-            ],
-            "likekeyz":[
-                {"id":22,"server_id":5454},
-                {"id":23,"server_id":5455},
-                {"id":33,"server_id":322}
-            ]
-        }
-        """
-        try:
-            data = dict(likes=[], likekeyz=[])
-            likes = request.data.get('likes')
-            if not isinstance(likes, list):
-                raise ServiceException('Не заданы likes')
-            like_dict = dict()
-            n_key = 0
-            for like in likes:
-                try:
-                    id_ = like['id']
-                    owner_id = like['owner_id']
-                except KeyError:
-                    raise ServiceException(
-                        'Не задан или не верен какой-то из параметров'
-                        'в likes номер %s (начиная с 0)'
-                        % n_key
-                    )
-                insert_timestamp = like.get('create_timestamp', int(time.time()))
-                try:
-                    owner = User.objects.get(pk=owner_id)
-                except User.DoesNotExist:
-                    raise ServiceException("Нет пользователя с owner_id = %s" % owner_id)
-                like_object = Like.objects.create(
-                    owner=owner,
-                    insert_timestamp=insert_timestamp,
-                )
-                data['likes'].append({
-                    'id': id_,
-                    'server_id': like_object.pk,
-                })
-                like_dict[id_] = like_object
-                n_key += 1
-
-            likekeyz = request.data.get('likekeyz')
-            if not isinstance(likekeyz, list):
-                raise ServiceException('Не заданы likekeyz')
-            for likekey in likekeyz:
-                try:
-                    id_ = likekey['id']
-                    like_id = likekey['like_id']
-                    keyz_id = likekey['keyz_id']
-                except KeyError:
-                    raise ServiceException(
-                        'Не задан или не верен какой-то из параметров'
-                        'в likekeyz номер %s (начиная с 0)'
-                        % n_key
-                    )
-                if like_dict.get(like_id, None) is None:
-                    raise ServiceException(
-                        'likekeyz номер %s (начиная с 0): '
-                        'нет like_id = %s среди id в массиве likes'
-                        % (n_key, like_id, )
-                    )
-                try:
-                    key = Key.objects.get(pk=keyz_id)
-                except Key.DoesNotExist:
-                    raise ServiceException('Не найден ключ с keyz_id = %s' % keyz_id)
-                likekey_object = LikeKey.objects.create(
-                    like=like_dict[like_id],
-                    key=key,
-                )
-                data['likekeyz'].append({
-                    'id': id_,
-                    'server_id': likekey_object.pk,
-                })
-
-            status_code = status.HTTP_200_OK
-        except ServiceException as excpt:
-            transaction.set_rollback(True)
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
-
-api_add_like = ApiAddLIke.as_view()
-
-class ApiGetLikes(APIView):
-
-    def get(self, request):
-        """
-        Получение лайков и связей лайк-ключ
-
-        Возвращает все лайки, поставленные либо отмененные
-        данным пользователем после заданного момента времени,
-        а также связи лайк-ключ для всех переданных лайков
-        со значениями и типами ключей.
-
-        Пример исходных данных:
-        .../getlikes?ownerid=2&synctimestamp=1569995335
-
-        Возвращает:
-        {
-            "likes":[
-                {"server_id":231,"timestamp":1570995335},
-                {"server_id":232,"timestamp":1579995335},
-                {"server_id":233,"timestamp":569995335,"cancel_timestamp":1569995335}
-            ],
-            "likekeyz":[
-                {"server_id":3443,"like_id":231,"keyz_id":340,"value":"asdf@gmail.com","type_id":2},
-                {"server_id":3444,"like_id":231,"keyz_id":344,"value":"375296685412","type_id":1},
-                {"server_id":3445,"like_id":232,"keyz_id":874,"value":"375298849562","type_id":1},
-                {"server_id":6456,"like_id":233,"keyz_id":874,"value":"375298849562","type_id":1}
-            ]
-        }
-        """
-        try:
-            data = dict(
-                likes=[],
-                likekeyz=[],
-            )
-            ownerid = request.GET.get('ownerid')
-            if not ownerid:
-                raise ServiceException("Не задан параметр ownerid")
-            synctimestamp = request.GET.get('synctimestamp')
-
-            qs = Q(owner__pk=ownerid)
-            if synctimestamp:
-                qs &= Q(insert_timestamp__gte=synctimestamp) | Q(update_timestamp__gte=synctimestamp)
-            for like in Like.objects.filter(qs).distinct():
-                data['likes'].append(dict(
-                    server_id=like.pk,
-                    create_timestamp=like.insert_timestamp,
-                    cancel_timestamp=like.cancel_timestamp,
-                ))
-                for likekey in LikeKey.objects.filter(like=like):
-                    data['likekeyz'].append(dict(
-                        server_id=likekey.pk,
-                        like_id=likekey.like.pk,
-                        keyz_id=likekey.key.pk,
-                        value=likekey.key.value,
-                        type_id=likekey.key.type.pk,
-                    ))
-
-            status_code = status.HTTP_200_OK
-        except ServiceException as excpt:
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
-
-api_get_likes = ApiGetLikes.as_view()
-
-class ApiGetAllLikes(APIView):
-
-    def post(self, request, *args, **kwargs):
-        """
-        Получение всех лайков по ключам или по идентификаторам
-
-        Запрос возвращает сгруппированные:
-            по ключам: kwargs['by'] =='keys'
-        или
-            по идентификаторам: kwargs['by'] =='ids'
-        вставленные либо обновленные после заданного момента времени
-        (insert_timestamp > sync_timestamp OR update_timestamp > sync_timestamp).
-
-        Примеры исходных данных.
-            kwargs['by'] =='keys':
-                {
-                    "keyz": [
-                        {
-                        "value": "324234234",
-                        "type_id": 1
-                        },
-                        {
-                        "value": "asfe@gmail.com",
-                        "type_id": 2
-                        },
-                        {
-                        "value": "656346346",
-                        "type_id": 1
-                        }
-                    ]
-                }
-            kwargs['by'] =='ids':
-                {
-                    "keyz_ids":[232,3432,532]
-                }
-
-        Возвращает, отсортированные по убыванию update_timestamp:
-            {
-                "likes": [
-                    {
-                    "owner_id": 324,
-                    "server_id": 231,
-                    "create_timestamp": 1570995335,
-                    "cancel_timestamp": null
-                    },
-                    {
-                    "owner_id": 77,
-                    "server_id": 232,
-                    "create_timestamp": 1570995336,
-                    "cancel_timestamp": null
-                    },
-                    {
-                    "owner_id": 14,
-                    "server_id": 233,
-                    "create_timestamp": 54543545345,
-                    "cancel_timestamp": 63463463463
-                    }
-                ]
-            }
-        """
-        try:
-            data = dict(
-                likes=[],
-            )
-            if kwargs['by'] =='ids':
-                keyz_ids = request.data.get('keyz_ids')
-                if not isinstance(keyz_ids, list):
-                    raise ServiceException('Не заданы keyz_ids')
-
-            elif kwargs['by'] =='keys':
-                keyz = request.data.get('keyz')
-                if not isinstance(keyz, list):
-                    raise ServiceException('Не заданы keyz')
-                keyz_ids = []
-                n = 0
-                err_message = 'Массив keyz, элемент %s (начиная с нуля): не заданы value и/или type_id'
-                for key in keyz:
-                    if not isinstance(key, dict):
-                        raise ServiceException(err_message % n)
-                    value = key.get('value')
-                    type_id = key.get('type_id')
-                    if value is None or type_id is None:
-                        raise ServiceException(err_message % n)
-                    try:
-                        key_object = Key.objects.get(type__pk=type_id, value=value)
-                        keyz_ids.append(key_object.pk)
-                    except Key.DoesNotExist:
-                        pass
-                    n += 1
-            else:
-                keyz_ids = []
-
-            if keyz_ids:
-                for like in Like.objects.filter(
-                        likekey__key__pk__in=keyz_ids
-                    ).order_by('-update_timestamp').distinct():
-                    data['likes'].append(dict(
-                        owner_id=like.owner.pk,
-                        server_id=like.pk,
-                        create_timestamp=like.insert_timestamp,
-                        cancel_timestamp=like.cancel_timestamp,
-                    ))
-            status_code = status.HTTP_200_OK
-        except ServiceException as excpt:
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
-
-api_get_all_likes = ApiGetAllLikes.as_view()
-
-class ApiGetContactsSumInfo(APIView):
-
-    def post(self, request, *args, **kwargs):
-        """
-        Получение известности и общего количества лайков
-
-        Передаем user_id.
-        Передаем массив контактов, у контакта есть id и массив ключей.
-        По каждому контакту, надо получить количество уникальных неотмененных лайков,
-        привязанных к его ключам - это будет sum_likes_count.
-        Надо еще получать количество уникальных лайков заданного user_id,
-        это будет likes_count
-        Известность (fame) - количество уникальных пользователей,
-        которым известен хотя бы один ключ контакта.
-
-        Пример исходных данных:
-        Если ключи идут как тип - значение
-        {
-            "user_id": 45,
-            "contacts": [
-                    {"id":75,"keyz":[{"value":"12345678","type_id":1}]},
-                    {"id":76,"keyz":[
-                            {"value":"333555","type_id":1},
-                            {"value":"vasya@gmail.com","type_id":2}
-                        ]
-                    },
-                ]
-        }
-        Если ключи идут как ID's
-        {
-            "contacts": [
-                    {"id":75,"keyz":[2, 3]},
-                    {"id":76,"keyz":[4, 5]},
-                ]
-        }
-        Возвращает:
-        {
-        "contacts":[
-                {"id":75,"fame":5,"likes_count":12,"sum_likes_count":32},
-                {"id":76,"fame":3,"likes_count":10,"sum_likes_count":12},
-            ]
-        }
-        """
-        try:
-            data = dict(contacts=[])
-            contacts = request.data.get("contacts")
-            if not isinstance(contacts, list):
-                raise ServiceException("Не заданы contacts")
-            user_id = request.data.get("user_id")
-
-            n_key = 0
-            for contact in contacts:
-                try:
-                    id_ = contact['id']
-                    keyz = contact['keyz']
-                except (KeyError, TypeError,):
-                    raise ServiceException(MSG_NO_PARM % n_key)
-                by = kwargs.get('by')
-                key_pks = []
-                if by == 'values':
-                    for key in keyz:
-                        try:
-                            value = key['value']
-                            type_id = key['type_id']
-                        except (KeyError, TypeError,):
-                            raise ServiceException(
-                                "Не заданы или не верны value и/или type_id "
-                                "в каком-то из ключей контакта id = %s"
-                                % id_
-                            )
-                        try:
-                            key_object_pk = Key.objects.values_list('pk', flat=True). \
-                                            get(value=value, type__pk=type_id)
-                            key_pks.append(key_object_pk)
-                        except Key.DoesNotExist:
-                            pass
-                elif by == 'ids':
-                    key_pks = keyz
-                fame = likes_count = sum_likes_count = 0
-                if key_pks:
-                    fame = UserKey.objects.filter(
-                            key__pk__in=key_pks
-                            ).only('pk').distinct('user').count()
-                    sum_likes_count = LikeKey.objects.filter(
-                                        key__pk__in=key_pks,
-                                        like__cancel_timestamp__isnull=True,
-                                        ).only('pk').distinct('like').count()
-                    if user_id is not None:
-                        likes_count = LikeKey.objects.filter(
-                                        key__pk__in=key_pks,
-                                        like__owner__pk=user_id,
-                                        like__cancel_timestamp__isnull=True,
-                                        ).only('pk').distinct('like').count()
-                data['contacts'].append({
-                    'id': id_,
-                    'fame': fame,
-                    'likes_count': likes_count,
-                    'sum_likes_count': sum_likes_count,
-                })
-                n_key += 1
-
-            status_code = status.HTTP_200_OK
-        except ServiceException as excpt:
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
-
-api_get_contacts_sum_info = ApiGetContactsSumInfo.as_view()
-
-class ApiCancelLike(APIView):
-
-    @transaction.atomic
-    def post(self, request):
-        """
-        Отмена лайков
-
-        Запрос обновляет поле cancel_timestamp в соответствии
-        с переданным значением и обновляет поле update_timestamp,
-        устанавливая его в значение текущего момента времени
-
-        Пример исходных данных:
-        {
-            "likes": [
-                {"server_id":23,"owner_id":23,"cancel_timestamp":34235235235},
-                {"server_id":658,"owner_id":23,"cancel_timestamp":6537547345}
-            ]
-        }
-        Возвращает:
-        {
-            "count_cancelled_likes" : сколько записей изменено
-        }
-        """
-        try:
-            likes = request.data.get('likes')
-            if not isinstance(likes, list):
-                raise ServiceException('Не заданы likes')
-            n_key = 0
-            count_cancelled_likes = 0
-            for like in likes:
-                try:
-                    server_id = like['server_id']
-                    owner_id = like['owner_id']
-                    cancel_timestamp = like['cancel_timestamp']
-                except (KeyError, TypeError,):
-                    raise ServiceException(MSG_NO_PARM % n_key)
-                update_timestamp = int(time.time())
-                count_cancelled_likes += Like.objects.filter(
-                    pk=server_id,
-                    owner__pk=owner_id,
-                ).update(cancel_timestamp=cancel_timestamp, update_timestamp=update_timestamp)
-                n_key += 1
-
-            data = dict(count_cancelled_likes=count_cancelled_likes)
-            status_code = status.HTTP_200_OK
-        except ServiceException as excpt:
-            transaction.set_rollback(True)
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
-
-api_cancel_likes = ApiCancelLike.as_view()
-
-class ApiDeleteLike(APIView):
-
-    @transaction.atomic
-    def post(self, request):
-        """
-        Удаление благодарностей
-
-        Запрос удаляет записи из таблицы tbl_like_keyz,
-        а затем из таблицы tbl_like,
-        соответствующие переданным идентификаторам благодарностей.
-        Отсутствие записей с каким либо идентификатором благодарности
-        не считать за ошибку. Они могли быть удалены ранее,
-        при синхронизации с другого устройства.
-
-        Пример исходных данных:
-        {
-            "ids": [232,3432,532,245,52,34]
-        }
-        Возвращает:
-        {
-            "count_deleted_likes" : сколько лайков удалено
-        }
-        """
-        try:
-            ids = request.data.get('ids')
-            if not isinstance(ids, list):
-                raise ServiceException('Не заданы ids')
-            count_deleted_likes = Like.objects.filter(pk__in=ids).delete()
-            data = dict(count_deleted_likes=count_deleted_likes[0])
-            status_code = status.HTTP_200_OK
-        except ServiceException as excpt:
-            transaction.set_rollback(True)
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
-
-api_delete_likes = ApiDeleteLike.as_view()
-
-class ApiDeleteLikeKey(APIView):
-
-    @transaction.atomic
-    def post(self, request):
-        """
-        Удаление связи благодарность-ключ
-
-        Запрос удаляет записи из таблицы tbl_like_keyz,
-        соответствующие переданным идентификаторам.
-        Отсутствие записей с каким либо идентификатором
-        не считать за ошибку. Они могли быть удалены ранее,
-        при синхронизации с другого устройства.
-
-        Пример исходных данных:
-        {
-            "ids": [232,3432,532,245,52,34]
-        }
-        Возвращает:
-        {
-            "count_deleted_likekeyz" : сколько лайков удалено
-        }
-        """
-        try:
-            ids = request.data.get('ids')
-            if not isinstance(ids, list):
-                raise ServiceException('Не заданы ids')
-            count_deleted_likekeyz = LikeKey.objects.filter(pk__in=ids).delete()
-            data = dict(count_deleted_likekeyz=count_deleted_likekeyz[0])
-            status_code = status.HTTP_200_OK
-        except ServiceException as excpt:
-            transaction.set_rollback(True)
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
-
-api_delete_like_keys = ApiDeleteLikeKey.as_view()
-
-class ApiDeleteUserKey(APIView):
-
-    @transaction.atomic
-    def post(self, request):
-        """
-        Удаление связи пользователь-ключ
-
-        Запрос удаляет записи из таблицы tbl_user_keyz,
-        соответствующие переданным идентификаторам.
-        Отсутствие записей с каким либо идентификатором
-        не считать за ошибку. Они могли быть удалены ранее,
-        при синхронизации с другого устройства.
-
-        Пример исходных данных:
-        {
-            "ids": [232,3432,532,245,52,34]
-        }
-        Возвращает:
-        {
-            "count_deleted_userkeyz" : сколько лайков удалено
-        }
-        """
-        try:
-            ids = request.data.get('ids')
-            if not isinstance(ids, list):
-                raise ServiceException('Не заданы ids')
-            count_deleted_userkeyz = UserKey.objects.filter(pk__in=ids).delete()
-            data = dict(count_deleted_userkeyz=count_deleted_userkeyz[0])
-            status_code = status.HTTP_200_OK
-        except ServiceException as excpt:
-            transaction.set_rollback(True)
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
-
-api_delete_user_keys = ApiDeleteUserKey.as_view()
-
-class ApiGetOrCreateLikeKey(APIView):
-
-    @transaction.atomic
-    def post(self, request):
-        """
-        Добавление связи между лайком и ключом
-
-        Надо проверить, существует ли в базе связь лайк-ключ
-        с такими like_id и keyz_id:
-            - Если не существует, то добавить запись в БД и вернуть его id.
-            - Если существует, вернуть его id.
-
-        Пример исходных данных:
-        {
-            "likekeyz": [
-                {"id":1,"like_id":123,"keyz_id":431},
-                {"id":2,"like_id":123,"keyz_id":462}
-            ]
-        }
-        Возвращает:
-        {
-            "likekeyz":[
-                {"id":1, "server_id":5454},
-                {"id":2, "server_id":5455},
-            ]
-        }
-        """
-        try:
-            data = dict(likekeyz=[])
-            status_code = status.HTTP_200_OK
-            likekeyz = request.data.get("likekeyz")
-            if not isinstance(likekeyz, list):
-                raise ServiceException("Не заданы likekeyz")
-            n_key = 0
-            for likekey in likekeyz:
-                try:
-                    id_ = likekey['id']
-                    like_id = likekey['like_id']
-                    keyz_id = likekey['keyz_id']
-                except KeyError:
-                    raise ServiceException(MSG_NO_PARM % n_key)
-                try:
-                    like = Like.objects.get(pk=like_id)
-                except Like.DoesNotExist:
-                    raise ServiceException("Нет лайка с like_id = %s" % like_id)
-                try:
-                    key = Key.objects.get(pk=keyz_id)
-                except Key.DoesNotExist:
-                    raise ServiceException("Нет ключа с keyz_id = %s" % keyz_id)
-                likekey_object, created_ = LikeKey.objects.get_or_create(
-                    like=like,
-                    key=key,
-                )
-                data['likekeyz'].append({
-                    'id': id_,
-                    'server_id': likekey_object.pk,
-                })
-                n_key += 1
-        except ServiceException as excpt:
-            transaction.set_rollback(True)
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
-
-get_or_create_like_key = ApiGetOrCreateLikeKey.as_view()
-
 class ApiGetStats(APIView):
+
+    # За сколько часов берем статистику
+    #
+    LAST_STAT_HOURS = 48
 
     def get(self, request, *args, **kwargs):
         """
@@ -1678,8 +1042,569 @@ class ApiGetStats(APIView):
 
         Что получать, определяется в словаре kwargs
         """
-        return Response(data=LogLike.get_stats(request, *args, **kwargs), status=status.HTTP_200_OK)
+        return Response(data=self.get_stats(request, *args, **kwargs), status=status.HTTP_200_OK)
 
+    def get_stats(self, request, *args, **kwargs):
+
+        if kwargs.get('only') == 'user_connections':
+
+            # Вернуть:
+            #
+            # {
+            #   "users": [...],     # список пользователей с профилями (и uuid)
+            #   "connections": [
+            #       [3, 4],         # user_id=3 сделал thank user_id=4 или наоборот
+            #       [5, 6],
+            #       ...
+            #   [
+            # }
+
+            users = dict()
+            for user in User.objects.filter(is_superuser=False):
+                initials = ''
+                first_name = user.first_name.strip()
+                if first_name:
+                    initials += first_name[0]
+                last_name = user.last_name.strip()
+                if last_name:
+                    initials += last_name[0]
+                users[user.pk] = dict(initials=initials)
+            connections = []
+            for cs in CurrentState.objects.filter(
+                        user_to__isnull=False,
+                        thanks_count__gt=0,
+                        is_reverse=False,
+                    ).select_related('user_from', 'user_to'):
+                connection_fvd = [cs.user_from.pk, cs.user_to.pk]
+                connection_rev = [cs.user_to.pk, cs.user_from.pk]
+                if not (connection_fvd in connections or connection_rev in connections):
+                    connections.append(connection_fvd)
+
+            return dict(users=users, connections=connections)
+
+        if kwargs.get('only') == 'user_connections_graph':
+
+            # Возвращает:
+            #   без параметров:
+            #       список всех пользователей, и связи,
+            #       где не обнулено доверие (currenstate.is_trust is not null).
+            #   с параметром query:
+            #       список всех пользователей у которых в
+            #           имени или
+            #           фамилии или
+            #           возможностях или
+            #           ключах или
+            #           желаниях
+            #       есть query, и их связи,
+            #       где не обнулено доверие (currenstate.is_trust is not null).
+            #       В любом случае возвращаются в массиве users еще
+            #       данные пользователя, если он авторизовался.
+            #   список выдается по страницам найденных (или всех) пользователей,
+            #   в порядке убывания даты регистрации пользователя,
+            #   начало страницы -- параметр from (нумерация с 0), по умолчанию 0
+            #   сколько на странице -- параметр number, по умолчанию 50
+            #   с параметром count:
+            #       число пользователей, всех или найденных по фильтру query
+
+            q_users = Q(is_superuser=False)
+            query = request.GET.get('query')
+            if query:
+                q_users &= \
+                    Q(last_name__icontains=query) | \
+                    Q(first_name__icontains=query) | \
+                    Q(wish__text__icontains=query) | \
+                    Q(ability__text__icontains=query) | \
+                    Q(key__value__icontains=query)
+            users_selected = User.objects.filter(q_users).distinct()
+
+            count = request.GET.get('count')
+            if count:
+                return dict(count=users_selected.count())
+
+            users_selected = users_selected.select_related('profile', 'profile__ability')
+            users = []
+            user_pks = []
+            user_filtered_pks = []
+            try:
+                from_ = abs(int(request.GET.get("from")))
+            except (ValueError, TypeError, ):
+                from_ = 0
+            try:
+                number_ = abs(int(request.GET.get("number")))
+            except (ValueError, TypeError, ):
+                number_ = settings.PAGINATE_USERS_COUNT
+
+            users_selected = users_selected.order_by('-date_joined')[from_:from_ + number_]
+            for user in users_selected:
+                profile = user.profile
+                d = dict(
+                    uuid=profile.uuid,
+                    first_name=user.first_name,
+                    last_name=user.last_name,
+                    photo = profile.choose_photo(),
+                    filtered=True,
+                    is_active=user.is_active,
+                    latitude=profile.latitude,
+                    longitude=profile.longitude,
+                    ability=profile.ability and profile.ability.text or None,
+                )
+                users.append(d)
+                user_pks.append(user.pk)
+
+            connections = []
+            q_connections = Q(
+                is_reverse=False,
+                is_trust__isnull=False,
+                user_to__isnull=False,
+            )
+            q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
+            for cs in CurrentState.objects.filter(q_connections).select_related(
+                    'user_from__profile', 'user_to__profile',
+                    'user_from__profile__ability', 'user_to__profile__ability',
+                ).distinct():
+                connections.append({
+                    'source': cs.user_from.profile.uuid,
+                    'target': cs.user_to.profile.uuid,
+                    'thanks_count': cs.thanks_count,
+                    'is_trust': cs.is_trust,
+                })
+                if cs.user_to.pk not in user_pks:
+                    user = cs.user_to
+                    profile = user.profile
+                    d = dict(
+                        uuid=profile.uuid,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                        photo = profile.choose_photo(),
+                        is_active=user.is_active,
+                        latitude=profile.latitude,
+                        longitude=profile.longitude,
+                        ability=profile.ability and profile.ability.text or None,
+                    )
+                    users.append(d)
+                    user_pks.append(user.pk)
+                if cs.user_from.pk not in user_pks:
+                    user = cs.user_from
+                    profile = user.profile
+                    d = dict(
+                        uuid=profile.uuid,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                        photo = profile.choose_photo(),
+                        is_active=user.is_active,
+                        latitude=profile.latitude,
+                        longitude=profile.longitude,
+                        ability=profile.ability and profile.ability.text or None,
+                    )
+                    users.append(d)
+                    user_pks.append(user.pk)
+
+            if request.user and request.user.is_authenticated:
+                if request.user.pk not in user_pks:
+                    user = request.user
+                    profile = user.profile
+                    d = dict(
+                        uuid=profile.uuid,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                        photo = profile.choose_photo(),
+                        is_active=user.is_active,
+                        ability=profile.ability and profile.ability.text or None,
+                    )
+                    users.append(d)
+
+            return dict(users=users, connections=connections)
+
+        if kwargs.get('only') == 'users':
+            # Вернуть число пользователей и симтомов
+            #
+            return dict(
+                users=UserSymptom.objects.all().distinct('incognitouser').count(),
+                symptoms=UserSymptom.objects.all().count(),
+            )
+
+        time_current = int(time.time())
+        time_last = int(((time_current + 3599) / 3600)) * 3600
+        time_1st = time_current - self.LAST_STAT_HOURS * 3600
+        time_1st = int(time_1st / 3600) * 3600
+
+        symptom_by_name = Symptom.objects.all().order_by('name')
+
+        if kwargs.get('only') == 'symptoms_names':
+            data = [
+                {
+                    'id': str(symptom.pk),
+                    'name': symptom.name,
+                }
+                for symptom in symptom_by_name
+            ]
+            return data
+
+        selected_ids_str = request.GET.get('selected_ids_str', '')
+        m = re.search(r'\((\S*)\)', selected_ids_str)
+        selected_ids_list = []
+        selected_ids_where = ''
+        if m:
+            m_group = m.group(1)
+            if m_group:
+                for s in m_group.split(','):
+                    try:
+                        selected_ids_list.append(int(s))
+                    except ValueError:
+                        selected_ids_list = []
+                        selected_ids_str = ''
+                        break
+        else:
+            selected_ids_str = ''
+        if len(selected_ids_list) == symptom_by_name.count():
+            selected_ids_str = ''
+        if selected_ids_str:
+            selected_ids_where = ' AND symptom_id IN %s ' % selected_ids_str
+
+        public_key = request.GET.get('public_key', '')
+        incognitouser = None
+        incognitouser_where = ''
+        if public_key:
+            try:
+                incognitouser = IncognitoUser.objects.get(public_key=public_key)
+                incognitouser_where = ' AND incognitouser_id = %s ' % incognitouser.pk
+            except IncognitoUser.DoesNotExist:
+                pass
+
+        if kwargs.get('only') == 'symptoms':
+            # Возвращает json:
+            #   {
+            #       "titles": [
+            #           "симптом1 (всего, <за LAST_STAT_HOURS>, <за 24 HOURS>)",
+            #           ...
+            #           "симптомN (всего, <за LAST_STAT_HOURS>, <за 24 HOURS>)",
+            #       ],
+            #       "counts_all": [
+            #           "<всего симптомов1>",
+            #           ...
+            #           "<всего симптомовN>"
+            #       ],
+            #       "counts_48h": [
+            #           "<за LAST_STAT_HOURS симптомов1>",
+            #           ...
+            #           "<за LAST_STAT_HOURS симптомовN>"
+            #       ],
+            #       "counts_24h": [
+            #           "<за 24 HOURS симптомов1>",
+            #           ...
+            #           "<за 24 HOURS симптомовN>"
+            #       ],
+            #   }
+            #
+
+            time_24h = time_current - 24 * 3600
+            time_24h = int(time_24h / 3600) * 3600
+
+            data = dict(
+                titles=[],
+                counts_all=[],
+                counts_48h=[],
+                counts_24h=[]
+            )
+
+            s_dict = dict()
+            if selected_ids_str != '()':
+                req_str = """
+                    SELECT
+                        contact_symptom.name AS name,
+                        count(contact_usersymptom.id) as count
+                    FROM
+                        contact_usersymptom
+                    LEFT JOIN
+                        contact_symptom
+                    ON
+                        symptom_id=contact_symptom.id
+                    WHERE
+                        insert_timestamp < %(time_last)s
+                        %(selected_ids_where)s
+                        %(incognitouser_where)s
+                    GROUP BY
+                        name
+                    ORDER BY
+                        count
+                """ % dict(
+                    time_last=time_last,
+                    selected_ids_where=selected_ids_where,
+                    incognitouser_where=incognitouser_where,
+                )
+                with connection.cursor() as cursor:
+                    cursor.execute(req_str)
+                    symptoms = dictfetchall(cursor)
+                for symptom in symptoms:
+                    s_dict[symptom['name']] = dict(
+                        count_all=symptom['count'],
+                    )
+
+            if selected_ids_str != '()':
+                req_str = """
+                    SELECT
+                        contact_symptom.name AS name,
+                        count(contact_usersymptom.id) as count
+                    FROM
+                        contact_usersymptom
+                    LEFT JOIN
+                        contact_symptom
+                    ON
+                        symptom_id=contact_symptom.id
+                    WHERE
+                        insert_timestamp < %(time_last)s AND
+                        insert_timestamp >= %(time_1st)s
+                        %(selected_ids_where)s
+                        %(incognitouser_where)s
+                    GROUP BY
+                        name
+                    ORDER BY
+                        count
+                """ % dict(
+                    time_last=time_last,
+                    time_1st=time_1st,
+                    selected_ids_where=selected_ids_where,
+                    incognitouser_where=incognitouser_where,
+                )
+                with connection.cursor() as cursor:
+                    cursor.execute(req_str)
+                    symptoms = dictfetchall(cursor)
+                for symptom in symptoms:
+                    s_dict[symptom['name']]['count_48h'] = symptom['count']
+                for name in s_dict:
+                    if not s_dict[name].get('count_48h'):
+                        s_dict[name]['count_48h'] = 0
+
+                req_str = """
+                    SELECT
+                        contact_symptom.name AS name,
+                        count(contact_usersymptom.id) as count
+                    FROM
+                        contact_usersymptom
+                    LEFT JOIN
+                        contact_symptom
+                    ON
+                        symptom_id=contact_symptom.id
+                    WHERE
+                        insert_timestamp < %(time_last)s AND
+                        insert_timestamp >= %(time_24h)s
+                        %(selected_ids_where)s
+                        %(incognitouser_where)s
+                    GROUP BY
+                        name
+                    ORDER BY
+                        count
+                """ % dict(
+                    time_last=time_last,
+                    time_24h=time_24h,
+                    selected_ids_where=selected_ids_where,
+                    incognitouser_where=incognitouser_where,
+                )
+                with connection.cursor() as cursor:
+                    cursor.execute(req_str)
+                    symptoms = dictfetchall(cursor)
+                for symptom in symptoms:
+                    s_dict[symptom['name']]['count_24h'] = symptom['count']
+                for name in s_dict:
+                    if not s_dict[name].get('count_24h'):
+                        s_dict[name]['count_24h'] = 0
+
+            s_list = []
+            for name in s_dict:
+                title = '%s (%s, %s, %s)' % (
+                    name,
+                    s_dict[name]['count_all'],
+                    s_dict[name]['count_48h'],
+                    s_dict[name]['count_24h'],
+                )
+                s_list.append(dict(
+                    title=title,
+                    count_all=s_dict[name]['count_all'],
+                    count_48h=s_dict[name]['count_48h'],
+                    count_24h=s_dict[name]['count_24h'],
+                ))
+            s_list.sort(key = lambda d: d['count_all'])
+
+            for s in s_list:
+                data['titles'].append(s['title'])
+                data['counts_all'].append(s['count_all'])
+                data['counts_48h'].append(s['count_48h'])
+                data['counts_24h'].append(s['count_24h'])
+            return data
+
+
+        if kwargs.get('only') == 'symptoms_hist_data':
+
+            # Возвращает json, данные для гистогораммы
+            # за последние 48 часов, для отрисовки
+            # средстванми plotly на front end
+
+            symptom_ids = dict()
+            symptom_names = dict()
+            n = 0
+            for symptom in Symptom.objects.all().order_by('pk'):
+                symptom_ids[symptom.pk] = n
+                symptom_names[n] = symptom.name
+                n += 1
+            times = [[] for i in symptom_ids]
+            q = Q(
+                    insert_timestamp__lt=time_last,
+                    insert_timestamp__gte=time_1st,
+                )
+            if selected_ids_str:
+                q &= Q(symptom__pk__in=selected_ids_list)
+            if incognitouser:
+                q &= Q(incognitouser=incognitouser)
+            for usersymptom in UserSymptom.objects.filter(q).select_related('symptom'):
+                times[symptom_ids[usersymptom.symptom.pk]].append(usersymptom.insert_timestamp)
+
+            return dict(
+                time_1st=time_1st,
+                time_last=time_last,
+                times=times,
+                symptom_names=symptom_names,
+            )
+
+        if kwargs.get('only') == 'symptoms_moon_data':
+
+            # Возвращает json, данные для графиков
+            # симптомов по лунным дням за все время
+            # наюлюдений для отрисовки
+            # средстванми plotly на front end
+
+            symptom_ids = dict()
+            symptom_names = dict()
+            n = 0
+            for symptom in Symptom.objects.all().order_by('pk'):
+                symptom_ids[symptom.pk] = n
+                symptom_names[n] = symptom.name
+                n += 1
+            moon_bars = []
+            if selected_ids_str != '()':
+                moon_bars = [[0 for j in range(30)] for i in range(len(symptom_ids))]
+                where = selected_ids_where + incognitouser_where
+                if where:
+                    where = re.sub(r'^\s*AND', '', where, flags=re.I)
+                    where = 'WHERE ' + where
+                req_str = """
+                    SELECT
+                        moon_day,
+                        symptom_id,
+                        Count(symptom_id) as count
+                    FROM
+                        contact_usersymptom
+                    %(where)s
+                    GROUP BY
+                        moon_day,
+                        symptom_id
+                """ % dict(
+                    where=where,
+                )
+                with connection.cursor() as cursor:
+                    cursor.execute(req_str)
+                    m = dictfetchall(cursor)
+                for r in m:
+                    moon_bars[symptom_ids[ r['symptom_id']] ] [r['moon_day']] = r['count']
+                for i, symptom_bar in enumerate(moon_bars):
+                    if not any(symptom_bar):
+                        moon_bars[i] = []
+                if not any(moon_bars):
+                    moon_bars = []
+
+            moon_hour = []
+            max_count_in_hour = 0
+            if moon_bars:
+
+                # Получить примерно следующее по каждому симптому
+                # из массива симптомов, которые идут в порядке
+                # массива symptom_names. Итак, элемент для симптома
+                # из массива moon_hour:
+                #   [
+                #       {2: {'count': 2, 'pos': 7.389655172413794}},
+                #       {5: {'count': 8, 'pos': 4.5}},
+                #       {5: {'count': 1, 'pos': 5.466666666666666}},
+                #       {6: {'count': 2, 'pos': 22.380555555555556}},
+                #       ...
+                #   ]
+                # Здесь:
+                #   2, 5, 5, 6 -    лунные дни (ось x)
+                #   2, 8, 1, 2 -    сколько раз появлялся симптом в позиции
+                #                   pos (ось y). Например 7.38... - соответствует
+                #                   7-му часу. В 7-м часе 2-го дня есть еще
+                #                   симптомы, они будут располагаться
+                #                   кружками размером count с некоторым сдвигом
+                #                   по вертикали
+                #                   А в 4-м часу 5-го дня, наверное, один
+                #                   симптом, он будет располагаться посреди
+                #                   "квадратика" для 4-го часа 5-го дня.
+                #
+                req_str = """
+                    SELECT
+                        moon_day,
+                        ((insert_timestamp + timezone * 3600/100 + (timezone %% 100) * 60)/3600) %% 24 as hour,
+                        symptom_id,
+                        Count(DISTINCT id) as count
+                    FROM
+                        contact_usersymptom
+                    %(where)s
+                    GROUP BY
+                        moon_day,
+                        hour,
+                        symptom_id
+                    ORDER BY
+                        count
+                    DESC
+                """ % dict(
+                    where=where,
+                )
+                with connection.cursor() as cursor:
+                    cursor.execute(req_str)
+                    m = dictfetchall(cursor)
+                s_d_h = [ [ [{'count': 0, 'pos': 0.5} for i in range(24)] for j in range(30) ] for k in range(len(symptom_ids)) ]
+                d_h_s = [ [[] for i in range(24)] for j in range(30) ]
+                for r in m:
+                    if r['count']:
+                        s_d_h[symptom_ids[ r['symptom_id']]] [r['moon_day']] [r['hour']] ['count'] = r['count']
+                        d_h_s[r['moon_day']] [r['hour']].append({
+                            symptom_ids[r['symptom_id']]: r['count']
+                        })
+                for s in range(len(symptom_ids)):
+                    for d in range(30):
+                        for h in range(24):
+                            len_slist = len(d_h_s[d][h])
+                            if len_slist <= 1:
+                                continue
+                            step = 0.5 / len_slist
+                            y_current = 0.70
+                            for ss in d_h_s[d][h]:
+                                for k in ss.keys():
+                                    s_d_h[k][d][h]['pos'] = y_current
+                                    break
+                                y_current -= step
+
+                for s in range(len(symptom_ids)):
+                    items = []
+                    for d in range(30):
+                        for h in range(24):
+                            if s_d_h[s][d][h]['count']:
+                                max_count_in_hour = max(max_count_in_hour, s_d_h[s][d][h]['count'])
+                                items.append({
+                                    d: {
+                                        'count': s_d_h[s][d][h]['count'],
+                                        'pos': h + s_d_h[s][d][h]['pos']
+                                    }
+                                })
+                    moon_hour.append(items)
+
+            return dict(
+                current_moon_day = get_moon_day(time_current),
+                moon_bars=moon_bars,
+                moon_hour=moon_hour,
+                symptom_names=symptom_names,
+                max_count_in_hour=max_count_in_hour,
+            )
+
+        return dict()
 api_get_stats = ApiGetStats.as_view()
 
 class ApiAddUserSymptom(APIView):
@@ -2046,71 +1971,6 @@ class MergeSymptomsView(View):
         return redirect('/admin/contact/symptom/')
 
 merge_symptoms = MergeSymptomsView.as_view()
-
-class ApiGetUserKeys(APIView):
-
-    def get(self, request, *args, **kwargs):
-        """
-        Возвращает список ключей пользователя
-
-        Пример исходных данных:
-        /api/getuserkeys?uuid=172da3fe-dd30-4cb8-8df3-46f69785d30a
-        Возвращает:
-        {
-            "keys": [
-                {
-                "id": 234,
-                "value": "6354654651",
-                "type_id": 1
-                },
-                {
-                "id": 4234,
-                "value": "asdf@fdsa.com",
-                "type_id": 2
-                },
-            ...
-            ]
-        }
-        """
-        try:
-            uuid = request.GET.get('uuid')
-            if uuid:
-                try:
-                    owner = Profile.objects.get(uuid=uuid).user
-                except ValidationError:
-                    raise ServiceException('Неверный uuid = %s' % uuid)
-                except Profile.DoesNotExist:
-                    raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
-                qs = Key.objects.filter(owner=owner).order_by('pk')
-                try:
-                    from_ = request.GET.get("from", 0)
-                    from_ = int(from_) if from_ else 0
-                    count = request.GET.get("count", 0)
-                    count = int(count) if count else 0
-                except ValueError:
-                    raise ServiceException('Неверный from или count')
-                if count:
-                    qs = qs[from_ : from_ + count]
-                else:
-                    qs = qs[from_:]
-                data = dict(
-                    keys = [
-                            {
-                            'id': key.id,
-                            'value': key.value,
-                            'type_id': key.type.pk,
-                        } for key in qs
-                    ]
-                )
-                status_code = status.HTTP_200_OK
-            else:
-                raise ServiceException('Не задан uuid пользователя')
-        except ServiceException as excpt:
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
-
-api_get_user_keys = ApiGetUserKeys.as_view()
 
 class ApiAddKeyView(APIView):
     permission_classes = (IsAuthenticated, )
@@ -2540,92 +2400,6 @@ class ApiGetIncognitoMessages(APIView):
         return Response(data=data, status=status_code)
 
 api_getincognitomessages = ApiGetIncognitoMessages.as_view()
-
-class ApiGetThanksUsers(APIView):
-
-    def get(self, request, *args, **kwargs):
-        """
-        Постраничное получение списка поблагодаривших и поблагодаренных
-
-        Нужно возвратить массив пользователей (их фото и UUID),
-        которые доверяют, либо которым доверяет пользователь
-        (is_trust == true), о котором запрашивается информация.
-        Массив пользователей должен быть отсортирован
-        по убыванию времени создания записи в tbl_current_state.
-        Нужно получить count записей начиная с записи from.
-        Пример вызова:
-        /api/getthanksusers?uuid=91c49fe2-3f74-49a8-906e-f4f711f8e3a1
-        Возвращает:
-        {
-        "thanks_users": [
-                {
-                    "photo": "photo/url",
-                    "user_uuid": "6e14d54b-9371-431f-8bf0-6688f2cf2451"
-                },
-            ...
-            ]
-        }
-
-        """
-        try:
-            uuid = request.GET.get('uuid')
-            if not uuid:
-                raise ServiceException('Не задан uuid пользователя')
-            try:
-                user_q = Profile.objects.select_related('user').get(uuid=uuid).user
-            except ValidationError:
-                raise ServiceException('Неверный uuid = %s' % uuid)
-            except Profile.DoesNotExist:
-                raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
-            try:
-                from_ = request.GET.get("from", 0)
-                from_ = int(from_) if from_ else 0
-                count = request.GET.get("count", 0)
-                count = int(count) if count else 0
-            except ValueError:
-                raise ServiceException('Неверный from или count')
-            q = Q(
-                user_to__isnull=False,
-                is_reverse=False,
-                is_trust=True,
-            )
-            q &= Q(user_to=user_q) | Q(user_from=user_q)
-            qs = CurrentState.objects.filter(q
-                ).distinct().select_related(
-                    'user_from', 'user_to',
-                    'user_from__profile', 'user_to__profile',
-                ).order_by('-insert_timestamp');
-            thanks_users = []
-            user_pks = []
-            n = 0
-            for cs in qs:
-                user = cs.user_to
-                if user == user_q:
-                    user = cs.user_from
-                if user.pk in user_pks:
-                    continue
-                user_pks.append(user.pk)
-                if n < from_:
-                    n += 1
-                    continue
-                if count and n >= from_ + count:
-                    break
-                profile = user.profile
-                thanks_users.append(dict(
-                    photo = profile.choose_photo(),
-                    user_uuid=str(profile.uuid)
-                ))
-                n += 1
-            data = dict(
-                thanks_users=thanks_users
-            )
-            status_code = 200
-        except ServiceException as excpt:
-            data = dict(message=excpt.args[0])
-            status_code = 400
-        return Response(data=data, status=status_code)
-
-api_get_thanks_users = ApiGetThanksUsers.as_view()
 
 class ApiGetThanksUsersForAnytext(APIView):
 

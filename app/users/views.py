@@ -18,7 +18,7 @@ from app.utils import ServiceException, dictfetchall, FrontendMixin
 
 from django.contrib.auth.models import User
 from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TempToken
-from contact.models import Key, UserKey, KeyType, CurrentState, OperationType, Wish, Like, Ability
+from contact.models import Key, KeyType, CurrentState, OperationType, Wish, Ability
 from contact.views import SendMessageMixin
 
 class ApiGetProfileInfo(APIView):
@@ -28,24 +28,15 @@ class ApiGetProfileInfo(APIView):
         Получение информации о профиле пользователя
 
         Возвращает информацию о пользователе, заданным get- параметром
-        uuid: ФИО, кредитную карту, фото, известность,
-        общее количество благодарностей, количество утрат доверия.
+        uuid: ФИО, фото, известность, общее количество благодарностей,
+        количество утрат доверия и др.
         Если в запросе присутствует токен авторизации, то нужно вернуть и
         текущее состояние между пользователем, который запрашивает информацию,
         и пользователем, о котором он запрашивает информацию.
-        То есть информацию из таблицы CurrentState,
-        где user_id_from = id_пользователя_из_токена,
-        а user_id_to = id_пользователя_из_запроса.
-        Если в CurrentState нет записи по заданным пользователям,
-        то возвратить thanks_count = null и is_trust = null.
-        Также нужно возвратить массив пользователей (их фото и UUID),
-        которые благодарили, либо были благодаримы пользователем,
-        о котором запрашивается информация.
-        Массив пользователей должен быть отсортирован по убыванию
-        известности пользователей.
 
         Пример вызова:
         /api/getprofileinfo?uuid=9e936638-3c48-4e7b-bab4-7f968824acd5
+        /api/getprofileinfo : для авторизованного пользователя
 
         Пример возвращаемых данных:
         {
@@ -59,24 +50,7 @@ class ApiGetProfileInfo(APIView):
             "is_notified": True,
             "trust_count": 3,
             "is_active": true,
-            "thanks_count": 12, // только при авторизованном запросе
-            "is_trust": true,   // только при авторизованном запросе
-            "thanks_users": [
-                {
-                "photo": "photo/url",
-                "user_uuid": "6e14d54b-9371-431f-8bf0-6688f2cf2451"
-                },
-                {
-                "photo": "photo/url",
-                "user_uuid": "5548a8ba-ac47-400e-96f3-f3c9caa75383"
-                },
-                {
-                "photo": "photo/url",
-                "user_uuid": "7ced71b2-3b55-45bf-a622-57311dbc6c9f"
-                }
-            ]
         }
-
         """
 
         try:
@@ -104,30 +78,12 @@ class ApiGetProfileInfo(APIView):
                 sum_thanks_count=profile.sum_thanks_count,
                 fame=profile.fame,
                 mistrust_count=profile.mistrust_count,
-                trustless_count=profile.mistrust_count,
                 trust_count=profile.trust_count,
                 is_active=user.is_active,
                 latitude=profile.latitude,
                 longitude=profile.longitude,
                 ability=profile.ability and profile.ability.text or None,
             )
-            user_from = request.user
-            if user_from.is_authenticated:
-                thanks_count = is_trust = None
-                try:
-                    currentstate = CurrentState.objects.get(
-                        user_from=user_from,
-                        user_to=user,
-                        is_reverse=False,
-                    )
-                    thanks_count = currentstate.thanks_count
-                    is_trust = currentstate.is_trust
-                except CurrentState.DoesNotExist:
-                    pass
-                data.update(
-                    thanks_count=thanks_count,
-                    is_trust=is_trust,
-                )
             status_code = 200
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
@@ -182,9 +138,7 @@ class ApiUpdateProfileInfo(SendMessageMixin, APIView):
         profile.ability = None
         profile.save()
 
-        UserKey.objects.filter(user=user).delete()
         Key.objects.filter(owner=user).delete()
-        Like.objects.filter(owner=user).delete()
         Ability.objects.filter(owner=user).delete()
         Wish.objects.filter(owner=user).delete()
         Token.objects.filter(user=user).delete()
@@ -581,7 +535,6 @@ class ApiGetUsers(APIView):
                     fame=profile.fame,
                     sum_thanks_count=profile.sum_thanks_count,
                     mistrust_count=profile.mistrust_count,
-                    trustless_count=profile.mistrust_count,
                     trust_count=profile.trust_count,
                     is_active=user.is_active,
                 ))
