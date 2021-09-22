@@ -17,8 +17,6 @@ urlpatterns = [
     re_path(r'^api/download\-rating\-apk\-details/?$', views.api_download_rating_apk_details),
     re_path(r'^api/getratinglatestversion/?$', views.api_rating_latest_version),
 
-    re_path(r'^api/getusers/?$', views.api_get_users),
-
     re_path(r'^api/auth/telegram/?$', views.api_auth_telegram),
 
     re_path(r'^api/oauth/callback/(?P<provider>yandex|vk|odnoklassniki)/?$', views.api_oauth_callback),
