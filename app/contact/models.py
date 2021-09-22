@@ -370,9 +370,6 @@ class LogLike(models.Model):
             #           желаниях
             #       есть query, и их связи,
             #       где не обнулено доверие (currenstate.is_trust is not null).
-            #       В списке пользователей найденные имеют filtered == true,
-            #       на front-end они выделяются, а связи,
-            #       не подпадающие под фильтр query: filtered == false.
             #       В любом случае возвращаются в массиве users еще
             #       данные пользователя, если он авторизовался.
             #   список выдается по страницам найденных (или всех) пользователей,
@@ -425,7 +422,6 @@ class LogLike(models.Model):
                     ability=profile.ability and profile.ability.text or None,
                 )
                 users.append(d)
-                user_filtered_pks.append(user.pk)
                 user_pks.append(user.pk)
 
             connections = []
@@ -434,7 +430,7 @@ class LogLike(models.Model):
                 is_trust__isnull=False,
                 user_to__isnull=False,
             )
-            q_connections &= Q(user_to__pk__in=user_filtered_pks) | Q(user_from__pk__in=user_filtered_pks)
+            q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
             for cs in CurrentState.objects.filter(q_connections).select_related(
                     'user_from__profile', 'user_to__profile',
                     'user_from__profile__ability', 'user_to__profile__ability',
@@ -453,7 +449,6 @@ class LogLike(models.Model):
                         first_name=user.first_name,
                         last_name=user.last_name,
                         photo = profile.choose_photo(),
-                        filtered=False,
                         is_active=user.is_active,
                         latitude=profile.latitude,
                         longitude=profile.longitude,
@@ -469,7 +464,6 @@ class LogLike(models.Model):
                         first_name=user.first_name,
                         last_name=user.last_name,
                         photo = profile.choose_photo(),
-                        filtered=False,
                         is_active=user.is_active,
                         latitude=profile.latitude,
                         longitude=profile.longitude,
@@ -487,7 +481,6 @@ class LogLike(models.Model):
                         first_name=user.first_name,
                         last_name=user.last_name,
                         photo = profile.choose_photo(),
-                        filtered=False,
                         is_active=user.is_active,
                         ability=profile.ability and profile.ability.text or None,
                     )
