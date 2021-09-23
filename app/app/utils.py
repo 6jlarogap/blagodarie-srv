@@ -24,13 +24,24 @@ class ServiceException(Exception):
     """
     pass
 
-def dictfetchall(cursor):
-    "Return all rows from a cursor as a dict"
-    columns = [col[0] for col in cursor.description]
-    return [
-        dict(list(zip(columns, row)))
-        for row in cursor.fetchall()
-    ]
+class SQL_Mixin(object):
+    """
+    Для raw- вызовов
+    """
+
+    def dictfetchall(self, cursor):
+        "Return all rows from a cursor as a dict"
+        columns = [col[0] for col in cursor.description]
+        return [
+            dict(list(zip(columns, row)))
+            for row in cursor.fetchall()
+        ]
+
+    def sql_like_value(self, s):
+        """
+        Escape a sring for sql like expression
+        """
+        return s.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
 
 def get_moon_day(utc_time=None):
     """

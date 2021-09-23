@@ -14,7 +14,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import status
 
-from app.utils import ServiceException, dictfetchall, FrontendMixin
+from app.utils import ServiceException, FrontendMixin
 
 from django.contrib.auth.models import User
 from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TempToken

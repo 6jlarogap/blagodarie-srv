@@ -19,7 +19,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import IsAuthenticated
 
-from app.utils import ServiceException, dictfetchall, FrontendMixin, get_moon_day
+from app.utils import ServiceException, FrontendMixin, SQL_Mixin, get_moon_day
 
 from contact.models import KeyType, Key, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
@@ -574,7 +574,7 @@ class ApiAddTextOperationView(APIView):
 
 api_add_text_operation = ApiAddTextOperationView.as_view()
 
-class ApiGetTextInfo(APIView):
+class ApiGetTextInfo(SQL_Mixin, APIView):
 
     def get(self, request):
         """
@@ -679,7 +679,7 @@ class ApiGetTextInfo(APIView):
             )
             with connection.cursor() as cursor:
                 cursor.execute(req_str)
-                recs = dictfetchall(cursor)
+                recs = self.dictfetchall(cursor)
                 for rec in recs:
                     thanks_users.append(dict(
                         photo = Profile.choose_photo_of(rec['photo'], rec['photo_url']),
@@ -1030,7 +1030,7 @@ class ApiGetOrCreateKey(APIView):
 
 get_or_create_key = ApiGetOrCreateKey.as_view()
 
-class ApiGetStats(APIView):
+class ApiGetStats(SQL_Mixin, APIView):
 
     # За сколько часов берем статистику
     #
@@ -1334,7 +1334,7 @@ class ApiGetStats(APIView):
                 )
                 with connection.cursor() as cursor:
                     cursor.execute(req_str)
-                    symptoms = dictfetchall(cursor)
+                    symptoms = self.dictfetchall(cursor)
                 for symptom in symptoms:
                     s_dict[symptom['name']] = dict(
                         count_all=symptom['count'],
@@ -1368,7 +1368,7 @@ class ApiGetStats(APIView):
                 )
                 with connection.cursor() as cursor:
                     cursor.execute(req_str)
-                    symptoms = dictfetchall(cursor)
+                    symptoms = self.dictfetchall(cursor)
                 for symptom in symptoms:
                     s_dict[symptom['name']]['count_48h'] = symptom['count']
                 for name in s_dict:
@@ -1402,7 +1402,7 @@ class ApiGetStats(APIView):
                 )
                 with connection.cursor() as cursor:
                     cursor.execute(req_str)
-                    symptoms = dictfetchall(cursor)
+                    symptoms = self.dictfetchall(cursor)
                 for symptom in symptoms:
                     s_dict[symptom['name']]['count_24h'] = symptom['count']
                 for name in s_dict:
@@ -1502,7 +1502,7 @@ class ApiGetStats(APIView):
                 )
                 with connection.cursor() as cursor:
                     cursor.execute(req_str)
-                    m = dictfetchall(cursor)
+                    m = self.dictfetchall(cursor)
                 for r in m:
                     moon_bars[symptom_ids[ r['symptom_id']] ] [r['moon_day']] = r['count']
                 for i, symptom_bar in enumerate(moon_bars):
@@ -1559,7 +1559,7 @@ class ApiGetStats(APIView):
                 )
                 with connection.cursor() as cursor:
                     cursor.execute(req_str)
-                    m = dictfetchall(cursor)
+                    m = self.dictfetchall(cursor)
                 s_d_h = [ [ [{'count': 0, 'pos': 0.5} for i in range(24)] for j in range(30) ] for k in range(len(symptom_ids)) ]
                 d_h_s = [ [[] for i in range(24)] for j in range(30) ]
                 for r in m:
@@ -2098,7 +2098,7 @@ class ApiDeleteKeyView(APIView):
 
 api_delete_key = ApiDeleteKeyView.as_view()
 
-class ApiProfileGraph(APIView):
+class ApiProfileGraph(SQL_Mixin, APIView):
 
     def get(self, request, *args, **kwargs):
         """
@@ -2148,8 +2148,6 @@ class ApiProfileGraph(APIView):
                         "latitude": 54.32,
                         "longitude": 32.54,
                         "ability": “Всё могу”,
-                        "is_closest": true  // это ближайшая связь опрашиваемого или нет,
-                                            // имеет смысл только в рекурсивном поиске
                     },
                     ...
             ],
@@ -2188,7 +2186,7 @@ class ApiProfileGraph(APIView):
             if not uuid:
                 raise ServiceException('Не задан uuid пользователя')
             try:
-                profile_q = Profile.objects.select_related('user').get(uuid=uuid)
+                profile_q = Profile.objects.select_related('user', 'ability').get(uuid=uuid)
                 user_q = profile_q.user
             except ValidationError:
                 raise ServiceException('Неверный uuid = %s' % uuid)
@@ -2196,36 +2194,82 @@ class ApiProfileGraph(APIView):
                 raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
 
             status_code = status.HTTP_200_OK
+            query = request.GET.get('query', '')
+
+            req_union = """
+                SELECT
+                    DISTINCT user_to_id as id
+                FROM
+                    contact_currentstate
+                WHERE
+                    is_reverse = false AND
+                    is_trust IS NOT NULL AND
+                    user_to_id IS NOT NULL AND
+                    user_from_id = %(user_q_pk)s
+                UNION
+                SELECT
+                    DISTINCT user_from_id as id
+                FROM
+                    contact_currentstate
+                WHERE
+                    is_reverse = false AND
+                    is_trust IS NOT NULL AND
+                    user_to_id = %(user_q_pk)s
+            """ % dict(
+                user_q_pk=user_q.pk
+            )
+
+            sql_joins = """
+                LEFT OUTER JOIN
+                    contact_wish ON (auth_user.id = contact_wish.owner_id)
+                LEFT OUTER JOIN
+                    contact_ability ON (auth_user.id = contact_ability.owner_id)
+                LEFT OUTER JOIN
+                    contact_key ON (auth_user.id = contact_key.owner_id)
+                LEFT OUTER JOIN
+                    users_profile ON (auth_user.id = users_profile.user_id)
+                LEFT OUTER JOIN
+                    contact_ability profile__ability ON (users_profile.ability_id = profile__ability.uuid)
+            """
+            if query:
+                # '%QUERY%' :
+                like_value = "'%" + self.sql_like_value(query.upper()) + "%'"
+                query_where = """
+                    UPPER(auth_user.last_name) LIKE %(like_value)s OR
+                    UPPER(auth_user.first_name) LIKE %(like_value)s OR
+                    UPPER(contact_wish.text) LIKE %(like_value)s OR
+                    UPPER(contact_ability.text) LIKE %(like_value)s OR
+                    UPPER(contact_key.value) LIKE %(like_value)s
+                """ % dict(like_value=like_value)
+
             if request.GET.get('count'):
-                req_str = """
-                    SELECT
-                        count(*) as count
-                    FROM
-                    (
+                if query:
+                    req = """
                         SELECT
-                            DISTINCT user_to_id as id
+                            Count(distinct auth_user.id) as count
                         FROM
-                            contact_currentstate
+                            auth_user
+                        %(sql_joins)s
                         WHERE
-                            is_reverse = false AND
-                            is_trust IS NOT NULL AND
-                            user_to_id IS NOT NULL AND
-                            user_from_id = %(user_q_pk)s
-                        UNION
+                            auth_user.id IN (%(req_union)s) AND
+                            (%(query_where)s)
+                    """ % dict(
+                        sql_joins=sql_joins,
+                        query_where=query_where,
+                        req_union=req_union,
+                    )
+                else:
+                    req = """
                         SELECT
-                            DISTINCT user_from_id as id
+                            Count(distinct id) as count
                         FROM
-                            contact_currentstate
-                        WHERE
-                            is_reverse = false AND
-                            is_trust IS NOT NULL AND
-                            user_to_id = %(user_q_pk)s
-                    ) as foo
-                    ;
-                """ % dict(user_q_pk=user_q.pk,)
+                            (%(req_union)s) as foo
+                    """ % dict(
+                        req_union=req_union
+                    )
                 with connection.cursor() as cursor:
-                    cursor.execute(req_str)
-                    recs = dictfetchall(cursor)
+                    cursor.execute(req)
+                    recs = self.dictfetchall(cursor)
                 return Response(data=dict(count=recs[0]['count']), status=status_code)
 
             try:
@@ -2236,66 +2280,71 @@ class ApiProfileGraph(APIView):
                 number_ = abs(int(request.GET.get("number")))
             except (ValueError, TypeError, ):
                 number_ = settings.PAGINATE_USERS_COUNT
-            req_str = """
+
+            req = """
                 SELECT
-                    id,
-                    date_joined
+                    distinct auth_user.id,
+                    auth_user.is_active,
+                    auth_user.first_name,
+                    auth_user.last_name,
+                    auth_user.date_joined,
+
+                    users_profile.latitude,
+                    users_profile.longitude,
+                    users_profile.photo,
+                    users_profile.uuid,
+                    users_profile.photo_url,
+
+                    profile__ability.text
                 FROM
                     auth_user
-                WHERE id IN
-                (
-                    SELECT
-                        DISTINCT user_to_id as id
-                    FROM
-                        contact_currentstate
-                    WHERE
-                        is_reverse = false AND
-                        is_trust IS NOT NULL AND
-                        user_to_id IS NOT NULL AND
-                        user_from_id = %(user_q_pk)s
-                    UNION
-                    SELECT
-                        DISTINCT user_from_id as id
-                    FROM
-                        contact_currentstate
-                    WHERE
-                        is_reverse = false AND
-                        is_trust IS NOT NULL AND
-                        user_to_id = %(user_q_pk)s
-                )
+                %(sql_joins)s
+                WHERE 
+                    auth_user.id IN (%(req_union)s)
+            """ % dict(
+                sql_joins=sql_joins,
+                req_union=req_union,
+            )
+            if query:
+                req += "AND (%(query_where)s)" % dict(query_where=query_where)
+            req += """
                 ORDER BY
                     date_joined
                 DESC
                 OFFSET %(from_)s
                 LIMIT %(number_)s
-                ;
             """ % dict(
-                user_q_pk=user_q.pk,
                 from_=from_,
                 number_=number_,
             )
             with connection.cursor() as cursor:
-                cursor.execute(req_str)
-                recs = dictfetchall(cursor)
-            closest_users_pks = [ r['id'] for r in recs]
-
+                cursor.execute(req)
+                recs = self.dictfetchall(cursor)
             users = []
-            connections = []
-
-            user_pks = [user_q.pk] + closest_users_pks
-            for user in User.objects.select_related('profile').filter(pk__in=user_pks).distinct():
-                profile = user.profile
+            users.append(dict(
+                uuid=profile_q.uuid,
+                first_name=user_q.first_name,
+                last_name=user_q.last_name,
+                photo=profile_q.choose_photo(),
+                is_active=user_q.is_active,
+                latitude=profile_q.latitude,
+                longitude=profile_q.longitude,
+                ability=profile_q.ability and profile_q.ability.text or None,
+            ))
+            user_pks = []
+            for rec in recs:
                 users.append(dict(
-                    uuid=profile.uuid,
-                    first_name=user.first_name,
-                    last_name=user.last_name,
-                    photo = profile.choose_photo(),
-                    is_active=user.is_active,
-                    latitude=profile.latitude,
-                    longitude=profile.longitude,
-                    ability=profile.ability and profile.ability.text or None,
-                    is_closest=True,
+                    uuid=rec['uuid'],
+                    first_name=rec['first_name'],
+                    last_name=rec['last_name'],
+                    photo=Profile.choose_photo_of(rec['photo'], rec['photo_url']),
+                    is_active=rec['is_active'],
+                    latitude=rec['latitude'],
+                    longitude=rec['longitude'],
+                    ability=rec['text'],
                 ))
+                user_pks.append(rec['id'])
+            connections = []
 
             q = Q(user_from__in=user_pks) & Q(user_to__in=user_pks)
             q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust__isnull=False)
@@ -2308,7 +2357,6 @@ class ApiProfileGraph(APIView):
                     'thanks_count': cs.thanks_count,
                     'is_trust': cs.is_trust,
                 })
-            data = dict(users=users, connections=connections)
 
             keys = [
                 {
@@ -2344,11 +2392,13 @@ class ApiProfileGraph(APIView):
                 } \
                 for ability in Ability.objects.filter(owner=user_q)
             ]
-            data.update(dict(
+            data = dict(
+                users=users,
+                connections=connections,
                 keys=keys,
                 wishes=wishes,
                 abilities=abilities,
-            ))
+            )
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
             status_code = status.HTTP_400_BAD_REQUEST

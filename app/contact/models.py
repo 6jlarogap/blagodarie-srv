@@ -19,8 +19,6 @@ from django.contrib.auth.models import User
 #
 from app.models import BaseModelInsertTimestamp, BaseModelInsertUpdateTimestamp, GeoPointModel
 
-from app.utils import dictfetchall
-
 class KeyType(models.Model):
 
     LINK_ID = 5
