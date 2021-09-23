@@ -1,4 +1,4 @@
-import os, datetime, time, json
+import os, datetime, time, json, re
 import urllib.request, urllib.error
 from urllib.parse import urlencode
 
@@ -19,7 +19,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import IsAuthenticated
 
-from app.utils import ServiceException, dictfetchall, FrontendMixin
+from app.utils import ServiceException, dictfetchall, FrontendMixin, get_moon_day
 
 from contact.models import KeyType, Key, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
@@ -2112,9 +2112,18 @@ class ApiProfileGraph(APIView):
         from
             Начало выборки, по умолчанию 0
         number
-            Сколько ближайших связей выдавать
+            Сколько ближайших связей выдавать среди всех (без параметра query)
+            или среди найденных (с параметром query)
+        query
+            Поиск среди ближайших связей по
+                имени или
+                фамилии или
+                возможностях или
+                ключах или
+                желаниях
 
         С параметром count возвращает лишь число ближайших связей запрашиваемого
+        среди всех или найденных по query
 
         Иначе возвращает ближайшие связи пользователя, его желания и ключи.
         Также возвращает связи между этими ближайшими связями
