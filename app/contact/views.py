@@ -2346,6 +2346,7 @@ class ApiProfileGraph(SQL_Mixin, APIView):
                 user_pks.append(rec['id'])
             connections = []
 
+            user_pks.append(user_q.pk)
             q = Q(user_from__in=user_pks) & Q(user_to__in=user_pks)
             q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust__isnull=False)
             for cs in CurrentState.objects.filter(q).select_related(
