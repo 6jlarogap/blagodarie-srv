@@ -1972,6 +1972,71 @@ class MergeSymptomsView(View):
 
 merge_symptoms = MergeSymptomsView.as_view()
 
+class ApiGetUserKeys(APIView):
+
+    def get(self, request, *args, **kwargs):
+        """
+        Возвращает список ключей пользователя
+
+        Пример исходных данных:
+        /api/getuserkeys?uuid=172da3fe-dd30-4cb8-8df3-46f69785d30a
+        Возвращает:
+        {
+            "keys": [
+                {
+                "id": 234,
+                "value": "6354654651",
+                "type_id": 1
+                },
+                {
+                "id": 4234,
+                "value": "asdf@fdsa.com",
+                "type_id": 2
+                },
+            ...
+            ]
+        }
+        """
+        try:
+            uuid = request.GET.get('uuid')
+            if uuid:
+                try:
+                    owner = Profile.objects.get(uuid=uuid).user
+                except ValidationError:
+                    raise ServiceException('Неверный uuid = %s' % uuid)
+                except Profile.DoesNotExist:
+                    raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
+                qs = Key.objects.filter(owner=owner).order_by('pk')
+                try:
+                    from_ = request.GET.get("from", 0)
+                    from_ = int(from_) if from_ else 0
+                    count = request.GET.get("count", 0)
+                    count = int(count) if count else 0
+                except ValueError:
+                    raise ServiceException('Неверный from или count')
+                if count:
+                    qs = qs[from_ : from_ + count]
+                else:
+                    qs = qs[from_:]
+                data = dict(
+                    keys = [
+                            {
+                            'id': key.id,
+                            'value': key.value,
+                            'type_id': key.type.pk,
+                        } for key in qs
+                    ]
+                )
+                status_code = status.HTTP_200_OK
+            else:
+                raise ServiceException('Не задан uuid пользователя')
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_get_user_keys = ApiGetUserKeys.as_view()
+
 class ApiAddKeyView(APIView):
     permission_classes = (IsAuthenticated, )
 

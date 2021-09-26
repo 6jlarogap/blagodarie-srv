@@ -15,6 +15,7 @@ urlpatterns = [
 
     re_path(r'^api/addkeyz/?$', views.api_add_keyz),
     re_path(r'^api/getorcreatekeyz/?$', views.get_or_create_key),
+    re_path(r'^api/getuserkeys/?$', views.api_get_user_keys),
     re_path(r'^api/addkey/?$', views.api_add_key),
     re_path(r'^api/updatekey/?$', views.api_update_key),
     re_path(r'^api/deletekey/?$', views.api_delete_key),
