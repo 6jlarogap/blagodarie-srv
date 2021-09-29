@@ -1097,9 +1097,11 @@ class ApiGetStats(SQL_Mixin, APIView):
             #           желаниях
             #       есть query, и их связи,
             #       где не обнулено доверие (currenstate.is_trust is not null).
-            #       В любом случае возвращаются в массиве users еще
-            #       данные пользователя, если он авторизовался.
-            #   список выдается по страницам найденных (или всех) пользователей,
+            #   В любом случае возвращаются в массиве users еще
+            #   данные пользователя, если он авторизовался, а также
+            #   связи с попавшими в выборку по query и/или в страницу from...
+            #   number.
+            #   Cписок выдается по страницам найденных (или всех) пользователей,
             #   в порядке убывания даты регистрации пользователя,
             #   начало страницы -- параметр from (нумерация с 0), по умолчанию 0
             #   сколько на странице -- параметр number, по умолчанию 50
@@ -1151,6 +1153,24 @@ class ApiGetStats(SQL_Mixin, APIView):
                 users.append(d)
                 user_pks.append(user.pk)
 
+            if request.user and request.user.is_authenticated:
+                if request.user.pk not in user_pks:
+                    user= request.user
+                    profile = user.profile
+                    d = dict(
+                        uuid=profile.uuid,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                        photo = profile.choose_photo(),
+                        filtered=True,
+                        is_active=user.is_active,
+                        latitude=profile.latitude,
+                        longitude=profile.longitude,
+                        ability=profile.ability and profile.ability.text or None,
+                    )
+                    users.append(d)
+                    user_pks.append(user.pk)
+
             connections = []
             q_connections = Q(
                 is_reverse=False,
@@ -1160,7 +1180,6 @@ class ApiGetStats(SQL_Mixin, APIView):
             q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
             for cs in CurrentState.objects.filter(q_connections).select_related(
                     'user_from__profile', 'user_to__profile',
-                    'user_from__profile__ability', 'user_to__profile__ability',
                 ).distinct():
                 connections.append({
                     'source': cs.user_from.profile.uuid,
@@ -1168,50 +1187,6 @@ class ApiGetStats(SQL_Mixin, APIView):
                     'thanks_count': cs.thanks_count,
                     'is_trust': cs.is_trust,
                 })
-                if cs.user_to.pk not in user_pks:
-                    user = cs.user_to
-                    profile = user.profile
-                    d = dict(
-                        uuid=profile.uuid,
-                        first_name=user.first_name,
-                        last_name=user.last_name,
-                        photo = profile.choose_photo(),
-                        is_active=user.is_active,
-                        latitude=profile.latitude,
-                        longitude=profile.longitude,
-                        ability=profile.ability and profile.ability.text or None,
-                    )
-                    users.append(d)
-                    user_pks.append(user.pk)
-                if cs.user_from.pk not in user_pks:
-                    user = cs.user_from
-                    profile = user.profile
-                    d = dict(
-                        uuid=profile.uuid,
-                        first_name=user.first_name,
-                        last_name=user.last_name,
-                        photo = profile.choose_photo(),
-                        is_active=user.is_active,
-                        latitude=profile.latitude,
-                        longitude=profile.longitude,
-                        ability=profile.ability and profile.ability.text or None,
-                    )
-                    users.append(d)
-                    user_pks.append(user.pk)
-
-            if request.user and request.user.is_authenticated:
-                if request.user.pk not in user_pks:
-                    user = request.user
-                    profile = user.profile
-                    d = dict(
-                        uuid=profile.uuid,
-                        first_name=user.first_name,
-                        last_name=user.last_name,
-                        photo = profile.choose_photo(),
-                        is_active=user.is_active,
-                        ability=profile.ability and profile.ability.text or None,
-                    )
-                    users.append(d)
 
             return dict(users=users, connections=connections)
 
