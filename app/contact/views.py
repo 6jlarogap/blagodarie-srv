@@ -1126,7 +1126,6 @@ class ApiGetStats(SQL_Mixin, APIView):
             users_selected = users_selected.select_related('profile', 'profile__ability')
             users = []
             user_pks = []
-            user_filtered_pks = []
             try:
                 from_ = abs(int(request.GET.get("from")))
             except (ValueError, TypeError, ):
@@ -1144,7 +1143,6 @@ class ApiGetStats(SQL_Mixin, APIView):
                     first_name=user.first_name,
                     last_name=user.last_name,
                     photo = profile.choose_photo(),
-                    filtered=True,
                     is_active=user.is_active,
                     latitude=profile.latitude,
                     longitude=profile.longitude,
@@ -1162,7 +1160,6 @@ class ApiGetStats(SQL_Mixin, APIView):
                         first_name=user.first_name,
                         last_name=user.last_name,
                         photo = profile.choose_photo(),
-                        filtered=True,
                         is_active=user.is_active,
                         latitude=profile.latitude,
                         longitude=profile.longitude,
