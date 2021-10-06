@@ -15,6 +15,8 @@ from django.contrib.auth.models import User
 from django.apps import apps
 get_model = apps.get_model
 
+from app.models import UnclearDateModelField
+
 from app.models import BaseModelInsertUpdateTimestamp, BaseModelInsertTimestamp, PhotoModel, GeoPointModel
 from app.utils import ServiceException
 
@@ -327,6 +329,13 @@ class Oauth(BaseModelInsertUpdateTimestamp):
 
 class Profile(PhotoModel, GeoPointModel):
 
+    GENDER_MALE = 'm'
+    GENDER_FEMALE = 'f'
+    GENDER_CHOICES = (
+        (GENDER_MALE, _('Мужской')),
+        (GENDER_FEMALE, _('Женский')),
+    )
+
     user = models.OneToOneField('auth.User', on_delete=models.CASCADE)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
     middle_name = models.CharField(_("Отчество"), max_length=255, blank=True, default='')
@@ -337,12 +346,39 @@ class Profile(PhotoModel, GeoPointModel):
     trust_count = models.PositiveIntegerField(_("Число оказанных доверий"), default=0)
     mistrust_count = models.PositiveIntegerField(_("Число утрат доверия"), default=0)
     ability = models.ForeignKey('contact.Ability', verbose_name=_("Способность"), null=True, on_delete=models.SET_NULL)
+    # Для родни:
+    owner = models.ForeignKey('auth.User', on_delete=models.CASCADE, null=True, related_name='profile_owner_set')
+    gender = models.CharField(_("Тип"), max_length=1, choices=GENDER_CHOICES, null=True)
+    dob = UnclearDateModelField("Дата рождения", null=True, blank=True)
+    dod = UnclearDateModelField("Дата смерти", null=True, blank=True)
 
     class Meta:
         ordering = ('user__last_name', 'user__first_name', 'middle_name', )
 
     def __str__(self):
         return self.full_name() or str(self.pk)
+
+    def data_dict(self, request):
+        user = self.user
+        return dict(
+            uuid=str(self.uuid),
+            last_name=user.last_name,
+            first_name=user.first_name,
+            middle_name=self.middle_name,
+            photo=self.choose_photo(request),
+            is_notified=self.is_notified,
+            sum_thanks_count=self.sum_thanks_count,
+            fame=self.fame,
+            mistrust_count=self.mistrust_count,
+            trust_count=self.trust_count,
+            is_active=user.is_active,
+            latitude=self.latitude,
+            longitude=self.longitude,
+            ability=self.ability and self.ability.text or None,
+            gender=self.gender,
+            dob=self.dob and self.dob.str_safe() or None,
+            dod=self.dod and self.dod.str_safe() or None,
+        )
 
     def merge(self, profile_from):
         # Проверку на один и тот же профиль производить
@@ -483,10 +519,10 @@ class Profile(PhotoModel, GeoPointModel):
         return name
 
     @classmethod
-    def choose_photo_of(cls, photo, photo_url, photo_size=None):
+    def choose_photo_of(cls, request, photo, photo_url, photo_size=None):
         result = ''
         if photo:
-            result = photo
+            result = request.build_absolute_uri(settings.MEDIA_URL + photo)
         elif photo_url:
             result = photo_url
             if not photo_size:
@@ -512,21 +548,33 @@ class Profile(PhotoModel, GeoPointModel):
                              '/s' + str(photo_size) + '-c/' + m.group(6)
         return result
 
-    def choose_photo(self, photo_size=None):
+    def choose_photo(self, request, photo_size=None):
         """
         Выбрать фото пользователя
 
         Если есть выданное пользователем фото (photo), то оно,
         иначе photo_url
         """
-        return Profile.choose_photo_of(self.photo, self.photo_url, photo_size)
+        return Profile.choose_photo_of(request, self.photo and self.photo.name, self.photo_url, photo_size)
 
 
 class CreateUserMixin(object):
 
     MSG_FAILED_CREATE_USER = 'Не удалось создать пользователя с уникальным именем. Попробуйте еще раз.'
 
-    def create_user(self, last_name='', first_name='', middle_name='', email='', photo_url=''):
+    def create_user(self,
+        last_name='',
+        first_name='',
+        middle_name='',
+        email='',
+        photo_url='',
+        photo=None,
+        owner=None,
+        dob=None,
+        dod=None,
+        is_active=True,
+        gender=None,
+            ):
         user = None
         random.seed()
         chars = string.ascii_lowercase + string.digits
@@ -542,6 +590,7 @@ class CreateUserMixin(object):
                         last_name=last_name,
                         first_name=first_name,
                         email=email,
+                        is_active=is_active,
                     )
                     break
                 except IntegrityError:
@@ -551,6 +600,11 @@ class CreateUserMixin(object):
                 user=user,
                 middle_name=middle_name,
                 photo_url=photo_url,
+                photo=photo,
+                owner=owner,
+                dob=dob,
+                dod=dod,
+                gender=gender,
             )
         return user
 

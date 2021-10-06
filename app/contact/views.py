@@ -20,6 +20,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import IsAuthenticated
 
 from app.utils import ServiceException, FrontendMixin, SQL_Mixin, get_moon_day
+from app.models import UnclearDate
 
 from contact.models import KeyType, Key, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
@@ -102,6 +103,7 @@ class ApiAddOperationMixin(object):
                     currentstate.is_reverse = False
                     currentstate.thanks_count = 1
                     currentstate.is_trust = None
+                    currentstate.is_parent = False
                 else:
                     currentstate.thanks_count += 1
                 currentstate.save()
@@ -113,6 +115,7 @@ class ApiAddOperationMixin(object):
                     is_reverse=True,
                     is_trust=currentstate.is_trust,
                     thanks_count=currentstate.thanks_count,
+                    is_parent=currentstate.is_parent,
             ))
             if not reverse_created and reverse_cs.is_reverse:
                 reverse_cs.thanks_count = currentstate.thanks_count
@@ -135,6 +138,7 @@ class ApiAddOperationMixin(object):
                     currentstate.insert_timestamp = insert_timestamp
                     currentstate.is_reverse = False
                     currentstate.is_trust = False
+                    currentstate.is_parent = False
                     currentstate.thanks_count = 0
                     currentstate.save()
                 else:
@@ -152,6 +156,7 @@ class ApiAddOperationMixin(object):
                     is_reverse=True,
                     is_trust=False,
                     thanks_count=currentstate.thanks_count,
+                    is_parent=currentstate.is_parent,
             ))
             if not reverse_created and reverse_cs.is_reverse and not (reverse_cs.is_trust == False):
                 reverse_cs.is_trust = False
@@ -173,6 +178,7 @@ class ApiAddOperationMixin(object):
                     currentstate.insert_timestamp = insert_timestamp
                     currentstate.is_reverse = False
                     currentstate.is_trust = True
+                    currentstate.is_parent = False
                     currentstate.thanks_count = 0
                     currentstate.save()
                 else:
@@ -190,6 +196,7 @@ class ApiAddOperationMixin(object):
                     is_reverse=True,
                     is_trust=True,
                     thanks_count=currentstate.thanks_count,
+                    is_parent=currentstate.is_parent,
             ))
             if not reverse_created and reverse_cs.is_reverse and not (reverse_cs.is_trust == True):
                 reverse_cs.is_trust = True
@@ -213,6 +220,7 @@ class ApiAddOperationMixin(object):
                     currentstate.is_reverse = False
                     currentstate.is_trust = True
                     currentstate.thanks_count = 1
+                    currentstate.is_parent = False
                     currentstate.save()
                 else:
                     currentstate.is_trust = True
@@ -226,6 +234,7 @@ class ApiAddOperationMixin(object):
                     is_reverse=True,
                     is_trust=True,
                     thanks_count=currentstate.thanks_count,
+                    is_parent=currentstate.is_parent,
             ))
             if not reverse_created and reverse_cs.is_reverse:
                 reverse_cs.is_trust = True
@@ -258,7 +267,7 @@ class ApiAddOperationMixin(object):
                     currentstate.is_trust = None
                     currentstate.save()
 
-            reverse_cs = CurrentState.objects.filter(
+            CurrentState.objects.filter(
                 user_to=user_from,
                 user_from=user_to,
                 is_reverse=True,
@@ -682,7 +691,7 @@ class ApiGetTextInfo(SQL_Mixin, APIView):
                 recs = self.dictfetchall(cursor)
                 for rec in recs:
                     thanks_users.append(dict(
-                        photo = Profile.choose_photo_of(rec['photo'], rec['photo_url']),
+                        photo = Profile.choose_photo_of(request, rec['photo'], rec['photo_url']),
                         user_uuid=str(rec['uuid'])
                     ))
             data.update(
@@ -760,7 +769,7 @@ class ApiGetTextOperationsView(APIView):
                     user_id_from=j.user_from.profile.uuid,
                     first_name=j.user_from.first_name,
                     last_name=j.user_from.last_name,
-                    photo=j.user_from.profile.choose_photo(),
+                    photo=j.user_from.profile.choose_photo(request),
                     operation_type_id=j.operationtype.pk,
                     timestamp=j.insert_timestamp,
                     comment=j.comment,
@@ -841,7 +850,7 @@ class ApiGetUserOperationsView(APIView):
                     first_name=j.user_from.first_name,
                     last_name=j.user_from.last_name,
                     is_active=j.user_from.is_active,
-                    photo=j.user_from.profile.choose_photo(),
+                    photo=j.user_from.profile.choose_photo(request),
                     operation_type_id=j.operationtype.pk,
                     timestamp=j.insert_timestamp,
                     comment=j.comment,
@@ -1138,34 +1147,14 @@ class ApiGetStats(SQL_Mixin, APIView):
             users_selected = users_selected.order_by('-date_joined')[from_:from_ + number_]
             for user in users_selected:
                 profile = user.profile
-                d = dict(
-                    uuid=profile.uuid,
-                    first_name=user.first_name,
-                    last_name=user.last_name,
-                    photo = profile.choose_photo(),
-                    is_active=user.is_active,
-                    latitude=profile.latitude,
-                    longitude=profile.longitude,
-                    ability=profile.ability and profile.ability.text or None,
-                )
-                users.append(d)
+                users.append(profile.data_dict(request))
                 user_pks.append(user.pk)
 
             if request.user and request.user.is_authenticated:
                 if request.user.pk not in user_pks:
                     user= request.user
                     profile = user.profile
-                    d = dict(
-                        uuid=profile.uuid,
-                        first_name=user.first_name,
-                        last_name=user.last_name,
-                        photo = profile.choose_photo(),
-                        is_active=user.is_active,
-                        latitude=profile.latitude,
-                        longitude=profile.longitude,
-                        ability=profile.ability and profile.ability.text or None,
-                    )
-                    users.append(d)
+                    users.append(profile.data_dict(request))
                     user_pks.append(user.pk)
 
             connections = []
@@ -1183,6 +1172,7 @@ class ApiGetStats(SQL_Mixin, APIView):
                     'target': cs.user_to.profile.uuid,
                     'thanks_count': cs.thanks_count,
                     'is_trust': cs.is_trust,
+                    'is_parent': cs.is_parent,
                 })
 
             return dict(users=users, connections=connections)
@@ -2326,11 +2316,21 @@ class ApiProfileGraph(SQL_Mixin, APIView):
                     auth_user.last_name,
                     auth_user.date_joined,
 
+                    users_profile.middle_name,
+                    users_profile.gender,
                     users_profile.latitude,
                     users_profile.longitude,
                     users_profile.photo,
                     users_profile.uuid,
                     users_profile.photo_url,
+
+                    users_profile.dob,
+                    users_profile.dob_no_day,
+                    users_profile.dob_no_month,
+
+                    users_profile.dod,
+                    users_profile.dod_no_day,
+                    users_profile.dod_no_month,
 
                     profile__ability.text
                 FROM
@@ -2358,27 +2358,21 @@ class ApiProfileGraph(SQL_Mixin, APIView):
                 cursor.execute(req)
                 recs = self.dictfetchall(cursor)
             users = []
-            users.append(dict(
-                uuid=profile_q.uuid,
-                first_name=user_q.first_name,
-                last_name=user_q.last_name,
-                photo=profile_q.choose_photo(),
-                is_active=user_q.is_active,
-                latitude=profile_q.latitude,
-                longitude=profile_q.longitude,
-                ability=profile_q.ability and profile_q.ability.text or None,
-            ))
+            users.append(profile_q.data_dict(request))
             user_pks = []
             for rec in recs:
                 users.append(dict(
                     uuid=rec['uuid'],
                     first_name=rec['first_name'],
                     last_name=rec['last_name'],
-                    photo=Profile.choose_photo_of(rec['photo'], rec['photo_url']),
+                    photo=Profile.choose_photo_of(request, rec['photo'], rec['photo_url']),
                     is_active=rec['is_active'],
                     latitude=rec['latitude'],
                     longitude=rec['longitude'],
                     ability=rec['text'],
+                    gender=rec['gender'],
+                    dob=UnclearDate.str_safe_from_rec(rec, 'dob'),
+                    dod=UnclearDate.str_safe_from_rec(rec, 'dod'),
                 ))
                 user_pks.append(rec['id'])
             connections = []
@@ -2394,6 +2388,7 @@ class ApiProfileGraph(SQL_Mixin, APIView):
                     'target': cs.user_to.profile.uuid,
                     'thanks_count': cs.thanks_count,
                     'is_trust': cs.is_trust,
+                    'is_parent': cs.is_parent,
                 })
 
             keys = [
@@ -2549,7 +2544,7 @@ class ApiGetThanksUsersForAnytext(APIView):
             for currentstate in qs:
                 profile = currentstate.user_from.profile
                 thanks_users.append(dict(
-                    photo = profile.choose_photo(),
+                    photo = profile.choose_photo(request),
                     user_uuid=str(profile.uuid)
                 ))
             data = dict(

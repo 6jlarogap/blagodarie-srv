@@ -62,5 +62,19 @@
     "fields": {
       "title": "Trust and thank"
     }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 6,
+    "fields": {
+      "title": "Parent"
+    }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 7,
+    "fields": {
+      "title": "No Parent"
+    }
   }
 ]

@@ -24,4 +24,6 @@ urlpatterns = [
     re_path(r'^api/update\-frontend\-site/?$', views.api_update_frontend_site),
 
     re_path(r'^api/invite/gettoken/?$', views.api_invite_get_token),
+
+    re_path(r'^api/parent/?$', views.api_parent),
 ]

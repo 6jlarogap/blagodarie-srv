@@ -32,6 +32,7 @@ class OperationType(models.Model):
     TRUST = 3
     NULLIFY_TRUST = 4
     TRUST_AND_THANK = 5
+    PARENT = 6
 
     title = models.CharField(_("Тип операции"), max_length=255, unique=True)
 
@@ -72,6 +73,7 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
                     verbose_name=_("Текст"), on_delete=models.CASCADE, null=True)
     thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
     is_trust = models.BooleanField(_("Доверие"), default=None, null=True)
+    is_parent = models.BooleanField(_("Родитель"), default=False)
 
     # Для построения графов связей между пользователями, где надо учитывать
     # связь - это не только что пользователь 1 отблагодарил пользователя 2,

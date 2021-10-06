@@ -15,6 +15,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import status
 
 from app.utils import ServiceException, FrontendMixin
+from app.models import UnclearDate, PhotoModel
 
 from django.contrib.auth.models import User
 from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TempToken
@@ -69,21 +70,7 @@ class ApiGetProfileInfo(APIView):
                     user = profile.user
                 except (ValidationError, Profile.DoesNotExist, ):
                     raise ServiceException("Не найден пользователь с uuid = %s или uuid неверен" % uuid)
-            data = dict(
-                last_name=user.last_name,
-                first_name=user.first_name,
-                middle_name=profile.middle_name,
-                photo=profile.choose_photo(),
-                is_notified=profile.is_notified,
-                sum_thanks_count=profile.sum_thanks_count,
-                fame=profile.fame,
-                mistrust_count=profile.mistrust_count,
-                trust_count=profile.trust_count,
-                is_active=user.is_active,
-                latitude=profile.latitude,
-                longitude=profile.longitude,
-                ability=profile.ability and profile.ability.text or None,
-            )
+            data = profile.data_dict(request)
             status_code = 200
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
@@ -136,6 +123,9 @@ class ApiUpdateProfileInfo(SendMessageMixin, APIView):
         for f in ('photo', 'photo_original_filename', 'photo_url', 'middle_name'):
             setattr(profile, f, '')
         profile.ability = None
+        profile.delete_from_media()
+        profile.photo = None
+        profile.photo_original_filename = ''
         profile.save()
 
         Key.objects.filter(owner=user).delete()
@@ -818,3 +808,130 @@ class ApiInviteGetToken(APIView):
         return Response(data=data, status=status_code)
 
 api_invite_get_token = ApiInviteGetToken.as_view()
+
+class ApiParent(CreateUserMixin, APIView):
+    permission_classes = (IsAuthenticated,)
+    parser_classes = (MultiPartParser, JSONParser, )
+
+    def check_dates(self, request):
+        dob = request.data.get('dob')
+        dod = request.data.get('dod')
+        m = UnclearDate.check_safe_str(dob)
+        if m:
+            raise ServiceException('Дата рождения: %s' % m)
+        m = UnclearDate.check_safe_str(dod)
+        if m:
+            raise ServiceException('Дата смерти: %s' % m)
+        dob = UnclearDate.from_str_safe(dob)
+        dod = UnclearDate.from_str_safe(dod)
+        return dob, dod
+
+    def check_gender(self, request):
+        if 'gender' in request.data:
+            if request.data.get('gender') not in (None, 'm', 'f'):
+                raise ServiceException("Задан неверный пол: допустимы 'm', 'f' или null")
+
+    def get(self, request):
+        return Response(
+            data=[p.data_dict(request) for p in \
+                Profile.objects.filter(owner=request.user).select_related('user')
+            ],
+            status=status.HTTP_200_OK,
+        )
+
+    @transaction.atomic
+    def post(self, request):
+        try:
+            got_it = False
+            for f in ('last_name', 'first_name'):
+                got_it = request.data.get(f)
+                break
+            if not got_it:
+                raise ServiceException('Имя или фамилия обязательны для нового родственника')
+            dob, dod =self.check_dates(request)
+            self.check_gender(request)
+            photo = PhotoModel.get_photo(request)
+
+            data = dict()
+            status_code = status.HTTP_200_OK
+            user = self.create_user(
+                last_name=request.data.get('last_name', ''),
+                first_name=request.data.get('first_name', ''),
+                middle_name=request.data.get('middle_name', ''),
+                owner=request.user,
+                dob=dob,
+                dod=dod,
+                photo=photo,
+                is_active=False,
+                gender=request.data.get('gender'),
+            )
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+    def check_uuid(self, request):
+        try:
+            uuid = request.data.get("uuid")
+            if not uuid:
+                raise ServiceException('Не задан uuid')
+            profile = Profile.objects.select_for_update().select_related('user').get(uuid=uuid)
+            user = profile.user
+        except ValidationError:
+            raise ServiceException('Неверный uuid = "%s"' % uuid)
+        except Profile.DoesNotExist:
+            raise ServiceException('Не найден пользователь, uuid = "%s"' % uuid)
+        if not profile.owner:
+            raise ServiceException('Профиль, uuid = "%s" не родственный' % uuid)
+        if request.user != profile.owner:
+            raise ServiceException('Профиль, uuid = "%s" не подлежит правке/удалению Вами' % uuid)
+        return user, profile
+
+    @transaction.atomic
+    def put(self, request):
+        try:
+            user, profile = self.check_uuid(request)
+            dob, dod =self.check_dates(request)
+            self.check_gender(request)
+            if 'dob' in request.data:
+                profile.dob = dob
+            if 'dod' in request.data:
+                profile.dod = dod
+            for f in ('last_name', 'first_name',):
+                if f in request.data:
+                    setattr(user, f, request.data.get(f))
+            for f in ('middle_name', 'gender'):
+                if f in request.data:
+                    setattr(profile, f, request.data.get(f))
+            if 'photo' in request.data:
+                if request.data.get('photo'):
+                    photo = PhotoModel.get_photo(request)
+                else:
+                    photo = None
+                    profile.photo_original_filename = ''
+                if profile.photo:
+                    profile.delete_from_media()
+                profile.photo = photo
+            user.save()
+            profile.save()
+            data = dict()
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+    @transaction.atomic
+    def delete(self, request):
+        try:
+            user, profile = self.check_uuid(request)
+            profile.delete_from_media()
+            user.delete()
+            data = dict()
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+api_parent = ApiParent.as_view()
