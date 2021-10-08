@@ -489,3 +489,28 @@ class PhotoModel(FilesMixin, models.Model):
                     status=400,
                 )
         return photo
+
+class GenderMixin(object):
+    """
+    Применяется в 2 или более моделях
+    """
+
+    GENDER_MALE = 'm'
+    GENDER_FEMALE = 'f'
+    GENDER_CHOICES = (
+        (GENDER_MALE, _('Мужской')),
+        (GENDER_FEMALE, _('Женский')),
+    )
+
+    def check_gender(self, request):
+        if 'gender' in request.data:
+            if request.data.get('gender') not in (
+                '',
+                GenderMixin.GENDER_MALE,
+                GenderMixin.GENDER_FEMALE,
+                None,
+               ):
+                raise ServiceException(
+                    "Задан неверный пол: допустимы '%s', '%s' или пусто" % (
+                    GenderMixin.GENDER_MALE, GenderMixin.GENDER_FEMALE,
+                ))

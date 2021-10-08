@@ -15,7 +15,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import status
 
 from app.utils import ServiceException, FrontendMixin
-from app.models import UnclearDate, PhotoModel
+from app.models import UnclearDate, PhotoModel, GenderMixin
 
 from django.contrib.auth.models import User
 from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TempToken
@@ -79,22 +79,32 @@ class ApiGetProfileInfo(APIView):
 
 api_get_profileinfo = ApiGetProfileInfo.as_view()
 
-class ApiUpdateProfileInfo(SendMessageMixin, APIView):
+class ApiUpdateProfileInfo(SendMessageMixin, GenderMixin, APIView):
     permission_classes = (IsAuthenticated, )
-    parser_classes = (FormParser, MultiPartParser, JSONParser,)
 
     @transaction.atomic
     def post(self, request):
         """
         Обновить информацию о пользователе
         """
-        for key in request.data:
-            key = key.lower()
-            if key in ('is_notified', 'latitude', 'longitude'):
-                profile = request.user.profile
-                setattr(profile, key, request.data.get(key))
-                profile.save()
-        return Response(data=dict(), status=200)
+        try:
+            user = request.user
+            profile = user.profile
+            for key in request.data:
+                key = key.lower()
+                if key in ('is_notified', 'latitude', 'longitude', 'gender'):
+                    if key == 'gender':
+                        self.check_gender(request)
+                        profile.gender = request.data.get(key) or None
+                    else:
+                        setattr(profile, key, request.data.get(key))
+            profile.save()
+            data=profile.data_dict(request)
+            status_code = 200
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 500
+        return Response(data=data, status=200)
 
     @transaction.atomic
     def delete(self, request):
@@ -809,7 +819,56 @@ class ApiInviteGetToken(APIView):
 
 api_invite_get_token = ApiInviteGetToken.as_view()
 
-class ApiParent(CreateUserMixin, APIView):
+class ApiParent(CreateUserMixin, GenderMixin, APIView):
+    """
+    Получить своих родственников (без связей), добавить/править/удалить родственника
+
+    GET
+        Получить всех родственников авторизованного пользователя,
+        массив json структур в формате, см. метод PUT
+
+    PUT
+        Править родственника. На входе:
+        multipart/form-data  при наличии файла фото.
+        При отсутствии файла photo можно передать в json структуре
+            uuid:
+                # обязательно
+                # остальные поля могут отсутствовать. По отсутствующим полям
+                # правка профиля не производится
+            last_name
+            first_name
+            middle_name
+            gender
+            dob: дата рождения
+                # гггг-мм-дд, гггг-мм, гггг или пустая строка (удаляет дату)
+            dob: дата смерти
+                # гггг-мм-дд, гггг-мм, гггг или пустая строка (удаляет дату)
+            photo:
+                # файл фото. Или пустая строка, тогда текущее фото, если имеется,
+                # то удаляется
+    POST
+        Добавить родственника. На входе:
+        multipart/form-data  при наличии файла фото.
+        При отсутствии файла photo можно передать в json структуре
+            last_name
+            first_name
+                # Наличие last_name или first_name обязательно
+                # остальные поля могут отсутствовать. По отсутствующим полям
+                # заносятся пустые или null значения
+            middle_name
+            gender
+            dob: дата рождения
+                # гггг-мм-дд, гггг-мм, гггг или пустая строка (дата отсутствует)
+            dob: дата смерти
+                # гггг-мм-дд, гггг-мм, гггг или пустая строка (дата отсутствует)
+            photo:
+                # файл фото. Или пустая строка, тогда фото не заносится
+
+    DELETE
+        uuid:
+            # обязательно
+    """
+
     permission_classes = (IsAuthenticated,)
     parser_classes = (MultiPartParser, JSONParser, )
 
@@ -826,16 +885,14 @@ class ApiParent(CreateUserMixin, APIView):
         dod = UnclearDate.from_str_safe(dod)
         return dob, dod
 
-    def check_gender(self, request):
-        if 'gender' in request.data:
-            if request.data.get('gender') not in (None, 'm', 'f'):
-                raise ServiceException("Задан неверный пол: допустимы 'm', 'f' или null")
-
     def get(self, request):
         return Response(
             data=[p.data_dict(request) for p in \
-                Profile.objects.filter(owner=request.user).select_related('user')
-            ],
+                Profile.objects.filter(owner=request.user).select_related('user').order_by(
+                    'user__last_name',
+                    'user__first_name',
+                    'middle_name',
+            )],
             status=status.HTTP_200_OK,
         )
 
@@ -852,8 +909,6 @@ class ApiParent(CreateUserMixin, APIView):
             self.check_gender(request)
             photo = PhotoModel.get_photo(request)
 
-            data = dict()
-            status_code = status.HTTP_200_OK
             user = self.create_user(
                 last_name=request.data.get('last_name', ''),
                 first_name=request.data.get('first_name', ''),
@@ -863,8 +918,10 @@ class ApiParent(CreateUserMixin, APIView):
                 dod=dod,
                 photo=photo,
                 is_active=False,
-                gender=request.data.get('gender'),
+                gender=request.data.get('gender') or None,
             )
+            data = user.profile.data_dict(request)
+            status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
             status_code = 400
@@ -900,9 +957,11 @@ class ApiParent(CreateUserMixin, APIView):
             for f in ('last_name', 'first_name',):
                 if f in request.data:
                     setattr(user, f, request.data.get(f))
-            for f in ('middle_name', 'gender'):
+            for f in ('middle_name',):
                 if f in request.data:
                     setattr(profile, f, request.data.get(f))
+            if 'gender' in  request.data:
+                profile.gender = request.data.get('gender') or None
             if 'photo' in request.data:
                 if request.data.get('photo'):
                     photo = PhotoModel.get_photo(request)
@@ -914,7 +973,7 @@ class ApiParent(CreateUserMixin, APIView):
                 profile.photo = photo
             user.save()
             profile.save()
-            data = dict()
+            data = profile.data_dict(request)
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])

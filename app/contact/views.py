@@ -118,6 +118,7 @@ class ApiAddOperationMixin(object):
                     is_parent=currentstate.is_parent,
             ))
             if not reverse_created and reverse_cs.is_reverse:
+                reverse_cs.update_timestamp = update_timestamp
                 reverse_cs.thanks_count = currentstate.thanks_count
                 reverse_cs.save()
 
@@ -159,6 +160,7 @@ class ApiAddOperationMixin(object):
                     is_parent=currentstate.is_parent,
             ))
             if not reverse_created and reverse_cs.is_reverse and not (reverse_cs.is_trust == False):
+                reverse_cs.update_timestamp = update_timestamp
                 reverse_cs.is_trust = False
                 reverse_cs.save()
 
@@ -199,6 +201,7 @@ class ApiAddOperationMixin(object):
                     is_parent=currentstate.is_parent,
             ))
             if not reverse_created and reverse_cs.is_reverse and not (reverse_cs.is_trust == True):
+                reverse_cs.update_timestamp = update_timestamp
                 reverse_cs.is_trust = True
                 reverse_cs.save()
 
@@ -237,6 +240,7 @@ class ApiAddOperationMixin(object):
                     is_parent=currentstate.is_parent,
             ))
             if not reverse_created and reverse_cs.is_reverse:
+                reverse_cs.update_timestamp = update_timestamp
                 reverse_cs.is_trust = True
                 reverse_cs.thanks_count = currentstate.thanks_count
                 reverse_cs.save()
@@ -272,9 +276,87 @@ class ApiAddOperationMixin(object):
                 user_from=user_to,
                 is_reverse=True,
                 is_trust__isnull=False,
-            ).update(is_trust=None)
+            ).update(is_trust=None, update_timestamp=update_timestamp)
 
             profile_to.recount_trust_fame()
+
+        elif operationtype_id == OperationType.PARENT:
+            try:
+                CurrentState.objects.get(
+                    user_from=user_to,
+                    user_to=user_from,
+                    is_reverse=False,
+                    is_parent=True,
+                )
+                raise ServiceException('Два человека не могут быть оба родителями по отношению друг к другу')
+            except CurrentState.DoesNotExist:
+                pass
+
+            currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
+                user_from=user_from,
+                user_to=user_to,
+                defaults=dict(
+                    is_parent=True,
+            ))
+            if not created_:
+                currentstate.update_timestamp = update_timestamp
+                if currentstate.is_reverse:
+                    # то же что created
+                    currentstate.insert_timestamp = insert_timestamp
+                    currentstate.is_reverse = False
+                    currentstate.is_trust = False
+                    currentstate.is_parent = True
+                    currentstate.thanks_count = 0
+                    currentstate.save()
+                else:
+                    if currentstate.is_parent == True:
+                        raise ServiceException('Такой родитель уже задан')
+                    else:
+                        currentstate.is_parent = True
+                        currentstate.save()
+
+            reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
+                user_to=user_from,
+                user_from=user_to,
+                defaults=dict(
+                    is_reverse=True,
+                    is_parent=True,
+                    thanks_count=currentstate.thanks_count,
+                    is_trust=currentstate.is_trust,
+            ))
+            if not reverse_created and reverse_cs.is_reverse and not (reverse_cs.is_parent == True):
+                reverse_cs.update_timestamp = update_timestamp
+                reverse_cs.is_parent = True
+                reverse_cs.save()
+
+        elif operationtype_id == OperationType.NOT_PARENT:
+            err_message = 'Вы и так не связаны отношением потомок - родитель'
+            try:
+                currentstate = CurrentState.objects.select_for_update().get(
+                    user_from=user_from,
+                    user_to=user_to,
+                )
+            except CurrentState.DoesNotExist:
+                raise ServiceException(err_message)
+
+            if currentstate.is_reverse:
+                # то же что и не существует такой связи
+                raise ServiceException(err_message)
+            else:
+                if currentstate.is_parent == False:
+                    raise ServiceException(err_message)
+                else:
+                    # is_parent is True
+                    currentstate.update_timestamp = update_timestamp
+                    currentstate.is_parent = False
+                    currentstate.save()
+
+            CurrentState.objects.filter(
+                user_to=user_from,
+                user_from=user_to,
+                is_reverse=True,
+                is_parent=True,
+            ).update(is_parent=False, update_timestamp=update_timestamp)
 
         Journal.objects.create(
             user_from=user_from,
@@ -332,6 +414,35 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                         - записать данные в таблицу tbl_journal;
                 - иначе вернуть ошибку (нельзя обнулить доверие, если связи нет);
 
+            - По операциям Parent, noParent NB::
+            !!! может быть задан еще и user_from_id,
+                но тогда это или uuid авторизованного пользователя или
+                uuid родственника, у которого owner  == user_from
+            !!! user_to также должен иметь owner  == user_from или быть
+                авторизованным пользователем, например для показа связи
+                сын -> авторизованный пользователь
+
+            - если тип операции Parent:
+                - проверить, есть ли запись с user_from == user_to и
+                  user_to == user_from и is_parent == True. Если есть, то ошибка:
+                  в одной паре людей не могут быть первй родителем второго одновременно
+                  с тем, что второй - родитель первого
+                - если есть запись в таблице tbl_current_state для заданных user_id_from и user_id_to:
+                    - если текущее значение is_parent == True, вернуть ошибку,
+                      нельзя несколько раз подряд становиться родителем
+                    - если текущее значение is_parent == False, установить is_parent == True,
+                - иначе создать запись в таблице tbl_current_state
+                  для заданных user_id_from и user_id_to c is_parent == True
+                - если нет ошибок, то записать данные в таблицу tbl_journal
+
+            - если тип операции not Parent:
+                - если есть запись в таблице tbl_current_state для заданных user_id_from и user_id_to:
+                    - если текущее значение is_parent == False,
+                      вернуть ошибку, нельзя не становиться  родителем, если и раньше им не был
+                    - если текущее значение is_parent == True, установить is_parent == False
+                - иначе вернуть ошибку, не был родителем, нечего еще раз говорить, что не родитель
+                - если нет ошибок, то записать данные в таблицу tbl_journal
+
         Пример исходных данных:
         {
             "user_id_to": "825b031e-95a2-4fdd-a70b-b446a52c4498",
@@ -342,6 +453,9 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
 
         try:
             user_from = request.user
+            profile_from = user_from.profile
+            user_from_uuid = profile_from.uuid
+
             user_to_uuid = request.data.get("user_id_to")
             operationtype_id = request.data.get("operation_type_id")
             comment = request.data.get("comment", None)
@@ -353,11 +467,30 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 profile_to = Profile.objects.select_for_update().select_related('user').get(uuid=user_to_uuid)
                 user_to = profile_to.user
             except ValidationError:
-                raise ServiceException('Неверный uuid = "%s"' % user_to_uuid)
+                raise ServiceException('Неверный user_id_to = "%s"' % user_to_uuid)
             except Profile.DoesNotExist:
-                raise ServiceException('Не найден пользователь, uuid = "%s"' % user_to_uuid)
+                raise ServiceException('Не найден пользователь, user_id_to = "%s"' % user_to_uuid)
+            if operationtype_id in (OperationType.PARENT, OperationType.NOT_PARENT,):
+                user_from_uuid = request.data.get("user_id_from")
+                if user_from_uuid:
+                    try:
+                        profile_from = Profile.objects.select_for_update().select_related('user').get(uuid=user_from_uuid)
+                        user_from = profile_from.user
+                    except ValidationError:
+                        raise ServiceException('Неверный user_id_from = "%s"' % user_from_uuid)
+                    except Profile.DoesNotExist:
+                        raise ServiceException('Не найден пользователь, user_id_from = "%s"' % user_from_uuid)
             if user_to == user_from:
                 raise ServiceException('Операция на самого себя не предусмотрена')
+            if operationtype_id in (OperationType.PARENT, OperationType.NOT_PARENT,):
+                if not (
+                    user_from == request.user or profile_from.owner == request.user
+                   ):
+                        raise ServiceException('У Вас нет прав задавать родителя для user_from_uuid = "%s"' % user_from_uuid)
+                if not (
+                    user_to == request.user or profile_to.owner == request.user
+                   ):
+                    raise ServiceException('У Вас нет прав задавать родителя - user_to_uuid = "%s"' % user_to_uuid)
 
             data = self.add_operation(
                 user_from,
@@ -1117,7 +1250,8 @@ class ApiGetStats(SQL_Mixin, APIView):
             #   с параметром count:
             #       число пользователей, всех или найденных по фильтру query
 
-            q_users = Q(is_superuser=False)
+            # Пока исключаем из выборки предков
+            q_users = Q(is_superuser=False, profile__owner__isnull=True)
             query = request.GET.get('query')
             if query:
                 q_users &= \

@@ -47,7 +47,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='profile',
             name='gender',
-            field=models.CharField(choices=[('m', 'Мужской'), ('f', 'Женский')], max_length=1, null=True, verbose_name='Тип'),
+            field=models.CharField(choices=[('m', 'Мужской'), ('f', 'Женский')], max_length=1, null=True, verbose_name='Пол'),
         ),
         migrations.AddField(
             model_name='profile',

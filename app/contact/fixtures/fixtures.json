@@ -74,7 +74,7 @@
     "model": "contact.operationtype",
     "pk": 7,
     "fields": {
-      "title": "No Parent"
+      "title": "Not Parent"
     }
   }
 ]

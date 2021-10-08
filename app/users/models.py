@@ -15,7 +15,7 @@ from django.contrib.auth.models import User
 from django.apps import apps
 get_model = apps.get_model
 
-from app.models import UnclearDateModelField
+from app.models import UnclearDateModelField, GenderMixin
 
 from app.models import BaseModelInsertUpdateTimestamp, BaseModelInsertTimestamp, PhotoModel, GeoPointModel
 from app.utils import ServiceException
@@ -329,13 +329,6 @@ class Oauth(BaseModelInsertUpdateTimestamp):
 
 class Profile(PhotoModel, GeoPointModel):
 
-    GENDER_MALE = 'm'
-    GENDER_FEMALE = 'f'
-    GENDER_CHOICES = (
-        (GENDER_MALE, _('Мужской')),
-        (GENDER_FEMALE, _('Женский')),
-    )
-
     user = models.OneToOneField('auth.User', on_delete=models.CASCADE)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
     middle_name = models.CharField(_("Отчество"), max_length=255, blank=True, default='')
@@ -348,7 +341,7 @@ class Profile(PhotoModel, GeoPointModel):
     ability = models.ForeignKey('contact.Ability', verbose_name=_("Способность"), null=True, on_delete=models.SET_NULL)
     # Для родни:
     owner = models.ForeignKey('auth.User', on_delete=models.CASCADE, null=True, related_name='profile_owner_set')
-    gender = models.CharField(_("Тип"), max_length=1, choices=GENDER_CHOICES, null=True)
+    gender = models.CharField(_("Пол"), max_length=1, choices=GenderMixin.GENDER_CHOICES, null=True)
     dob = UnclearDateModelField("Дата рождения", null=True, blank=True)
     dod = UnclearDateModelField("Дата смерти", null=True, blank=True)
 

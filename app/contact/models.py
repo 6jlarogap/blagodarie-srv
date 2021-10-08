@@ -17,7 +17,8 @@ from django.contrib.auth.models import User
 # Для таблицы auth_user требуется только insert_timestamp, это можно взять
 # из ее поля date_joined (timestamp with time zone)
 #
-from app.models import BaseModelInsertTimestamp, BaseModelInsertUpdateTimestamp, GeoPointModel
+from app.models import BaseModelInsertTimestamp, BaseModelInsertUpdateTimestamp, \
+                       GeoPointModel, GenderMixin
 
 class KeyType(models.Model):
 
@@ -33,6 +34,7 @@ class OperationType(models.Model):
     NULLIFY_TRUST = 4
     TRUST_AND_THANK = 5
     PARENT = 6
+    NOT_PARENT = 7
 
     title = models.CharField(_("Тип операции"), max_length=255, unique=True)
 
