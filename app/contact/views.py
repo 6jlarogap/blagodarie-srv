@@ -2939,8 +2939,8 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
             for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
                 profiles_dict[profile.user.pk] = dict(
                     uuid=profile.uuid,
-                    first_name=profile.user.first_name,
                     last_name=profile.user.last_name,
+                    first_name=profile.user.first_name,
                     middle_name=profile.middle_name,
                     photo=profile.choose_photo(request),
                     gender=profile.gender
