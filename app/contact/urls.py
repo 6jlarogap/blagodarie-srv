@@ -34,6 +34,7 @@ urlpatterns = [
     re_path(r'^api/getstats/user_connections_graph/?$', views.api_get_stats, {'only': 'user_connections_graph'}),
 
     re_path(r'^api/profile_graph/?$', views.api_profile_graph),
+    re_path(r'^api/profile_genesis/?$', views.api_profile_genesis),
 
     re_path(r'^api/addusersymptom/?$', views.api_add_user_symptom),
     re_path(r'^api/add_user_symptom/?$', views.api_add_user_symptom, {'auth': True}),

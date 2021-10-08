@@ -26,7 +26,7 @@ from contact.models import KeyType, Key, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
                            Journal, CurrentState, OperationType, Wish, \
                            AnyText, Ability
-from users.models import CreateUserMixin, IncognitoUser, Profile, TempToken, Oauth
+from users.models import CreateUserMixin, IncognitoUser, Profile, TempToken, Oauth, UuidMixin
 
 MSG_NO_PARM = 'Не задан или не верен какой-то из параметров в связке номер %s (начиная с 0)'
 
@@ -1990,7 +1990,7 @@ class ApiGetWishInfo(APIView):
 
 api_get_wish_info = ApiGetWishInfo.as_view()
 
-class ApiGetUserWishes(APIView):
+class ApiGetUserWishes(UuidMixin, APIView):
 
     def get(self, request, *args, **kwargs):
         """
@@ -2013,37 +2013,29 @@ class ApiGetUserWishes(APIView):
         """
         try:
             uuid = request.GET.get('uuid')
-            if uuid:
-                try:
-                    owner = Profile.objects.select_related('user').get(uuid=uuid).user
-                except ValidationError:
-                    raise ServiceException('Неверный uuid = %s' % uuid)
-                except Profile.DoesNotExist:
-                    raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
-                qs = Wish.objects.filter(owner=owner).order_by('update_timestamp')
-                try:
-                    from_ = request.GET.get("from", 0)
-                    from_ = int(from_) if from_ else 0
-                    count = request.GET.get("count", 0)
-                    count = int(count) if count else 0
-                except ValueError:
-                    raise ServiceException('Неверный from или count')
-                if count:
-                    qs = qs[from_ : from_ + count]
-                else:
-                    qs = qs[from_:]
-                data = dict(
-                    wishes = [
-                        dict(
-                            uuid=wish.uuid,
-                            text=wish.text,
-                            last_edit=wish.update_timestamp,
-                        ) for wish in qs
-                    ]
-                )
-                status_code = status.HTTP_200_OK
+            user, profile = self.check_user_uuid(uuid)
+            qs = Wish.objects.filter(owner=user).order_by('update_timestamp')
+            try:
+                from_ = request.GET.get("from", 0)
+                from_ = int(from_) if from_ else 0
+                count = request.GET.get("count", 0)
+                count = int(count) if count else 0
+            except ValueError:
+                raise ServiceException('Неверный from или count')
+            if count:
+                qs = qs[from_ : from_ + count]
             else:
-                raise ServiceException('Не задан uuid пользователя')
+                qs = qs[from_:]
+            data = dict(
+                wishes = [
+                    dict(
+                        uuid=wish.uuid,
+                        text=wish.text,
+                        last_edit=wish.update_timestamp,
+                    ) for wish in qs
+                ]
+            )
+            status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
             status_code = status.HTTP_400_BAD_REQUEST
@@ -2068,7 +2060,7 @@ class MergeSymptomsView(View):
 
 merge_symptoms = MergeSymptomsView.as_view()
 
-class ApiGetUserKeys(APIView):
+class ApiGetUserKeys(UuidMixin, APIView):
 
     def get(self, request, *args, **kwargs):
         """
@@ -2095,37 +2087,29 @@ class ApiGetUserKeys(APIView):
         """
         try:
             uuid = request.GET.get('uuid')
-            if uuid:
-                try:
-                    owner = Profile.objects.get(uuid=uuid).user
-                except ValidationError:
-                    raise ServiceException('Неверный uuid = %s' % uuid)
-                except Profile.DoesNotExist:
-                    raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
-                qs = Key.objects.filter(owner=owner).order_by('pk')
-                try:
-                    from_ = request.GET.get("from", 0)
-                    from_ = int(from_) if from_ else 0
-                    count = request.GET.get("count", 0)
-                    count = int(count) if count else 0
-                except ValueError:
-                    raise ServiceException('Неверный from или count')
-                if count:
-                    qs = qs[from_ : from_ + count]
-                else:
-                    qs = qs[from_:]
-                data = dict(
-                    keys = [
-                            {
-                            'id': key.id,
-                            'value': key.value,
-                            'type_id': key.type.pk,
-                        } for key in qs
-                    ]
-                )
-                status_code = status.HTTP_200_OK
+            user, profile = self.check_user_uuid(uuid)
+            qs = Key.objects.filter(owner=user).order_by('pk')
+            try:
+                from_ = request.GET.get("from", 0)
+                from_ = int(from_) if from_ else 0
+                count = request.GET.get("count", 0)
+                count = int(count) if count else 0
+            except ValueError:
+                raise ServiceException('Неверный from или count')
+            if count:
+                qs = qs[from_ : from_ + count]
             else:
-                raise ServiceException('Не задан uuid пользователя')
+                qs = qs[from_:]
+            data = dict(
+                keys = [
+                        {
+                        'id': key.id,
+                        'value': key.value,
+                        'type_id': key.type.pk,
+                    } for key in qs
+                ]
+            )
+            status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
             status_code = status.HTTP_400_BAD_REQUEST
@@ -2259,7 +2243,7 @@ class ApiDeleteKeyView(APIView):
 
 api_delete_key = ApiDeleteKeyView.as_view()
 
-class ApiProfileGraph(SQL_Mixin, APIView):
+class ApiProfileGraph(UuidMixin, SQL_Mixin, APIView):
 
     def get(self, request, *args, **kwargs):
         """
@@ -2344,17 +2328,9 @@ class ApiProfileGraph(SQL_Mixin, APIView):
         """
         try:
             uuid = request.GET.get('uuid')
-            if not uuid:
-                raise ServiceException('Не задан uuid пользователя')
-            try:
-                profile_q = Profile.objects.select_related('user', 'ability').get(uuid=uuid)
-                user_q = profile_q.user
-            except ValidationError:
-                raise ServiceException('Неверный uuid = %s' % uuid)
-            except Profile.DoesNotExist:
-                raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
-
+            user_q, profile_q = self.check_user_uuid(uuid)
             status_code = status.HTTP_200_OK
+
             query = request.GET.get('query', '')
 
             req_union = """
@@ -2499,6 +2475,7 @@ class ApiProfileGraph(SQL_Mixin, APIView):
                     uuid=rec['uuid'],
                     first_name=rec['first_name'],
                     last_name=rec['last_name'],
+                    middle_name=rec['middle_name'],
                     photo=Profile.choose_photo_of(request, rec['photo'], rec['photo_url']),
                     is_active=rec['is_active'],
                     latitude=rec['latitude'],
@@ -2768,7 +2745,7 @@ class ApiAddOrUpdateAbility(APIView):
 
 api_add_or_update_ability = ApiAddOrUpdateAbility.as_view()
 
-class ApiGetUserAbilities(APIView):
+class ApiGetUserAbilities(UuidMixin, APIView):
 
     def get(self, request, *args, **kwargs):
         """
@@ -2791,37 +2768,29 @@ class ApiGetUserAbilities(APIView):
         """
         try:
             uuid = request.GET.get('uuid')
-            if uuid:
-                try:
-                    owner = Profile.objects.select_related('user').get(uuid=uuid).user
-                except ValidationError:
-                    raise ServiceException('Неверный uuid = %s' % uuid)
-                except Profile.DoesNotExist:
-                    raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
-                qs = Ability.objects.filter(owner=owner).order_by('update_timestamp')
-                try:
-                    from_ = request.GET.get("from", 0)
-                    from_ = int(from_) if from_ else 0
-                    count = request.GET.get("count", 0)
-                    count = int(count) if count else 0
-                except ValueError:
-                    raise ServiceException('Неверный from или count')
-                if count:
-                    qs = qs[from_ : from_ + count]
-                else:
-                    qs = qs[from_:]
-                data = dict(
-                    abilities = [
-                        dict(
-                            uuid=ability.uuid,
-                            text=ability.text,
-                            last_edit=ability.update_timestamp,
-                        ) for ability in qs
-                    ]
-                )
-                status_code = status.HTTP_200_OK
+            user, profile = self.check_user_uuid(uuid)
+            qs = Ability.objects.filter(owner=user).order_by('update_timestamp')
+            try:
+                from_ = request.GET.get("from", 0)
+                from_ = int(from_) if from_ else 0
+                count = request.GET.get("count", 0)
+                count = int(count) if count else 0
+            except ValueError:
+                raise ServiceException('Неверный from или count')
+            if count:
+                qs = qs[from_ : from_ + count]
             else:
-                raise ServiceException('Не задан uuid пользователя')
+                qs = qs[from_:]
+            data = dict(
+                abilities = [
+                    dict(
+                        uuid=ability.uuid,
+                        text=ability.text,
+                        last_edit=ability.update_timestamp,
+                    ) for ability in qs
+                ]
+            )
+            status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
             status_code = status.HTTP_400_BAD_REQUEST
@@ -2917,3 +2886,99 @@ class ApiInviteUseToken(ApiAddOperationMixin, SendMessageMixin, APIView):
         return Response(data=data, status=status_code)
 
 api_invite_use_token = ApiInviteUseToken.as_view()
+
+class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
+
+    def get(self, request, *args, **kwargs):
+        """
+        Строит рекурсивно дерево родни
+
+        Пример вызова:
+        /api/profile_genesis?uuid=4d02e22c-b6eb-4307-a440-ccafdeedd9b8
+        Если задан uuid родственника, то выводится дерево родни
+        владельца
+        """
+        try:
+            related = ('user', 'owner', 'ability',)
+            uuid = request.GET.get('uuid')
+            user_q, profile_q = self.check_user_uuid(uuid, related=related)
+            if profile_q.owner:
+                user_q = profile_q.owner
+                profile_q = Profile.objects.select_related(*related).get(user=user_q)
+
+            connections = []
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    'select * from find_rel_parent(%(user_id)s, %(connection_level)s)' % dict(
+                        user_id=user_q.pk,
+                        connection_level=settings.CONNECTIONS_LEVEL,
+                ))
+                recs = self.dictfetchall(cursor)
+            user_pks = set()
+            user_pks.add(user_q.pk)
+            pairs = []
+            for rec in recs:
+                if rec['is_reverse']:
+                    user_from_id = rec['user_to_id']
+                    user_to_id = rec['user_from_id']
+                else:
+                    user_from_id = rec['user_from_id']
+                    user_to_id = rec['user_to_id']
+                pair = '%s/%s' % (user_from_id, user_to_id)
+                if pair not in pairs:
+                    pairs.append(pair)
+                    user_pks.add(user_from_id)
+                    user_pks.add(user_to_id)
+                    connections.append(dict(
+                        source=user_from_id,
+                        target=user_to_id,
+                        thanks_count=rec['thanks_count'],
+                        is_trust=rec['is_trust'],
+                    ))
+            profiles_dict = dict()
+            for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
+                profiles_dict[profile.user.pk] = dict(
+                    uuid=profile.uuid,
+                    first_name=profile.user.first_name,
+                    last_name=profile.user.last_name,
+                    middle_name=profile.middle_name,
+                    photo=profile.choose_photo(request),
+                    gender=profile.gender
+                )
+            user_q_data = profile_q.data_dict(request)
+            if user_pks:
+                users = []
+                for pk in profiles_dict:
+                    if pk == user_q.pk:
+                        users.append(user_q_data)
+                    else:
+                        users.append(profiles_dict[pk])
+            else:
+                users = [user_q_data]
+            for c in connections:
+
+                # TODO: remove this debug:
+                #
+                c['source_fio'] = "%s %s %s" % (
+                    profiles_dict[c['source']]['last_name'] or '-',
+                    profiles_dict[c['source']]['first_name'] or '-',
+                    profiles_dict[c['source']]['middle_name'] or '-',
+                )
+                c['target_fio'] = "%s %s %s" % (
+                    profiles_dict[c['target']]['last_name'] or '-',
+                    profiles_dict[c['target']]['first_name'] or '-',
+                    profiles_dict[c['target']]['middle_name'] or '-',
+                )
+
+                c['source'] = profiles_dict[c['source']]['uuid']
+                c['parent_gender'] = profiles_dict[c['target']]['gender']
+                c['target'] = profiles_dict[c['target']]['uuid']
+
+            data = dict(users=users, connections=connections)
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_profile_genesis = ApiProfileGenesis.as_view()

@@ -7,6 +7,7 @@ from django.db import models, transaction, IntegrityError
 from django.db.models import Sum, F
 from django.db.models.query_utils import Q
 from django.utils.translation import gettext_lazy as _
+from django.core.exceptions import ValidationError
 
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
@@ -666,3 +667,17 @@ class TempToken(BaseModelInsertTimestamp):
 
     def __str__(self):
         return "%s - %s" % (self.type, self.token, )
+
+class UuidMixin(object):
+
+    def check_user_uuid(self, uuid, related=('user', 'ability',)):
+        if not uuid:
+            raise ServiceException('Не задан uuid пользователя')
+        try:
+            profile = Profile.objects.select_related(*related).get(uuid=uuid)
+            user = profile.user
+        except ValidationError:
+            raise ServiceException('Неверный uuid = %s' % uuid)
+        except Profile.DoesNotExist:
+            raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
+        return user, profile

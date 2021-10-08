@@ -18,11 +18,11 @@ from app.utils import ServiceException, FrontendMixin
 from app.models import UnclearDate, PhotoModel, GenderMixin
 
 from django.contrib.auth.models import User
-from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TempToken
+from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TempToken, UuidMixin
 from contact.models import Key, KeyType, CurrentState, OperationType, Wish, Ability
 from contact.views import SendMessageMixin
 
-class ApiGetProfileInfo(APIView):
+class ApiGetProfileInfo(UuidMixin, APIView):
 
     def get(self, request):
         """
@@ -56,20 +56,14 @@ class ApiGetProfileInfo(APIView):
 
         try:
             uuid=request.GET.get('uuid')
-            user = None
-            if not uuid:
+            if uuid:
+                user, profile = self.check_user_uuid(uuid)
+            else:
                 if request.user.is_authenticated:
                     user = request.user
                     profile = user.profile
-                    uuid = profile.uuid
                 else:
                     raise ServiceException("Не задан uuid или пользователь не вошел в систему")
-            if not user:
-                try:
-                    profile = Profile.objects.select_related('user', 'ability',).get(uuid=uuid)
-                    user = profile.user
-                except (ValidationError, Profile.DoesNotExist, ):
-                    raise ServiceException("Не найден пользователь с uuid = %s или uuid неверен" % uuid)
             data = profile.data_dict(request)
             status_code = 200
         except ServiceException as excpt:
@@ -819,7 +813,7 @@ class ApiInviteGetToken(APIView):
 
 api_invite_get_token = ApiInviteGetToken.as_view()
 
-class ApiParent(CreateUserMixin, GenderMixin, APIView):
+class ApiParent(CreateUserMixin, UuidMixin, GenderMixin, APIView):
     """
     Получить своих родственников (без связей), добавить/править/удалить родственника
 
@@ -888,7 +882,7 @@ class ApiParent(CreateUserMixin, GenderMixin, APIView):
     def get(self, request):
         return Response(
             data=[p.data_dict(request) for p in \
-                Profile.objects.filter(owner=request.user).select_related('user').order_by(
+                Profile.objects.filter(owner=request.user).select_related('user', 'ability',).order_by(
                     'user__last_name',
                     'user__first_name',
                     'middle_name',
@@ -927,17 +921,9 @@ class ApiParent(CreateUserMixin, GenderMixin, APIView):
             status_code = 400
         return Response(data=data, status=status_code)
 
-    def check_uuid(self, request):
-        try:
-            uuid = request.data.get("uuid")
-            if not uuid:
-                raise ServiceException('Не задан uuid')
-            profile = Profile.objects.select_for_update().select_related('user').get(uuid=uuid)
-            user = profile.user
-        except ValidationError:
-            raise ServiceException('Неверный uuid = "%s"' % uuid)
-        except Profile.DoesNotExist:
-            raise ServiceException('Не найден пользователь, uuid = "%s"' % uuid)
+    def check_user_uuid_here(self, request):
+        uuid = request.data.get("uuid")
+        user, profile = self.check_user_uuid(uuid)
         if not profile.owner:
             raise ServiceException('Профиль, uuid = "%s" не родственный' % uuid)
         if request.user != profile.owner:
@@ -947,7 +933,7 @@ class ApiParent(CreateUserMixin, GenderMixin, APIView):
     @transaction.atomic
     def put(self, request):
         try:
-            user, profile = self.check_uuid(request)
+            user, profile = self.check_user_uuid_here(request)
             dob, dod =self.check_dates(request)
             self.check_gender(request)
             if 'dob' in request.data:
@@ -983,7 +969,7 @@ class ApiParent(CreateUserMixin, GenderMixin, APIView):
     @transaction.atomic
     def delete(self, request):
         try:
-            user, profile = self.check_uuid(request)
+            user, profile = self.check_user_uuid_here(request)
             profile.delete_from_media()
             user.delete()
             data = dict()
