@@ -2936,25 +2936,20 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
                         is_trust=rec['is_trust'],
                     ))
             profiles_dict = dict()
+            users = []
             for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
                 profiles_dict[profile.user.pk] = dict(
                     uuid=profile.uuid,
+                    gender=profile.gender,
+
+                    # for debug
                     last_name=profile.user.last_name,
                     first_name=profile.user.first_name,
                     middle_name=profile.middle_name,
-                    photo=profile.choose_photo(request),
-                    gender=profile.gender
                 )
-            user_q_data = profile_q.data_dict(request)
-            if user_pks:
-                users = []
-                for pk in profiles_dict:
-                    if pk == user_q.pk:
-                        users.append(user_q_data)
-                    else:
-                        users.append(profiles_dict[pk])
-            else:
-                users = [user_q_data]
+                users.append(profile.data_dict(request))
+            if not users:
+                users.append(profile_q.data_dict(request))
             for c in connections:
 
                 # TODO: remove this debug:
