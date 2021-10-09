@@ -2947,9 +2947,14 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
                     first_name=profile.user.first_name,
                     middle_name=profile.middle_name,
                 )
-                users.append(profile.data_dict(request))
-            if not users:
-                users.append(profile_q.data_dict(request))
+                # debug - users.append(profile.data_dict(request))
+            # debug -if not users:
+                # debug - users.append(profile_q.data_dict(request))
+
+            # debug - show all relatives
+            users = [p.data_dict(request) for p in Profile.objects.filter(owner=user_q)]
+            users.append(profile_q.data_dict(request))
+
             for c in connections:
 
                 # TODO: remove this debug:
