@@ -1220,13 +1220,13 @@ class ApiGetStats(SQL_Mixin, APIView):
         if kwargs.get('only') == 'user_connections_graph':
 
             # Возвращает:
+            #   список пользователей:
+            #      - (1) которые выполнили логин в систему, а также
+            #      - (2) родственников, которые имеют доверие/недоверие от (1)
             #   без параметров:
-            #       список всех пользователей, и связи,
+            #       список тех пользователей, и связи,
             #       где не обнулено доверие (currenstate.is_trust is not null).
             #   с параметром query:
-            #       список пользователей:
-            #           - (1) которые выполнили логин в систему, а также
-            #           - (2) родственников, которые имеют доверие/недоверие от (1)
             #       у которых в
             #               имени или
             #               фамилии или
@@ -1246,7 +1246,6 @@ class ApiGetStats(SQL_Mixin, APIView):
             #   с параметром count:
             #       число пользователей, всех или найденных по фильтру query
 
-            # Пока исключаем из выборки предков
             q_users = Q(is_superuser=False)
             q_users &= Q(profile__owner__isnull=False, currentstate_user_to_set__is_trust__isnull=False) | \
                        Q(profile__owner__isnull=True)
@@ -1255,6 +1254,7 @@ class ApiGetStats(SQL_Mixin, APIView):
                 q_users &= \
                     Q(last_name__icontains=query) | \
                     Q(first_name__icontains=query) | \
+                    Q(profile__middle_name__icontains=query) | \
                     Q(wish__text__icontains=query) | \
                     Q(ability__text__icontains=query) | \
                     Q(key__value__icontains=query)
