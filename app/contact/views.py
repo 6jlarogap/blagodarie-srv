@@ -416,11 +416,8 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
 
             - По операциям Parent, noParent NB::
             !!! может быть задан еще и user_from_id,
-                но тогда это или uuid авторизованного пользователя или
-                uuid родственника, у которого owner  == user_from
-            !!! user_to также должен иметь owner  == user_from или быть
-                авторизованным пользователем, например для показа связи
-                сын -> авторизованный пользователь
+            !!! из user_from, user_to хотя бы один должен быть
+                или авторизованным пользователем или его родственником
 
             - если тип операции Parent:
                 - проверить, есть ли запись с user_from == user_to и
@@ -484,13 +481,10 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 raise ServiceException('Операция на самого себя не предусмотрена')
             if operationtype_id in (OperationType.PARENT, OperationType.NOT_PARENT,):
                 if not (
-                    user_from == request.user or profile_from.owner == request.user
-                   ):
-                        raise ServiceException('У Вас нет прав задавать родителя для user_from_uuid = "%s"' % user_from_uuid)
-                if not (
+                    user_from == request.user or profile_from.owner == request.user or
                     user_to == request.user or profile_to.owner == request.user
                    ):
-                    raise ServiceException('У Вас нет прав задавать родителя - user_to_uuid = "%s"' % user_to_uuid)
+                        raise ServiceException('У Вас нет прав задавать такого родителя')
 
             data = self.add_operation(
                 user_from,
@@ -2915,7 +2909,6 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
                 ))
                 recs = self.dictfetchall(cursor)
             user_pks = set()
-            user_pks.add(user_q.pk)
             pairs = []
             for rec in recs:
                 if rec['is_reverse']:
@@ -2941,19 +2934,23 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
                 profiles_dict[profile.user.pk] = dict(
                     uuid=profile.uuid,
                     gender=profile.gender,
-
-                    # for debug
                     last_name=profile.user.last_name,
                     first_name=profile.user.first_name,
                     middle_name=profile.middle_name,
                 )
-                # debug - users.append(profile.data_dict(request))
-            # debug -if not users:
-                # debug - users.append(profile_q.data_dict(request))
+                users.append(profile.data_dict(request))
 
-            # debug - show all relatives
-            users = [p.data_dict(request) for p in Profile.objects.filter(owner=user_q)]
-            users.append(profile_q.data_dict(request))
+            # TODO: remove this debug, show parents wihout links
+            #
+            for profile in Profile.objects.filter(owner=user_q).select_related('user', 'ability'):
+                if profile.user.pk not in user_pks:
+                    user_pks.add(profile.user.pk)
+                    users.append(profile.data_dict(request))
+            # ------------------------
+
+            if user_q.pk not in user_pks:
+                user_pks.add(user_q.pk)
+                users.append(profile_q.data_dict(request))
 
             for c in connections:
 
@@ -2969,6 +2966,7 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
                     profiles_dict[c['target']]['first_name'] or '-',
                     profiles_dict[c['target']]['middle_name'] or '-',
                 )
+                # ------------------------
 
                 c['source'] = profiles_dict[c['source']]['uuid']
                 c['parent_gender'] = profiles_dict[c['target']]['gender']
