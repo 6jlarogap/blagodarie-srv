@@ -1224,12 +1224,15 @@ class ApiGetStats(SQL_Mixin, APIView):
             #       список всех пользователей, и связи,
             #       где не обнулено доверие (currenstate.is_trust is not null).
             #   с параметром query:
-            #       список всех пользователей у которых в
-            #           имени или
-            #           фамилии или
-            #           возможностях или
-            #           ключах или
-            #           желаниях
+            #       список пользователей:
+            #           - (1) которые выполнили логин в систему, а также
+            #           - (2) родственников, которые имеют доверие/недоверие от (1)
+            #       у которых в
+            #               имени или
+            #               фамилии или
+            #               возможностях или
+            #               ключах или
+            #               желаниях
             #       есть query, и их связи,
             #       где не обнулено доверие (currenstate.is_trust is not null).
             #   В любом случае возвращаются в массиве users еще
@@ -1244,7 +1247,9 @@ class ApiGetStats(SQL_Mixin, APIView):
             #       число пользователей, всех или найденных по фильтру query
 
             # Пока исключаем из выборки предков
-            q_users = Q(is_superuser=False, profile__owner__isnull=True)
+            q_users = Q(is_superuser=False)
+            q_users &= Q(profile__owner__isnull=False, currentstate_user_to_set__is_trust__isnull=False) | \
+                       Q(profile__owner__isnull=True)
             query = request.GET.get('query')
             if query:
                 q_users &= \
