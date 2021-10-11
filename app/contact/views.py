@@ -481,7 +481,6 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 raise ServiceException('Операция на самого себя не предусмотрена')
             if operationtype_id in (OperationType.PARENT, OperationType.NOT_PARENT,):
                 if not (
-                    user_from == request.user or profile_from.owner == request.user or
                     user_to == request.user or profile_to.owner == request.user
                    ):
                         raise ServiceException('У Вас нет прав задавать такого родителя')
