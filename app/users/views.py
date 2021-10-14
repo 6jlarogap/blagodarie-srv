@@ -111,9 +111,10 @@ class ApiUpdateProfileInfo(SendMessageMixin, GenderMixin, APIView):
             возможности
             желания
             токен авторизации
+            широта, долгота
+            пол
         Отметить а auth_user пользователя is_active = False
         """
-
         user = request.user
         message = telegram_uid = None
         profile = user.profile
@@ -126,7 +127,8 @@ class ApiUpdateProfileInfo(SendMessageMixin, GenderMixin, APIView):
                 pass
         for f in ('photo', 'photo_original_filename', 'photo_url', 'middle_name'):
             setattr(profile, f, '')
-        profile.ability = None
+        for f in ('latitude', 'longitude', 'gender', 'ability'):
+            setattr(profile, f, None)
         profile.delete_from_media()
         profile.photo = None
         profile.photo_original_filename = ''
@@ -813,7 +815,7 @@ class ApiInviteGetToken(APIView):
 
 api_invite_get_token = ApiInviteGetToken.as_view()
 
-class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, APIView):
+class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIView):
     """
     Получить своих родственников (без связей), добавить/править/обезличить родственника. Правка своего профиля.
 
@@ -975,17 +977,55 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, APIView):
             status_code = 400
         return Response(data=data, status=status_code)
 
-    #@transaction.atomic
-    #def delete(self, request):
-        #try:
-            #user, profile = self.check_user_uuid_here(request)
-            #profile.delete_from_media()
-            #user.delete()
-            #data = dict()
-            #status_code = status.HTTP_200_OK
-        #except ServiceException as excpt:
-            #data = dict(message=excpt.args[0])
-            #status_code = 400
-        #return Response(data=data, status=status_code)
+    @transaction.atomic
+    def delete(self, request):
+        """
+        Деактивировать профиль пользователя (обезличить)
+
+        Удалить:
+            ФИО, фото - в профиле и во всех профилях соцсетей
+            ключи
+            возможности
+            желания
+            токен авторизации
+        Отметить а auth_user пользователя is_active = False
+        """
+
+        user, profile = self.check_user_uuid_here(request)
+        message = telegram_uid = None
+        if profile.is_notified:
+            try:
+                telegram_uid = Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)[0].uid
+                fio = profile.full_name(last_name_first=False) or 'Без имени'
+                message = "Cвязанный профиль '%s' обезличен пользователем" % fio
+            except IndexError:
+                pass
+        for f in ('photo', 'photo_original_filename', 'photo_url', 'middle_name'):
+            setattr(profile, f, '')
+        for f in ('latitude', 'longitude', 'gender', 'ability'):
+            setattr(profile, f, None)
+        profile.delete_from_media()
+        profile.photo = None
+        profile.photo_original_filename = ''
+        profile.save()
+
+        Key.objects.filter(owner=user).delete()
+        Ability.objects.filter(owner=user).delete()
+        Wish.objects.filter(owner=user).delete()
+        Token.objects.filter(user=user).delete()
+
+        for oauth in Oauth.objects.filter(user=user):
+            for f in ('last_name', 'first_name', 'display_name', 'email', 'photo', 'username'):
+                setattr(oauth, f, '')
+            oauth.update_timestamp = int(time.time())
+            oauth.save()
+        for f in ('first_name', 'email'):
+            setattr(user, f, '')
+        user.last_name = "Обезличен"
+        user.is_active = False
+        user.save()
+        if message:
+            self.send_to_telegram(message, telegram_uid=telegram_uid)
+        return Response(data={}, status=200)
 
 api_profile = ApiProfile.as_view()
