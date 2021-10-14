@@ -813,9 +813,9 @@ class ApiInviteGetToken(APIView):
 
 api_invite_get_token = ApiInviteGetToken.as_view()
 
-class ApiParent(CreateUserMixin, UuidMixin, GenderMixin, APIView):
+class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, APIView):
     """
-    Получить своих родственников (без связей), добавить/править/удалить родственника
+    Получить своих родственников (без связей), добавить/править/обезличить родственника. Правка своего профиля.
 
     GET
         Получить всех родственников авторизованного пользователя,
@@ -880,8 +880,9 @@ class ApiParent(CreateUserMixin, UuidMixin, GenderMixin, APIView):
         return dob, dod
 
     def get(self, request):
+        my_data = [request.user.profile.data_dict(request)]
         return Response(
-            data=[p.data_dict(request) for p in \
+            data=my_data + [p.data_dict(request) for p in \
                 Profile.objects.filter(owner=request.user).select_related('user', 'ability',).order_by(
                     'user__last_name',
                     'user__first_name',
@@ -926,10 +927,13 @@ class ApiParent(CreateUserMixin, UuidMixin, GenderMixin, APIView):
     def check_user_uuid_here(self, request):
         uuid = request.data.get("uuid")
         user, profile = self.check_user_uuid(uuid)
-        if not profile.owner:
-            raise ServiceException('Профиль, uuid = "%s" не родственный' % uuid)
-        if request.user != profile.owner:
-            raise ServiceException('Профиль, uuid = "%s" не подлежит правке/удалению Вами' % uuid)
+        err_message = 'Профиль, uuid = "%s" не подлежит правке/обезличиванию Вами' % uuid
+        if profile.owner:
+            if request.user != profile.owner:
+                raise ServiceException(err_message)
+        else:
+            if user != request.user:
+                raise ServiceException(err_message)
         return user, profile
 
     @transaction.atomic
@@ -951,6 +955,8 @@ class ApiParent(CreateUserMixin, UuidMixin, GenderMixin, APIView):
             for f in ('gender', 'latitude', 'longitude',):
                 if f in  request.data:
                     setattr(profile, f, request.data.get(f) or None)
+            if 'is_notified' in request.data and user == request.user:
+                profile.is_notified = bool(request.data.get('is_notified'))
             if 'photo' in request.data:
                 if request.data.get('photo'):
                     photo = PhotoModel.get_photo(request)
@@ -969,17 +975,17 @@ class ApiParent(CreateUserMixin, UuidMixin, GenderMixin, APIView):
             status_code = 400
         return Response(data=data, status=status_code)
 
-    @transaction.atomic
-    def delete(self, request):
-        try:
-            user, profile = self.check_user_uuid_here(request)
-            profile.delete_from_media()
-            user.delete()
-            data = dict()
-            status_code = status.HTTP_200_OK
-        except ServiceException as excpt:
-            data = dict(message=excpt.args[0])
-            status_code = 400
-        return Response(data=data, status=status_code)
+    #@transaction.atomic
+    #def delete(self, request):
+        #try:
+            #user, profile = self.check_user_uuid_here(request)
+            #profile.delete_from_media()
+            #user.delete()
+            #data = dict()
+            #status_code = status.HTTP_200_OK
+        #except ServiceException as excpt:
+            #data = dict(message=excpt.args[0])
+            #status_code = 400
+        #return Response(data=data, status=status_code)
 
-api_parent = ApiParent.as_view()
+api_profile = ApiProfile.as_view()
