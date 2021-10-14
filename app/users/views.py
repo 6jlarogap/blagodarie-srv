@@ -988,15 +988,19 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
             возможности
             желания
             токен авторизации
+            широта, долгота,
+            пол
         Отметить а auth_user пользователя is_active = False
+        Отправить сообщение в телеграм
         """
 
         user, profile = self.check_user_uuid_here(request)
         message = telegram_uid = None
         if profile.is_notified:
             try:
-                telegram_uid = Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)[0].uid
-                fio = profile.full_name(last_name_first=False) or 'Без имени'
+                telegram = Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)[0]
+                telegram_uid = telegram.uid
+                fio = (telegram.first_name + ' ' + telegram.last_name).strip()
                 message = "Cвязанный профиль '%s' обезличен пользователем" % fio
             except IndexError:
                 pass
