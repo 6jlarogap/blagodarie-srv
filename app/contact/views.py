@@ -103,7 +103,6 @@ class ApiAddOperationMixin(object):
                     currentstate.is_reverse = False
                     currentstate.thanks_count = 1
                     currentstate.is_trust = None
-                    currentstate.is_parent = False
                 else:
                     currentstate.thanks_count += 1
                 currentstate.save()
@@ -115,7 +114,6 @@ class ApiAddOperationMixin(object):
                     is_reverse=True,
                     is_trust=currentstate.is_trust,
                     thanks_count=currentstate.thanks_count,
-                    is_parent=currentstate.is_parent,
             ))
             if not reverse_created and reverse_cs.is_reverse:
                 reverse_cs.update_timestamp = update_timestamp
@@ -139,7 +137,6 @@ class ApiAddOperationMixin(object):
                     currentstate.insert_timestamp = insert_timestamp
                     currentstate.is_reverse = False
                     currentstate.is_trust = False
-                    currentstate.is_parent = False
                     currentstate.thanks_count = 0
                     currentstate.save()
                 else:
@@ -157,7 +154,6 @@ class ApiAddOperationMixin(object):
                     is_reverse=True,
                     is_trust=False,
                     thanks_count=currentstate.thanks_count,
-                    is_parent=currentstate.is_parent,
             ))
             if not reverse_created and reverse_cs.is_reverse and not (reverse_cs.is_trust == False):
                 reverse_cs.update_timestamp = update_timestamp
@@ -180,7 +176,6 @@ class ApiAddOperationMixin(object):
                     currentstate.insert_timestamp = insert_timestamp
                     currentstate.is_reverse = False
                     currentstate.is_trust = True
-                    currentstate.is_parent = False
                     currentstate.thanks_count = 0
                     currentstate.save()
                 else:
@@ -198,7 +193,6 @@ class ApiAddOperationMixin(object):
                     is_reverse=True,
                     is_trust=True,
                     thanks_count=currentstate.thanks_count,
-                    is_parent=currentstate.is_parent,
             ))
             if not reverse_created and reverse_cs.is_reverse and not (reverse_cs.is_trust == True):
                 reverse_cs.update_timestamp = update_timestamp
@@ -223,7 +217,6 @@ class ApiAddOperationMixin(object):
                     currentstate.is_reverse = False
                     currentstate.is_trust = True
                     currentstate.thanks_count = 1
-                    currentstate.is_parent = False
                     currentstate.save()
                 else:
                     currentstate.is_trust = True
@@ -237,7 +230,6 @@ class ApiAddOperationMixin(object):
                     is_reverse=True,
                     is_trust=True,
                     thanks_count=currentstate.thanks_count,
-                    is_parent=currentstate.is_parent,
             ))
             if not reverse_created and reverse_cs.is_reverse:
                 reverse_cs.update_timestamp = update_timestamp
@@ -285,7 +277,6 @@ class ApiAddOperationMixin(object):
                 CurrentState.objects.get(
                     user_from=user_to,
                     user_to=user_from,
-                    is_reverse=False,
                     is_parent=True,
                 )
                 raise ServiceException('Два человека не могут быть оба родителями по отношению друг к другу')
@@ -297,66 +288,50 @@ class ApiAddOperationMixin(object):
                 user_to=user_to,
                 defaults=dict(
                     is_parent=True,
+                    is_child=False,
             ))
             if not created_:
-                currentstate.update_timestamp = update_timestamp
-                if currentstate.is_reverse:
-                    # то же что created
-                    currentstate.insert_timestamp = insert_timestamp
-                    currentstate.is_reverse = False
-                    currentstate.is_trust = False
-                    currentstate.is_parent = True
-                    currentstate.thanks_count = 0
-                    currentstate.save()
+                if currentstate.is_parent == True:
+                    raise ServiceException('Такой родитель уже задан')
                 else:
-                    if currentstate.is_parent == True:
-                        raise ServiceException('Такой родитель уже задан')
-                    else:
-                        currentstate.is_parent = True
-                        currentstate.save()
+                    currentstate.is_parent = True
+                    currentstate.save()
 
             reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
                 user_to=user_from,
                 user_from=user_to,
                 defaults=dict(
                     is_reverse=True,
-                    is_parent=True,
+                    is_child=True,
+                    is_parent=False,
                     thanks_count=currentstate.thanks_count,
                     is_trust=currentstate.is_trust,
             ))
-            if not reverse_created and reverse_cs.is_reverse and not (reverse_cs.is_parent == True):
+            if not reverse_created:
                 reverse_cs.update_timestamp = update_timestamp
-                reverse_cs.is_parent = True
+                reverse_cs.is_child = True
+                reverse_cs.is_parent = False
                 reverse_cs.save()
 
         elif operationtype_id == OperationType.NOT_PARENT:
-            err_message = 'Вы и так не связаны отношением потомок - родитель'
             try:
                 currentstate = CurrentState.objects.select_for_update().get(
                     user_from=user_from,
                     user_to=user_to,
+                    is_parent=True
                 )
             except CurrentState.DoesNotExist:
-                raise ServiceException(err_message)
+                raise ServiceException('Вы и так не связаны отношением потомок - родитель')
 
-            if currentstate.is_reverse:
-                # то же что и не существует такой связи
-                raise ServiceException(err_message)
-            else:
-                if currentstate.is_parent == False:
-                    raise ServiceException(err_message)
-                else:
-                    # is_parent is True
-                    currentstate.update_timestamp = update_timestamp
-                    currentstate.is_parent = False
-                    currentstate.save()
+            currentstate.update_timestamp = update_timestamp
+            currentstate.is_parent = False
+            currentstate.is_child = False
+            currentstate.save()
 
             CurrentState.objects.filter(
                 user_to=user_from,
                 user_from=user_to,
-                is_reverse=True,
-                is_parent=True,
-            ).update(is_parent=False, update_timestamp=update_timestamp)
+            ).update(is_parent=False, is_child=False, update_timestamp=update_timestamp)
 
         Journal.objects.create(
             user_from=user_from,
@@ -1220,9 +1195,9 @@ class ApiGetStats(SQL_Mixin, APIView):
         if kwargs.get('only') == 'user_connections_graph':
 
             # Возвращает:
-            #   список пользователей:
-            #      - (1) которые выполнили логин в систему, а также
-            #      - (2) родственников, которые имеют доверие/недоверие от (1)
+            #  список пользователей, которые выполнили логин в систему
+            #  (т.е. все, кроме родственников)
+            #
             #   без параметров:
             #       список тех пользователей, и связи,
             #       где не обнулено доверие (currenstate.is_trust is not null).
@@ -1246,9 +1221,7 @@ class ApiGetStats(SQL_Mixin, APIView):
             #   с параметром count:
             #       число пользователей, всех или найденных по фильтру query
 
-            q_users = Q(is_superuser=False)
-            q_users &= Q(profile__owner__isnull=False, currentstate_user_to_set__is_trust__isnull=False) | \
-                       Q(profile__owner__isnull=True)
+            q_users = Q(is_superuser=False, profile__owner__isnull=True)
             query = request.GET.get('query')
             if query:
                 q_users &= \
@@ -2907,7 +2880,7 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
             connections = []
             with connection.cursor() as cursor:
                 cursor.execute(
-                    'select * from find_rel_parent(%(user_id)s, %(connection_level)s)' % dict(
+                    'select * from find_rel_parent_child(%(user_id)s, %(connection_level)s)' % dict(
                         user_id=user_q.pk,
                         connection_level=settings.CONNECTIONS_LEVEL,
                 ))
@@ -2915,12 +2888,12 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
             user_pks = set()
             pairs = []
             for rec in recs:
-                if rec['is_reverse']:
-                    user_from_id = rec['user_to_id']
-                    user_to_id = rec['user_from_id']
-                else:
+                if rec['is_parent']:
                     user_from_id = rec['user_from_id']
                     user_to_id = rec['user_to_id']
+                else:
+                    user_from_id = rec['user_to_id']
+                    user_to_id = rec['user_from_id']
                 pair = '%s/%s' % (user_from_id, user_to_id)
                 if pair not in pairs:
                     pairs.append(pair)
@@ -2972,6 +2945,7 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
                 )
                 # ------------------------
 
+                c['child_gender'] = profiles_dict[c['source']]['gender']
                 c['source'] = profiles_dict[c['source']]['uuid']
                 c['parent_gender'] = profiles_dict[c['target']]['gender']
                 c['target'] = profiles_dict[c['target']]['uuid']

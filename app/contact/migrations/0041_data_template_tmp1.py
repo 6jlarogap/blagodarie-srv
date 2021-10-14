@@ -5,6 +5,8 @@ from django.db import migrations, connection
 def reverse_it(apps, schema_editor):
     pass
 
+# TODO Drop this table
+
 def operation(apps, schema_editor):
     ops = """
         create temp table if not exists tmp1(

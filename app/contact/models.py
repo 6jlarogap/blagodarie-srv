@@ -75,7 +75,8 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
                     verbose_name=_("Текст"), on_delete=models.CASCADE, null=True)
     thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
     is_trust = models.BooleanField(_("Доверие"), default=None, null=True)
-    is_parent = models.BooleanField(_("Родитель"), default=False)
+    is_parent = models.BooleanField(_("Родитель"), default=False, db_index=True)
+    is_child = models.BooleanField(_("Потомок"), default=False, db_index=True)
 
     # Для построения графов связей между пользователями, где надо учитывать
     # связь - это не только что пользователь 1 отблагодарил пользователя 2,
@@ -98,6 +99,8 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
             ('user_from', 'anytext', ),
         )
 
+# TODO Drop this table
+
 class TemplateTmp1(models.Model):
     """
     Для поиска связей пользователя рекурсивно
@@ -112,6 +115,22 @@ class TemplateTmp1(models.Model):
     class Meta:
         managed = False
         db_table = 'template_tmp1'
+
+class TemplateTmpParent(models.Model):
+    """
+    Для поиска связей пользователя рекурсивно
+    """
+    level = models.IntegerField(blank=True, null=True)
+    user_from_id = models.IntegerField(blank=True, null=True)
+    user_to_id = models.IntegerField(blank=True, null=True)
+    thanks_count = models.IntegerField(blank=True, null=True)
+    is_trust = models.BooleanField(blank=True, null=True)
+    is_parent = models.BooleanField(blank=True, null=True)
+    is_child = models.BooleanField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'template_tmp_parent'
 
 class Key(BaseModelInsertTimestamp):
 

@@ -7,6 +7,8 @@ from django.db import migrations, connection
 def reverse_it(apps, schema_editor):
     pass
 
+# TODO Drop this function
+
 def operation(apps, schema_editor):
     sql = '''create or replace function find_rel(v_user_from_id int, v_level int, do_reverse boolean) returns setof template_tmp1 as 
 $$
