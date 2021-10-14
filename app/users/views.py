@@ -864,7 +864,7 @@ class ApiParent(CreateUserMixin, UuidMixin, GenderMixin, APIView):
     """
 
     permission_classes = (IsAuthenticated,)
-    parser_classes = (MultiPartParser, JSONParser, )
+    parser_classes = (MultiPartParser, )
 
     def check_dates(self, request):
         dob = request.data.get('dob')
@@ -907,6 +907,8 @@ class ApiParent(CreateUserMixin, UuidMixin, GenderMixin, APIView):
                 last_name=request.data.get('last_name', ''),
                 first_name=request.data.get('first_name', ''),
                 middle_name=request.data.get('middle_name', ''),
+                latitude=request.data.get('latitude') or None,
+                longitude=request.data.get('longitude') or None,
                 owner=request.user,
                 dob=dob,
                 dod=dod,
@@ -942,12 +944,13 @@ class ApiParent(CreateUserMixin, UuidMixin, GenderMixin, APIView):
                 profile.dod = dod
             for f in ('last_name', 'first_name',):
                 if f in request.data:
-                    setattr(user, f, request.data.get(f))
+                    setattr(user, f, request.data.get(f) or '')
             for f in ('middle_name',):
                 if f in request.data:
-                    setattr(profile, f, request.data.get(f))
-            if 'gender' in  request.data:
-                profile.gender = request.data.get('gender') or None
+                    setattr(profile, f, request.data.get(f) or '')
+            for f in ('gender', 'latitude', 'longitude',):
+                if f in  request.data:
+                    setattr(profile, f, request.data.get(f) or None)
             if 'photo' in request.data:
                 if request.data.get('photo'):
                     photo = PhotoModel.get_photo(request)

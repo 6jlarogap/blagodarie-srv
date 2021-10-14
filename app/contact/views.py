@@ -2917,14 +2917,6 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
                 )
                 users.append(profile.data_dict(request))
 
-            # TODO: remove this debug, show parents wihout links
-            #
-            for profile in Profile.objects.filter(owner=user_q).select_related('user', 'ability'):
-                if profile.user.pk not in user_pks:
-                    user_pks.add(profile.user.pk)
-                    users.append(profile.data_dict(request))
-            # ------------------------
-
             if user_q.pk not in user_pks:
                 user_pks.add(user_q.pk)
                 users.append(profile_q.data_dict(request))
