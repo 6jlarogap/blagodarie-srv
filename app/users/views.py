@@ -910,14 +910,14 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
                 last_name=request.data.get('last_name', ''),
                 first_name=request.data.get('first_name', ''),
                 middle_name=request.data.get('middle_name', ''),
-                latitude=request.data.get('latitude') or None,
-                longitude=request.data.get('longitude') or None,
                 owner=request.user,
                 dob=dob,
                 dod=dod,
                 photo=photo,
                 is_active=False,
                 gender=request.data.get('gender') or None,
+                latitude=request.data.get('latitude') or None,
+                longitude=request.data.get('longitude') or None,
             )
             data = user.profile.data_dict(request)
             status_code = status.HTTP_200_OK

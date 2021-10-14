@@ -568,6 +568,8 @@ class CreateUserMixin(object):
         dod=None,
         is_active=True,
         gender=None,
+        latitude=None,
+        longitude=None,
             ):
         user = None
         random.seed()
@@ -599,6 +601,8 @@ class CreateUserMixin(object):
                 dob=dob,
                 dod=dod,
                 gender=gender,
+                latitude=latitude,
+                longitude=longitude,
             )
         return user
 
