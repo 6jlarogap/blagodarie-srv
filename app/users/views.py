@@ -926,22 +926,10 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
             status_code = 400
         return Response(data=data, status=status_code)
 
-    def check_user_uuid_here(self, request):
-        uuid = request.data.get("uuid")
-        user, profile = self.check_user_uuid(uuid)
-        err_message = 'Профиль, uuid = "%s" не подлежит правке/обезличиванию Вами' % uuid
-        if profile.owner:
-            if request.user != profile.owner:
-                raise ServiceException(err_message)
-        else:
-            if user != request.user:
-                raise ServiceException(err_message)
-        return user, profile
-
     @transaction.atomic
     def put(self, request):
         try:
-            user, profile = self.check_user_uuid_here(request)
+            user, profile = self.check_user_or_owned_uuid(request, need_uuid=True)
             dob, dod =self.check_dates(request)
             self.check_gender(request)
             if 'dob' in request.data:
@@ -994,7 +982,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
         Отправить сообщение в телеграм
         """
 
-        user, profile = self.check_user_uuid_here(request)
+        user, profile = self.check_user_or_owned_uuid(request, need_uuid=True)
         message = telegram_uid = None
         if profile.is_notified:
             try:

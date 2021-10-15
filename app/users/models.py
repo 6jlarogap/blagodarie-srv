@@ -674,9 +674,11 @@ class TempToken(BaseModelInsertTimestamp):
 
 class UuidMixin(object):
 
+    MSG_NO_UUID = 'Не задан uuid пользователя'
+
     def check_user_uuid(self, uuid, related=('user', 'ability',)):
         if not uuid:
-            raise ServiceException('Не задан uuid пользователя')
+            raise ServiceException(self.MSG_NO_UUID)
         try:
             profile = Profile.objects.select_related(*related).get(uuid=uuid)
             user = profile.user
@@ -685,3 +687,30 @@ class UuidMixin(object):
         except Profile.DoesNotExist:
             raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
         return user, profile
+
+    def check_user_or_owned_uuid(
+            self, request,
+            uuid_field='uuid',
+            related=('user', 'ability',),
+            need_uuid=False,
+        ):
+        """
+        Кого правим: авторизованного пользователя или заданного по uuid
+        """
+        uuid = request.data.get(uuid_field)
+        if need_uuid and not uuid:
+            raise ServiceException(self.MSG_NO_UUID)
+        err_message = 'Профиль, uuid = "%s" не подлежит правке Вами' % uuid
+        if uuid:
+            user, profile = self.check_user_uuid(uuid, related=related)
+        else:
+            user = request.user
+            profile = Profile.objects.select_related(*related).get(user=user)
+        if profile.owner:
+            if request.user != profile.owner:
+                raise ServiceException(err_message)
+        else:
+            if user != request.user:
+                raise ServiceException(err_message)
+        return user, profile
+
