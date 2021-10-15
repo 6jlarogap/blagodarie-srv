@@ -1921,24 +1921,27 @@ class ApiGetUserKeys(UuidMixin, APIView):
 
 api_get_user_keys = ApiGetUserKeys.as_view()
 
-class ApiAddKeyView(APIView):
+class ApiAddKeyView(UuidMixin, APIView):
     permission_classes = (IsAuthenticated, )
 
     def post(self, request):
         """
         Добавление ключа
 
-        Добавить ключ в таблицу tbl_key. Если такой ключ уже существует (пара значение-тип ключа),
+        Добавить ключ в таблицу Key, свой ключ или родственника.
+        Если такой ключ уже существует (пара значение-тип ключа),
         то вернуть ошибку.
 
         Пример исходных данных:
         {
+            "user_uuid": “....” :
+            // свой или родственника. Если отсутствует user_uuid, значит свой ключ
             "value": "56648",
             "type_id": 1
         }
         """
         try:
-            owner = request.user
+            owner, profile = self.check_user_or_owned_uuid(request, uuid_field='user_uuid',)
             value = request.data.get("value")
             type_id = request.data.get("type_id")
             if not value or not type_id:
@@ -1955,7 +1958,7 @@ class ApiAddKeyView(APIView):
             ))
             if not created_:
                 raise ServiceException('Такой ключ уже существует')
-            data = dict()
+            data = key.data_dict()
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
@@ -1971,9 +1974,10 @@ class ApiUpdateKeyView(APIView):
         """
         Обновление ключа
 
-        Обновить ключ в таблице Key. Если такого ключа не существует или
-        если пользователь пытается обновить ключ, который ему не принадлежит,
-        то вернуть ошибку
+        Обновить ключ в таблице tbl_key,  свой ключ или родственника.
+        Если такого ключа не существует или если пользователь пытается обновить ключ,
+        который не принадлежит ему или его родственнику,
+        то вернуть ошибку.
 
         Пример исходных данных:
         {
@@ -1996,15 +2000,15 @@ class ApiUpdateKeyView(APIView):
                 key = Key.objects.get(pk=id_)
             except (ValueError, Key.DoesNotExist):
                 raise ServiceException('Не найден ключ id = %s' % id_)
-            if key.owner != request.user:
-                raise ServiceException('Ключ id = %s не Вам принадлежит' % id_)
+            if key.owner != request.user and key.owner.profile.owner != request.user:
+                raise ServiceException('Ключ id = %s не принадлежит ни Вам, ни вашему родственнику' % id_)
             try:
                 key.type = keytype
                 key.value = value
                 key.save()
             except IntegrityError:
                 raise ServiceException('Попытка замены ключа на уже существующий')
-            data = dict()
+            data = key.data_dict()
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
@@ -2020,9 +2024,9 @@ class ApiDeleteKeyView(APIView):
         """
         Удаление ключа
 
-        Удалить ключ в таблице Key. Если такого ключа не существует или
-        если пользователь пытается обновить ключ, который ему не принадлежит,
-        то вернуть ошибку
+        Удалить ключ в таблице tbl_key. Если такого ключа не существует или
+        если пользователь пытается обновить ключ, который не принадлежит
+        ему или его родственнику, то вернуть ошибку
 
         Пример исходных данных:
         /api/deletekey?id=324342
@@ -2035,8 +2039,8 @@ class ApiDeleteKeyView(APIView):
                 key = Key.objects.get(pk=id_)
             except (ValueError, Key.DoesNotExist):
                 raise ServiceException('Не найден ключ id = %s' % id_)
-            if key.owner != request.user:
-                raise ServiceException('Ключ id = %s не Вам принадлежит' % id_)
+            if key.owner != request.user and key.owner.profile.owner != request.user:
+                raise ServiceException('Ключ id = %s не принадлежит ни Вам, ни вашему родственнику' % id_)
             key.delete()
             data = dict()
             status_code = status.HTTP_200_OK

@@ -146,6 +146,13 @@ class Key(BaseModelInsertTimestamp):
             self.pk, self.type.title, self.type.pk, self.value
         )
 
+    def data_dict(self):
+        return {
+            "id": self.pk,
+            "value": self.value,
+            "type_id": self.type.pk,
+        }
+
 class SymptomChecksumManage(object):
     """
     Расчет контрольной суммы при изменении симптомов/групп симптомов
