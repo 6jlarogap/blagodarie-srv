@@ -1648,19 +1648,24 @@ class ApiGetSymptoms(APIView):
 
 api_getsymptoms = ApiGetSymptoms.as_view()
 
-class ApiAddOrUpdateWish(APIView):
+class ApiAddOrUpdateWish(UuidMixin, APIView):
     permission_classes = (IsAuthenticated, )
 
     @transaction.atomic
     def post(self, request, *args, **kwargs,):
         """
-        Создать либо обновить желание uuid
+        Создать либо обновить желание
 
         Если желание с заданным uuid существует,
         то проверить принадлежит ли оно пользователю,
-        пославшему запрос, и если принадлежит, то обновить его.
+        пославшему запрос, или его родственнику,
+        и если принадлежит, то обновить его.
         Если же не принадлежит, то вернуть сообщение об ошибке.
-        Если желания с таким uuid не существует, то создать
+        Если желания с таким uuid не существует, то создать.
+        Может быть параметр user_uuid, чье желание изменять/добавлять.
+        Если параметр user_uuid отсутствует, желание добавляется или
+        изменяется у авторизованного пользователя
+
         Пример исходных данных:
         * Создать желание (uuid не задан)
             {
@@ -1681,6 +1686,7 @@ class ApiAddOrUpdateWish(APIView):
                 raise ServiceException('Желание без текста')
             update_timestamp = request.data.get('last_edit', int(time.time()))
             uuid = request.data.get('uuid')
+            owner, profile = self.check_user_or_owned_uuid(request, uuid_field='user_uuid')
             if uuid:
                 do_create = False
                 try:
@@ -1689,26 +1695,26 @@ class ApiAddOrUpdateWish(APIView):
                     raise ServiceException('Неверный uuid = %s' % uuid)
                 except Wish.DoesNotExist:
                     do_create = True
-                    Wish.objects.create(
+                    wish = Wish.objects.create(
                         uuid=uuid,
-                        owner=request.user,
+                        owner=owner,
                         text=text,
                         update_timestamp=update_timestamp,
                     )
                 if not do_create:
-                    if wish.owner == request.user:
+                    if wish.owner == request.user or wish.owner.profile.owner == request.user:
                         wish.text = text
                         wish.update_timestamp = update_timestamp
                         wish.save()
                     else:
-                        raise ServiceException('Желание с uuid = %s принадлежит другому пользователю' % uuid)
+                        raise ServiceException('Желание с uuid = %s не принадлежит ни Вам, ни Вашему родственнику' % uuid)
             else:
-                Wish.objects.create(
-                    owner=request.user,
+                wish = Wish.objects.create(
+                    owner=owner,
                     text=text,
                     update_timestamp=update_timestamp,
                 )
-            data = dict()
+            data = wish.data_dict()
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             transaction.set_rollback(True)
@@ -1726,6 +1732,7 @@ class ApiDeleteWish(APIView):
         Удалить желание uuid
 
         Проверить, принадлежит ли желание пользователю, пославшему запрос,
+        или его родственнику, и
         если принадлежит, то удалить его, иначе вернуть сообщение об ошибке.
         Пример исходных данных:
         /api/deletewish?uuid=4d02e22c-b6eb-4307-a440-ccafdeedd9b8
@@ -1735,13 +1742,15 @@ class ApiDeleteWish(APIView):
             uuid = request.GET.get('uuid')
             if uuid:
                 try:
-                    wish = Wish.objects.get(uuid=uuid, owner=request.user)
+                    wish = Wish.objects.get(uuid=uuid)
                 except ValidationError:
                     raise ServiceException('Неверный uuid = %s' % uuid)
                 except Wish.DoesNotExist:
                     raise ServiceException(
-                        'Желание с uuid = %s не найдено или принадлежит другому пользователю' % uuid
+                        'Желание с uuid = %s не найдено' % uuid
                     )
+                if wish.owner != request.user and wish.owner.profile.owner != request.user:
+                    raise ServiceException('Желание с uuid = %s не принадлежит ни Вам, ни Вашему родственнику' % uuid)
                 wish.delete()
             else:
                 raise ServiceException('Не задан uuid желания')
@@ -1831,13 +1840,7 @@ class ApiGetUserWishes(UuidMixin, APIView):
             else:
                 qs = qs[from_:]
             data = dict(
-                wishes = [
-                    dict(
-                        uuid=wish.uuid,
-                        text=wish.text,
-                        last_edit=wish.update_timestamp,
-                    ) for wish in qs
-                ]
+                wishes = [wish.data_dict() for wish in qs]
             )
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
@@ -1905,13 +1908,7 @@ class ApiGetUserKeys(UuidMixin, APIView):
             else:
                 qs = qs[from_:]
             data = dict(
-                keys = [
-                        {
-                        'id': key.id,
-                        'value': key.value,
-                        'type_id': key.type.pk,
-                    } for key in qs
-                ]
+                keys = [ key.data_dict() for key in qs ]
             )
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
@@ -2490,8 +2487,8 @@ class ApiAddOrUpdateAbility(UuidMixin, APIView):
         или его родственнику, и если принадлежит, то обновить ее.
         Если же не принадлежит, то вернуть сообщение об ошибке.
         Если возможности с таким uuid не существует, то создать.
-        Может быть параметр user_uuid, чью возможность изменять.
-        Если параметр user_uuid отсутствует,
+        Может быть параметр user_uuid, чью возможность изменять
+        или добавлять. Если параметр user_uuid отсутствует,
         возможность добавляется или изменяется у авторизованного пользователя.
 
         Пример исходных данных:
@@ -2537,7 +2534,7 @@ class ApiAddOrUpdateAbility(UuidMixin, APIView):
                         update_timestamp=update_timestamp,
                     )
                 if not do_create:
-                    if ability.owner == owner or ability.owner.profile.owner == request.user:
+                    if ability.owner == request.user or ability.owner.profile.owner == request.user:
                         ability.text = text
                         ability.update_timestamp = update_timestamp
                         ability.save()
@@ -2601,13 +2598,7 @@ class ApiGetUserAbilities(UuidMixin, APIView):
             else:
                 qs = qs[from_:]
             data = dict(
-                abilities = [
-                    dict(
-                        uuid=ability.uuid,
-                        text=ability.text,
-                        last_edit=ability.update_timestamp,
-                    ) for ability in qs
-                ]
+                abilities = [ ability.data_dict() for ability in qs ]
             )
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
