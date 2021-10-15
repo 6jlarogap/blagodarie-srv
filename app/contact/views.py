@@ -2477,7 +2477,7 @@ class ApiGetThanksUsersForAnytext(APIView):
 
 api_get_thanks_users_for_anytext = ApiGetThanksUsersForAnytext.as_view()
 
-class ApiAddOrUpdateAbility(APIView):
+class ApiAddOrUpdateAbility(UuidMixin, APIView):
     permission_classes = (IsAuthenticated, )
 
     @transaction.atomic
@@ -2485,19 +2485,30 @@ class ApiAddOrUpdateAbility(APIView):
         """
         Создать либо обновить возможность uuid
 
-        Если возможность с заданным uuid существует,
-        то проверить принадлежит ли оно пользователю,
-        пославшему запрос, и если принадлежит, то обновить ее.
+        Если возможность с заданным uuid существует, то проверить 
+        принадлежит ли она пользователю, пославшему запрос,
+        или его родственнику, и если принадлежит, то обновить ее.
         Если же не принадлежит, то вернуть сообщение об ошибке.
         Если возможности с таким uuid не существует, то создать.
+        Может быть параметр user_uuid, чью возможность изменять.
+        Если параметр user_uuid отсутствует,
+        возможность добавляется или изменяется у авторизованного пользователя.
+
         Пример исходных данных:
         * Создать возможность (uuid не задан)
             {
+                "user_uuid": "....",
+                    // у кого создаем возможность.
+                    // Если не задан, то у себя
+
                 "text": "Могу, Могу, Могу...",
                 "last_edit": 154230840234
             }
         * Обновить или обновить возможность (uuid задан)
             {
+                "user_uuid": "....",
+                    // у кого создаем возможность.
+                    // Если не задан, то у себя
                 "uuid": "e17a34d0-c6c4-4755-a67b-7e7d13e4bd4b",
                 "text": "Могу, Могу, Могу...",
                 "last_edit": 154230840234
@@ -2510,6 +2521,7 @@ class ApiAddOrUpdateAbility(APIView):
                 raise ServiceException('Возможность без текста')
             update_timestamp = request.data.get('last_edit', int(time.time()))
             uuid = request.data.get('uuid')
+            owner, profile = self.check_user_or_owned_uuid(request, uuid_field='user_uuid')
             if uuid:
                 do_create = False
                 try:
@@ -2520,30 +2532,29 @@ class ApiAddOrUpdateAbility(APIView):
                     do_create = True
                     ability = Ability.objects.create(
                         uuid=uuid,
-                        owner=request.user,
+                        owner=owner,
                         text=text,
                         update_timestamp=update_timestamp,
                     )
                 if not do_create:
-                    if ability.owner == request.user:
+                    if ability.owner == owner or ability.owner.profile.owner == request.user:
                         ability.text = text
                         ability.update_timestamp = update_timestamp
                         ability.save()
                     else:
-                        raise ServiceException('Возможность с uuid = %s принадлежит другому пользователю' % uuid)
+                        raise ServiceException('Возможность с uuid = %s не принадлежит ни Вам, ни Вашему родственнику' % uuid)
             else:
                 do_create = True
                 ability = Ability.objects.create(
-                    owner=request.user,
+                    owner=owner,
                     text=text,
                     update_timestamp=update_timestamp,
                 )
             if do_create:
-                profile = request.user.profile
                 if not profile.ability:
                     profile.ability = ability
                     profile.save(update_fields=('ability',))
-            data = dict()
+            data = ability.data_dict()
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             transaction.set_rollback(True)
@@ -2615,7 +2626,8 @@ class ApiDeleteAbility(APIView):
         Удалить возможности uuid
 
         Проверить, принадлежит ли возможность пользователю, пославшему запрос,
-        если принадлежит, то удалить ее, иначе вернуть сообщение об ошибке.
+        или его родственнику, иесли принадлежит, то удалить ее,
+        иначе вернуть сообщение об ошибке.
         Пример исходных данных:
         /api/deleteability?uuid=4d02e22c-b6eb-4307-a440-ccafdeedd9b8
         Возвращает: {}
@@ -2623,22 +2635,22 @@ class ApiDeleteAbility(APIView):
         try:
             uuid = request.GET.get('uuid')
             if uuid:
-                user = request.user
                 try:
-                    ability = Ability.objects.get(uuid=uuid, owner=user)
+                    ability = Ability.objects.get(uuid=uuid)
                 except ValidationError:
                     raise ServiceException('Неверный uuid = %s' % uuid)
                 except Ability.DoesNotExist:
-                    raise ServiceException(
-                        'Возможность с uuid = %s не найдена или принадлежит другому пользователю' % uuid
-                    )
+                    raise ServiceException('Возможность с uuid = %s не найдена' % uuid)
+                profile = ability.owner.profile
+                if ability.owner != request.user and profile.owner != request.user:
+                    raise ServiceException('Возможность с uuid = %s не принадлежит ни Вам, ни Вашему родственнику' % uuid)
+                if profile.ability == ability:
+                    profile.ability = None
+                    profile.save(update_fields=('ability',))
                 ability.delete()
-                # Если это была единственная возможность, то profile.ability
-                # станет null, т.к. в этом поле: on_delete=models.SET_NULL
-                profile = user.profile
                 if not profile.ability:
                     try:
-                        profile.ability = user.ability_set.all().order_by('insert_timestamp')[0]
+                        profile.ability = profile.user.ability_set.all().order_by('insert_timestamp')[0]
                         profile.save(update_fields=('ability',))
                     except IndexError:
                         pass

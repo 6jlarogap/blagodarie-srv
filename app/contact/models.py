@@ -295,3 +295,10 @@ class Ability(BaseModelInsertUpdateTimestamp):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True)
     owner = models.ForeignKey('auth.User', verbose_name=_("Владелец"), on_delete=models.CASCADE)
     text = models.TextField(verbose_name=_("Текст"), db_index=True)
+
+    def data_dict(self):
+        return dict(
+            uuid=str(self.uuid),
+            text=self.text,
+            last_edit=self.update_timestamp,
+        )
