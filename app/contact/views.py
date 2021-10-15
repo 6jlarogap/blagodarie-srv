@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 
 from app.utils import ServiceException, FrontendMixin, SQL_Mixin, get_moon_day
 from app.models import UnclearDate
@@ -79,7 +80,6 @@ class ApiAddOperationMixin(object):
         insert_timestamp,
     ):
         try:
-            operationtype_id = int(operationtype_id)
             operationtype = OperationType.objects.get(pk=operationtype_id)
         except (ValueError, OperationType.DoesNotExist,):
             raise ServiceException('Неизвестный operation_type_id = %s' % operationtype_id)
@@ -333,6 +333,9 @@ class ApiAddOperationMixin(object):
                 user_from=user_to,
             ).update(is_parent=False, is_child=False, update_timestamp=update_timestamp)
 
+        else:
+            raise ServiceException('Неизвестный operation_type_id')
+
         Journal.objects.create(
             user_from=user_from,
             user_to=user_to,
@@ -345,6 +348,7 @@ class ApiAddOperationMixin(object):
 
 class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
     permission_classes = (IsAuthenticated, )
+    parser_classes = (JSONParser, FormParser, MultiPartParser)
 
     @transaction.atomic
     def post(self, request):
@@ -429,12 +433,17 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
             user_from_uuid = profile_from.uuid
 
             user_to_uuid = request.data.get("user_id_to")
-            operationtype_id = request.data.get("operation_type_id")
+            if not user_to_uuid:
+                raise ServiceException('Не задан user_id_to')
+
+            try:
+                operationtype_id = int(request.data.get("operation_type_id"))
+            except (TypeError, ValueError):
+                raise ServiceException('Не задан или неверный operation_type_id')
+
             comment = request.data.get("comment", None)
             insert_timestamp = request.data.get('timestamp', int(time.time()))
 
-            if not user_to_uuid or not operationtype_id:
-                raise ServiceException('Не заданы user_id_to и/или operation_type_id')
             try:
                 profile_to = Profile.objects.select_for_update().select_related('user').get(uuid=user_to_uuid)
                 user_to = profile_to.user
@@ -481,8 +490,6 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                     message += self.profile_link(user_from.profile)
                 elif operationtype_id == OperationType.NULLIFY_TRUST:
                     message = 'Доверие от ' + self.profile_link(user_from.profile) + ' обнулено'
-                    #message = 'Отмена утраты доверия от '
-                    #message += self.profile_link(user_from.profile)
                 if message:
                     self.send_to_telegram(message, user=user_to)
 

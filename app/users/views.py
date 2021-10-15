@@ -866,7 +866,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
     """
 
     permission_classes = (IsAuthenticated,)
-    parser_classes = (MultiPartParser, )
+    parser_classes = (MultiPartParser, FormParser)
 
     def check_dates(self, request):
         dob = request.data.get('dob')
