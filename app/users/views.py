@@ -931,8 +931,6 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
                 raise ServiceException('Имя или фамилия обязательны для нового родственника')
             dob, dod =self.check_dates(request)
             self.check_gender(request)
-            photo = PhotoModel.get_photo(request)
-
             user = self.create_user(
                 last_name=request.data.get('last_name', ''),
                 first_name=request.data.get('first_name', ''),
@@ -940,13 +938,16 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
                 owner=request.user,
                 dob=dob,
                 dod=dod,
-                photo=photo,
                 is_active=False,
                 gender=request.data.get('gender') or None,
                 latitude=request.data.get('latitude') or None,
                 longitude=request.data.get('longitude') or None,
             )
-            data = user.profile.data_dict(request)
+            profile = user.profile
+            if request.data.get('photo'):
+                photo = PhotoModel.get_photo(request)
+                profile.photo.save(request.data['photo'].name, photo)
+            data = profile.data_dict(request)
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
@@ -979,12 +980,12 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
             if 'photo' in request.data:
                 if request.data.get('photo'):
                     photo = PhotoModel.get_photo(request)
-                else:
-                    photo = None
-                    profile.photo_original_filename = ''
-                if profile.photo:
                     profile.delete_from_media()
-                profile.photo = photo
+                    profile.photo.save(request.data['photo'].name, photo)
+                else:
+                    profile.delete_from_media()
+                    profile.photo = None
+                    profile.photo_original_filename = ''
             user.save()
             profile.save()
             data = profile.data_dict(request)

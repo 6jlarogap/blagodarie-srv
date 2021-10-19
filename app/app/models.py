@@ -9,6 +9,10 @@ get_model = apps.get_model
 
 from app.utils import ServiceException
 
+from restthumbnails.files import ThumbnailContentFile
+
+from django.conf import settings
+
 class UnclearDate:
 
     SAFE_STR_REGEX = r'^(\d{4})(?:\-(\d{2}))?(?:\-(\d{2}))?$'
@@ -463,8 +467,6 @@ class PhotoModel(FilesMixin, models.Model):
     """
     Базовый (дополнительный) класс для моделей, у которых есть фото объекта
     """
-    # Мегабайт:
-    MAX_PHOTO_SIZE = 10
 
     class Meta:
         abstract = True
@@ -473,22 +475,32 @@ class PhotoModel(FilesMixin, models.Model):
     photo_original_filename = models.CharField(max_length=255, editable=False, default='')
 
     @classmethod
-    def get_photo(cls, request, photofield='photo', max_photo_size=MAX_PHOTO_SIZE):
-        photo = request.data.get(photofield) or None
-        if photo:
-            if photo.size > max_photo_size * 1024 * 1024:
-                raise ServiceException(
-                    detail=_("Размер загружаемого файла превышает %d Мб") % attachment_model.MAX_PHOTO_SIZE,
-                    status=400,
-               )
-            try:
-                Image.open(photo)
-            except IOError:
-                raise ServiceException(
-                    detail=_("Загружаемый файл не является изображением"),
-                    status=400,
-                )
-        return photo
+    def get_photo(
+        cls,
+        request,
+        photofield='photo',
+        max_photo_size=None,
+        quality=None,
+        quality_min_size=None
+    ):
+        photo_content = request.data.get(photofield) or None
+        if photo_content:
+            if not max_photo_size:
+                max_photo_size = settings.PHOTO_MAX_SIZE
+            if not quality:
+                quality = settings.PHOTO_QUALITY
+            if photo_content.size > max_photo_size * 1024 * 1024:
+                raise ServiceException("Размер загружаемого файла превышает %d Мб" % max_photo_size)
+            if not quality_min_size:
+                quality_min_size = settings.PHOTO_QUALITY_MIN_SIZE or 0
+            photo_content = ThumbnailContentFile(
+                photo_content,
+                quality=quality,
+                minsize=quality_min_size,
+            ).generate()
+            if not photo_content:
+                raise ServiceException("Загружаемый файл фото не является изображением")
+        return photo_content
 
 class GenderMixin(object):
     """

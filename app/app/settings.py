@@ -75,6 +75,7 @@ INSTALLED_APPS = [
 
     'rest_framework',
     'rest_framework.authtoken',
+    'restthumbnails',
 
     'contact',
     'users',
@@ -252,10 +253,6 @@ TIME_START_GET_SYMPTOMS = 1586459348
 #
 MOON_MONTH_LONG = 2551442.82048     # 29.5305882 * 86400
 
-# Приводить google photos к такому размеру
-#
-GOOGLE_PHOTO_SIZE = 200
-
 # Давать ли доступ к Django Admin,
 # по умолчанию - не давать
 #
@@ -318,6 +315,38 @@ OAUTH_PROVIDERS = {
 # To avoid unnecessary migrations in future:
 #
 DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
+
+# ФОТО --------
+
+# Приводить google photos к такому размеру
+#
+GOOGLE_PHOTO_SIZE = 200
+
+# Мб. Если 0 или None, без ограничений.
+#
+PHOTO_MAX_SIZE = 10
+
+# %, от 0 до 100. Если 100, 0, None, фото не урезаются
+#
+PHOTO_QUALITY = 30
+#
+# Какого минимального размера фото урезаются фото до PHOTO_QUALITY?
+# Минимальный размер здесь ширина x высота в пикселях
+# Совсем малопиксельные снимки зачем урезать?
+# Урезать любого размера: <= 0 или None
+#
+PHOTO_QUALITY_MIN_SIZE = 1600 * 1200
+# -------------
+
+# THUMBNAILS
+#
+THUMBNAILS_FILE_SIGNATURE = '%(source)s/%(size)s~%(method)s~%(secret)s.%(extension)s'
+THUMBNAILS_STORAGE_BASE_PATH = '/thumb/'
+THUMBNAILS_PROXY_BASE_URL = '/thumb/'
+# возможные длины и высоты:
+THUMBNAILS_ALLOWED_SIZE_RANGE = dict(min=20, max=2000)
+
+THUMBNAILS_STORAGE_ROOT = os.path.join(MEDIA_ROOT, 'thumbnails')
 
 try:
     from app.local_settings import *
