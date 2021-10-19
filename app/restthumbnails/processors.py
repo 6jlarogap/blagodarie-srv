@@ -168,6 +168,8 @@ def save_image(image, format='JPEG', **options):
     if format == 'JPEG':
         options.setdefault('quality', 85)
         try:
+            if getattr(image, 'mode', '').upper() == 'RGBA':
+                image = image.convert('RGB')
             image.save(destination, format=format, optimize=1, **options)
         except IOError:
             # Try again, without optimization (PIL can't optimize an image
