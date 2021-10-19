@@ -13,6 +13,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import status
+from rest_framework.exceptions import NotAuthenticated
 
 from app.utils import ServiceException, FrontendMixin
 from app.models import UnclearDate, PhotoModel, GenderMixin
@@ -820,8 +821,16 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
     Получить своих родственников (без связей), добавить/править/обезличить родственника. Правка своего профиля.
 
     GET
-        Получить всех родственников авторизованного пользователя,
-        массив json структур в формате, см. метод PUT
+        Не требует авторизации
+        без параметров:
+            получить всех родственников авторизованного пользователя,
+            массив json структур в формате, см. метод PUT.
+            Возможны параметры для пагинации запроса: from (по умолчанию 0):
+            с какого начинать, number (по умолчанию 50) сколько на странице.
+            На любой странице будут еще данные авторизованного пользователя,
+            если запрос авторизован.
+        с параметром uuid=...
+            получить данные по одному пользователю, необязательно родственнику
 
     PUT
         Править родственника. На входе:
@@ -865,7 +874,6 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
             # обязательно
     """
 
-    permission_classes = (IsAuthenticated,)
     parser_classes = (MultiPartParser, FormParser)
 
     def check_dates(self, request):
@@ -882,19 +890,38 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
         return dob, dod
 
     def get(self, request):
-        my_data = [request.user.profile.data_dict(request)]
-        return Response(
-            data=my_data + [p.data_dict(request) for p in \
-                Profile.objects.filter(owner=request.user).select_related('user', 'ability',).order_by(
+        uuid = request.GET.get('uuid')
+        if uuid:
+            user, profile = self.check_user_uuid(uuid)
+            data = profile.data_dict(request)
+            return Response(data=data, status=status.HTTP_200_OK)
+        else:
+            if not request.user.is_authenticated:
+                raise NotAuthenticated
+            my_data = [request.user.profile.data_dict(request)]
+            try:
+                from_ = abs(int(request.GET.get("from")))
+            except (ValueError, TypeError, ):
+                from_ = 0
+            try:
+                number_ = abs(int(request.GET.get("number")))
+            except (ValueError, TypeError, ):
+                number_ = settings.PAGINATE_USERS_COUNT
+            users_selected = Profile.objects.filter(owner=request.user). \
+                select_related('user', 'ability',).order_by(
                     'user__last_name',
                     'user__first_name',
                     'middle_name',
-            )],
-            status=status.HTTP_200_OK,
-        )
+                )[from_:from_ + number_]
+            return Response(
+                data=my_data + [p.data_dict(request) for p in users_selected],
+                status=status.HTTP_200_OK,
+            )
 
     @transaction.atomic
     def post(self, request):
+        if not request.user.is_authenticated:
+            raise NotAuthenticated
         try:
             got_it = False
             for f in ('last_name', 'first_name'):
@@ -928,6 +955,8 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
 
     @transaction.atomic
     def put(self, request):
+        if not request.user.is_authenticated:
+            raise NotAuthenticated
         try:
             user, profile = self.check_user_or_owned_uuid(request, need_uuid=True)
             dob, dod =self.check_dates(request)
@@ -982,6 +1011,8 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
         Отправить сообщение в телеграм
         """
 
+        if not request.user.is_authenticated:
+            raise NotAuthenticated
         user, profile = self.check_user_or_owned_uuid(request, need_uuid=True)
         message = telegram_uid = None
         if profile.is_notified:
