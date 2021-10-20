@@ -2713,16 +2713,19 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
             related = ('user', 'owner', 'ability',)
             uuid = request.GET.get('uuid')
             user_q, profile_q = self.check_user_uuid(uuid, related=related)
-            if profile_q.owner:
-                user_q = profile_q.owner
-                profile_q = Profile.objects.select_related(*related).get(user=user_q)
+            try:
+                recursion_depth = int(request.GET.get('recursion_depth', 0) or 0)
+            except (TypeError, ValueError,):
+                recursion_depth = 0
+            if recursion_depth <= 0:
+                recursion_depth = settings.MAX_RECURSION_DEPTH
 
             connections = []
             with connection.cursor() as cursor:
                 cursor.execute(
-                    'select * from find_rel_parent_child(%(user_id)s, %(connection_level)s)' % dict(
+                    'select * from find_rel_parent_child(%(user_id)s, %(recursion_depth)s)' % dict(
                         user_id=user_q.pk,
-                        connection_level=settings.CONNECTIONS_LEVEL,
+                        recursion_depth=recursion_depth,
                 ))
                 recs = self.dictfetchall(cursor)
             user_pks = set()

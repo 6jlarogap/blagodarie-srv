@@ -909,9 +909,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
                 number_ = settings.PAGINATE_USERS_COUNT
             users_selected = Profile.objects.filter(owner=request.user). \
                 select_related('user', 'ability',).order_by(
-                    'user__last_name',
-                    'user__first_name',
-                    'middle_name',
+                    '-user__date_joined',
                 )[from_:from_ + number_]
             return Response(
                 data=my_data + [p.data_dict(request) for p in users_selected],
