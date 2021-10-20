@@ -2714,10 +2714,10 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
             uuid = request.GET.get('uuid')
             user_q, profile_q = self.check_user_uuid(uuid, related=related)
             try:
-                recursion_depth = int(request.GET.get('recursion_depth', 0) or 0)
+                recursion_depth = int(request.GET.get('depth', 0) or 0)
             except (TypeError, ValueError,):
                 recursion_depth = 0
-            if recursion_depth <= 0:
+            if recursion_depth <= 0 or recursion_depth > settings.MAX_RECURSION_DEPTH:
                 recursion_depth = settings.MAX_RECURSION_DEPTH
 
             connections = []
