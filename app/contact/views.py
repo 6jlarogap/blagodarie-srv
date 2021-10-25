@@ -1110,7 +1110,6 @@ class ApiGetStats(SQL_Mixin, APIView):
                     'target': cs.user_to.profile.uuid,
                     'thanks_count': cs.thanks_count,
                     'is_trust': cs.is_trust,
-                    'is_parent': cs.is_parent,
                 })
 
             return dict(users=users, connections=connections)
@@ -2757,6 +2756,7 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
                     last_name=profile.user.last_name,
                     first_name=profile.user.first_name,
                     middle_name=profile.middle_name,
+                    user_pk=profile.user.pk,
                 )
                 users.append(profile.data_dict(request))
 
@@ -2781,8 +2781,10 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
                 # ------------------------
 
                 c['child_gender'] = profiles_dict[c['source']]['gender']
+                c['child_id'] = profiles_dict[c['source']]['user_pk']
                 c['source'] = profiles_dict[c['source']]['uuid']
                 c['parent_gender'] = profiles_dict[c['target']]['gender']
+                c['parent_id'] = profiles_dict[c['target']]['user_pk']
                 c['target'] = profiles_dict[c['target']]['uuid']
 
             data = dict(users=users, connections=connections)

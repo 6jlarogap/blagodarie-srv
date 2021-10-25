@@ -977,7 +977,11 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
                 profile.is_notified = bool(request.data.get('is_notified'))
             if 'photo' in request.data:
                 if request.data.get('photo'):
-                    photo = PhotoModel.get_photo(request)
+                    photo_content = request.data.get('photo_content', 'base64')
+                    photo = PhotoModel.get_photo(
+                        request,
+                        photo_content=photo_content,
+                    )
                     profile.delete_from_media()
                     profile.photo.save(request.data['photo'].name, photo)
                 else:

@@ -67,7 +67,7 @@
     "model": "contact.operationtype",
     "pk": 6,
     "fields": {
-      "title": "Parent"
+      "title": "Father"
     }
   },
   {
@@ -75,6 +75,13 @@
     "pk": 7,
     "fields": {
       "title": "Not Parent"
+    }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 8,
+    "fields": {
+      "title": "Mother"
     }
   }
 ]

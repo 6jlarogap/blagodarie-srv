@@ -72,7 +72,7 @@ class Oauth(BaseModelInsertUpdateTimestamp):
         },
         PROVIDER_VKONTAKTE: {
             'url': "https://api.vk.com/method/users.get?access_token=%(token)s"
-                   "&fields=uid,first_name,last_name,photo_200"
+                   "&fields=uid,first_name,last_name,photo_200,sex"
                    "&v=5.89",
             'uid': 'id',
             'first_name': "first_name",

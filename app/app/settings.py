@@ -335,7 +335,7 @@ PHOTO_QUALITY = 30
 # Совсем малопиксельные снимки зачем урезать?
 # Урезать любого размера: <= 0 или None
 #
-PHOTO_QUALITY_MIN_SIZE = 1600 * 1200
+PHOTO_QUALITY_MIN_SIZE = 800 * 600
 # -------------
 
 # THUMBNAILS

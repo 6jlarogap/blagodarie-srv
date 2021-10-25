@@ -1,11 +1,12 @@
 import time, datetime, re, os
-import pytils
+import pytils, base64
 from PIL import Image
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.apps import apps
 get_model = apps.get_model
+from django.core.files.base import ContentFile
 
 from app.utils import ServiceException
 
@@ -481,26 +482,34 @@ class PhotoModel(FilesMixin, models.Model):
         photofield='photo',
         max_photo_size=None,
         quality=None,
-        quality_min_size=None
+        quality_min_size=None,
+        photo_content='binary'
     ):
-        photo_content = request.data.get(photofield) or None
-        if photo_content:
+        content = request.data.get(photofield) or None
+        if content:
+            name = getattr(content, 'name', 'photo.jpg')
+            is_base64 = photo_content == 'base64'
+            if is_base64:
+                buf = base64.b64decode(content.read())
+            else:
+                buf = content.read()
+            content = ContentFile(buf, name)
             if not max_photo_size:
                 max_photo_size = settings.PHOTO_MAX_SIZE
             if not quality:
                 quality = settings.PHOTO_QUALITY
-            if photo_content.size > max_photo_size * 1024 * 1024:
+            if content.size > max_photo_size * 1024 * 1024 * (4/3 if is_base64 else 1):
                 raise ServiceException("Размер загружаемого файла превышает %d Мб" % max_photo_size)
             if not quality_min_size:
                 quality_min_size = settings.PHOTO_QUALITY_MIN_SIZE or 0
-            photo_content = ThumbnailContentFile(
-                photo_content,
+            content = ThumbnailContentFile(
+                content,
                 quality=quality,
                 minsize=quality_min_size,
             ).generate()
-            if not photo_content:
+            if not content:
                 raise ServiceException("Загружаемый файл фото не является изображением")
-        return photo_content
+        return content
 
 class GenderMixin(object):
     """

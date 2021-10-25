@@ -34,7 +34,9 @@ class OperationType(models.Model):
     NULLIFY_TRUST = 4
     TRUST_AND_THANK = 5
     PARENT = 6
+    FATHER = 6
     NOT_PARENT = 7
+    MOTHER = 8
 
     title = models.CharField(_("Тип операции"), max_length=255, unique=True)
 
