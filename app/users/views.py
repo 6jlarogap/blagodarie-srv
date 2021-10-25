@@ -943,7 +943,11 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
             )
             profile = user.profile
             if request.data.get('photo'):
-                photo = PhotoModel.get_photo(request)
+                photo_content = request.data.get('photo_content', 'base64')
+                photo = PhotoModel.get_photo(
+                    request,
+                    photo_content=photo_content,
+                )
                 profile.photo.save(request.data['photo'].name, photo)
             data = profile.data_dict(request)
             status_code = status.HTTP_200_OK
