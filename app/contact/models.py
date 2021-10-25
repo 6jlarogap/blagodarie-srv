@@ -33,7 +33,6 @@ class OperationType(models.Model):
     TRUST = 3
     NULLIFY_TRUST = 4
     TRUST_AND_THANK = 5
-    PARENT = 6
     FATHER = 6
     NOT_PARENT = 7
     MOTHER = 8
@@ -77,7 +76,20 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
                     verbose_name=_("Текст"), on_delete=models.CASCADE, null=True)
     thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
     is_trust = models.BooleanField(_("Доверие"), default=None, null=True)
-    is_parent = models.BooleanField(_("Родитель"), default=False, db_index=True)
+
+    is_father = models.BooleanField(_("Отец"), default=False, db_index=True)
+    is_mother = models.BooleanField(_("Мать"), default=False, db_index=True)
+
+    # Для построения графов родительских связей между пользователями, где надо учитывать,
+    # что связь - это не только что пользователь 2 -- папа/мама пользователя 1,
+    # но если еще пользователь 1 - папа/мама 3-го,
+    # то должны быть связи 1->2, 1<-3. Для этого вводим служебное поле is_child
+    #
+    # Если is_child == False, то имеем родственную связь user_from -> user_to
+    # (user_to is_father/is_mother of user_from)
+    # Если is_child == True, то имеем родственную связь user_to -> user_from
+    # (user_from is_father/is_mother of user_to)
+    #
     is_child = models.BooleanField(_("Потомок"), default=False, db_index=True)
 
     # Для построения графов связей между пользователями, где надо учитывать
@@ -127,7 +139,8 @@ class TemplateTmpParent(models.Model):
     user_to_id = models.IntegerField(blank=True, null=True)
     thanks_count = models.IntegerField(blank=True, null=True)
     is_trust = models.BooleanField(blank=True, null=True)
-    is_parent = models.BooleanField(blank=True, null=True)
+    is_father = models.BooleanField(blank=True, null=True)
+    is_mother = models.BooleanField(blank=True, null=True)
     is_child = models.BooleanField(blank=True, null=True)
 
     class Meta:

@@ -272,29 +272,51 @@ class ApiAddOperationMixin(object):
 
             profile_to.recount_trust_fame()
 
-        elif operationtype_id == OperationType.PARENT:
+        elif operationtype_id in (OperationType.FATHER, OperationType.MOTHER,):
+
+            if operationtype_id == OperationType.FATHER:
+                is_father = True
+                is_mother = False
+            else:
+                is_father = False
+                is_mother = True
+
+            q = Q(user_from=user_to, user_to=user_from, is_child=False)
+            q &= Q(is_mother=True) | Q(is_father=True)
             try:
-                CurrentState.objects.get(
-                    user_from=user_to,
-                    user_to=user_from,
-                    is_parent=True,
-                )
+                CurrentState.objects.filter(q)[0]
                 raise ServiceException('Два человека не могут быть оба родителями по отношению друг к другу')
-            except CurrentState.DoesNotExist:
+            except IndexError:
+                pass
+
+            q_to = Q(user_from=user_from, is_child=False) & ~Q(user_to=user_to)
+            if is_father:
+                q = q_to & Q(is_father=True)
+            else:
+                q = q_to & Q(is_mother=True)
+            try:
+                CurrentState.objects.filter(q)[0]
+                raise ServiceException('У человека уже есть %s' % 'папа' if is_father else 'мама')
+            except IndexError:
                 pass
 
             currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
                 user_from=user_from,
                 user_to=user_to,
                 defaults=dict(
-                    is_parent=True,
+                    is_father=is_father,
+                    is_mother=is_mother,
                     is_child=False,
             ))
             if not created_:
-                if currentstate.is_parent == True:
-                    raise ServiceException('Такой родитель уже задан')
+                if is_father and currentstate.is_father:
+                    raise ServiceException('Такой папа уже задан')
+                elif is_mother and currentstate.is_mother:
+                    raise ServiceException('Такая мама уже задана')
                 else:
-                    currentstate.is_parent = True
+                    currentstate.update_timestamp = update_timestamp
+                    currentstate.is_father = is_father
+                    currentstate.is_mother = is_mother
                     currentstate.save()
 
             reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
@@ -303,35 +325,40 @@ class ApiAddOperationMixin(object):
                 defaults=dict(
                     is_reverse=True,
                     is_child=True,
-                    is_parent=False,
+                    is_father=is_father,
+                    is_mother=is_mother,
                     thanks_count=currentstate.thanks_count,
                     is_trust=currentstate.is_trust,
             ))
             if not reverse_created:
                 reverse_cs.update_timestamp = update_timestamp
                 reverse_cs.is_child = True
-                reverse_cs.is_parent = False
+                reverse_cs.is_father = is_father
+                reverse_cs.is_mother = is_mother
                 reverse_cs.save()
 
         elif operationtype_id == OperationType.NOT_PARENT:
+            q = Q(user_from=user_from, user_to=user_to, is_child=False)
+            q &= Q(is_mother=True) | Q(is_father=True)
             try:
-                currentstate = CurrentState.objects.select_for_update().get(
-                    user_from=user_from,
-                    user_to=user_to,
-                    is_parent=True
-                )
+                currentstate = CurrentState.objects.select_for_update().get(q)
             except CurrentState.DoesNotExist:
                 raise ServiceException('Вы и так не связаны отношением потомок - родитель')
 
             currentstate.update_timestamp = update_timestamp
-            currentstate.is_parent = False
-            currentstate.is_child = False
+            currentstate.is_father = False
+            currentstate.is_mother = False
             currentstate.save()
 
             CurrentState.objects.filter(
                 user_to=user_from,
                 user_from=user_to,
-            ).update(is_parent=False, is_child=False, update_timestamp=update_timestamp)
+            ).update(
+                is_father=False,
+                is_mother=False,
+                is_child=False,
+                update_timestamp=update_timestamp,
+            )
 
         else:
             raise ServiceException('Неизвестный operation_type_id')
@@ -393,29 +420,37 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                         - записать данные в таблицу tbl_journal;
                 - иначе вернуть ошибку (нельзя обнулить доверие, если связи нет);
 
-            - По операциям Parent, noParent NB::
+            - По операциям Father, Mother not_Parent NB::
             !!! может быть задан еще и user_from_id,
             !!! из user_from, user_to хотя бы один должен быть
                 или авторизованным пользователем или его родственником
 
-            - если тип операции Parent:
+            - если тип операции Father или Mother:
                 - проверить, есть ли запись с user_from == user_to и
-                  user_to == user_from и is_parent == True. Если есть, то ошибка:
+                  user_to == user_from и и (is_mother == True или is_father == True).
+                  Если есть, то ошибка:
                   в одной паре людей не могут быть первй родителем второго одновременно
                   с тем, что второй - родитель первого
+                - проверить, есть ли уже у user_from папа (при операции FATHER)
+                  или мама (при операции MOTHER), но не user_to.
+                  Если есть, то ошибка: двух пап или двух мам у человека быть не должно.
                 - если есть запись в таблице tbl_current_state для заданных user_id_from и user_id_to:
-                    - если текущее значение is_parent == True, вернуть ошибку,
-                      нельзя несколько раз подряд становиться родителем
-                    - если текущее значение is_parent == False, установить is_parent == True,
-                - иначе создать запись в таблице tbl_current_state
-                  для заданных user_id_from и user_id_to c is_parent == True
+                    - если текущее значение is_father  == True (при операции FATHER)
+                      или текущее значение is_mother  == True (при операции MOTHER),
+                      вернуть ошибку, нельзя несколько раз подряд становиться мамой или папой
+                    - иначе устанавливаются is_father, is_mother
+                      в соответствии с полученным типом операции
+                - иначе создать запись в таблице tbl_current_state c
+                  для заданных user_id_from и user_id_to c is_father, is_mother
+                      в соответствии с полученным типом операции
                 - если нет ошибок, то записать данные в таблицу tbl_journal
 
-            - если тип операции not Parent:
+            - если тип операции NOT_PARENT:
                 - если есть запись в таблице tbl_current_state для заданных user_id_from и user_id_to:
-                    - если текущее значение is_parent == False,
+                    - если текущие значения is_father == is_mother == False,
                       вернуть ошибку, нельзя не становиться  родителем, если и раньше им не был
-                    - если текущее значение is_parent == True, установить is_parent == False
+                    - если одно из is_father, is_mother == True,
+                      установить is_mother = is_father = False
                 - иначе вернуть ошибку, не был родителем, нечего еще раз говорить, что не родитель
                 - если нет ошибок, то записать данные в таблицу tbl_journal
 
@@ -451,7 +486,7 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 raise ServiceException('Неверный user_id_to = "%s"' % user_to_uuid)
             except Profile.DoesNotExist:
                 raise ServiceException('Не найден пользователь, user_id_to = "%s"' % user_to_uuid)
-            if operationtype_id in (OperationType.PARENT, OperationType.NOT_PARENT,):
+            if operationtype_id in (OperationType.FATHER, OperationType.MOTHER, OperationType.NOT_PARENT,):
                 user_from_uuid = request.data.get("user_id_from")
                 if user_from_uuid:
                     try:
@@ -463,7 +498,7 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                         raise ServiceException('Не найден пользователь, user_id_from = "%s"' % user_from_uuid)
             if user_to == user_from:
                 raise ServiceException('Операция на самого себя не предусмотрена')
-            if operationtype_id in (OperationType.PARENT, OperationType.NOT_PARENT,):
+            if operationtype_id in (OperationType.FATHER, OperationType.MOTHER, OperationType.NOT_PARENT,):
                 if not (
                     user_from == request.user or profile_from.owner == request.user
                    ):
@@ -2303,7 +2338,8 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, APIView):
                     'target': cs.user_to.profile.uuid,
                     'thanks_count': cs.thanks_count,
                     'is_trust': cs.is_trust,
-                    'is_parent': cs.is_parent,
+                    'is_father': cs.is_father,
+                    'is_mother': cs.is_mother,
                 })
 
             keys = [
@@ -2722,7 +2758,7 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
             connections = []
             with connection.cursor() as cursor:
                 cursor.execute(
-                    'select * from find_rel_parent_child(%(user_id)s, %(recursion_depth)s)' % dict(
+                    'select * from find_rel_mother_father(%(user_id)s, %(recursion_depth)s)' % dict(
                         user_id=user_q.pk,
                         recursion_depth=recursion_depth,
                 ))
@@ -2730,12 +2766,12 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
             user_pks = set()
             pairs = []
             for rec in recs:
-                if rec['is_parent']:
-                    user_from_id = rec['user_from_id']
-                    user_to_id = rec['user_to_id']
-                else:
+                if rec['is_child']:
                     user_from_id = rec['user_to_id']
                     user_to_id = rec['user_from_id']
+                else:
+                    user_from_id = rec['user_from_id']
+                    user_to_id = rec['user_to_id']
                 pair = '%s/%s' % (user_from_id, user_to_id)
                 if pair not in pairs:
                     pairs.append(pair)
@@ -2746,13 +2782,15 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
                         target=user_to_id,
                         thanks_count=rec['thanks_count'],
                         is_trust=rec['is_trust'],
+                        is_father=rec['is_father'],
+                        is_mother=rec['is_mother'],
                     ))
             profiles_dict = dict()
             users = []
             for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
                 profiles_dict[profile.user.pk] = dict(
                     uuid=profile.uuid,
-                    gender=profile.gender,
+                    # TODO remove below, it is for debug
                     last_name=profile.user.last_name,
                     first_name=profile.user.first_name,
                     middle_name=profile.middle_name,
@@ -2780,11 +2818,14 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
                 )
                 # ------------------------
 
-                c['child_gender'] = profiles_dict[c['source']]['gender']
+                # TODO: remove this debug:
                 c['child_id'] = profiles_dict[c['source']]['user_pk']
+
                 c['source'] = profiles_dict[c['source']]['uuid']
-                c['parent_gender'] = profiles_dict[c['target']]['gender']
+
+                # TODO: remove this debug:
                 c['parent_id'] = profiles_dict[c['target']]['user_pk']
+
                 c['target'] = profiles_dict[c['target']]['uuid']
 
             data = dict(users=users, connections=connections)
