@@ -487,7 +487,7 @@ class PhotoModel(FilesMixin, models.Model):
     ):
         content = request.data.get(photofield) or None
         if content:
-            name = getattr(content, 'name', 'photo.jpg')
+            name = getattr(content, 'name', 'photo.png')
             is_base64 = photo_content == 'base64'
             if isinstance(content, str):
                 if is_base64:
