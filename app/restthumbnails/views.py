@@ -5,7 +5,7 @@ from django.views.decorators.cache import add_never_cache_headers
 from django.views.generic import View
 
 from restthumbnails import defaults
-from restthumbnails.exceptions import ThumbnailError
+from restthumbnails.exceptions import ThumbnailError, SourceDoesNotExist
 from restthumbnails.helpers import get_thumbnail
 
 
@@ -27,12 +27,18 @@ class ThumbnailView(View):
 
         # Make only one worker busy on this thumbnail by managing a lock
         if cache.get(thumbnail.key) is None:
+            no_source = False
             try:
                 cache.set(thumbnail.key, True, self.lock_timeout)
-                thumbnail.generate()
+                try:
+                    thumbnail.generate()
+                except SourceDoesNotExist:
+                    no_source = True
             finally:
                 cache.delete(thumbnail.key)
             # Internal redirect to the generated file
+            if no_source:
+                raise http.Http404
             return self.sendfile(request, thumbnail)
 
         # Return 404 while there's a lock. Also, make sure user agents and

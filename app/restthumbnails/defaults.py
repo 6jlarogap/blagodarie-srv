@@ -23,6 +23,12 @@ THUMBNAIL_PROXY_BASE_URL = getattr(settings,
     'THUMBNAILS_PROXY_BASE_URL',
     '/thumbnails/')
 
+# Качество, с которым по умолчанию сохраняется thumbnail
+#
+THUMBNAIL_QUALITY = getattr(settings,
+    'THUMBNAIL_QUALITY',
+    85)
+
 def thumbnail_proxy():
     THUMBNAIL_PROXY = getattr(settings,
         'THUMBNAILS_PROXY',

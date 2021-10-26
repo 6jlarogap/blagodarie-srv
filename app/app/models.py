@@ -1,4 +1,4 @@
-import time, datetime, re, os
+import time, datetime, re, os, shutil
 import pytils, base64
 from PIL import Image
 
@@ -459,6 +459,14 @@ class FilesMixin(object):
                 os.removedirs(dir_)
             except OSError:
                 pass
+            thmb = os.path.join(settings.THUMBNAILS_STORAGE_ROOT, file_.name)
+            if os.path.exists(thmb):
+                try:
+                    dir_ = os.path.dirname(thmb)
+                    shutil.rmtree(thmb)
+                    os.removedirs(dir_)
+                except OSError:
+                    pass
 
     def delete(self):
         self.delete_from_media()

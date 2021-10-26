@@ -166,7 +166,8 @@ def save_image(image, format='JPEG', **options):
     """
     destination = BytesIO()
     if format == 'JPEG':
-        options.setdefault('quality', 85)
+        from restthumbnails import defaults
+        options.setdefault('quality', defaults.THUMBNAIL_QUALITY)
         try:
             if getattr(image, 'mode', '').upper() == 'RGBA':
                 image = image.convert('RGB')

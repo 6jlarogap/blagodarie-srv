@@ -20,9 +20,10 @@ from django.views.static import serve
 from django.conf import settings
 
 urlpatterns = [
+    re_path(r'^thumb/', include('restthumbnails.urls')),
+    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
     path('', include('contact.urls')),
     path('', include('users.urls')),
-    re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT})
 ]
 
 if settings.ADMIN_ENABLED:
