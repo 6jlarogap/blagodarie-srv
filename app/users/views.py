@@ -948,7 +948,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
                     request,
                     photo_content=photo_content,
                 )
-                profile.photo.save(request.data['photo'].name, photo)
+                profile.photo.save(getattr(request.data['photo'], 'name', 'photo.jpg'), photo)
             data = profile.data_dict(request)
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
@@ -987,7 +987,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
                         photo_content=photo_content,
                     )
                     profile.delete_from_media()
-                    profile.photo.save(request.data['photo'].name, photo)
+                    profile.photo.save(getattr(request.data['photo'], 'name', 'photo.jpg'), photo)
                 else:
                     profile.delete_from_media()
                     profile.photo = None

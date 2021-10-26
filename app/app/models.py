@@ -489,16 +489,22 @@ class PhotoModel(FilesMixin, models.Model):
         if content:
             name = getattr(content, 'name', 'photo.jpg')
             is_base64 = photo_content == 'base64'
-            if is_base64:
-                buf = base64.b64decode(content.read())
+            if isinstance(content, str):
+                if is_base64:
+                    content = base64.b64decode(content)
+                else:
+                    content = content.encode()
             else:
-                buf = content.read()
-            content = ContentFile(buf, name)
+                if is_base64:
+                    content = base64.b64decode(content.read())
+                else:
+                    content = content.read()
+            content = ContentFile(content, name)
             if not max_photo_size:
                 max_photo_size = settings.PHOTO_MAX_SIZE
             if not quality:
                 quality = settings.PHOTO_QUALITY
-            if content.size > max_photo_size * 1024 * 1024 * (4/3 if is_base64 else 1):
+            if content.size > max_photo_size * 1024 * 1024:
                 raise ServiceException("Размер загружаемого файла превышает %d Мб" % max_photo_size)
             if not quality_min_size:
                 quality_min_size = settings.PHOTO_QUALITY_MIN_SIZE or 0

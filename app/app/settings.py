@@ -348,6 +348,8 @@ THUMBNAILS_ALLOWED_SIZE_RANGE = dict(min=20, max=2000)
 
 THUMBNAILS_STORAGE_ROOT = os.path.join(MEDIA_ROOT, 'thumbnails')
 
+DATA_UPLOAD_MAX_MEMORY_SIZE = 14 * 1024 * 1024
+
 try:
     from app.local_settings import *
 except ModuleNotFoundError:
