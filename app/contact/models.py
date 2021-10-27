@@ -113,23 +113,6 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
             ('user_from', 'anytext', ),
         )
 
-# TODO Drop this table
-
-class TemplateTmp1(models.Model):
-    """
-    Для поиска связей пользователя рекурсивно
-    """
-    level = models.IntegerField(blank=True, null=True)
-    user_from_id = models.IntegerField(blank=True, null=True)
-    user_to_id = models.IntegerField(blank=True, null=True)
-    thanks_count = models.IntegerField(blank=True, null=True)
-    is_trust = models.BooleanField(blank=True, null=True)
-    is_reverse = models.BooleanField(blank=True, null=True)
-
-    class Meta:
-        managed = False
-        db_table = 'template_tmp1'
-
 class TemplateTmpParent(models.Model):
     """
     Для поиска связей пользователя рекурсивно

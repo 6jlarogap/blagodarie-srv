@@ -1543,9 +1543,6 @@ api_get_stats = ApiGetStats.as_view()
 
 class ApiAddUserSymptom(APIView):
 
-    # TODO
-    # Удалить обработку incognito_id, когда пользователи обновят свои апк
-
     @transaction.atomic
     def post(self, request, *args, **kwargs,):
         """
@@ -1556,7 +1553,9 @@ class ApiAddUserSymptom(APIView):
         Пример исходных данных:
         {
             "incognito_id": "2b0cdb0a-544d-406a-b832-6821c63f5d45"
-            // Это временно
+            // Это временно. Из разряда "нет ничего более постоянного, чем временное" :)
+            // В коде apk таки применяется incognito_id
+            //
             // или
             "private_key": "2b0cdb0a-544d-406a-b832-6821c63fffff"
             "user_symptoms": [
