@@ -56,7 +56,7 @@ class UnclearDate:
     def __str__(self):
         return self.strftime('%d.%m.%Y')
 
-    def str_safe(self, format=''):
+    def str_safe(self, format='d.m.y'):
         """
         YYYY or YYYY-MM or YYYY-MM-DD
 
@@ -76,7 +76,7 @@ class UnclearDate:
         return result
 
     @classmethod
-    def str_safe_from_rec(cls, rec, date):
+    def str_safe_from_rec(cls, rec, date, format='d.m.y'):
         """
         Сделать yyyy-mm-dd, yyyy-mm, yyyy или None из словря rec, поля date
 
@@ -85,15 +85,23 @@ class UnclearDate:
         """
         result = None
         if rec[date]:
-            result = rec[date].strftime("%Y-%m-%d")
-            if rec[date + '_no_day']:
-                result = result[0:-3]
-                if rec[date + '_no_month']:
+            ymd = rec[date].strftime("%Y-%m-%d")
+            if format == 'd.m.y':
+                result = ymd[0:4]
+                if not rec[date + '_no_month']:
+                    result = ymd[5:2] + result + "."
+                if not rec[date + '_no_day']:
+                    result = ymd[8:2] + result + "."
+            else:
+                result = ymd
+                if rec[date + '_no_day']:
                     result = result[0:-3]
+                    if rec[date + '_no_month']:
+                        result = result[0:-3]
         return result
 
     @classmethod
-    def from_str_safe(cls, s, format=''):
+    def from_str_safe(cls, s, format='d.m.y'):
         """
         Сделать UnclearDate из yyyy-mm-dd, yyyy-mm, yyyy, или из None ('null')
 
@@ -203,7 +211,7 @@ class UnclearDate:
         return year, month, day
 
     @classmethod
-    def check_safe_str(cls, s, check_today=False, format=''):
+    def check_safe_str(cls, s, check_today=False, format='d.m.y'):
         """
         Проверка правильности строки "гггг-мм-дд", "гггг-мм", "гггг", или None ("null"), если дата не задана
 
@@ -224,7 +232,7 @@ class UnclearDate:
                     except ValueError:
                         raise ServiceException(_(
                             "Неверный формат даты. "
-                            "Допускается ДД.ММ.ГГГГ, ММ.ГГГГ, ГГГГ. Точки можно опустить или вместо них - или /"))
+                            "Допускается ДД.ММ.ГГГГ, ММ.ГГГГ, ГГГГ"))
 
                 else:
                     m = re.search(cls.SAFE_STR_REGEX, s)

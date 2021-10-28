@@ -921,12 +921,8 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
         if not request.user.is_authenticated:
             raise NotAuthenticated
         try:
-            got_it = False
-            for f in ('last_name', 'first_name'):
-                got_it = request.data.get(f)
-                break
-            if not got_it:
-                raise ServiceException('Имя или фамилия обязательны для нового родственника')
+            if not request.data.get('last_name'):
+                raise ServiceException('Фамилия обязательна для нового')
             dob, dod =self.check_dates(request)
             self.check_gender(request)
             user = self.create_user(
