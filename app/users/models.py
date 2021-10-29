@@ -352,14 +352,14 @@ class Profile(PhotoModel, GeoPointModel):
     def __str__(self):
         return self.full_name() or str(self.pk)
 
-    def data_dict(self, request):
+    def data_dict(self, request, google_photo_size=None):
         user = self.user
         return dict(
             uuid=str(self.uuid),
             last_name=user.last_name,
             first_name=user.first_name,
             middle_name=self.middle_name,
-            photo=self.choose_photo(request),
+            photo=self.choose_photo(request, google_photo_size),
             is_notified=self.is_notified,
             sum_thanks_count=self.sum_thanks_count,
             fame=self.fame,
@@ -513,14 +513,14 @@ class Profile(PhotoModel, GeoPointModel):
         return name
 
     @classmethod
-    def choose_photo_of(cls, request, photo, photo_url, photo_size=None):
+    def choose_photo_of(cls, request, photo, photo_url, google_photo_size=None):
         result = ''
         if photo:
             result = request.build_absolute_uri(settings.MEDIA_URL + photo)
         elif photo_url:
             result = photo_url
-            if not photo_size:
-                photo_size = settings.GOOGLE_PHOTO_SIZE
+            if not google_photo_size:
+                google_photo_size = settings.GOOGLE_PHOTO_SIZE
             m = re.search(
                 #      1       2     3      4     5
                 r'^(https?://)(\S*)(google)(\S+)(\=s\d+\-c)$',
@@ -529,7 +529,7 @@ class Profile(PhotoModel, GeoPointModel):
             )
             if m:
                 result = m.group(1) + m.group(2) + m.group(3) + m.group(4) + \
-                        '=s' + str(photo_size) + '-c'
+                        '=s' + str(google_photo_size) + '-c'
             else:
                 m = re.search(
                     #     1        2     3      4     5         6
@@ -539,18 +539,32 @@ class Profile(PhotoModel, GeoPointModel):
                 )
                 if m:
                     result = m.group(1) + m.group(2) + m.group(3) + m.group(4) + \
-                             '/s' + str(photo_size) + '-c/' + m.group(6)
+                             '/s' + str(google_photo_size) + '-c/' + m.group(6)
         return result
 
-    def choose_photo(self, request, photo_size=None):
+    def choose_photo(self, request, google_photo_size=None):
         """
         Выбрать фото пользователя
 
         Если есть выданное пользователем фото (photo), то оно,
         иначе photo_url
         """
-        return Profile.choose_photo_of(request, self.photo and self.photo.name, self.photo_url, photo_size)
+        return Profile.choose_photo_of(request, self.photo and self.photo.name, self.photo_url, google_photo_size)
 
+    def parents_dict(self, request, google_photo_size=None):
+        """
+        Вернуть папу и маму из CurrentState
+        """
+        result = dict(father=None, mother=None)
+        q = Q(is_reverse=False, user_to__isnull=False) & (Q(is_father=True) | Q(is_mother=True))
+        for parent_link in self.user.currentstate_user_from_set.filter(q). \
+            select_related('user_to__profile', 'user_to__profile__ability').distinct():
+            human = parent_link.user_to.profile.data_dict(request)
+            if parent_link.is_father:
+                result['father'] = human
+            else:
+                result['mother'] = human
+        return result
 
 class CreateUserMixin(object):
 

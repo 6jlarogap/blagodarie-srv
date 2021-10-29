@@ -894,6 +894,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
         if uuid:
             user, profile = self.check_user_uuid(uuid)
             data = profile.data_dict(request)
+            data.update(profile.parents_dict(request))
             return Response(data=data, status=status.HTTP_200_OK)
         else:
             if not request.user.is_authenticated:
@@ -991,6 +992,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
             user.save()
             profile.save()
             data = profile.data_dict(request)
+            data.update(profile.parents_dict(request))
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])

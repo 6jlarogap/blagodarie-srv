@@ -2817,17 +2817,40 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
                 )
                 # ------------------------
 
-                # TODO: remove this debug:
-                c['child_id'] = profiles_dict[c['source']]['user_pk']
-
                 c['source'] = profiles_dict[c['source']]['uuid']
-
-                # TODO: remove this debug:
-                c['parent_id'] = profiles_dict[c['target']]['user_pk']
-
                 c['target'] = profiles_dict[c['target']]['uuid']
 
-            data = dict(users=users, connections=connections)
+            trust_connections = []
+            q_connections = Q(
+                is_reverse=False,
+                is_trust__isnull=False,
+                user_to__isnull=False,
+            )
+            q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
+            for cs in CurrentState.objects.filter(q_connections).select_related(
+                    'user_from__profile', 'user_to__profile',
+                ).distinct():
+                trust_connections.append({
+                    'source': cs.user_from.profile.uuid,
+                    'target': cs.user_to.profile.uuid,
+                    'thanks_count': cs.thanks_count,
+                    'is_trust': cs.is_trust,
+                    # TODO: remove this debug:
+                    #
+                    'source_fio': "%s %s %s" % (
+                        cs.user_from.last_name or '-',
+                        cs.user_from.first_name or '-',
+                        cs.user_from.profile.middle_name or '-',
+                    ),
+                    'target_fio': "%s %s %s" % (
+                        cs.user_to.last_name or '-',
+                        cs.user_to.first_name or '-',
+                        cs.user_to.profile.middle_name or '-',
+                    ),
+                    # -------------------------
+                })
+
+            data = dict(users=users, connections=connections, trust_connections=trust_connections)
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
