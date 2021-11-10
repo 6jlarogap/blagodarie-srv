@@ -959,6 +959,14 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
             raise NotAuthenticated
         try:
             user, profile = self.check_user_or_owned_uuid(request, need_uuid=True)
+            owner_uuid = request.data.get('owner_uuid')
+            if owner_uuid:
+                new_owner, new_owner_profile = self.check_user_uuid(owner_uuid)
+                if not profile.owner:
+                    raise ServiceException('Нельзя назначать владельца профилю зарегистрированного пользователя')
+                if new_owner_profile.owner:
+                    raise ServiceException('Нельзя делать владельцем профиль, которым кто-то владеет')
+                profile.owner = new_owner
             dob, dod =self.check_dates(request)
             self.check_gender(request)
             if 'dob' in request.data:

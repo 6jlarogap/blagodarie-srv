@@ -16,6 +16,7 @@ opendir DIR, ".";
 while (readdir DIR) {
     next unless -d $_;
     next unless /$dir_qr/;
-    next if $_ >= $dir;
+    next if $_ >= $dir || $_ eq $dir;
     `rm -r $_`;
 }
+closedir DIR;
