@@ -345,6 +345,7 @@ class Profile(PhotoModel, GeoPointModel):
     gender = models.CharField(_("Пол"), max_length=1, choices=GenderMixin.GENDER_CHOICES, null=True)
     dob = UnclearDateModelField("Дата рождения", null=True, blank=True)
     dod = UnclearDateModelField("Дата смерти", null=True, blank=True)
+    comment = models.TextField(verbose_name=_("Примечание"), null=True)
 
     class Meta:
         ordering = ('user__last_name', 'user__first_name', 'middle_name', )
@@ -372,6 +373,7 @@ class Profile(PhotoModel, GeoPointModel):
             gender=self.gender,
             dob=self.dob and self.dob.str_safe() or None,
             dod=self.dod and self.dod.str_safe() or None,
+            comment=self.comment or '',
         )
 
     def merge(self, profile_from):
@@ -583,6 +585,7 @@ class CreateUserMixin(object):
         gender=None,
         latitude=None,
         longitude=None,
+        comment=None,
             ):
         user = None
         random.seed()
@@ -615,6 +618,7 @@ class CreateUserMixin(object):
                 gender=gender,
                 latitude=latitude,
                 longitude=longitude,
+                comment=comment,
             )
         return user
 

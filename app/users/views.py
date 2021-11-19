@@ -937,6 +937,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
                 gender=request.data.get('gender') or None,
                 latitude=request.data.get('latitude') or None,
                 longitude=request.data.get('longitude') or None,
+                comment=request.data.get('comment') or None,
             )
             profile = user.profile
             if request.data.get('photo'):
@@ -979,7 +980,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
             for f in ('middle_name',):
                 if f in request.data:
                     setattr(profile, f, request.data.get(f) or '')
-            for f in ('gender', 'latitude', 'longitude',):
+            for f in ('gender', 'latitude', 'longitude', 'comment',):
                 if f in  request.data:
                     setattr(profile, f, request.data.get(f) or None)
             if 'is_notified' in request.data and user == request.user:
@@ -1036,9 +1037,9 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
                 message = "Cвязанный профиль '%s' обезличен пользователем" % fio
             except IndexError:
                 pass
-        for f in ('photo', 'photo_original_filename', 'photo_url', 'middle_name'):
+        for f in ('photo', 'photo_original_filename', 'photo_url', 'middle_name',):
             setattr(profile, f, '')
-        for f in ('latitude', 'longitude', 'gender', 'ability'):
+        for f in ('latitude', 'longitude', 'gender', 'ability', 'comment',):
             setattr(profile, f, None)
         profile.delete_from_media()
         profile.photo = None

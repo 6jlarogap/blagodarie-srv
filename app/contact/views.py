@@ -2322,6 +2322,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, APIView):
                     gender=rec['gender'],
                     dob=UnclearDate.str_safe_from_rec(rec, 'dob'),
                     dod=UnclearDate.str_safe_from_rec(rec, 'dod'),
+                    comment=rec['comment'] or '',
                 ))
                 user_pks.append(rec['id'])
             connections = []
