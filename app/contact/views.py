@@ -2280,7 +2280,8 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, APIView):
                     users_profile.dod_no_day,
                     users_profile.dod_no_month,
 
-                    profile__ability.text
+                    profile__ability.text,
+                    users_profile.comment
                 FROM
                     auth_user
                 %(sql_joins)s
