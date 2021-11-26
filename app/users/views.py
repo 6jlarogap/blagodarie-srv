@@ -1024,45 +1024,48 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
         Отметить а auth_user пользователя is_active = False
         Отправить сообщение в телеграм
         """
+        try:
+            if not request.user.is_authenticated:
+                raise NotAuthenticated
+            user, profile = self.check_user_or_owned_uuid(request, need_uuid=True)
+            message = telegram_uid = None
+            if profile.is_notified:
+                try:
+                    telegram = Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)[0]
+                    telegram_uid = telegram.uid
+                    fio = (telegram.first_name + ' ' + telegram.last_name).strip()
+                    message = "Cвязанный профиль '%s' обезличен пользователем" % fio
+                except IndexError:
+                    pass
+            for f in ('photo', 'photo_original_filename', 'photo_url', 'middle_name',):
+                setattr(profile, f, '')
+            for f in ('latitude', 'longitude', 'gender', 'ability', 'comment',):
+                setattr(profile, f, None)
+            profile.delete_from_media()
+            profile.photo = None
+            profile.photo_original_filename = ''
+            profile.save()
 
-        if not request.user.is_authenticated:
-            raise NotAuthenticated
-        user, profile = self.check_user_or_owned_uuid(request, need_uuid=True)
-        message = telegram_uid = None
-        if profile.is_notified:
-            try:
-                telegram = Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)[0]
-                telegram_uid = telegram.uid
-                fio = (telegram.first_name + ' ' + telegram.last_name).strip()
-                message = "Cвязанный профиль '%s' обезличен пользователем" % fio
-            except IndexError:
-                pass
-        for f in ('photo', 'photo_original_filename', 'photo_url', 'middle_name',):
-            setattr(profile, f, '')
-        for f in ('latitude', 'longitude', 'gender', 'ability', 'comment',):
-            setattr(profile, f, None)
-        profile.delete_from_media()
-        profile.photo = None
-        profile.photo_original_filename = ''
-        profile.save()
+            Key.objects.filter(owner=user).delete()
+            Ability.objects.filter(owner=user).delete()
+            Wish.objects.filter(owner=user).delete()
+            Token.objects.filter(user=user).delete()
 
-        Key.objects.filter(owner=user).delete()
-        Ability.objects.filter(owner=user).delete()
-        Wish.objects.filter(owner=user).delete()
-        Token.objects.filter(user=user).delete()
-
-        for oauth in Oauth.objects.filter(user=user):
-            for f in ('last_name', 'first_name', 'display_name', 'email', 'photo', 'username'):
-                setattr(oauth, f, '')
-            oauth.update_timestamp = int(time.time())
-            oauth.save()
-        for f in ('first_name', 'email'):
-            setattr(user, f, '')
-        user.last_name = "Обезличен"
-        user.is_active = False
-        user.save()
-        if message:
-            self.send_to_telegram(message, telegram_uid=telegram_uid)
+            for oauth in Oauth.objects.filter(user=user):
+                for f in ('last_name', 'first_name', 'display_name', 'email', 'photo', 'username'):
+                    setattr(oauth, f, '')
+                oauth.update_timestamp = int(time.time())
+                oauth.save()
+            for f in ('first_name', 'email'):
+                setattr(user, f, '')
+            user.last_name = "Обезличен"
+            user.is_active = False
+            user.save()
+            if message:
+                self.send_to_telegram(message, telegram_uid=telegram_uid)
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
         return Response(data={}, status=200)
 
 api_profile = ApiProfile.as_view()
