@@ -2653,7 +2653,7 @@ class ApiDeleteAbility(APIView):
         Удалить возможности uuid
 
         Проверить, принадлежит ли возможность пользователю, пославшему запрос,
-        или его родственнику, иесли принадлежит, то удалить ее,
+        или его родственнику, и если принадлежит, то удалить ее,
         иначе вернуть сообщение об ошибке.
         Пример исходных данных:
         /api/deleteability?uuid=4d02e22c-b6eb-4307-a440-ccafdeedd9b8
@@ -2686,6 +2686,7 @@ class ApiDeleteAbility(APIView):
             data = dict()
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
+            transaction.set_rollback(True)
             data = dict(message=excpt.args[0])
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)

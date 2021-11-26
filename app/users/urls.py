@@ -9,7 +9,6 @@ urlpatterns = [
     re_path(r'^api/auth/signup/incognito/?$', views.api_auth_signup_incognito),
 
     re_path(r'^api/getprofileinfo/?$', views.api_get_profileinfo),
-    re_path(r'^api/updateprofileinfo/?$', views.api_update_profileinfo),
 
     re_path(r'^api/download\-apk\-details/?$', views.api_download_apk_details),
     re_path(r'^api/getlatestversion/?$', views.api_latest_version),

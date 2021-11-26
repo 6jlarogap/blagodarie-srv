@@ -74,88 +74,6 @@ class ApiGetProfileInfo(UuidMixin, APIView):
 
 api_get_profileinfo = ApiGetProfileInfo.as_view()
 
-class ApiUpdateProfileInfo(SendMessageMixin, GenderMixin, APIView):
-    permission_classes = (IsAuthenticated, )
-
-    @transaction.atomic
-    def post(self, request):
-        """
-        Обновить информацию о пользователе
-        """
-        try:
-            user = request.user
-            profile = user.profile
-            for key in request.data:
-                key = key.lower()
-                if key in ('is_notified', 'latitude', 'longitude', 'gender'):
-                    if key == 'gender':
-                        self.check_gender(request)
-                        profile.gender = request.data.get(key) or None
-                    else:
-                        setattr(profile, key, request.data.get(key))
-            profile.save()
-            data=profile.data_dict(request)
-            status_code = 200
-        except ServiceException as excpt:
-            data = dict(message=excpt.args[0])
-            status_code = 500
-        return Response(data=data, status=200)
-
-    @transaction.atomic
-    def delete(self, request):
-        """
-        Деактивировать профиль пользователя (обезличить)
-
-        Удалить:
-            ФИО, фото - в профиле и во всех профилях соцсетей
-            ключи
-            возможности
-            желания
-            токен авторизации
-            широта, долгота
-            пол
-        Отметить а auth_user пользователя is_active = False
-        """
-        user = request.user
-        message = telegram_uid = None
-        profile = user.profile
-        if profile.is_notified:
-            try:
-                telegram_uid = Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)[0].uid
-                fio = profile.full_name(last_name_first=False) or 'Без имени'
-                message = "Cвязанный профиль '%s' обезличен пользователем" % fio
-            except IndexError:
-                pass
-        for f in ('photo', 'photo_original_filename', 'photo_url', 'middle_name'):
-            setattr(profile, f, '')
-        for f in ('latitude', 'longitude', 'gender', 'ability'):
-            setattr(profile, f, None)
-        profile.delete_from_media()
-        profile.photo = None
-        profile.photo_original_filename = ''
-        profile.save()
-
-        Key.objects.filter(owner=user).delete()
-        Ability.objects.filter(owner=user).delete()
-        Wish.objects.filter(owner=user).delete()
-        Token.objects.filter(user=user).delete()
-
-        for oauth in Oauth.objects.filter(user=user):
-            for f in ('last_name', 'first_name', 'display_name', 'email', 'photo', 'username'):
-                setattr(oauth, f, '')
-            oauth.update_timestamp = int(time.time())
-            oauth.save()
-        for f in ('first_name', 'email'):
-            setattr(user, f, '')
-        user.last_name = "Обезличен"
-        user.is_active = False
-        user.save()
-        if message:
-            self.send_to_telegram(message, telegram_uid=telegram_uid)
-        return Response(data={}, status=200)
-
-api_update_profileinfo = ApiUpdateProfileInfo.as_view()
-
 class ApiDownloadApkDetails(APIView):
     """
     Получить с github каталога данные о последней версии мобильного приложения
@@ -570,6 +488,7 @@ class ApiAuthTelegram(CreateUserMixin, SendMessageMixin, APIView):
             status_code = 200
 
         except ServiceException as excpt:
+            transaction.set_rollback(True)
             data = dict(message=excpt.args[0])
             status_code = 400
         return Response(data=data, status=status_code)
@@ -628,122 +547,127 @@ class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
         """
         Callback функция для различных Oauth2 провайдеров (yandex, vk...)
         """
-
-        s_provider = settings.OAUTH_PROVIDERS.get(provider)
-        d_provider = self.OAUTH_PROVIDERS.get(provider)
-        if not s_provider or not d_provider:
-            return redirect(self.get_frontend_url(request) + '?error=provider_not_implemetnted')
-
-        redirect_from_callback = self.get_frontend_url(request, settings.REDIRECT_FROM_CALLBACK)
-
-        m_error = d_provider.get('m_error') or 'error'
-        m_error_description = d_provider.get('m_error_description') or 'error_description'
-        s_error = request.GET.get(m_error)
-        if s_error:
-            s_errors = '?error=%s' % urllib.parse.quote_plus(s_error)
-            s_error_description = request.GET.get(m_error_description)
-            if s_error_description:
-                s_errors += '&' + 'error_description=%s' % urllib.parse.quote_plus(s_error_description)
-            return redirect(redirect_from_callback + s_errors)
-
-        code = request.GET.get('code')
-        if not code:
-            return redirect(redirect_from_callback + '?error=no_code_received_in_callback')
-
-        d_post_for_token = {}
-        if provider in (Oauth.PROVIDER_YANDEX, Oauth.PROVIDER_ODNOKLASSNIKI):
-            t_grant_type = d_provider.get('t_grant_type') or 'grant_type'
-            t_authorization_code = d_provider.get('t_authorization_code') or 'authorization_code'
-            d_post_for_token[t_grant_type] = t_authorization_code
-
-        t_code = d_provider.get('t_code') or 'code'
-        d_post_for_token[t_code] = code
-        t_client_id = d_provider.get('t_client_id') or 'client_id'
-        d_post_for_token[t_client_id] = s_provider['client_id']
-        t_client_secret = d_provider.get('t_client_secret') or 'client_secret'
-        d_post_for_token[t_client_secret] = s_provider['client_secret']
-
-        t_redirect_uri = d_provider.get('t_redirect_uri')
-        if t_redirect_uri:
-            redirect_uri = request.build_absolute_uri()
-            redirect_uri = re.sub(r'\?.*$', '', redirect_uri)
-            d_post_for_token[t_redirect_uri] = redirect_uri
-
-        t_request_token_method = d_provider.get('t_request_token_method') or 'POST'
-        d_post_for_token = urllib.parse.urlencode(d_post_for_token)
-        d_post_for_token = d_post_for_token.encode()
-        if t_request_token_method == 'POST':
-            req_post_for_token = urllib.request.Request(
-                d_provider['request_token_url'],
-                d_post_for_token
-            )
-        else:
-            # GET, для vk
-            req_post_for_token = urllib.request.Request(
-                d_provider['request_token_url'] + '?' + \
-                d_post_for_token
-            )
-
-        s_errors = '?error=error_getting_token_from_%s' %provider
-        t_access_token = d_provider.get('t_access_token') or 'access_token'
         try:
-            response_post_for_token = urllib.request.urlopen(req_post_for_token)
-            raw_data = response_post_for_token.read().decode(
-                response_post_for_token.headers.get_content_charset('utf-8')
-            )
-            data = json.loads(raw_data)
-            access_token = data.get(t_access_token)
-            if not access_token:
+            s_provider = settings.OAUTH_PROVIDERS.get(provider)
+            d_provider = self.OAUTH_PROVIDERS.get(provider)
+            if not s_provider or not d_provider:
+                return redirect(self.get_frontend_url(request) + '?error=provider_not_implemetnted')
+
+            redirect_from_callback = self.get_frontend_url(request, settings.REDIRECT_FROM_CALLBACK)
+
+            m_error = d_provider.get('m_error') or 'error'
+            m_error_description = d_provider.get('m_error_description') or 'error_description'
+            s_error = request.GET.get(m_error)
+            if s_error:
+                s_errors = '?error=%s' % urllib.parse.quote_plus(s_error)
+                s_error_description = request.GET.get(m_error_description)
+                if s_error_description:
+                    s_errors += '&' + 'error_description=%s' % urllib.parse.quote_plus(s_error_description)
                 return redirect(redirect_from_callback + s_errors)
-        except (urllib.error.HTTPError, urllib.error.URLError, ValueError):
-            return redirect(redirect_from_callback + s_errors)
 
-        oauth_dict = dict(
-            provider=provider,
-            token=access_token,
-        )
+            code = request.GET.get('code')
+            if not code:
+                return redirect(redirect_from_callback + '?error=no_code_received_in_callback')
 
-        oauth_result = Oauth.check_token(oauth_dict)
-        if oauth_result['message']:
-            s_errors = '?error=error_getting_user_data_by_token'
-            s_errors += '&' + 'error_description=%s' % \
-                    urllib.parse.quote_plus(oauth_result['message'])
-            return redirect(redirect_from_callback + s_errors)
+            d_post_for_token = {}
+            if provider in (Oauth.PROVIDER_YANDEX, Oauth.PROVIDER_ODNOKLASSNIKI):
+                t_grant_type = d_provider.get('t_grant_type') or 'grant_type'
+                t_authorization_code = d_provider.get('t_authorization_code') or 'authorization_code'
+                d_post_for_token[t_grant_type] = t_authorization_code
 
-        try:
-            oauth = Oauth.objects.select_related(
-                'user',
-                'user__profile',
-                'user__auth_token',
-            ).get(
+            t_code = d_provider.get('t_code') or 'code'
+            d_post_for_token[t_code] = code
+            t_client_id = d_provider.get('t_client_id') or 'client_id'
+            d_post_for_token[t_client_id] = s_provider['client_id']
+            t_client_secret = d_provider.get('t_client_secret') or 'client_secret'
+            d_post_for_token[t_client_secret] = s_provider['client_secret']
+
+            t_redirect_uri = d_provider.get('t_redirect_uri')
+            if t_redirect_uri:
+                redirect_uri = request.build_absolute_uri()
+                redirect_uri = re.sub(r'\?.*$', '', redirect_uri)
+                d_post_for_token[t_redirect_uri] = redirect_uri
+
+            t_request_token_method = d_provider.get('t_request_token_method') or 'POST'
+            d_post_for_token = urllib.parse.urlencode(d_post_for_token)
+            d_post_for_token = d_post_for_token.encode()
+            if t_request_token_method == 'POST':
+                req_post_for_token = urllib.request.Request(
+                    d_provider['request_token_url'],
+                    d_post_for_token
+                )
+            else:
+                # GET, для vk
+                req_post_for_token = urllib.request.Request(
+                    d_provider['request_token_url'] + '?' + \
+                    d_post_for_token
+                )
+
+            s_errors = '?error=error_getting_token_from_%s' %provider
+            t_access_token = d_provider.get('t_access_token') or 'access_token'
+            try:
+                response_post_for_token = urllib.request.urlopen(req_post_for_token)
+                raw_data = response_post_for_token.read().decode(
+                    response_post_for_token.headers.get_content_charset('utf-8')
+                )
+                data = json.loads(raw_data)
+                access_token = data.get(t_access_token)
+                if not access_token:
+                    return redirect(redirect_from_callback + s_errors)
+            except (urllib.error.HTTPError, urllib.error.URLError, ValueError):
+                return redirect(redirect_from_callback + s_errors)
+
+            oauth_dict = dict(
                 provider=provider,
-                uid=oauth_result['uid'],
+                token=access_token,
             )
-            user = oauth.user
-        except Oauth.DoesNotExist:
-            user = self.create_user()
-            oauth = Oauth.objects.create(
-                provider=provider,
-                uid=oauth_result['uid'],
-                user=user,
-            )
-            Token.objects.create(user=user)
-        self.update_oauth(oauth, oauth_result)
 
-        response = redirect(redirect_from_callback)
-        to_cookie = dict(
-            provider=provider,
-            user_uuid=str(user.profile.uuid),
-            auth_token=user.auth_token.key
-        )
-        response.set_cookie(
-            key='auth_data',
-            value=json.dumps(to_cookie),
-            max_age=600,
-            path='/',
-            domain=self.get_frontend_name(request),
-        )
-        return response
+            oauth_result = Oauth.check_token(oauth_dict)
+            if oauth_result['message']:
+                s_errors = '?error=error_getting_user_data_by_token'
+                s_errors += '&' + 'error_description=%s' % \
+                        urllib.parse.quote_plus(oauth_result['message'])
+                return redirect(redirect_from_callback + s_errors)
+
+            try:
+                oauth = Oauth.objects.select_related(
+                    'user',
+                    'user__profile',
+                    'user__auth_token',
+                ).get(
+                    provider=provider,
+                    uid=oauth_result['uid'],
+                )
+                user = oauth.user
+            except Oauth.DoesNotExist:
+                user = self.create_user()
+                oauth = Oauth.objects.create(
+                    provider=provider,
+                    uid=oauth_result['uid'],
+                    user=user,
+                )
+                Token.objects.create(user=user)
+            self.update_oauth(oauth, oauth_result)
+
+            response = redirect(redirect_from_callback)
+            to_cookie = dict(
+                provider=provider,
+                user_uuid=str(user.profile.uuid),
+                auth_token=user.auth_token.key
+            )
+            response.set_cookie(
+                key='auth_data',
+                value=json.dumps(to_cookie),
+                max_age=600,
+                path='/',
+                domain=self.get_frontend_name(request),
+            )
+            return response
+        except ServiceException as excpt:
+            transaction.set_rollback(True)
+            data = dict(message=excpt.args[0])
+            status_code = 400
+            return Response(data=data, status=status_code)
 
 api_oauth_callback = ApiOauthCallback.as_view()
 
