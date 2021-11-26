@@ -950,6 +950,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
             data = profile.data_dict(request)
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
+            transaction.set_rollback(True)
             data = dict(message=excpt.args[0])
             status_code = 400
         return Response(data=data, status=status_code)
@@ -1004,6 +1005,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
             data.update(profile.parents_dict(request))
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
+            transaction.set_rollback(True)
             data = dict(message=excpt.args[0])
             status_code = 400
         return Response(data=data, status=status_code)
@@ -1068,6 +1070,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
             data.update(profile.parents_dict(request))
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
+            transaction.set_rollback(True)
             data = dict(message=excpt.args[0])
             status_code = 400
         return Response(data=data, status=status_code)
