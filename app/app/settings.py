@@ -348,6 +348,52 @@ THUMBNAILS_ALLOWED_SIZE_RANGE = dict(min=20, max=2000)
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 14 * 1024 * 1024
 
+# Log errors. Установить следующее в прод версии в local_settings.py:
+#
+ADMINS = (
+    # ("John Smith", "jsmith@org.com",)
+)
+EMAIL_HOST = 'localhost'
+EMAIL_HOST_USER = ''
+EMAIL_HOST_PASSWORD = ''
+SERVER_EMAIL = 'root@localhost'
+
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
+
+from app.logging import skip_ioerror_post
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'filters': {
+        'require_debug_false': {
+            '()': 'django.utils.log.RequireDebugFalse'
+        },
+        'skip_ioerror_posts': {
+            '()': 'django.utils.log.CallbackFilter',
+            'callback': skip_ioerror_post,
+        },
+    },
+    'handlers': {
+        'mail_admins': {
+            'level': 'ERROR',
+            'filters': [
+                'require_debug_false',
+                'skip_ioerror_posts',
+             ],
+            'class': 'django.utils.log.AdminEmailHandler'
+        }
+    },
+    'loggers': {
+        'django.request': {
+            'handlers': ['mail_admins'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    }
+}
+
 try:
     from app.local_settings import *
 except ModuleNotFoundError:
