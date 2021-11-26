@@ -632,9 +632,9 @@ class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
         s_provider = settings.OAUTH_PROVIDERS.get(provider)
         d_provider = self.OAUTH_PROVIDERS.get(provider)
         if not s_provider or not d_provider:
-            return redirect(settings.FRONTEND_ROOT + '?error=provider_not_implemetnted')
+            return redirect(self.get_frontend_url(request) + '?error=provider_not_implemetnted')
 
-        redirect_from_callback = self.get_frontend_url(settings.REDIRECT_FROM_CALLBACK)
+        redirect_from_callback = self.get_frontend_url(request, settings.REDIRECT_FROM_CALLBACK)
 
         m_error = d_provider.get('m_error') or 'error'
         m_error_description = d_provider.get('m_error_description') or 'error_description'
@@ -741,7 +741,7 @@ class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
             value=json.dumps(to_cookie),
             max_age=600,
             path='/',
-            domain=self.get_frontend_name(),
+            domain=self.get_frontend_name(request),
         )
         return response
 

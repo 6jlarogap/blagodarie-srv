@@ -284,9 +284,20 @@ TELEGRAM_AUTH_DATA_OUTDATED = 3600
 
 # ------------------------------------------------
 
-# Требуется для oauth аутентификации
+# Адрес front end. Вычисляется из url запроса к апи.
+# Например, если запрос к апи пришел по
+# https://(api.blagodarie.org), то будем считать,
+# что frontend находится по: https://blagodarie.org.
+# При этом проверяется, чтобы хост апи,
+# например, api.blagodarie.org, начинался с 'api'
 #
-FRONTEND_ROOT = 'https://blagodarie.org/'
+# Для oauth авторизации необходимо, чтобы frontend
+# находился там же или доменом выше, чем backend.
+#
+# Вместе с тем оставляем возможность задать
+# FRONTEND_ROOT вручную
+#
+FRONTEND_ROOT = ''
 
 # Относительный путь к settings.FRONTEND_ROOT,
 # куда ouauth2 callback возвращает пользователя

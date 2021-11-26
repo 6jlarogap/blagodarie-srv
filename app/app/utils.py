@@ -70,11 +70,30 @@ def get_moon_day(utc_time=None):
 
 class FrontendMixin(object):
 
-    def get_frontend_url(self, path='', ending_slash='/'):
+    def get_frontend_url(self, request, path='', ending_slash='/'):
         """
         Получить полный путь к path на front-end
+
+        Если задан settings.FRONTEND_ROOT:
+            имя хоста берем оттуда
+        Иначе:
+            Полагаем, что это апи вызывается по http(s)://api.some.site,
+            где 'api' - обязательно
         """
-        fe_site = settings.FRONTEND_ROOT.rstrip('/')
+        if settings.FRONTEND_ROOT:
+            fe_site = settings.FRONTEND_ROOT.rstrip('/')
+        else:
+            host = request.get_host()
+            m = re.search(r'^api\.(\S+)$', host, flags=re.I)
+            if m:
+                host = m.group(1).lower()
+            # else
+                # Затычка: frontend == backend.
+                # Невозможная ситуация в реальной работе
+            fe_site = '%(https)s://%(host)s' % dict(
+                https='https' if request.is_secure() else 'http',
+                host=host,
+            )
         fe_path = path.strip('/')
         if not fe_path:
             ending_slash = ''
@@ -84,10 +103,12 @@ class FrontendMixin(object):
             ending_slash=ending_slash,
         )
 
-    def get_frontend_name(self):
+    def get_frontend_name(self, request):
         """
-        Получить полный путь к path на front-end
+        Получить имя хоста front-end, без :цифры, если они есть
+
+        Для отправки туда кук
         """
         return re.sub(r'\:\d+$', '',
-            re.sub(r'^https?://', '', settings.FRONTEND_ROOT.rstrip('/'))
+            re.sub(r'^https?://', '', self.get_frontend_url(request).rstrip('/'))
         )

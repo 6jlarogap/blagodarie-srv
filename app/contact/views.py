@@ -34,7 +34,7 @@ MSG_NO_PARM = 'Не задан или не верен какой-то из па�
 class SendMessageMixin(FrontendMixin):
 
     def profile_link(self, profile):
-        url_profile = self.get_frontend_url('profile') + '?id=%s' % profile.uuid
+        url_profile = self.get_frontend_url(request, 'profile') + '?id=%s' % profile.uuid
         full_name = profile.full_name(last_name_first=False) or 'Без имени'
         link = '<a href="%(url_profile)s">%(full_name)s</a>' % dict(
             url_profile=url_profile,
