@@ -1013,6 +1013,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
         """
         Деактивировать профиль пользователя (обезличить)
 
+        Если задан uuid, обезличиваем 
         Удалить:
             ФИО, фото - в профиле и во всех профилях соцсетей
             ключи
@@ -1027,7 +1028,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
         try:
             if not request.user.is_authenticated:
                 raise NotAuthenticated
-            user, profile = self.check_user_or_owned_uuid(request, need_uuid=True)
+            user, profile = self.check_user_or_owned_uuid(request, need_uuid=False)
             message = telegram_uid = None
             if profile.is_notified:
                 try:
@@ -1063,9 +1064,12 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
             user.save()
             if message:
                 self.send_to_telegram(message, telegram_uid=telegram_uid)
+            data = profile.data_dict(request)
+            data.update(profile.parents_dict(request))
+            status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
             status_code = 400
-        return Response(data={}, status=200)
+        return Response(data=data, status=status_code)
 
 api_profile = ApiProfile.as_view()
