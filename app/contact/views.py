@@ -33,7 +33,7 @@ MSG_NO_PARM = 'Не задан или не верен какой-то из па�
 
 class SendMessageMixin(FrontendMixin):
 
-    def profile_link(self, profile):
+    def profile_link(self, request, profile,):
         url_profile = self.get_frontend_url(request, 'profile') + '?id=%s' % profile.uuid
         full_name = profile.full_name(last_name_first=False) or 'Без имени'
         link = '<a href="%(url_profile)s">%(full_name)s</a>' % dict(
@@ -516,15 +516,15 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 message = None
                 if operationtype_id in (OperationType.THANK, OperationType.TRUST_AND_THANK, ):
                     message = 'Получена благодарность от '
-                    message += self.profile_link(user_from.profile)
+                    message += self.profile_link(request, user_from.profile)
                 elif operationtype_id == OperationType.MISTRUST:
                     message = 'Получена утрата доверия от '
-                    message += self.profile_link(user_from.profile)
+                    message += self.profile_link(request, user_from.profile)
                 elif operationtype_id == OperationType.TRUST:
                     message = 'Получено доверие от '
-                    message += self.profile_link(user_from.profile)
+                    message += self.profile_link(request, user_from.profile)
                 elif operationtype_id == OperationType.NULLIFY_TRUST:
-                    message = 'Доверие от ' + self.profile_link(user_from.profile) + ' обнулено'
+                    message = 'Доверие от ' + self.profile_link(request, user_from.profile) + ' обнулено'
                 if message:
                     self.send_to_telegram(message, user=user_to)
 
@@ -2722,7 +2722,7 @@ class ApiInviteUseToken(ApiAddOperationMixin, SendMessageMixin, APIView):
                 insert_timestamp=int(time.time()),
             )
             if profile_to.is_notified:
-                message = self.profile_link(profile_to) + ' принял Вашу благодарность'
+                message = self.profile_link(request, profile_to) + ' принял Вашу благодарность'
                 self.send_to_telegram(message, user=user_from)
             token.delete()
             data = dict()
