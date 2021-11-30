@@ -2829,6 +2829,11 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
                 is_trust__isnull=False,
                 user_to__isnull=False,
             )
+            if request.user.is_authenticated:
+                user = request.user
+                if user.pk not in user_pks:
+                    users.append(user.profile.data_dict(request))
+                    user_pks.add(user.pk)
             q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
             for cs in CurrentState.objects.filter(q_connections).select_related(
                     'user_from__profile', 'user_to__profile',
