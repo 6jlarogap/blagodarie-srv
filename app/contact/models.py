@@ -8,6 +8,7 @@ from django.conf import settings
 from django.db import models, connection
 from django.utils.translation import gettext_lazy as _
 from django.db.models.query_utils import Q
+from django.contrib.postgres.fields import ArrayField
 
 from django.contrib.auth.models import User
 
@@ -107,6 +108,23 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
     #
     is_reverse = models.BooleanField(_("Обратное отношение"), default=False)
 
+    def data_dict(self, show_trust=True, show_parent=True):
+        result = dict(
+            source=self.user_from.profile.uuid,
+            target=self.user_to.profile.uuid,
+        )
+        if show_trust:
+            result.update(dict(
+                thanks_count=self.thanks_count,
+                is_trust=self.is_trust,
+            ))
+        if show_parent:
+            result.update(dict(
+                is_father=self.is_father,
+                is_mother=self.is_mother,
+            ))
+        return result
+
     class Meta:
         unique_together = (
             ('user_from', 'user_to', ),
@@ -115,7 +133,7 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
 
 class TemplateTmpParent(models.Model):
     """
-    Для поиска связей пользователя рекурсивно
+    Для поиска родственных связей пользователя рекурсивно
     """
     level = models.IntegerField(blank=True, null=True)
     user_from_id = models.IntegerField(blank=True, null=True)
@@ -129,6 +147,19 @@ class TemplateTmpParent(models.Model):
     class Meta:
         managed = False
         db_table = 'template_tmp_parent'
+
+class TemplateTmpLinks(models.Model):
+    """
+    Для поиска любых связей между несколькими пользователями
+    """
+    level = models.IntegerField(blank=True, null=True)
+    path = ArrayField(models.PositiveIntegerField())
+    user_from_id = models.IntegerField(blank=True, null=True)
+    user_to_id = models.IntegerField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'template_tmp_links'
 
 class Key(BaseModelInsertTimestamp):
 

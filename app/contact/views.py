@@ -1,6 +1,7 @@
 import os, datetime, time, json, re
 import urllib.request, urllib.error
 from urllib.parse import urlencode
+from itertools import combinations
 
 from django.shortcuts import redirect
 from django.db import transaction, IntegrityError, connection
@@ -1140,12 +1141,7 @@ class ApiGetStats(SQL_Mixin, APIView):
             for cs in CurrentState.objects.filter(q_connections).select_related(
                     'user_from__profile', 'user_to__profile',
                 ).distinct():
-                connections.append({
-                    'source': cs.user_from.profile.uuid,
-                    'target': cs.user_to.profile.uuid,
-                    'thanks_count': cs.thanks_count,
-                    'is_trust': cs.is_trust,
-                })
+                connections.append(cs.data_dict(show_parent=False))
 
             return dict(users=users, connections=connections)
 
@@ -2334,14 +2330,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, APIView):
             for cs in CurrentState.objects.filter(q).select_related(
                 'user_to__profile', 'user_from__profile',
                 ).distinct():
-                connections.append({
-                    'source': cs.user_from.profile.uuid,
-                    'target': cs.user_to.profile.uuid,
-                    'thanks_count': cs.thanks_count,
-                    'is_trust': cs.is_trust,
-                    'is_father': cs.is_father,
-                    'is_mother': cs.is_mother,
-                })
+                connections.append(cs.data_dict())
 
             keys = [
                 {
@@ -2737,7 +2726,109 @@ api_invite_use_token = ApiInviteUseToken.as_view()
 
 class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
 
-    def get(self, request, *args, **kwargs):
+    def get(self, request):
+        """
+        Дерево родни пользователя с uuid или связи, включая родственные, пользователей с uuid=uuid1,uuid2...
+        """
+        try:
+            try:
+                recursion_depth = int(request.GET.get('depth', 0) or 0)
+            except (TypeError, ValueError,):
+                recursion_depth = 0
+            if recursion_depth <= 0 or recursion_depth > settings.MAX_RECURSION_DEPTH:
+                recursion_depth = settings.MAX_RECURSION_DEPTH
+
+            uuid = request.GET.get('uuid', '').strip(' ,')
+            if not uuid:
+                raise ServiceException('Не задан параметр uuid: пользователя или нескольких пользователей через запятую')
+            uuids = re.split(r'[, ]+', uuid)
+            len_uuids = len(uuids)
+            if len_uuids == 1:
+                data = self.get_gen_tree(request, uuids[0], recursion_depth)
+            else:
+                data = self.get_gen_links(request, uuids, recursion_depth)
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+    def get_gen_links(self, request, uuids, recursion_depth):
+        user_pks = []
+        try:
+            user_pks = [int(profile.user.pk) for profile in Profile.objects.filter(uuid__in=uuids)]
+        except ValidationError:
+            pass
+        if len(user_pks) != len(uuids):
+            raise ServiceException('Один или несколько uuid неверны или есть повторы среди заданных uuid')
+
+        user_pks = set(user_pks)
+        if request.user.is_authenticated:
+            user = request.user
+            if int(user.pk) not in user_pks:
+                user_pks.add(int(user.pk))
+
+        # Строка запроса типа:
+        # select path from find_links_among(array [326, 27, 331], 100)
+        # where path @> array [326, 27] or path @> array [326, 331] or path @> array [27, 331];
+        #
+        sql = 'select path from find_links_among'
+        s = ','.join([str(i) for i in user_pks])
+        sql += '(array [%s], %s) where ' % (s, recursion_depth)
+        array_pairs = ['path @> array[%s, %s]' % (pair[0], pair[1]) for pair in combinations(user_pks, 2)]
+        sql += ' or '.join(array_pairs)
+
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+            paths = [rec[0] for rec in cursor.fetchall()]
+        for path in paths:
+            for user_id in path:
+                user_pks.add(user_id)
+
+        users = [
+            p.data_dict(request) for p in \
+            Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability')
+        ]
+
+        connections = []
+        q_connections = Q(
+            is_reverse=False,
+            user_to__isnull=False,
+        )
+        q_connections &= Q(is_father=True) | Q(is_mother=True)
+        q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
+        for cs in CurrentState.objects.filter(q_connections).select_related(
+                'user_from__profile', 'user_to__profile',
+            ).distinct():
+            d = cs.data_dict()
+            # TODO remove below, it is for debug
+            d.update({
+                'source_fio': cs.user_from.profile.full_name(),
+                'target_fio': cs.user_to.profile.full_name(),
+            })
+            connections.append(d)
+
+        trust_connections = []
+        q_connections = Q(
+            is_reverse=False,
+            user_to__isnull=False,
+            is_trust__isnull=False,
+        )
+        q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
+        for cs in CurrentState.objects.filter(q_connections).select_related(
+                'user_from__profile', 'user_to__profile',
+            ).distinct():
+            d = cs.data_dict(show_parent=False)
+            # TODO remove below, it is for debug
+            d.update({
+                'source_fio': cs.user_from.profile.full_name(),
+                'target_fio': cs.user_to.profile.full_name(),
+            })
+            trust_connections.append(d)
+
+        return dict(users=users, connections=connections, trust_connections=trust_connections)
+
+    def get_gen_tree(self, request, uuid, recursion_depth):
         """
         Строит рекурсивно дерево родни
 
@@ -2746,123 +2837,100 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
         Если задан uuid родственника, то выводится дерево родни
         владельца
         """
-        try:
-            related = ('user', 'owner', 'ability',)
-            uuid = request.GET.get('uuid')
-            user_q, profile_q = self.check_user_uuid(uuid, related=related)
-            try:
-                recursion_depth = int(request.GET.get('depth', 0) or 0)
-            except (TypeError, ValueError,):
-                recursion_depth = 0
-            if recursion_depth <= 0 or recursion_depth > settings.MAX_RECURSION_DEPTH:
-                recursion_depth = settings.MAX_RECURSION_DEPTH
-
-            connections = []
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    'select * from find_rel_mother_father(%(user_id)s, %(recursion_depth)s)' % dict(
-                        user_id=user_q.pk,
-                        recursion_depth=recursion_depth,
+        related = ('user', 'owner', 'ability',)
+        user_q, profile_q = self.check_user_uuid(uuid, related=related)
+        connections = []
+        with connection.cursor() as cursor:
+            cursor.execute(
+                'select * from find_rel_mother_father(%(user_id)s, %(recursion_depth)s)' % dict(
+                    user_id=user_q.pk,
+                    recursion_depth=recursion_depth,
+            ))
+            recs = self.dictfetchall(cursor)
+        user_pks = set()
+        pairs = []
+        for rec in recs:
+            if rec['is_child']:
+                user_from_id = rec['user_to_id']
+                user_to_id = rec['user_from_id']
+            else:
+                user_from_id = rec['user_from_id']
+                user_to_id = rec['user_to_id']
+            pair = '%s/%s' % (user_from_id, user_to_id)
+            if pair not in pairs:
+                pairs.append(pair)
+                user_pks.add(user_from_id)
+                user_pks.add(user_to_id)
+                connections.append(dict(
+                    source=user_from_id,
+                    target=user_to_id,
+                    thanks_count=rec['thanks_count'],
+                    is_trust=rec['is_trust'],
+                    is_father=rec['is_father'],
+                    is_mother=rec['is_mother'],
                 ))
-                recs = self.dictfetchall(cursor)
-            user_pks = set()
-            pairs = []
-            for rec in recs:
-                if rec['is_child']:
-                    user_from_id = rec['user_to_id']
-                    user_to_id = rec['user_from_id']
-                else:
-                    user_from_id = rec['user_from_id']
-                    user_to_id = rec['user_to_id']
-                pair = '%s/%s' % (user_from_id, user_to_id)
-                if pair not in pairs:
-                    pairs.append(pair)
-                    user_pks.add(user_from_id)
-                    user_pks.add(user_to_id)
-                    connections.append(dict(
-                        source=user_from_id,
-                        target=user_to_id,
-                        thanks_count=rec['thanks_count'],
-                        is_trust=rec['is_trust'],
-                        is_father=rec['is_father'],
-                        is_mother=rec['is_mother'],
-                    ))
-            profiles_dict = dict()
-            users = []
-            for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
-                profiles_dict[profile.user.pk] = dict(
-                    uuid=profile.uuid,
-                    # TODO remove below, it is for debug
-                    last_name=profile.user.last_name,
-                    first_name=profile.user.first_name,
-                    middle_name=profile.middle_name,
-                    user_pk=profile.user.pk,
-                )
-                users.append(profile.data_dict(request))
-
-            if user_q.pk not in user_pks:
-                user_pks.add(user_q.pk)
-                users.append(profile_q.data_dict(request))
-
-            for c in connections:
-
-                # TODO: remove this debug:
-                #
-                c['source_fio'] = "%s %s %s" % (
-                    profiles_dict[c['source']]['last_name'] or '-',
-                    profiles_dict[c['source']]['first_name'] or '-',
-                    profiles_dict[c['source']]['middle_name'] or '-',
-                )
-                c['target_fio'] = "%s %s %s" % (
-                    profiles_dict[c['target']]['last_name'] or '-',
-                    profiles_dict[c['target']]['first_name'] or '-',
-                    profiles_dict[c['target']]['middle_name'] or '-',
-                )
-                # ------------------------
-
-                c['source'] = profiles_dict[c['source']]['uuid']
-                c['target'] = profiles_dict[c['target']]['uuid']
-
-            trust_connections = []
-            q_connections = Q(
-                is_reverse=False,
-                is_trust__isnull=False,
-                user_to__isnull=False,
+        profiles_dict = dict()
+        users = []
+        for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
+            profiles_dict[profile.user.pk] = dict(
+                uuid=profile.uuid,
+                # TODO remove below, it is for debug
+                last_name=profile.user.last_name,
+                first_name=profile.user.first_name,
+                middle_name=profile.middle_name,
+                user_pk=profile.user.pk,
             )
-            if request.user.is_authenticated:
-                user = request.user
-                if user.pk not in user_pks:
-                    users.append(user.profile.data_dict(request))
-                    user_pks.add(user.pk)
-            q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
-            for cs in CurrentState.objects.filter(q_connections).select_related(
-                    'user_from__profile', 'user_to__profile',
-                ).distinct():
-                trust_connections.append({
-                    'source': cs.user_from.profile.uuid,
-                    'target': cs.user_to.profile.uuid,
-                    'thanks_count': cs.thanks_count,
-                    'is_trust': cs.is_trust,
-                    # TODO: remove this debug:
-                    #
-                    'source_fio': "%s %s %s" % (
-                        cs.user_from.last_name or '-',
-                        cs.user_from.first_name or '-',
-                        cs.user_from.profile.middle_name or '-',
-                    ),
-                    'target_fio': "%s %s %s" % (
-                        cs.user_to.last_name or '-',
-                        cs.user_to.first_name or '-',
-                        cs.user_to.profile.middle_name or '-',
-                    ),
-                    # -------------------------
-                })
+            users.append(profile.data_dict(request))
 
-            data = dict(users=users, connections=connections, trust_connections=trust_connections)
-            status_code = status.HTTP_200_OK
-        except ServiceException as excpt:
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
+        if user_q.pk not in user_pks:
+            user_pks.add(user_q.pk)
+            users.append(profile_q.data_dict(request))
+
+        for c in connections:
+
+            # TODO: remove this debug:
+            #
+            c['source_fio'] = "%s %s %s" % (
+                profiles_dict[c['source']]['last_name'] or '-',
+                profiles_dict[c['source']]['first_name'] or '-',
+                profiles_dict[c['source']]['middle_name'] or '-',
+            )
+            c['source_id'] = profiles_dict[c['source']]['user_pk']
+
+            c['target_fio'] = "%s %s %s" % (
+                profiles_dict[c['target']]['last_name'] or '-',
+                profiles_dict[c['target']]['first_name'] or '-',
+                profiles_dict[c['target']]['middle_name'] or '-',
+            )
+            c['target_id'] = profiles_dict[c['target']]['user_pk']
+            # ------------------------
+
+            c['source'] = profiles_dict[c['source']]['uuid']
+            c['target'] = profiles_dict[c['target']]['uuid']
+
+        trust_connections = []
+        q_connections = Q(
+            is_reverse=False,
+            is_trust__isnull=False,
+            user_to__isnull=False,
+        )
+        if request.user.is_authenticated:
+            user = request.user
+            if user.pk not in user_pks:
+                users.append(user.profile.data_dict(request))
+                user_pks.add(user.pk)
+        q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
+        for cs in CurrentState.objects.filter(q_connections).select_related(
+                'user_from__profile', 'user_to__profile',
+            ).distinct():
+            d = cs.data_dict(show_parent=False)
+            # TODO remove below, it is for debug
+            d.update({
+                'source_fio': cs.user_from.profile.full_name(),
+                'target_fio': cs.user_to.profile.full_name(),
+            })
+            trust_connections.append(d)
+
+        return dict(users=users, connections=connections, trust_connections=trust_connections)
 
 api_profile_genesis = ApiProfileGenesis.as_view()
