@@ -1,7 +1,6 @@
 import os, datetime, time, json, re
 import urllib.request, urllib.error
 from urllib.parse import urlencode
-from itertools import combinations
 
 from django.shortcuts import redirect
 from django.db import transaction, IntegrityError, connection
@@ -2728,7 +2727,7 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
 
     def get(self, request):
         """
-        Дерево родни пользователя с uuid или связи, включая родственные, пользователей с uuid=uuid1,uuid2...
+        Дерево родни, если задан 1 uuid, или кратчайший путь (пути, если несколько) между 2 родственниками
         """
         try:
             try:
@@ -2745,50 +2744,43 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
             len_uuids = len(uuids)
             if len_uuids == 1:
                 data = self.get_gen_tree(request, uuids[0], recursion_depth)
+            elif len_uuids == 2:
+                data = self.get_gen_shortest_path(request, uuids, recursion_depth)
             else:
-                data = self.get_gen_links(request, uuids, recursion_depth)
+                raise ServiceException("Допускается  uuid (дерево) или 2 uuid's (найти путь между)")
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
-    def get_gen_links(self, request, uuids, recursion_depth):
+    def get_gen_shortest_path(self, request, uuids, recursion_depth):
         user_pks = []
         try:
             user_pks = [int(profile.user.pk) for profile in Profile.objects.filter(uuid__in=uuids)]
         except ValidationError:
             pass
-        if len(user_pks) != len(uuids):
-            raise ServiceException('Один или несколько uuid неверны или есть повторы среди заданных uuid')
-
-        user_pks = set(user_pks)
-        if request.user.is_authenticated:
-            user = request.user
-            if int(user.pk) not in user_pks:
-                user_pks.add(int(user.pk))
+        if len(user_pks) != 2:
+            raise ServiceException('Один или несколько uuid неверны или есть повтор среди заданных uuid')
 
         # Строка запроса типа:
-        # select path from find_links_among(array [326, 27, 331], 100)
-        # where path @> array [326, 27] or path @> array [326, 331] or path @> array [27, 331];
+        # select path from find_shortest_relation_path(416, 455, 10)
+        # where path @> array [416, 455];
         #
-        sql = 'select path from find_links_among'
-        s = ','.join([str(i) for i in user_pks])
-        sql += '(array [%s], %s) where ' % (s, recursion_depth)
-        array_pairs = ['path @> array[%s, %s]' % (pair[0], pair[1]) for pair in combinations(user_pks, 2)]
-        sql += ' or '.join(array_pairs)
-
+        sql = 'select path from find_shortest_relation_path ' \
+              '(%(user_from_id)s, %(user_to_id)s, %(recursion_depth)s) ' \
+              'where path @> array [%(user_from_id)s, %(user_to_id)s]' % dict(
+            user_from_id=user_pks[0],
+            user_to_id=user_pks[1],
+            recursion_depth=recursion_depth,
+        )
         with connection.cursor() as cursor:
             cursor.execute(sql)
             paths = [rec[0] for rec in cursor.fetchall()]
+        user_pks = set(user_pks)
         for path in paths:
             for user_id in path:
                 user_pks.add(user_id)
-
-        users = [
-            p.data_dict(request) for p in \
-            Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability')
-        ]
 
         connections = []
         q_connections = Q(
@@ -2809,6 +2801,17 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
             connections.append(d)
 
         trust_connections = []
+
+        if request.user.is_authenticated:
+            user = request.user
+            if int(user.pk) not in user_pks:
+                user_pks.add(int(user.pk))
+
+        users = [
+            p.data_dict(request) for p in \
+            Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability')
+        ]
+
         q_connections = Q(
             is_reverse=False,
             user_to__isnull=False,
