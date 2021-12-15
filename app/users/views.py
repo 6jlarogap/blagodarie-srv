@@ -21,7 +21,7 @@ from app.models import UnclearDate, PhotoModel, GenderMixin
 from django.contrib.auth.models import User
 from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TempToken, UuidMixin
 from contact.models import Key, KeyType, CurrentState, OperationType, Wish, Ability
-from contact.views import SendMessageMixin
+from contact.views import SendMessageMixin, ApiAddOperationMixin
 
 class ApiGetProfileInfo(UuidMixin, APIView):
 
@@ -740,7 +740,7 @@ class ApiInviteGetToken(APIView):
 
 api_invite_get_token = ApiInviteGetToken.as_view()
 
-class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIView):
+class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiAddOperationMixin, APIView):
     """
     Получить своих родственников (без связей), добавить/править/обезличить родственника. Правка своего профиля.
 
@@ -850,6 +850,16 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
                 raise ServiceException('Фамилия или имя обязательно для нового')
             dob, dod =self.check_dates(request)
             self.check_gender(request)
+            link_uuid = request.data.get('link_uuid')
+            if link_uuid:
+                link_user, link_profile = self.check_user_or_owned_uuid(
+                    request,
+                    uuid_field='link_uuid',
+                    need_uuid=True,
+                )
+                relation = request.data.get('link_relation', '')
+                if relation not in ('new_is_father', 'new_is_mother', 'link_is_father', 'link_is_mother'):
+                    raise ServiceException('При заданном link_uuid не получен или получен неправильный link_relation')
             user = self.create_user(
                 last_name=request.data.get('last_name', ''),
                 first_name=request.data.get('first_name', ''),
@@ -863,6 +873,33 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
                 longitude=request.data.get('longitude') or None,
                 comment=request.data.get('comment') or None,
             )
+
+            if link_uuid:
+                if relation == 'new_is_father':
+                    is_father = True
+                    link_user_from = link_user
+                    link_user_to = user
+                elif relation == 'new_is_mother':
+                    is_father = False
+                    link_user_from = link_user
+                    link_user_to = user
+                elif relation == 'link_is_father':
+                    is_father = True
+                    link_user_from = user
+                    link_user_to = link_user
+                elif relation == 'link_is_mother':
+                    is_father = False
+                    link_user_from = user
+                    link_user_to = link_user
+
+                self.add_operation(
+                    link_user_from,
+                    link_user_to.profile,
+                    operationtype_id = OperationType.FATHER if is_father else OperationType.MOTHER,
+                    comment = None,
+                    insert_timestamp = int(time.time()),
+                )
+
             profile = user.profile
             if request.data.get('photo'):
                 photo_content = request.data.get('photo_content', 'base64')
@@ -871,6 +908,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, APIV
                     photo_content=photo_content,
                 )
                 profile.photo.save(getattr(request.data['photo'], 'name', 'photo.png'), photo)
+
             data = profile.data_dict(request)
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
