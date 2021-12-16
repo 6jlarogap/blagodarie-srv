@@ -857,16 +857,24 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 if relation not in ('new_is_father', 'new_is_mother', 'link_is_father', 'link_is_mother'):
                     raise ServiceException('При заданном link_uuid не получен или получен неправильный link_relation')
                 if not (link_profile.owner == request.user or link_user == request.user):
-                    if not link_profile.owner:
-                        msg_user_to = link_user
-                        msg = '%s предлагает указать для Вас родственника' % self.profile_link(request, request.user.profile)
-                    else:
+                    if link_profile.owner:
                         msg_user_to = link_profile.owner
-                        msg = '%s предлагает указать родственника для %s' % (
-                            self.profile_link(request, request.user.profile),
-                            self.profile_link(request, link_profile),
-                        )
-                    self.send_to_telegram(msg, msg_user_to)
+                    else:
+                        msg_user_to = link_user
+                    if not CurrentState.objects.filter(
+                        user_from__in=(request.user, msg_user_to,),
+                        user_to__in=(request.user, msg_user_to,),
+                        user_to__isnull=False,
+                        is_trust=False,
+                       ).exists():
+                        if link_profile.owner:
+                            msg = '%s предлагает указать родственника для %s' % (
+                                self.profile_link(request, request.user.profile),
+                                self.profile_link(request, link_profile),
+                            )
+                        else:
+                            msg = '%s предлагает указать для Вас родственника' % self.profile_link(request, request.user.profile)
+                        self.send_to_telegram(msg, msg_user_to)
                     raise ServiceException('У Вас нет права указывать родственника к этому профилю')
             user = self.create_user(
                 last_name=request.data.get('last_name', ''),
