@@ -856,7 +856,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 relation = request.data.get('link_relation', '')
                 if relation not in ('new_is_father', 'new_is_mother', 'link_is_father', 'link_is_mother'):
                     raise ServiceException('При заданном link_uuid не получен или получен неправильный link_relation')
-                if link_profile.owner != request.user:
+                if not (link_profile.owner == request.user or link_user == request.user):
                     if not link_profile.owner:
                         msg_user_to = link_user
                         msg = '%s предлагает указать для Вас родственника' % self.profile_link(request, request.user.profile)
