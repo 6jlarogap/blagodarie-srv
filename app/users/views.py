@@ -852,14 +852,22 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             self.check_gender(request)
             link_uuid = request.data.get('link_uuid')
             if link_uuid:
-                link_user, link_profile = self.check_user_or_owned_uuid(
-                    request,
-                    uuid_field='link_uuid',
-                    need_uuid=True,
-                )
+                link_user, link_profile = self.check_user_uuid(link_uuid)
                 relation = request.data.get('link_relation', '')
                 if relation not in ('new_is_father', 'new_is_mother', 'link_is_father', 'link_is_mother'):
                     raise ServiceException('При заданном link_uuid не получен или получен неправильный link_relation')
+                if link_profile.owner != request.user:
+                    if not link_profile.owner:
+                        msg_user_to = link_user
+                        msg = '%s предлагает указать для Вас родственника' % self.profile_link(request, request.user.profile)
+                    else:
+                        msg_user_to = link_profile.owner
+                        msg = '%s предлагает указать родственника для %s' % (
+                            self.profile_link(request, request.user.profile),
+                            self.profile_link(request, link_profile),
+                        )
+                    self.send_to_telegram(msg, msg_user_to)
+                    raise ServiceException('У Вас нет права указывать родственника к этому профилю')
             user = self.create_user(
                 last_name=request.data.get('last_name', ''),
                 first_name=request.data.get('first_name', ''),
