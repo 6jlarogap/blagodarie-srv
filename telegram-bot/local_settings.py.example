@@ -1,0 +1,10 @@
+TOKEN = 'secret'
+
+START_MODE = 'webhook'
+
+WEBHOOK_HOST = 'https://site.org.com'
+WEBHOOK_PATH = '/'
+
+WEBAPP_HOST = '127.0.0.1'
+WEBAPP_PORT = 3001
+

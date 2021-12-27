@@ -233,6 +233,7 @@ install-readme.txt
     # полагаем его 6789
 
     # Запуск websocket-server через systemd
+    # -------------------------------------
     #
     cd /etc/systemd/system
     # Создать там файл с именем websocket-prod.service 
@@ -258,7 +259,8 @@ install-readme.txt
 
     
     
-    # Настройка apache2 на работу c websocket-server через systemd
+    # Настройка apache2 на работу c websocket-server
+    # ----------------------------------------------
     #
     # Файл конфигурации виртуального хоста apache2
     #
@@ -275,5 +277,74 @@ install-readme.txt
 
         ProxyPass "/" "ws://127.0.0.1:6789/"
         ProxyPassReverse "/" "ws://127.0.0.1:6789/"
+
+    </VirtualHost>
+
+Установка Telegram Bot Server на сервер Apache в Ubuntu Linux.
+----------------------------------------------------------------
+
+    (Здесь каталог telegram-bot)
+
+    mkdir -p ~/venv; cd ~/venv
+    virtualenv -p `which python3` telegram-bot
+    cd telegram-bot
+    source ./bin/activate
+    pip install -r /путь/к/pip-telegram-bot.txt
+    deactivate
+    sudo chown -R www-data:www-data .
+
+    #   В git каталоге:
+    cd telegram-bot
+    sudo ln -s /home/LINUX-USER-NAME/venv/telegram-bot ENV
+    sudo chown -R www-data:www-data .
+    # В local_settings.py подправить параметры
+    sudo chmod 0600 local_settings.py
+
+    # Запуск telegram-bot-server через systemd
+    # ----------------------------------------
+    #
+    cd /etc/systemd/system
+    # Создать там файл с именем telegram-bot-prod.service 
+    [Unit]
+    Description=Start telegram-bot server for blagodarie.org
+    After=network.target
+    Before=apache2.service
+
+    [Service]
+    Type=simple
+    Restart=always
+    User=www-data
+    ExecStart=/home/www-data/django/api_blagodarie_org/telegram-bot/ENV/bin/python3 /home/www-data/django/api_blagodarie_org/telegram-bot/bot_run.py
+    
+    # /home/www-data/django/api_blagodarie_org/telegram-bot/ENV/bin/python3 :
+    #   путь и python в виртуальном окружении
+    #
+    # /home/www-data/django/api_blagodarie_org/telegram-bot/bot_run.py :
+    #   исполняемый файл сервиса
+
+    [Install]
+    WantedBy=multi-user.target
+    
+    # Настройка apache2 на работу c telegram-bot
+    # ------------------------------------------
+    #
+    # Файл конфигурации виртуального хоста apache2
+    #
+    <VirtualHost *:443>
+        ServerName bot.blagodarie.org
+
+        SSLEngine on
+        SSLProtocol all -SSLv2
+        SSLCipherSuite ALL:!ADH:!EXPORT:!SSLv2:RC4+RSA:+HIGH:+MEDIUM
+
+        SSLCertificateFile /home/www-data/ssl-certificates/sslforfree/wildcard.blagodarie.org/certificate.crt
+        SSLCertificateKeyFile /home/www-data/ssl-certificates/sslforfree/wildcard.blagodarie.org/private.key
+        SSLCertificateChainFile /home/www-data/ssl-certificates/sslforfree/wildcard.blagodarie.org/ca_bundle.crt
+
+        SSLEngine On
+        SSLProxyEngine On
+        # Здесь порт 3001 должен быть согласован с local_settings.py
+        ProxyPass / http://127.0.0.1:3001/
+        ProxyPassReverse / http://127.0.0.1:3001/
 
     </VirtualHost>
