@@ -472,7 +472,7 @@ class Profile(PhotoModel, GeoPointModel):
         self.sum_thanks_count = CurrentState.objects.filter(
             is_reverse=False,
             user_to=user,
-        ).distinct().aggregate(Sum('thanks_count'))['thanks_count__sum']
+        ).distinct().aggregate(Sum('thanks_count'))['thanks_count__sum'] or 0
         if do_save:
             self.save(update_fields=('sum_thanks_count',))
 
