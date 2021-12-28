@@ -11,7 +11,7 @@ TOKEN = 'secret'
 
 # Способ запуска, 'poll' или 'webhook'
 #
-START_MODE = 'poll'
+START_MODE = 'webhook'
 
 # Webhook параметры
 #

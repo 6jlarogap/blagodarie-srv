@@ -469,7 +469,7 @@ class Profile(PhotoModel, GeoPointModel):
     def recount_sum_thanks_count(self, do_save=True):
         CurrentState = get_model('contact', 'CurrentState')
         user = self.user
-        sum_thanks_count = CurrentState.objects.filter(
+        self.sum_thanks_count = CurrentState.objects.filter(
             is_reverse=False,
             user_to=user,
         ).distinct().aggregate(Sum('thanks_count'))['thanks_count__sum']
