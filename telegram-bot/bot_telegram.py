@@ -18,6 +18,7 @@ async def on_startup(dp):
 
 async def on_shutdown(dp):
     logging.warning('Shutting down..')
+    await bot.delete_webhook()
 
 @dp.message_handler()
 async def echo_send(message: types.Message):
