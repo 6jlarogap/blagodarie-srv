@@ -451,8 +451,13 @@ class Profile(PhotoModel, GeoPointModel):
                 defaults=dict(
                     is_reverse=True,
                     thanks_count=cs.thanks_count,
-                    is_trust=cs.is_trust
+                    is_trust=cs.is_trust,
+                    is_father=cs.is_father,
+                    is_mother=cs.is_mother,
             ))
+            if created_ and (cs.is_father or cs.is_mother) and not cs.is_child:
+                cs_reverse.is_child = True
+                cs_reverse.save(update_fields=('is_child',))
 
         Wish.objects.filter(owner=user_from).update(owner=user)
         Ability.objects.filter(owner=user_from).update(owner=user)
