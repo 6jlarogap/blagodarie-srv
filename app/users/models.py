@@ -469,6 +469,9 @@ class Profile(PhotoModel, GeoPointModel):
                 Key.objects.filter(pk=key.pk).delete()
         self.recount_sum_thanks_count()
         self.recount_trust_fame()
+        if not self.middle_name and profile_from.middle_name:
+            self.middle_name = profile_from.middle_name
+            self.save(update_fields=('middle_name',))
         user_from.delete()
 
     def recount_sum_thanks_count(self, do_save=True):
