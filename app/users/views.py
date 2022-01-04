@@ -814,32 +814,34 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
         return dob, dod
 
     def get(self, request):
-        uuid = request.GET.get('uuid')
-        if uuid:
-            user, profile = self.check_user_uuid(uuid)
-            data = profile.data_dict(request)
-            data.update(profile.parents_dict(request))
-            return Response(data=data, status=status.HTTP_200_OK)
-        else:
-            if not request.user.is_authenticated:
-                raise NotAuthenticated
-            my_data = [request.user.profile.data_dict(request)]
-            try:
-                from_ = abs(int(request.GET.get("from")))
-            except (ValueError, TypeError, ):
-                from_ = 0
-            try:
-                number_ = abs(int(request.GET.get("number")))
-            except (ValueError, TypeError, ):
-                number_ = settings.PAGINATE_USERS_COUNT
-            users_selected = Profile.objects.filter(owner=request.user). \
-                select_related('user', 'ability',).order_by(
-                    '-user__date_joined',
-                )[from_:from_ + number_]
-            return Response(
-                data=my_data + [p.data_dict(request) for p in users_selected],
-                status=status.HTTP_200_OK,
-            )
+        try:
+            uuid = request.GET.get('uuid')
+            if uuid:
+                user, profile = self.check_user_uuid(uuid)
+                data = profile.data_dict(request)
+                data.update(profile.parents_dict(request))
+            else:
+                if not request.user.is_authenticated:
+                    raise NotAuthenticated
+                my_data = [request.user.profile.data_dict(request)]
+                try:
+                    from_ = abs(int(request.GET.get("from")))
+                except (ValueError, TypeError, ):
+                    from_ = 0
+                try:
+                    number_ = abs(int(request.GET.get("number")))
+                except (ValueError, TypeError, ):
+                    number_ = settings.PAGINATE_USERS_COUNT
+                users_selected = Profile.objects.filter(owner=request.user). \
+                    select_related('user', 'ability',).order_by(
+                        '-user__date_joined',
+                    )[from_:from_ + number_]
+                data = my_data + [p.data_dict(request) for p in users_selected],
+            status_code = 200
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
 
     @transaction.atomic
     def post(self, request):
