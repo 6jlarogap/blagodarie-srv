@@ -462,7 +462,14 @@ class Profile(PhotoModel, GeoPointModel):
                 cs_reverse.save(update_fields=('is_child',))
 
         Wish.objects.filter(owner=user_from).update(owner=user)
+
         Ability.objects.filter(owner=user_from).update(owner=user)
+        try:
+            self.ability = user.ability_set.all().order_by('insert_timestamp')[0]
+        except IndexError:
+            self.ability = None
+        self.save(update_fields=('ability',))
+
         for key in Key.objects.filter(owner=user_from):
             try:
                 with transaction.atomic():
