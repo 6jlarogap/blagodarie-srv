@@ -836,7 +836,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                     select_related('user', 'ability',).order_by(
                         '-user__date_joined',
                     )[from_:from_ + number_]
-                data = my_data + [p.data_dict(request) for p in users_selected],
+                data = my_data + [p.data_dict(request) for p in users_selected]
             status_code = 200
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
