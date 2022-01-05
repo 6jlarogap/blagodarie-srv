@@ -8,7 +8,6 @@
 
 from django.core.management.base import BaseCommand
 from django.core.exceptions import ValidationError
-from django.db import transaction
 
 from users.models import Profile
 
@@ -19,7 +18,6 @@ class Command(BaseCommand):
         parser.add_argument('uuid_to', type=str, help='uuid_to, destination account')
         parser.add_argument('uuid_from', type=str, help='uuid_to, account to merge')
 
-    @transaction.atomic
     def handle(self, *args, **kwargs):
         uuid_to = kwargs['uuid_to']
         uuid_from = kwargs['uuid_from']

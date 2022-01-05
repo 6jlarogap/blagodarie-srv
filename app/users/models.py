@@ -13,6 +13,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 
 from django.contrib.auth.models import User
+from rest_framework.authtoken.models import Token
 from django.apps import apps
 get_model = apps.get_model
 
@@ -376,6 +377,7 @@ class Profile(PhotoModel, GeoPointModel):
             comment=self.comment or '',
         )
 
+    @transaction.atomic
     def merge(self, profile_from):
         # Проверку на один и тот же профиль производить
         # в вызывающей этот метод функции!
@@ -472,6 +474,10 @@ class Profile(PhotoModel, GeoPointModel):
         if not self.middle_name and profile_from.middle_name:
             self.middle_name = profile_from.middle_name
             self.save(update_fields=('middle_name',))
+        try:
+            self_token = Token.objects.get(user=user)
+        except Token.DoesNotExist:
+            Token.objects.filter(user=user_from).update(user=user)
         user_from.delete()
 
     def recount_sum_thanks_count(self, do_save=True):
