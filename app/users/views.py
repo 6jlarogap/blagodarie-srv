@@ -15,7 +15,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import status
 from rest_framework.exceptions import NotAuthenticated
 
-from app.utils import ServiceException, FrontendMixin
+from app.utils import ServiceException, SkipException, FrontendMixin
 from app.models import UnclearDate, PhotoModel, GenderMixin
 
 from django.contrib.auth.models import User
@@ -757,8 +757,10 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             получить данные по одному пользователю, необязательно родственнику
 
     PUT
-        Править родственника. На входе:
-        multipart/form-data  при наличии файла фото.
+        Править родственника или себя.
+        Требует авторизации.
+        На входе:
+        form-data. Или multipart/form-data при наличии файла фото.
         При отсутствии файла photo можно передать в json структуре
             uuid:
                 # обязательно
@@ -773,11 +775,34 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             dob: дата смерти
                 # гггг-мм-дд, гггг-мм, гггг или пустая строка (удаляет дату)
             photo:
-                # файл фото. Или пустая строка, тогда текущее фото, если имеется,
-                # то удаляется
+                # файл фото или строка:
+                    - base64 encoded строка,
+                    - файл с base64-encoded содержимым,
+                    - “обычный” файл фото.
+                  Размер строки/файла не должен превышать 10Мб
+                  (для base64- строки/файла - не более 10Мб *4/3).
+                    - или пустая строка, тогда текущее фото, если имеется, то удаляется
     POST
-        Добавить родственника. На входе:
-        multipart/form-data  при наличии файла фото.
+        * Добавить пользователя из бота телеграма.
+        Не требует авторизации.
+        На входе:
+        Обязательны:
+            tg_token: токен бота. Такой же записан в настройках АПИ
+            tg_uid: uid пользователя в телеграме
+        Не обязательны:
+            last_name
+            first_name
+            username
+                пользователя в телеграме
+            photo
+                путь, который можно включить в ссылку (действует 1 час):
+                https://api.telegram.org/file/bot<tg_token>/<tg_photo_path>,
+                скачать фото, записать в фото профиля.
+
+        * Добавить родственника.
+        Требует авторизации.
+        На входе:
+        form-data. Или multipart/form-data при наличии файла фото.
         При отсутствии файла photo можно передать в json структуре
             last_name
             first_name
@@ -791,7 +816,32 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             dob: дата смерти
                 # гггг-мм-дд, гггг-мм, гггг или пустая строка (дата отсутствует)
             photo:
-                # файл фото. Или пустая строка, тогда фото не заносится
+                # файл фото или строка:
+                    - base64 encoded строка,
+                    - файл с base64-encoded содержимым,
+                    - “обычный” файл фото.
+                  Размер строки/файла не должен превышать 10Мб
+                  (для base64- строки/файла - не более 10Мб *4/3).
+
+        Возможно вместе с созданием родственника сразу указать степень его родства
+        к существующему пользователю (или пользователю - родственнику)
+
+        link_uuid
+            родитель или ребенок создаваемого профиля, должен существовать.
+        link_relation, одно из:
+            new_is_father: создаваемый родич является папой по отношению к link_uuid
+            new_is_mother: создаваемая родственница является мамой по отношению к link_uuid
+            link_is_father: link_uuid – это папа создаваемого родственника (создаваемой родственницы)
+            link_is_mother: link_uuid – это мама создаваемого родственника (создаваемой родственницы)
+
+        Если заданы link_uuid & link_relation, то новый пользователь становится прямым
+        родственником по отношению к link_uuid. Вид родства, см. link_relation.
+        Задать таким образом родство можно или если link_uuid
+        это сам авторизованный пользователь или его родственник
+        (владелец link_uuid - авторизованный пользователь).
+        Иначе ошибка, а если нет недоверия между авторизованным пользователем и
+        владельцем link_uuid или самим link_uuid, если им никто не владеет,
+        то еще и уведомление в телеграм, что кто-то предлагает link_uuid назначить родственика
 
     DELETE
         uuid:
@@ -837,17 +887,77 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                         '-user__date_joined',
                     )[from_:from_ + number_]
                 data = my_data + [p.data_dict(request) for p in users_selected]
-            status_code = 200
+            status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
             status_code = 400
         return Response(data=data, status=status_code)
 
+    def save_photo(self, request, profile):
+        if request.data.get('photo'):
+            photo_content = request.data.get('photo_content', 'base64')
+            photo = PhotoModel.get_photo(
+                request,
+                photo_content=photo_content,
+            )
+            profile.delete_from_media()
+            profile.photo.save(getattr(request.data['photo'], 'name', 'photo.png'), photo)
+
+    def post_tg_data(self, request):
+        status_code = status.HTTP_200_OK
+        if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+            raise ServiceException('Неверный токен телеграм бота')
+        last_name=request.data.get('last_name', '')
+        first_name=request.data.get('first_name', '')
+        created_ = False
+        try:
+            oauth = Oauth.objects.get(
+                provider=Oauth.PROVIDER_TELEGRAM,
+                uid=request.data.get('tg_uid'),
+            )
+            user = oauth.user
+            profile = user.profile
+            save_ = False
+            for f in ('last_name', 'first_name', 'username', ):
+                input_val = request.data.get(f, '')
+                if getattr(oauth, f) != input_val and (input_val or f == 'username'):
+                    setattr(oauth, f, input_val)
+                    save_ = True
+            if save_:
+                oauth.update_timestamp = int(time.time())
+                oauth.save()
+
+        except Oauth.DoesNotExist:
+            user = self.create_user(
+                last_name=last_name,
+                first_name=first_name,
+            )
+            profile = user.profile
+            oauth = Oauth.objects.create(
+                provider = Oauth.PROVIDER_TELEGRAM,
+                uid=request.data.get('tg_uid'),
+                user=user,
+                last_name=last_name,
+                first_name=first_name,
+                username=request.data.get('username'),
+            )
+            token, created_token = Token.objects.get_or_create(user=user)
+            self.save_photo(request, profile)
+            created_ = True
+        data = profile.data_dict(request)
+        data.update(dict(created=created_, user_id=user.pk))
+        return status_code, data
+
     @transaction.atomic
     def post(self, request):
-        if not request.user.is_authenticated:
-            raise NotAuthenticated
         try:
+            if request.data.get('tg_token') and request.data.get('tg_uid'):
+                status_code, data = self.post_tg_data(request)
+                raise SkipException
+
+            status_code = status.HTTP_200_OK
+            if not request.user.is_authenticated:
+                raise NotAuthenticated
             if not request.data.get('last_name') and not request.data.get('first_name'):
                 raise ServiceException('Фамилия или имя обязательно для нового')
             dob, dod =self.check_dates(request)
@@ -919,16 +1029,10 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 )
 
             profile = user.profile
-            if request.data.get('photo'):
-                photo_content = request.data.get('photo_content', 'base64')
-                photo = PhotoModel.get_photo(
-                    request,
-                    photo_content=photo_content,
-                )
-                profile.photo.save(getattr(request.data['photo'], 'name', 'photo.png'), photo)
-
+            self.save_photo(request, profile)
             data = profile.data_dict(request)
-            status_code = status.HTTP_200_OK
+        except SkipException:
+            pass
         except ServiceException as excpt:
             transaction.set_rollback(True)
             data = dict(message=excpt.args[0])
@@ -968,13 +1072,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 profile.is_notified = bool(request.data.get('is_notified'))
             if 'photo' in request.data:
                 if request.data.get('photo'):
-                    photo_content = request.data.get('photo_content', 'base64')
-                    photo = PhotoModel.get_photo(
-                        request,
-                        photo_content=photo_content,
-                    )
-                    profile.delete_from_media()
-                    profile.photo.save(getattr(request.data['photo'], 'name', 'photo.png'), photo)
+                    self.save_photo(request, profile)
                 else:
                     profile.delete_from_media()
                     profile.photo = None

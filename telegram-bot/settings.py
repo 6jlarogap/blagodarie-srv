@@ -21,8 +21,21 @@ WEBHOOK_PATH = '/path/to/api'
 WEBAPP_HOST = '127.0.0.1'
 WEBAPP_PORT = 3001
 
+# secs
+#
+HTTP_TIMEOUT = 60
+
+# URL апи, без завершающей/, :
+#
+API_HOST = 'https://api.dev.blagodarie.org'
+FRONTEND_HOST = 'https://dev.blagodarie.org'
+
 # --------------------------------------------------------------
 #
+
+# Выбираем из фото пользователей не меньше такого:
+#
+PHOTO_MAX_SIZE = 320 * 320
 
 try:
     from local_settings import *

@@ -24,6 +24,23 @@ class ServiceException(Exception):
     """
     pass
 
+class SkipException(Exception):
+    """
+    Чтобы обойти дальнейший код и выйти в окончание view
+    
+    Пример:
+    try:
+        data, status_code = self.func(request)
+        raise SkipException
+        много
+                строк
+                        кода
+    except SkipException:
+        pass
+    return Response(data, status_code)
+    """
+    pass
+
 class SQL_Mixin(object):
     """
     Для raw- вызовов
