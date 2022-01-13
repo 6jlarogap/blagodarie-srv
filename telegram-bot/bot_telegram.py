@@ -15,7 +15,7 @@ bot = Bot(
 )
 dp = Dispatcher(bot)
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=settings.LOG_LEVEL)
 
 async def on_startup(dp):
     logging.info('Starting...')
@@ -45,18 +45,18 @@ async def echo_send(message: types.Message):
         method='post',
         data=payload_sender,
     )
-    print(status)
-    print(response)
+    logging.info(status)
+    logging.info(response)
 
     message_is_forward = message.is_forward()
     user_forwarded = message.forward_from
     if message_is_forward:
-        print('MESSAGE IS FORWARDED:')
+        logging.info('MESSAGE IS FORWARDED:')
         if user_forwarded:
             if user_forwarded.is_bot:
-                print('Forwaded message user is a bot')
+                logging.info('Forwaded message user is a bot')
         else:
-            print('but the forwarded message user restricts forwarding')
+            logging.info('but the forwarded message user restricts forwarding')
         
     # Не всегда можно получить message.forward_from, даже если пересылаем сообщение,
     # private policy: https://telegram.org/blog/unsend-privacy-emoji#anonymous-forwarding
@@ -76,8 +76,8 @@ async def echo_send(message: types.Message):
             method='post',
             data=payload_forwarded,
         )
-        print(status)
-        print(response)
+        logging.info(status)
+        logging.info(response)
 
     try:
         await bot.send_message(message.from_user.id, message.text)

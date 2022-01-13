@@ -9,17 +9,20 @@
 #
 TOKEN = 'secret'
 
-# Способ запуска, 'poll' или 'webhook'
+# Способ запуска, 'poll' или 'webhook'.
+# На сервере: webhook. В консоли разработчика: poll
 #
 START_MODE = 'webhook'
 
 # Webhook параметры
 #
-WEBHOOK_HOST = 'https://your.domain'
-WEBHOOK_PATH = '/path/to/api'
-
+WEBHOOK_HOST = 'https://bot-dev.blagodarie.org'
+WEBHOOK_PATH = '/'
 WEBAPP_HOST = '127.0.0.1'
 WEBAPP_PORT = 3001
+
+import logging
+LOG_LEVEL = logging.WARNING
 
 # secs
 #
