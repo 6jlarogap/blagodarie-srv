@@ -29,6 +29,13 @@ async def on_shutdown(dp):
 
 @dp.message_handler()
 async def echo_send(message: types.Message):
+
+    # NB: \n instead of <br /> !
+    reply = 'От Вас получено сообщение.\n'
+
+    msg_is_created = lambda created: 'новый' if created else 'существующий'
+    msg_api_error = 'Произошла ошибка при обращении к апи\n'
+
     user_sender = message.from_user
     sender_photo = await get_user_photo(bot, user_sender)
 
@@ -48,39 +55,63 @@ async def echo_send(message: types.Message):
     logging.info(status)
     logging.info(response)
 
-    message_is_forward = message.is_forward()
-    user_forwarded = message.forward_from
-    if message_is_forward:
-        logging.info('MESSAGE IS FORWARDED:')
-        if user_forwarded:
-            if user_forwarded.is_bot:
-                logging.info('Forwaded message user is a bot')
-        else:
-            logging.info('but the forwarded message user restricts forwarding')
-        
-    # Не всегда можно получить message.forward_from, даже если пересылаем сообщение,
-    # private policy: https://telegram.org/blog/unsend-privacy-emoji#anonymous-forwarding
-    if user_forwarded and not user_forwarded.is_bot:
-        forwarded_photo = await get_user_photo(bot, user_forwarded)
+    if status == 200:
+        reply += (
+                'Вы - <b>%(msg_is_created)s</b> '
+                '<a href="%(frontend_host)s?id=%(uuid)s">пользователь %(frontend_host_title)s</a>\n'
+            ) % dict(
+            msg_is_created=msg_is_created(response['created']),
+            frontend_host=settings.FRONTEND_HOST,
+            uuid=response['uuid'],
+            frontend_host_title=settings.FRONTEND_HOST_TITLE,
+        )
+    else:
+        reply += msg_api_error
 
-        payload_forwarded = dict(
-            tg_token=settings.TOKEN,
-            tg_uid=message.forward_from.id,
-            last_name=user_forwarded.last_name or '',
-            first_name=user_forwarded.first_name or '',
-            username=user_forwarded.username or '',
-            photo=forwarded_photo or '',
-        )
-        status, response = await api_request(
-            path='/api/profile',
-            method='post',
-            data=payload_forwarded,
-        )
-        logging.info(status)
-        logging.info(response)
+    if message.is_forward():
+        reply += '\nСообщение было переслано.\n'
+        user_forwarded = message.forward_from
+        if not user_forwarded:
+            logging.info('but the forwarded message user restricts forwarding')
+            reply += (
+                'Автор исходного сообщения '
+                '<a href="https://telegram.org/blog/unsend-privacy-emoji#anonymous-forwarding">запретил</a> '
+                'идентифицировать себя в пересылаемых сообщениях\n'
+            )
+        elif user_forwarded.is_bot:
+            reply += 'Автор исходного сообщения: бот\n'
+        else:
+            forwarded_photo = await get_user_photo(bot, user_forwarded)
+            payload_forwarded = dict(
+                tg_token=settings.TOKEN,
+                tg_uid=message.forward_from.id,
+                last_name=user_forwarded.last_name or '',
+                first_name=user_forwarded.first_name or '',
+                username=user_forwarded.username or '',
+                photo=forwarded_photo or '',
+            )
+            status, response = await api_request(
+                path='/api/profile',
+                method='post',
+                data=payload_forwarded,
+            )
+            logging.info(status)
+            logging.info(response)
+            if status == 200:
+                reply += (
+                    'Автор исходного сообщения: - <b>%(msg_is_created)s</b> '
+                    '<a href="%(frontend_host)s?id=%(uuid)s">пользователь %(frontend_host_title)s</a>\n'
+                ) % dict(
+                    msg_is_created=msg_is_created(response['created']),
+                    frontend_host=settings.FRONTEND_HOST,
+                    uuid=response['uuid'],
+                    frontend_host_title=settings.FRONTEND_HOST_TITLE,
+                )
+            else:
+                reply += msg_api_error
 
     try:
-        await bot.send_message(message.from_user.id, message.text)
+        await message.reply(reply)
     except (ChatNotFound, CantInitiateConversation):
         pass
 

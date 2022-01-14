@@ -32,6 +32,7 @@ HTTP_TIMEOUT = 60
 #
 API_HOST = 'https://api.dev.blagodarie.org'
 FRONTEND_HOST = 'https://dev.blagodarie.org'
+FRONTEND_HOST_TITLE = 'БлагоДари.РФ (dev)'
 
 # --------------------------------------------------------------
 #
