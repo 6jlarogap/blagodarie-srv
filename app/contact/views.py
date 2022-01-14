@@ -296,7 +296,7 @@ class ApiAddOperationMixin(object):
                 q = q_to & Q(is_mother=True)
             try:
                 CurrentState.objects.filter(q)[0]
-                raise ServiceException('У человека уже есть %s' % 'папа' if is_father else 'мама')
+                raise ServiceException('У человека уже есть %s' % ('папа' if is_father else 'мама'))
             except IndexError:
                 pass
 

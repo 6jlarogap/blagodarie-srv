@@ -851,8 +851,8 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
     parser_classes = (MultiPartParser, FormParser)
 
     def check_dates(self, request):
-        dob = request.data.get('dob')
-        dod = request.data.get('dod')
+        dob = dob_got = request.data.get('dob')
+        dod = dod_got = request.data.get('dod')
         m = UnclearDate.check_safe_str(dob)
         if m:
             raise ServiceException('Дата рождения: %s' % m)
@@ -861,6 +861,11 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             raise ServiceException('Дата смерти: %s' % m)
         dob = UnclearDate.from_str_safe(dob)
         dod = UnclearDate.from_str_safe(dod)
+        if dob is not None and dob is not None and dob > dod:
+            raise ServiceException('Дата рождения: %(dob)s, позже даты смерти: %(dod)s ' % dict(
+                dod=dod_got,
+                dob=dob_got,
+            ))
         return dob, dod
 
     def get(self, request):
@@ -988,6 +993,23 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                             msg = '%s предлагает указать для Вас родственника' % self.profile_link(request, request.user.profile)
                         self.send_to_telegram(msg, msg_user_to)
                     raise ServiceException('У Вас нет права указывать родственника к этому профилю')
+
+            gender_new = request.data.get('gender', '').lower() or None
+            if link_uuid:
+                msg_female_is_father = 'Женщина не может быть папой'
+                msg_male_is_mother = 'Мужчина не может быть мамой'
+                gender_link = link_profile.gender or None
+                if gender_new is not None:
+                    if relation == 'new_is_father' and gender_new == self.GENDER_FEMALE:
+                        raise ServiceException(msg_female_is_father)
+                    if relation == 'new_is_mother' and gender_new == self.GENDER_MALE:
+                        raise ServiceException(msg_male_is_mother)
+                if gender_link is not None:
+                    if relation == 'link_is_father' and gender_link == self.GENDER_FEMALE:
+                        raise ServiceException(msg_female_is_father)
+                    if relation == 'link_is_mother' and gender_link == self.GENDER_MALE:
+                        raise ServiceException(msg_male_is_mother)
+
             user = self.create_user(
                 last_name=request.data.get('last_name', ''),
                 first_name=request.data.get('first_name', ''),
@@ -996,7 +1018,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 dob=dob,
                 dod=dod,
                 is_active=False,
-                gender=request.data.get('gender') or None,
+                gender=gender_new,
                 latitude=request.data.get('latitude') or None,
                 longitude=request.data.get('longitude') or None,
                 comment=request.data.get('comment') or None,
@@ -1065,7 +1087,8 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             for f in ('middle_name',):
                 if f in request.data:
                     setattr(profile, f, request.data.get(f) or '')
-            for f in ('gender', 'latitude', 'longitude', 'comment',):
+            profile.gender = request.data.get('gender', '').lower() or None
+            for f in ('latitude', 'longitude', 'comment',):
                 if f in  request.data:
                     setattr(profile, f, request.data.get(f) or None)
             if 'is_notified' in request.data and user == request.user:
