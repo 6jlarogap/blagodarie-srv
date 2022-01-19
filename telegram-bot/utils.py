@@ -7,6 +7,25 @@ import settings
 
 TIMEOUT = aiohttp.ClientTimeout(total=settings.HTTP_TIMEOUT)
 
+class OperationType(object):
+    THANK = 1
+    MISTRUST = 2
+    TRUST = 3
+    NULLIFY_TRUST = 4
+    TRUST_AND_THANK = 5
+
+class KeyboardType(object):
+    """
+    Варианты клавиатур и служебный символ для call back data из кнопок клавиатур
+    """
+    # Багодарность, доверие, недоверие...
+    #
+    TRUST_THANK = 1
+
+    # Разделитель данных в call back data
+    #
+    SEP = '~'
+
 async def get_user_photo(bot, user):
     """
     Получить фото пользователя, base64-строку, фото размером не больше settings.PHOTO_MAX_SIZE, если возможно

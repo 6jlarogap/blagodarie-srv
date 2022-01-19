@@ -19,6 +19,7 @@ from rest_framework.response import Response
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
+from rest_framework.exceptions import NotAuthenticated
 
 from app.utils import ServiceException, FrontendMixin, SQL_Mixin, get_moon_day
 from app.models import UnclearDate
@@ -46,6 +47,9 @@ class SendMessageMixin(FrontendMixin):
         """
         Сообщение в телеграм или пользователю user, или по telegram uid
         """
+        if not settings.SEND_TO_TELEGRAM:
+            return
+
         uid = None
         if user:
             try:
@@ -87,6 +91,7 @@ class ApiAddOperationMixin(object):
         data = dict()
         update_timestamp = int(time.time())
         user_to = profile_to.user
+        already_code = 'already'
 
         if operationtype_id == OperationType.THANK:
             currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
@@ -141,7 +146,10 @@ class ApiAddOperationMixin(object):
                     currentstate.save()
                 else:
                     if currentstate.is_trust == False:
-                        raise ServiceException('Вы уже не доверяете пользователю')
+                        raise ServiceException(
+                            'Вы уже не доверяете пользователю',
+                            already_code,
+                        )
                     else:
                         # True or None
                         currentstate.is_trust = False
@@ -180,7 +188,10 @@ class ApiAddOperationMixin(object):
                     currentstate.save()
                 else:
                     if currentstate.is_trust == True:
-                        raise ServiceException('Вы уже доверяете пользователю')
+                        raise ServiceException(
+                            'Вы уже доверяете пользователю',
+                            already_code,
+                        )
                     else:
                         # False or None
                         currentstate.is_trust = True
@@ -249,14 +260,14 @@ class ApiAddOperationMixin(object):
                     user_to=user_to,
                 )
             except CurrentState.DoesNotExist:
-                raise ServiceException(err_message)
+                raise ServiceException(err_message, already_code)
 
             if currentstate.is_reverse:
                 # то же что created
-                raise ServiceException(err_message)
+                raise ServiceException(err_message, already_code)
             else:
                 if currentstate.is_trust == None:
-                    raise ServiceException(err_message)
+                    raise ServiceException(err_message, already_code)
                 else:
                     # False or True
                     currentstate.update_timestamp = update_timestamp
@@ -374,7 +385,6 @@ class ApiAddOperationMixin(object):
         return data
 
 class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
-    permission_classes = (IsAuthenticated, )
     parser_classes = (JSONParser, FormParser, MultiPartParser)
 
     @transaction.atomic
@@ -382,6 +392,22 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
         """
         Добавление операции
 
+        На входе json или form data
+
+        Обязательно:
+            тип операции, operation_type_id, см. таблицу OperationType
+
+        Если запрос приходит из телеграм бота:
+            tg_token
+                токен бота, должен соответствовать тому, что в api local_settings
+            user_id_to
+                (не uuid!) пользователя от кого
+                NB! при передаче данных по кнопке есть ограничение, строка не больше 64 символов, uuid не подходит
+            user_id_from
+                (не uuid!) пользователя к кому
+            тип операции может быть любой, кроме назначения.снятия родственников
+
+        Иначе требует авторизации
         - если user_id_from == user_id_to, то вернуть ошибку (нельзя добавить операцию себе);
         - иначе:
             - если тип операции THANK:
@@ -391,7 +417,9 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 - инкрементировать значение столбца thanks_count в таблице tbl_current_state для user_id_from и user_id_to;
             - если тип операции MISTRUST:
                 - если есть запись в таблице tbl_current_state для заданных user_id_from и user_id_to;
-                    - если значение IS_TRUST == FALSE, вернуть ошибку (нельзя утратить доверие, если его и так нет);
+                    - если значение IS_TRUST == FALSE, вернуть ошибку /message/
+                      (нельзя утратить доверие, если его и так нет),
+                      при этом кроме message, еще передается code='already';
                 - иначе:
                     - создать запись в таблице tbl_current_state;
                 - записать данные в таблицу tbl_journal;
@@ -401,7 +429,9 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 - в таблице tbl_current_state установить IS_TRUST = FALSE;
             - если тип операции TRUST:
                 - если есть запись в таблице tbl_current_state для заданных user_id_from и user_id_to;
-                    - если значение IS_TRUST == TRUE, вернуть ошибку (нельзя установить доверие, если уже доверяешь);
+                    - если значение IS_TRUST == TRUE, вернуть ошибку /message/
+                    (нельзя установить доверие, если уже доверяешь);
+                      при этом кроме message, еще передается code='already';
                 - иначе:
                     - создать запись в таблице tbl_current_state;
                 - записать данные в таблицу tbl_journal;
@@ -411,16 +441,19 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 - в таблице tbl_current_state установить IS_TRUST = TRUE;
             - если тип операции NULLIFY_TRUST:
                 - если есть запись в таблице tbl_current_state для заданных user_id_from и user_id_to;
-                    - если значение IS_TRUST == NULL, вернуть ошибку (нельзя обнулить доверие, если оно пустое);
+                    - если значение IS_TRUST == NULL, вернуть ошибку /message/
+                      (нельзя обнулить доверие, если оно пустое);
+                      при этом кроме message, еще передается code='already';
                     - иначе:
                         - если текущее IS_TRUST == TRUE, то декрементировать TRUST_COUNT;
                         - если текущее IS_TRUST == FALSE, то декрементировать MISTRUST_COUNT;
                         - декрементировать FAME для user_id_to;
                         - установить IS_TRUST = NULL;
                         - записать данные в таблицу tbl_journal;
-                - иначе вернуть ошибку (нельзя обнулить доверие, если связи нет);
+                    - иначе вернуть ошибку /message/ (нельзя обнулить доверие, если связи нет)
+                      при этом кроме message, еще передается code='already';
 
-            - По операциям Father, Mother not_Parent NB::
+            - По операциям Father, Mother not_Parent NB
             !!! может быть задан еще и user_from_id,
             !!! из user_from, user_to хотя бы один должен быть
                 или авторизованным пользователем или его родственником
@@ -463,46 +496,78 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
         """
 
         try:
-            user_from = request.user
-            profile_from = user_from.profile
-            user_from_uuid = profile_from.uuid
-
-            user_to_uuid = request.data.get("user_id_to")
-            if not user_to_uuid:
-                raise ServiceException('Не задан user_id_to')
-
             try:
                 operationtype_id = int(request.data.get("operation_type_id"))
             except (TypeError, ValueError):
                 raise ServiceException('Не задан или неверный operation_type_id')
 
-            comment = request.data.get("comment", None)
-            insert_timestamp = request.data.get('timestamp', int(time.time()))
+            got_tg_token = False
+            if request.data.get('tg_token'):
+                if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                    raise ServiceException('Неверный токен телеграм бота')
+                user_id_from = request.data.get('user_id_from')
+                try:
+                    user_from = User.objects.select_related('profile').get(pk=user_id_from)
+                    profile_from = user_from.profile
+                except (User.DoesNotExist, ValueError,):
+                    raise ServiceException('Не задан или не найден user_id_from')
+                user_id_to = request.data.get('user_id_to')
+                try:
+                    user_to = User.objects.select_related('profile').get(pk=user_id_to)
+                    profile_to = user_to.profile
+                except (User.DoesNotExist, ValueError,):
+                    raise ServiceException('Не задан или не найден user_id_to')
+                if not (operationtype_id in (
+                        OperationType.THANK,
+                        OperationType.MISTRUST,
+                        OperationType.TRUST,
+                        OperationType.NULLIFY_TRUST,
+                        OperationType.TRUST_AND_THANK,
+                    )):
+                    raise ServiceException('Недопустимый operation_type_id для операции от бота')
+                got_tg_token = True
 
-            try:
-                profile_to = Profile.objects.select_for_update().select_related('user').get(uuid=user_to_uuid)
-                user_to = profile_to.user
-            except ValidationError:
-                raise ServiceException('Неверный user_id_to = "%s"' % user_to_uuid)
-            except Profile.DoesNotExist:
-                raise ServiceException('Не найден пользователь, user_id_to = "%s"' % user_to_uuid)
-            if operationtype_id in (OperationType.FATHER, OperationType.MOTHER, OperationType.NOT_PARENT,):
-                user_from_uuid = request.data.get("user_id_from")
-                if user_from_uuid:
-                    try:
-                        profile_from = Profile.objects.select_for_update().select_related('user').get(uuid=user_from_uuid)
-                        user_from = profile_from.user
-                    except ValidationError:
-                        raise ServiceException('Неверный user_id_from = "%s"' % user_from_uuid)
-                    except Profile.DoesNotExist:
-                        raise ServiceException('Не найден пользователь, user_id_from = "%s"' % user_from_uuid)
+            elif not request.user.is_authenticated:
+                raise NotAuthenticated
+
+            if not got_tg_token:
+                user_from = request.user
+                profile_from = user_from.profile
+                user_from_uuid = profile_from.uuid
+
+                user_to_uuid = request.data.get("user_id_to")
+                if not user_to_uuid:
+                    raise ServiceException('Не задан user_id_to')
+                try:
+                    profile_to = Profile.objects.select_for_update().select_related('user').get(uuid=user_to_uuid)
+                    user_to = profile_to.user
+                except ValidationError:
+                    raise ServiceException('Неверный user_id_to = "%s"' % user_to_uuid)
+                except Profile.DoesNotExist:
+                    raise ServiceException('Не найден пользователь, user_id_to = "%s"' % user_to_uuid)
+
+                if operationtype_id in (OperationType.FATHER, OperationType.MOTHER, OperationType.NOT_PARENT,):
+                    user_from_uuid = request.data.get("user_id_from")
+                    if user_from_uuid:
+                        try:
+                            profile_from = Profile.objects.select_for_update().select_related('user').get(uuid=user_from_uuid)
+                            user_from = profile_from.user
+                        except ValidationError:
+                            raise ServiceException('Неверный user_id_from = "%s"' % user_from_uuid)
+                        except Profile.DoesNotExist:
+                            raise ServiceException('Не найден пользователь, user_id_from = "%s"' % user_from_uuid)
             if user_to == user_from:
                 raise ServiceException('Операция на самого себя не предусмотрена')
-            if operationtype_id in (OperationType.FATHER, OperationType.MOTHER, OperationType.NOT_PARENT,):
-                if not (
-                    user_from == request.user or profile_from.owner == request.user
-                   ):
-                        raise ServiceException('У Вас нет прав задавать такого родителя')
+
+            if not got_tg_token:
+                if operationtype_id in (OperationType.FATHER, OperationType.MOTHER, OperationType.NOT_PARENT,):
+                    if not (
+                        user_from == request.user or profile_from.owner == request.user
+                    ):
+                            raise ServiceException('У Вас нет прав задавать такого родителя')
+
+            comment = request.data.get("comment", None)
+            insert_timestamp = request.data.get('timestamp', int(time.time()))
 
             data = self.add_operation(
                 user_from,
@@ -533,6 +598,11 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
         except ServiceException as excpt:
             transaction.set_rollback(True)
             data = dict(message=excpt.args[0])
+            try:
+                code=excpt.args[1]
+            except IndexError:
+                code=''
+            data.update(code=code)
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
