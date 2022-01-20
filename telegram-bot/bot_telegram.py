@@ -83,7 +83,6 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         elif p['operation_type_id'] == OperationType.NULLIFY_TRUST:
             text = 'Вы и так не знакомы'
 
-    send_alert = False
     if not text:
         if status == 200:
             text = 'Операция выполнена'
@@ -91,31 +90,22 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             text = 'Простите, произошла ошибка'
             if response.get('message'):
                 text += ': %s' % response['message']
-            send_alert = True
         else:
             text = 'Простите, произошла ошибка'
-            send_alert = True
 
-    if send_alert:
-        await bot.answer_callback_query(
+    await bot.answer_callback_query(
             callback_query.id,
             text=text,
             show_alert=True,
         )
-    else:
-        try:
-            await bot.send_message(
-                callback_query.message.chat.id,
-                text=text,
-            )
-        except (ChatNotFound, CantInitiateConversation):
-            await bot.answer_callback_query(
-                callback_query.id,
-                text=text,
-                show_alert=True,
-            )
-    #if not send_alert:
-        #await callback_query.message.delete_reply_markup()
+    try:
+        await bot.send_message(
+            callback_query.message.chat.id,
+            text=text,
+        )
+    except (ChatNotFound, CantInitiateConversation):
+        pass
+    #await callback_query.message.delete_reply_markup()
 
 @dp.message_handler(commands=["start", "help",])
 async def cmd_start_help(message: types.Message):
@@ -149,19 +139,23 @@ async def echo_send(message: types.Message):
     logging.info('get user_sender, status: %s' % status)
     logging.info('get user_sender, response: %s' % response)
 
-    user_id_from=None
+    user_id_from = None
     user_id_to = None
     if status == 200:
         user_id_from = response.get('user_id')
+        user_uuid_from = response.get('uuid')
         if user_id_from:
             reply += (
-                    'Вы - <u>%(msg_is_created)s</u> '
-                    '<a href="%(frontend_host)s?id=%(user_id_from)s">пользователь %(frontend_host_title)s</a>\n'
+                    'Вы - <u>%(msg_is_created)s</u> пользователь %(frontend_host_title)s'
+                    ' '
+                    '<a href="%(frontend_host)s?id=%(user_uuid_from)s"><b>%(full_name)s</b></a>\n'
                 ) % dict(
                 msg_is_created=msg_is_created(response['created']),
                 frontend_host=settings.FRONTEND_HOST,
                 user_id_from=user_id_from,
+                user_uuid_from=user_uuid_from,
                 frontend_host_title=settings.FRONTEND_HOST_TITLE,
+                full_name=user_sender.full_name,
             )
     else:
         reply += msg_api_error
@@ -197,6 +191,7 @@ async def echo_send(message: types.Message):
             logging.info('get user_forwarded, response: %s' % response)
             if status == 200 and user_id_from:
                 user_id_to = response.get('user_id')
+                user_uuid_to = response.get('uuid')
                 if user_id_to:
                     dict_reply = dict(
                         sep=KeyboardType.SEP,
@@ -204,13 +199,16 @@ async def echo_send(message: types.Message):
                         frontend_host=settings.FRONTEND_HOST,
                         user_id_from=user_id_from,
                         user_id_to=user_id_to,
+                        user_uuid_to=user_uuid_to,
                         frontend_host_title=settings.FRONTEND_HOST_TITLE,
                         full_name=user_forwarded.full_name,
                         keyboard_type=KeyboardType.TRUST_THANK,
                     )
                     reply += (
-                        'Автор исходного сообщения: <b>%(full_name)s</b>, <u>%(msg_is_created)s</u> '
-                        '<a href="%(frontend_host)s?id=%(user_id_to)s">пользователь %(frontend_host_title)s</a>\n'
+                        'Автор исходного сообщения: <u>%(msg_is_created)s</u> '
+                        'пользователь %(frontend_host_title)s'
+                        ' '
+                        '<a href="%(frontend_host)s?id=%(user_uuid_to)s"><b>%(full_name)s</b></a>\n'
                     ) % dict_reply
                     if user_id_to != user_id_from:
 
@@ -230,7 +228,9 @@ async def echo_send(message: types.Message):
                         if status == 200 or (status == 400 and response.get('code', '') == 'already'):
                             reply += (
                                 '\n'
-                                'От Вас к <b>%(full_name)s</b> установлено доверие\n'
+                                'От Вас к <a href="%(frontend_host)s?id=%(user_uuid_to)s"><b>%(full_name)s</b></a>'
+                                ' '
+                                'установлено доверие\n'
                             ) % dict_reply
 
                         inline_kb_full = InlineKeyboardMarkup()
