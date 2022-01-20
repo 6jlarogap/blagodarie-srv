@@ -148,7 +148,7 @@ async def echo_send(message: types.Message):
             reply += (
                     'Вы - <u>%(msg_is_created)s</u> пользователь %(frontend_host_title)s'
                     ' '
-                    '<a href="%(frontend_host)s?id=%(user_uuid_from)s"><b>%(full_name)s</b></a>\n'
+                    '<a href="%(frontend_host)s/profile/?id=%(user_uuid_from)s"><b>%(full_name)s</b></a>\n'
                 ) % dict(
                 msg_is_created=msg_is_created(response['created']),
                 frontend_host=settings.FRONTEND_HOST,
@@ -208,7 +208,7 @@ async def echo_send(message: types.Message):
                         'Автор исходного сообщения: <u>%(msg_is_created)s</u> '
                         'пользователь %(frontend_host_title)s'
                         ' '
-                        '<a href="%(frontend_host)s?id=%(user_uuid_to)s"><b>%(full_name)s</b></a>\n'
+                        '<a href="%(frontend_host)s/profile/?id=%(user_uuid_to)s"><b>%(full_name)s</b></a>\n'
                     ) % dict_reply
                     if user_id_to != user_id_from:
 
@@ -228,7 +228,7 @@ async def echo_send(message: types.Message):
                         if status == 200 or (status == 400 and response.get('code', '') == 'already'):
                             reply += (
                                 '\n'
-                                'От Вас к <a href="%(frontend_host)s?id=%(user_uuid_to)s"><b>%(full_name)s</b></a>'
+                                'От Вас к <a href="%(frontend_host)s/profile/?id=%(user_uuid_to)s"><b>%(full_name)s</b></a>'
                                 ' '
                                 'установлено доверие\n'
                             ) % dict_reply
