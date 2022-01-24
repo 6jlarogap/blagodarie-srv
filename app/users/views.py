@@ -861,7 +861,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             raise ServiceException('Дата смерти: %s' % m)
         dob = UnclearDate.from_str_safe(dob)
         dod = UnclearDate.from_str_safe(dod)
-        if dob is not None and dob is not None and dob > dod:
+        if dob is not None and dod is not None and dob > dod:
             raise ServiceException('Дата рождения: %(dob)s, позже даты смерти: %(dod)s ' % dict(
                 dod=dod_got,
                 dob=dob_got,
