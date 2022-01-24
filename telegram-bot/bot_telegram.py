@@ -4,7 +4,7 @@ import settings
 from utils import get_user_photo, api_request, OperationType, KeyboardType
 
 from aiogram import Bot, types
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ContentType
 from aiogram.dispatcher import Dispatcher
 from aiogram.utils.executor import start_polling, start_webhook
 
@@ -111,7 +111,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
 async def cmd_start_help(message: types.Message):
     await message.reply("Приветствуем Вас!")
 
-@dp.message_handler()
+@dp.message_handler(content_types=ContentType.all())
 async def echo_send(message: types.Message):
 
     # NB: \n instead of <br /> !
