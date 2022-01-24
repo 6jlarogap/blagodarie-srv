@@ -214,7 +214,7 @@ async def echo_send(message: types.Message):
 
                         payload_trust = dict(
                             tg_token=settings.TOKEN,
-                            operation_type_id=OperationType.TRUST_AND_THANK,
+                            operation_type_id=OperationType.TRUST,
                             user_id_to=user_id_to,
                             user_id_from=user_id_from,
                         )
@@ -230,7 +230,7 @@ async def echo_send(message: types.Message):
                                 '\n'
                                 'От Вас к <a href="%(frontend_host)s/profile/?id=%(user_uuid_to)s"><b>%(full_name)s</b></a>'
                                 ' '
-                                'отправлена благодарность\n'
+                                'установлено доверие\n'
                             ) % dict_reply
 
                         inline_kb_full = InlineKeyboardMarkup()
