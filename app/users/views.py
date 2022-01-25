@@ -958,6 +958,27 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
 
         data = profile.data_dict(request)
         data.update(dict(created=created_, user_id=user.pk))
+
+        wishes = [
+            {
+                'text': wish.text,
+            } \
+            for wish in Wish.objects.filter(owner=user).order_by('insert_timestamp')
+        ]
+        abilities = [
+            {
+                'text': ability.text,
+            } \
+            for ability in Ability.objects.filter(owner=user).order_by('insert_timestamp')
+        ]
+        keys = [
+            {
+                'text': key.value,
+            } \
+            for key in Key.objects.filter(owner=user).order_by('type__pk')
+        ]
+        data.update(dict(wishes=wishes, abilities=abilities, keys=keys))
+
         return data
 
     @transaction.atomic

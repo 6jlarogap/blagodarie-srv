@@ -114,12 +114,10 @@ async def cmd_start_help(message: types.Message):
 @dp.message_handler(content_types=ContentType.all())
 async def echo_send(message: types.Message):
 
-    # NB: \n instead of <br /> !
-    reply = 'От Вас получено сообщение.\n'
-
-    msg_is_created = lambda created: 'новый' if created else 'существующий'
     msg_api_error = 'Произошла ошибка при обращении к апи\n'
 
+    reply_from = ''
+    reply_markup = None
     user_sender = message.from_user
 
     payload_sender = dict(
@@ -149,24 +147,62 @@ async def echo_send(message: types.Message):
         user_from_uuid = response.get('uuid')
         user_from_created = response['created']
         if user_from_id:
-            reply += (
-                    'Вы - <u>%(msg_is_created)s</u> пользователь %(frontend_host_title)s'
-                    ' '
-                    '<a href="%(frontend_host)s/profile/?id=%(user_from_uuid)s"><b>%(full_name)s</b></a>\n'
+            reply_from += (
+                    '<b>%(first_name)s %(last_name)s</b>\n'
+                    'Доверий: %(trust_count)s\n'
+                    'Благодарностей: %(sum_thanks_count)s\n'
+                    'Недоверий: %(trust_count)s\n'
+                    '\n'
                 ) % dict(
-                msg_is_created=msg_is_created(user_from_created),
-                frontend_host=settings.FRONTEND_HOST,
-                user_from_id=user_from_id,
-                user_from_uuid=user_from_uuid,
-                frontend_host_title=settings.FRONTEND_HOST_TITLE,
-                full_name=user_sender.full_name,
+                first_name=response['first_name'],
+                last_name=response['last_name'],
+                trust_count=response['trust_count'],
+                sum_thanks_count=response['sum_thanks_count'],
+                mistrust_count=response['mistrust_count'],
             )
-    else:
-        reply += msg_api_error
+            abilities_text = '\n'.join(
+                ability['text'] for ability in response['abilities']
+            ) if response.get('abilities') else 'не задано'
+            reply_from += ('Возможности: %s' % abilities_text) + '\n\n'
 
-    reply_markup = None
+            wishes_text = '\n'.join(
+                wish['text'] for wish in response['wishes']
+            ) if response.get('wishes') else 'не задано'
+            reply_from += ('Потребности: %s' % wishes_text) + '\n\n'
+
+            map_text = (
+                '<a href="%(frontend_host)s/profile/?id=%(user_from_uuid)s&q=1&map_visible=true">тут</a>'
+            ) % dict(
+                frontend_host=settings.FRONTEND_HOST,
+                user_from_uuid=user_from_uuid,
+            ) if response.get('latitude') is not None and response.get('longitude') is not None \
+              else  'не задано'
+            reply_from += ('Местоположение: %s' % map_text) + '\n\n'
+
+            keys = []
+            if user_sender.username:
+                keys.append("@%s" % user_sender.username)
+            keys += [key['text'] for key in response['keys']]
+            keys_text = '\n' + '\n'.join(
+                key for key in keys
+            ) if keys else 'не задано'
+
+            reply_from += ('Контакты: %s' % keys_text) + '\n\n'
+            inline_kb_full = InlineKeyboardMarkup()
+            inline_btn_go = InlineKeyboardButton(
+                'Перейти',
+                url="%(frontend_host)s/profile/?id=%(user_from_uuid)s" % dict(
+                    frontend_host=settings.FRONTEND_HOST,
+                    user_from_uuid=user_from_uuid,
+            ))
+            inline_kb_full.row(inline_btn_go)
+            reply_markup = inline_kb_full
+
+    else:
+        reply_from += msg_api_error + '\n'
+
+    reply = ''
     if message.is_forward():
-        reply += '\nСообщение было переслано.\n'
         user_forwarded = message.forward_from
         if not user_forwarded:
             reply += (
@@ -176,15 +212,17 @@ async def echo_send(message: types.Message):
             )
         elif user_forwarded.is_bot:
             reply += 'Автор исходного сообщения: бот\n'
+        elif user_forwarded.id == user_sender.id:
+            reply += (
+                'Было переслано сообщение от себя самого\n'
+            )
         else:
-            forwarded_photo = await get_user_photo(bot, user_forwarded)
             payload_forwarded = dict(
                 tg_token=settings.TOKEN,
                 tg_uid=message.forward_from.id,
                 last_name=user_forwarded.last_name or '',
                 first_name=user_forwarded.first_name or '',
                 username=user_forwarded.username or '',
-                photo=forwarded_photo or '',
             )
             status, response = await api_request(
                 path='/api/profile',
@@ -197,60 +235,60 @@ async def echo_send(message: types.Message):
                 user_to_id = response.get('user_id')
                 user_to_uuid = response.get('uuid')
                 user_to_created = response['created']
-                if user_to_id:
-                    dict_reply = dict(
-                        sep=KeyboardType.SEP,
-                        msg_is_created=msg_is_created(user_to_created),
-                        frontend_host=settings.FRONTEND_HOST,
-                        user_from_id=user_from_id,
-                        user_to_id=user_to_id,
-                        user_to_uuid=user_to_uuid,
-                        frontend_host_title=settings.FRONTEND_HOST_TITLE,
-                        full_name=user_forwarded.full_name,
-                        keyboard_type=KeyboardType.TRUST_THANK,
-                    )
-                    reply += (
-                        'Автор исходного сообщения: <u>%(msg_is_created)s</u> '
-                        'пользователь %(frontend_host_title)s'
-                        ' '
-                        '<a href="%(frontend_host)s/profile/?id=%(user_to_uuid)s"><b>%(full_name)s</b></a>\n'
-                    ) % dict_reply
-                    if user_to_id != user_from_id:
-                        inline_kb_full = InlineKeyboardMarkup()
-                        callback_data_template = (
-                                '%(keyboard_type)s%(sep)s'
-                                '%(operation)s%(sep)s'
-                                '%(user_from_id)s%(sep)s'
-                                '%(user_to_id)s'
-                            )
-                        # inline_btn_go = InlineKeyboardButton('Перейти', url=settings.FRONTEND_HOST,)
-                        dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-                        inline_btn_thank = InlineKeyboardButton(
-                            'Благодарность',
-                            callback_data=callback_data_template % dict_reply,
-                        )
-                        dict_reply.update(operation=OperationType.MISTRUST)
-                        inline_btn_mistrust = InlineKeyboardButton(
-                            'Не доверяю',
-                            callback_data=callback_data_template % dict_reply,
-                        )
-                        dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-                        inline_btn_nullify_trust = InlineKeyboardButton(
-                            'Не знакомы',
-                            callback_data=callback_data_template % dict_reply,
-                        )
-                        # inline_kb_full.row(inline_btn_go)
-                        inline_kb_full.row(
-                            inline_btn_thank,
-                            inline_btn_mistrust,
-                            inline_btn_nullify_trust
-                        )
-                        reply_markup = inline_kb_full
             else:
                 reply += msg_api_error
+    else:
+        # Not forwarded message
+        # Ищем @username в теле сообщения
+        # Потом запрос в апи, есть ли такой @username у нас в базе
+        pass
+
+    if user_to_id:
+        dict_reply = dict(
+            sep=KeyboardType.SEP,
+            frontend_host=settings.FRONTEND_HOST,
+            user_from_id=user_from_id,
+            user_to_id=user_to_id,
+            user_to_uuid=user_to_uuid,
+            frontend_host_title=settings.FRONTEND_HOST_TITLE,
+            full_name=user_forwarded.full_name,
+            keyboard_type=KeyboardType.TRUST_THANK,
+        )
+        reply += (
+            'Автор исходного сообщения: '
+            'пользователь %(frontend_host_title)s'
+            ' '
+            '<a href="%(frontend_host)s/profile/?id=%(user_to_uuid)s"><b>%(full_name)s</b></a>\n'
+        ) % dict_reply
+        callback_data_template = (
+                '%(keyboard_type)s%(sep)s'
+                '%(operation)s%(sep)s'
+                '%(user_from_id)s%(sep)s'
+                '%(user_to_id)s'
+            )
+        dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+        inline_btn_thank = InlineKeyboardButton(
+            'Благодарность',
+            callback_data=callback_data_template % dict_reply,
+        )
+        dict_reply.update(operation=OperationType.MISTRUST)
+        inline_btn_mistrust = InlineKeyboardButton(
+            'Не доверяю',
+            callback_data=callback_data_template % dict_reply,
+        )
+        dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+        inline_btn_nullify_trust = InlineKeyboardButton(
+            'Не знакомы',
+            callback_data=callback_data_template % dict_reply,
+        )
+        inline_kb_full.row(
+            inline_btn_thank,
+            inline_btn_mistrust,
+            inline_btn_nullify_trust
+        )
 
     if user_from_id:
-        await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+        await message.reply(reply_from + reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
     if user_from_uuid and user_from_created:
         sender_photo = await get_user_photo(bot, user_sender)

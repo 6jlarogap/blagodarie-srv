@@ -2679,7 +2679,7 @@ class ApiGetUserAbilities(UuidMixin, APIView):
         try:
             uuid = request.GET.get('uuid')
             user, profile = self.check_user_uuid(uuid)
-            qs = Ability.objects.filter(owner=user).order_by('update_timestamp')
+            qs = Ability.objects.filter(owner=user).order_by('insert_timestamp')
             try:
                 from_ = request.GET.get("from", 0)
                 from_ = int(from_) if from_ else 0
