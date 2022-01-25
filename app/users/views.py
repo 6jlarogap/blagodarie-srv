@@ -1215,3 +1215,51 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
         return Response(data=data, status=status_code)
 
 api_profile = ApiProfile.as_view()
+
+class ApiUserRelations(UuidMixin, APIView):
+    """
+    Как user_id_to относится к user_id_from
+
+    Пример:
+        api/user/relations?user_id_to=...&user_id_from=...я все ключи
+    Возвращает
+        {
+        "from_to": {
+            "is_trust": True,
+            },
+        "to_from": {
+            "is_trust": null,
+            },
+        }
+    """
+    def get(self, request):
+        try:
+            status_code = status.HTTP_200_OK
+            user_from, profile_from = self.check_user_uuid(
+                request.GET.get('user_id_from'),
+                comment='user_id_from. ',
+            )
+            user_to, profile_to = self.check_user_uuid(
+                request.GET.get('user_id_to'),
+                comment='user_id_to. ',
+            )
+            data = dict(
+                from_to=dict(is_trust=None),
+                to_from=dict(is_trust=None),
+            )
+            users = (user_from, user_to,)
+            for cs in CurrentState.objects.filter(
+                user_from__in=users,
+                user_to__in=users,
+                is_reverse=False,
+                ):
+                if cs.user_from == user_from:
+                    data['from_to']['is_trust'] = cs.is_trust
+                elif cs.user_from == user_to:
+                    data['to_from']['is_trust'] = cs.is_trust
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+api_user_relations = ApiUserRelations.as_view()

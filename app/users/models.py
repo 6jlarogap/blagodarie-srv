@@ -713,9 +713,9 @@ class UuidMixin(object):
 
     MSG_NO_UUID = 'Не задан uuid пользователя'
 
-    def check_user_uuid(self, uuid, related=('user', 'ability',)):
+    def check_user_uuid(self, uuid, related=('user', 'ability',), comment=''):
         if not uuid:
-            raise ServiceException(self.MSG_NO_UUID)
+            raise ServiceException(comment + self.MSG_NO_UUID)
         try:
             profile = Profile.objects.select_related(*related).get(uuid=uuid)
             user = profile.user
