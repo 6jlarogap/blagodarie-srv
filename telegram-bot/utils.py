@@ -1,7 +1,6 @@
 import base64
 
 import aiohttp
-import asyncio
 
 import settings
 
@@ -34,7 +33,10 @@ async def get_user_photo(bot, user):
     if not user:
         return result
 
-    photos_output = await user.get_profile_photos()
+    try:
+        photos_output = await user.get_profile_photos()
+    except:
+        return result
 
     # Вытащить отсюда фото размером не больше settings.PHOTO_MAX_SIZE
     # Если несколько фоток, берм 1-е
@@ -75,15 +77,18 @@ async def get_user_photo(bot, user):
 
     if photo_path:
         async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
-            async with session.get(
-                "https://api.telegram.org/file/bot%s/%s" % (settings.TOKEN, photo_path,),
-            ) as resp:
-                try:
-                    status = int(resp.status)
-                    if status == 200:
-                        result = base64.b64encode(await resp.read()).decode('UTF-8')
-                except ValueError:
-                    pass
+            try:
+                async with session.get(
+                    "https://api.telegram.org/file/bot%s/%s" % (settings.TOKEN, photo_path,),
+                ) as resp:
+                    try:
+                        status = int(resp.status)
+                        if status == 200:
+                            result = base64.b64encode(await resp.read()).decode('UTF-8')
+                    except ValueError:
+                        pass
+            except:
+                pass
     return result
 
 async def api_request(

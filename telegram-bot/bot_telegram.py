@@ -42,9 +42,9 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         <KeyboardType.SEP>
         <operation_type_id>
         <KeyboardType.SEP>
-        <user_id_from>
+        <user_from_id>
         <KeyboardType.SEP>
-        <user_id_to>,
+        <user_to_id>,
         например: 1~2~326~387
     """
     code = callback_query.data.split(KeyboardType.SEP)
@@ -107,9 +107,9 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         pass
     #await callback_query.message.delete_reply_markup()
 
-@dp.message_handler(commands=["start", "help",])
+@dp.message_handler(commands=["help",])
 async def cmd_start_help(message: types.Message):
-    await message.reply("Приветствуем Вас!")
+    await message.reply("Текст помощи в разработке!")
 
 @dp.message_handler(content_types=ContentType.all())
 async def echo_send(message: types.Message):
@@ -121,7 +121,6 @@ async def echo_send(message: types.Message):
     msg_api_error = 'Произошла ошибка при обращении к апи\n'
 
     user_sender = message.from_user
-    sender_photo = await get_user_photo(bot, user_sender)
 
     payload_sender = dict(
         tg_token=settings.TOKEN,
@@ -129,7 +128,6 @@ async def echo_send(message: types.Message):
         last_name=user_sender.last_name or '',
         first_name=user_sender.first_name or '',
         username=user_sender.username or '',
-        photo=sender_photo or '',
     )
     status, response = await api_request(
         path='/api/profile',
@@ -139,21 +137,27 @@ async def echo_send(message: types.Message):
     logging.info('get user_sender, status: %s' % status)
     logging.info('get user_sender, response: %s' % response)
 
-    user_id_from = None
-    user_id_to = None
+    user_from_id = None
+    user_from_uuid = None
+    user_from_created = False
+
+    user_to_id = None
+    user_to_uuid = None
+    user_to_created = False
     if status == 200:
-        user_id_from = response.get('user_id')
-        user_uuid_from = response.get('uuid')
-        if user_id_from:
+        user_from_id = response.get('user_id')
+        user_from_uuid = response.get('uuid')
+        user_from_created = response['created']
+        if user_from_id:
             reply += (
                     'Вы - <u>%(msg_is_created)s</u> пользователь %(frontend_host_title)s'
                     ' '
-                    '<a href="%(frontend_host)s/profile/?id=%(user_uuid_from)s"><b>%(full_name)s</b></a>\n'
+                    '<a href="%(frontend_host)s/profile/?id=%(user_from_uuid)s"><b>%(full_name)s</b></a>\n'
                 ) % dict(
-                msg_is_created=msg_is_created(response['created']),
+                msg_is_created=msg_is_created(user_from_created),
                 frontend_host=settings.FRONTEND_HOST,
-                user_id_from=user_id_from,
-                user_uuid_from=user_uuid_from,
+                user_from_id=user_from_id,
+                user_from_uuid=user_from_uuid,
                 frontend_host_title=settings.FRONTEND_HOST_TITLE,
                 full_name=user_sender.full_name,
             )
@@ -189,17 +193,18 @@ async def echo_send(message: types.Message):
             )
             logging.info('get user_forwarded, status: %s' % status)
             logging.info('get user_forwarded, response: %s' % response)
-            if status == 200 and user_id_from:
-                user_id_to = response.get('user_id')
-                user_uuid_to = response.get('uuid')
-                if user_id_to:
+            if status == 200 and user_from_id:
+                user_to_id = response.get('user_id')
+                user_to_uuid = response.get('uuid')
+                user_to_created = response['created']
+                if user_to_id:
                     dict_reply = dict(
                         sep=KeyboardType.SEP,
-                        msg_is_created=msg_is_created(response['created']),
+                        msg_is_created=msg_is_created(user_to_created),
                         frontend_host=settings.FRONTEND_HOST,
-                        user_id_from=user_id_from,
-                        user_id_to=user_id_to,
-                        user_uuid_to=user_uuid_to,
+                        user_from_id=user_from_id,
+                        user_to_id=user_to_id,
+                        user_to_uuid=user_to_uuid,
                         frontend_host_title=settings.FRONTEND_HOST_TITLE,
                         full_name=user_forwarded.full_name,
                         keyboard_type=KeyboardType.TRUST_THANK,
@@ -208,16 +213,17 @@ async def echo_send(message: types.Message):
                         'Автор исходного сообщения: <u>%(msg_is_created)s</u> '
                         'пользователь %(frontend_host_title)s'
                         ' '
-                        '<a href="%(frontend_host)s/profile/?id=%(user_uuid_to)s"><b>%(full_name)s</b></a>\n'
+                        '<a href="%(frontend_host)s/profile/?id=%(user_to_uuid)s"><b>%(full_name)s</b></a>\n'
                     ) % dict_reply
-                    if user_id_to != user_id_from:
+                    if user_to_id != user_from_id:
                         inline_kb_full = InlineKeyboardMarkup()
                         callback_data_template = (
                                 '%(keyboard_type)s%(sep)s'
                                 '%(operation)s%(sep)s'
-                                '%(user_id_from)s%(sep)s'
-                                '%(user_id_to)s'
+                                '%(user_from_id)s%(sep)s'
+                                '%(user_to_id)s'
                             )
+                        # inline_btn_go = InlineKeyboardButton('Перейти', url=settings.FRONTEND_HOST,)
                         dict_reply.update(operation=OperationType.TRUST_AND_THANK)
                         inline_btn_thank = InlineKeyboardButton(
                             'Благодарность',
@@ -233,6 +239,7 @@ async def echo_send(message: types.Message):
                             'Не знакомы',
                             callback_data=callback_data_template % dict_reply,
                         )
+                        # inline_kb_full.row(inline_btn_go)
                         inline_kb_full.row(
                             inline_btn_thank,
                             inline_btn_mistrust,
@@ -242,8 +249,41 @@ async def echo_send(message: types.Message):
             else:
                 reply += msg_api_error
 
-    if user_id_from:
+    if user_from_id:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+
+    if user_from_uuid and user_from_created:
+        sender_photo = await get_user_photo(bot, user_sender)
+        if sender_photo:
+            payload_photo = dict(
+                tg_token=settings.TOKEN,
+                photo=sender_photo,
+                uuid=user_from_uuid,
+            )
+            status, response = await api_request(
+                path='/api/profile',
+                method='put',
+                data=payload_photo,
+            )
+            logging.info('put user_sender photo, status: %s' % status)
+            logging.info('put user_sender photo, response: %s' % response)
+
+    if user_to_uuid and user_to_created:
+        user_forwarded_photo = await get_user_photo(bot, user_forwarded)
+        if user_forwarded_photo:
+            payload_photo = dict(
+                tg_token=settings.TOKEN,
+                photo=user_forwarded_photo,
+                uuid=user_to_uuid,
+            )
+            status, response = await api_request(
+                path='/api/profile',
+                method='put',
+                data=payload_photo,
+            )
+            logging.info('put user_forwarded photo, status: %s' % status)
+            logging.info('put user_forwarded photo, response: %s' % response)
+
 
 if __name__ == '__main__':
     if settings.START_MODE == 'poll':

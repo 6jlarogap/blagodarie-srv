@@ -909,7 +909,6 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             profile.photo.save(getattr(request.data['photo'], 'name', 'photo.png'), photo)
 
     def post_tg_data(self, request):
-        status_code = status.HTTP_200_OK
         if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
             raise ServiceException('Неверный токен телеграм бота')
         last_name=request.data.get('last_name', '')
@@ -946,21 +945,29 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 first_name=first_name,
                 username=request.data.get('username'),
             )
-            token, created_token = Token.objects.get_or_create(user=user)
             self.save_photo(request, profile)
             created_ = True
+
+        token, created_token = Token.objects.get_or_create(user=user)
+        # Существующий Пользователь может быть обезличен
+        if created_token:
+            user.last_name = last_name
+            user.first_name = first_name
+            user.is_active = True
+            user.save()
+
         data = profile.data_dict(request)
         data.update(dict(created=created_, user_id=user.pk))
-        return status_code, data
+        return data
 
     @transaction.atomic
     def post(self, request):
         try:
+            status_code = status.HTTP_200_OK
             if request.data.get('tg_token') and request.data.get('tg_uid'):
-                status_code, data = self.post_tg_data(request)
+                data = self.post_tg_data(request)
                 raise SkipException
 
-            status_code = status.HTTP_200_OK
             if not request.user.is_authenticated:
                 raise NotAuthenticated
             if not request.data.get('last_name') and not request.data.get('first_name'):
@@ -1063,9 +1070,18 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
 
     @transaction.atomic
     def put(self, request):
-        if not request.user.is_authenticated:
-            raise NotAuthenticated
         try:
+            status_code = status.HTTP_200_OK
+            if request.data.get('tg_token') and request.data.get('uuid'):
+                if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                    raise ServiceException('Неверный токен телеграм бота')
+                user, profile = self.check_user_uuid(request.data.get('uuid'))
+                self.save_photo(request, profile)
+                data = {}
+                raise SkipException
+
+            if not request.user.is_authenticated:
+                raise NotAuthenticated
             user, profile = self.check_user_or_owned_uuid(request, need_uuid=True)
             owner_uuid = request.data.get('owner_uuid')
             if owner_uuid:
@@ -1104,7 +1120,8 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             profile.save()
             data = profile.data_dict(request)
             data.update(profile.parents_dict(request))
-            status_code = status.HTTP_200_OK
+        except SkipException:
+            pass
         except ServiceException as excpt:
             transaction.set_rollback(True)
             data = dict(message=excpt.args[0])
