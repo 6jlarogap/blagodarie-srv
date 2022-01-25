@@ -211,28 +211,6 @@ async def echo_send(message: types.Message):
                         '<a href="%(frontend_host)s/profile/?id=%(user_uuid_to)s"><b>%(full_name)s</b></a>\n'
                     ) % dict_reply
                     if user_id_to != user_id_from:
-
-                        payload_trust = dict(
-                            tg_token=settings.TOKEN,
-                            operation_type_id=OperationType.TRUST,
-                            user_id_to=user_id_to,
-                            user_id_from=user_id_from,
-                        )
-                        status, response = await api_request(
-                            path='/api/addoperation',
-                            method='post',
-                            data=payload_trust,
-                        )
-                        logging.info('post trust from sender to forwarded, status: %s' % status)
-                        logging.info('post trust from sender to forwarded, response: %s' % response)
-                        if status == 200 or (status == 400 and response.get('code', '') == 'already'):
-                            reply += (
-                                '\n'
-                                'От Вас к <a href="%(frontend_host)s/profile/?id=%(user_uuid_to)s"><b>%(full_name)s</b></a>'
-                                ' '
-                                'установлено доверие\n'
-                            ) % dict_reply
-
                         inline_kb_full = InlineKeyboardMarkup()
                         callback_data_template = (
                                 '%(keyboard_type)s%(sep)s'
