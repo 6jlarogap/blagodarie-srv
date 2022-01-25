@@ -120,6 +120,7 @@ async def echo_send(message: types.Message):
     reply_markup = None
     user_sender = message.from_user
 
+    logging.info('get user_sender...')
     payload_sender = dict(
         tg_token=settings.TOKEN,
         tg_uid=message.from_user.id,
@@ -133,7 +134,7 @@ async def echo_send(message: types.Message):
         data=payload_sender,
     )
     logging.info('get user_sender, status: %s' % status)
-    logging.info('get user_sender, response: %s' % response)
+    logging.debug('get user_sender, response: %s' % response)
 
     user_from_id = None
     user_from_uuid = None
@@ -217,6 +218,7 @@ async def echo_send(message: types.Message):
                 'Было переслано сообщение от себя самого\n'
             )
         else:
+            logging.info('get user_forwarded...')
             payload_forwarded = dict(
                 tg_token=settings.TOKEN,
                 tg_uid=message.forward_from.id,
@@ -230,7 +232,7 @@ async def echo_send(message: types.Message):
                 data=payload_forwarded,
             )
             logging.info('get user_forwarded, status: %s' % status)
-            logging.info('get user_forwarded, response: %s' % response)
+            logging.debug('get user_forwarded, response: %s' % response)
             if status == 200 and user_from_id:
                 user_to_id = response.get('user_id')
                 user_to_uuid = response.get('uuid')
@@ -292,6 +294,7 @@ async def echo_send(message: types.Message):
 
     if user_from_uuid and user_from_created:
         sender_photo = await get_user_photo(bot, user_sender)
+        logging.info('put user_sender photo...')
         if sender_photo:
             payload_photo = dict(
                 tg_token=settings.TOKEN,
@@ -304,11 +307,12 @@ async def echo_send(message: types.Message):
                 data=payload_photo,
             )
             logging.info('put user_sender photo, status: %s' % status)
-            logging.info('put user_sender photo, response: %s' % response)
+            logging.debug('put user_sender photo, response: %s' % response)
 
     if user_to_uuid and user_to_created:
         user_forwarded_photo = await get_user_photo(bot, user_forwarded)
         if user_forwarded_photo:
+            logging.info('put user_forwarded photo...')
             payload_photo = dict(
                 tg_token=settings.TOKEN,
                 photo=user_forwarded_photo,
@@ -320,8 +324,7 @@ async def echo_send(message: types.Message):
                 data=payload_photo,
             )
             logging.info('put user_forwarded photo, status: %s' % status)
-            logging.info('put user_forwarded photo, response: %s' % response)
-
+            logging.debug('put user_forwarded photo, response: %s' % response)
 
 if __name__ == '__main__':
     if settings.START_MODE == 'poll':
