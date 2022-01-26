@@ -152,7 +152,7 @@ async def echo_send(message: types.Message):
                     '<b>%(first_name)s %(last_name)s</b>\n'
                     'Доверий: %(trust_count)s\n'
                     'Благодарностей: %(sum_thanks_count)s\n'
-                    'Недоверий: %(trust_count)s\n'
+                    'Недоверий: %(mistrust_count)s\n'
                     '\n'
                 ) % dict(
                 first_name=response['first_name'],
