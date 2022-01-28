@@ -13,6 +13,16 @@ class OperationType(object):
     NULLIFY_TRUST = 4
     TRUST_AND_THANK = 5
 
+    @classmethod
+    def relation_text(cls, is_trust):
+        if is_trust is None:
+            result = 'не знакомы'
+        elif is_trust:
+            result = 'доверие'
+        else:
+            result = 'недоверие'
+        return result
+
 class KeyboardType(object):
     """
     Варианты клавиатур и служебный символ для call back data из кнопок клавиатур
@@ -96,6 +106,7 @@ async def api_request(
         method='GET',
         data=None,
         json=None,
+        params=None,
         response_type='json',
     ):
     """
@@ -112,6 +123,7 @@ async def api_request(
             "%s%s" % (settings.API_HOST, path,),
             data=data,
             json=json,
+            params=params,
         ) as resp:
             status = resp.status
             if response_type == 'json':

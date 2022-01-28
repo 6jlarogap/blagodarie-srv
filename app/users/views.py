@@ -788,16 +788,24 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
         На входе:
         Обязательны:
             tg_token: токен бота. Такой же записан в настройках АПИ
-            tg_uid: uid пользователя в телеграме
-        Не обязательны:
-            last_name
-            first_name
-            username
-                пользователя в телеграме
-            photo
-                путь, который можно включить в ссылку (действует 1 час):
-                https://api.telegram.org/file/bot<tg_token>/<tg_photo_path>,
-                скачать фото, записать в фото профиля.
+        Дальше варианты:
+            - задан tg_username:
+                Ищем у нас в базе такой телеграм- username, возвращаем
+                "карточку пользователя", включая его telegram id
+            - иначе:
+                обязательно:
+                tg_uid: uid пользователя в телеграме
+                В этом случае не обязательны:
+                    last_name
+                    first_name
+                    username
+                        пользователя в телеграме
+                    photo
+                        путь, который можно включить в ссылку (действует 1 час):
+                        https://api.telegram.org/file/bot<tg_token>/<tg_photo_path>,
+                        скачать фото, записать в фото профиля.
+                    activate
+                        активировать пользователя, если был обезличен
 
         * Добавить родственника.
         Требует авторизации.
@@ -909,83 +917,101 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             profile.photo.save(getattr(request.data['photo'], 'name', 'photo.png'), photo)
 
     def post_tg_data(self, request):
+        profile = None
+        data = dict()
         if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
             raise ServiceException('Неверный токен телеграм бота')
-        last_name=request.data.get('last_name', '')
-        first_name=request.data.get('first_name', '')
-        created_ = False
-        try:
-            oauth = Oauth.objects.get(
-                provider=Oauth.PROVIDER_TELEGRAM,
-                uid=request.data.get('tg_uid'),
-            )
-            user = oauth.user
-            profile = user.profile
-            save_ = False
-            for f in ('last_name', 'first_name', 'username', ):
-                input_val = request.data.get(f, '')
-                if getattr(oauth, f) != input_val and (input_val or f == 'username'):
-                    setattr(oauth, f, input_val)
-                    save_ = True
-            if save_:
-                oauth.update_timestamp = int(time.time())
-                oauth.save()
+        if request.data.get('tg_username'):
+            try:
+                oauth = Oauth.objects.select_related(
+                    'user', 'user__profile'
+                ).filter(
+                    username=request.data['tg_username']
+                )[0]
+                user = oauth.user
+                profile = user.profile
+                data.update(tg_uid=oauth.uid)
+            except IndexError:
+                pass
+        else:
+            last_name=request.data.get('last_name', '')
+            first_name=request.data.get('first_name', '')
+            created_ = False
+            try:
+                oauth = Oauth.objects.get(
+                    provider=Oauth.PROVIDER_TELEGRAM,
+                    uid=request.data.get('tg_uid'),
+                )
+                user = oauth.user
+                profile = user.profile
+                save_ = False
+                for f in ('last_name', 'first_name', 'username', ):
+                    input_val = request.data.get(f, '')
+                    if getattr(oauth, f) != input_val and (input_val or f == 'username'):
+                        setattr(oauth, f, input_val)
+                        save_ = True
+                if save_:
+                    oauth.update_timestamp = int(time.time())
+                    oauth.save()
 
-        except Oauth.DoesNotExist:
-            user = self.create_user(
-                last_name=last_name,
-                first_name=first_name,
-            )
-            profile = user.profile
-            oauth = Oauth.objects.create(
-                provider = Oauth.PROVIDER_TELEGRAM,
-                uid=request.data.get('tg_uid'),
-                user=user,
-                last_name=last_name,
-                first_name=first_name,
-                username=request.data.get('username'),
-            )
-            self.save_photo(request, profile)
-            created_ = True
+            except Oauth.DoesNotExist:
+                user = self.create_user(
+                    last_name=last_name,
+                    first_name=first_name,
+                )
+                profile = user.profile
+                oauth = Oauth.objects.create(
+                    provider = Oauth.PROVIDER_TELEGRAM,
+                    uid=request.data.get('tg_uid'),
+                    user=user,
+                    last_name=last_name,
+                    first_name=first_name,
+                    username=request.data.get('username'),
+                )
+                self.save_photo(request, profile)
+                data.update(created=True)
 
-        token, created_token = Token.objects.get_or_create(user=user)
-        # Существующий Пользователь может быть обезличен
-        if created_token:
-            user.last_name = last_name
-            user.first_name = first_name
-            user.is_active = True
-            user.save()
+            token, created_token = Token.objects.get_or_create(user=user)
+            # Существующий Пользователь может быть обезличен
+            if created_token and request.data.get('activate'):
+                user.last_name = last_name
+                user.first_name = first_name
+                user.is_active = True
+                user.save()
 
-        data = profile.data_dict(request)
-        data.update(dict(created=created_, user_id=user.pk))
+        if profile:
+            data.update(profile.data_dict(request))
+            data.update(user_id=user.pk)
 
-        wishes = [
-            {
-                'text': wish.text,
-            } \
-            for wish in Wish.objects.filter(owner=user).order_by('insert_timestamp')
-        ]
-        abilities = [
-            {
-                'text': ability.text,
-            } \
-            for ability in Ability.objects.filter(owner=user).order_by('insert_timestamp')
-        ]
-        keys = [
-            {
-                'text': key.value,
-            } \
-            for key in Key.objects.filter(owner=user).order_by('type__pk')
-        ]
-        data.update(dict(wishes=wishes, abilities=abilities, keys=keys))
-
+            wishes = [
+                {
+                    'text': wish.text,
+                } \
+                for wish in Wish.objects.filter(owner=user).order_by('insert_timestamp')
+            ]
+            abilities = [
+                {
+                    'text': ability.text,
+                } \
+                for ability in Ability.objects.filter(owner=user).order_by('insert_timestamp')
+            ]
+            keys = [
+                {
+                    'text': key.value,
+                } \
+                for key in Key.objects.filter(owner=user).order_by('type__pk')
+            ]
+            data.update(dict(wishes=wishes, abilities=abilities, keys=keys))
+        else:
+            data = {}
         return data
 
     @transaction.atomic
     def post(self, request):
         try:
             status_code = status.HTTP_200_OK
-            if request.data.get('tg_token') and request.data.get('tg_uid'):
+            if request.data.get('tg_token') and \
+               (request.data.get('tg_uid') or request.data.get('tg_username')):
                 data = self.post_tg_data(request)
                 raise SkipException
 
