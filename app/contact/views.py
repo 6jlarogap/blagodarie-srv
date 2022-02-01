@@ -579,11 +579,11 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
             if got_tg_token:
                 profile_from_data=profile_from.data_dict(request)
                 profile_from_data.update(profile_from.data_WAK())
-                profile_from_data.update(tg_data=profile_from.tg_data())
+                profile_from_data.update(tg_data=profile_from.tg_data(), user_id=user_from.pk)
 
                 profile_to_data=profile_to.data_dict(request)
                 profile_to_data.update(profile_to.data_WAK())
-                profile_to_data.update(tg_data=profile_to.tg_data())
+                profile_to_data.update(tg_data=profile_to.tg_data(), user_id=user_to.pk)
 
                 data.update(
                     profile_from=profile_from_data,

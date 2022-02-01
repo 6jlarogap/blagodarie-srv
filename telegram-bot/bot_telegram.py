@@ -187,6 +187,39 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         )
         reply_markup.row(inline_btn_go)
 
+        dict_reply = dict(
+            keyboard_type=KeyboardType.TRUST_THANK,
+            sep=KeyboardType.SEP,
+            user_from_id=profile_to['user_id'],
+            user_to_id=profile_from['user_id'],
+        )
+        callback_data_template = (
+                '%(keyboard_type)s%(sep)s'
+                '%(operation)s%(sep)s'
+                '%(user_from_id)s%(sep)s'
+                '%(user_to_id)s%(sep)s'
+            )
+        dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+        inline_btn_thank = InlineKeyboardButton(
+            'Благодарность',
+            callback_data=callback_data_template % dict_reply,
+        )
+        dict_reply.update(operation=OperationType.MISTRUST)
+        inline_btn_mistrust = InlineKeyboardButton(
+            'Не доверяю',
+            callback_data=callback_data_template % dict_reply,
+        )
+        dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+        inline_btn_nullify_trust = InlineKeyboardButton(
+            'Не знакомы',
+            callback_data=callback_data_template % dict_reply,
+        )
+        reply_markup.row(
+            inline_btn_thank,
+            inline_btn_mistrust,
+            inline_btn_nullify_trust
+        )
+
         try:
             # Учесть aiogram.utils.exceptions.BadRequest: Replied message not found
             await bot.send_message(
@@ -417,12 +450,10 @@ async def echo_send(message: types.Message):
             reply += Misc.reply_relations(response)
 
         dict_reply = dict(
+            keyboard_type=KeyboardType.TRUST_THANK,
             sep=KeyboardType.SEP,
             user_from_id=user_from_id,
             user_to_id=user_to_id,
-            user_to_uuid=response_to['uuid'],
-            frontend_host_title=settings.FRONTEND_HOST_TITLE,
-            keyboard_type=KeyboardType.TRUST_THANK,
         )
         callback_data_template = (
                 '%(keyboard_type)s%(sep)s'

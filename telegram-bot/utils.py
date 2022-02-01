@@ -164,7 +164,6 @@ class Misc(object):
         @username
         +3752975422568
         https://username.com
-
         """
         if not response:
             return ''
