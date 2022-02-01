@@ -405,7 +405,7 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 NB! при передаче данных по кнопке есть ограничение, строка не больше 64 символов, uuid не подходит
             user_id_from
                 (не uuid!) пользователя к кому
-            тип операции может быть любой, кроме назначения.снятия родственников
+            тип операции может быть любой, кроме назначения/снятия родственников
 
         Иначе требует авторизации
         - если user_id_from == user_id_to, то вернуть ошибку (нельзя добавить операцию себе);
@@ -576,8 +576,17 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 comment,
                 insert_timestamp,
             )
+            if got_tg_token:
+                profile_from_data=profile_from.data_dict(request)
+                profile_from_data.update(tg_data=profile_from.tg_data())
+                profile_to_data=profile_to.data_dict(request)
+                profile_to_data.update(tg_data=profile_to.tg_data())
+                data.update(
+                    profile_from=profile_from_data,
+                    profile_to=profile_to_data,
+                )
 
-            if user_to.profile.is_notified:
+            if not got_tg_token and profile_to.is_notified:
                 message = None
                 if operationtype_id in (OperationType.THANK, OperationType.TRUST_AND_THANK, ):
                     message = 'Получена благодарность от '

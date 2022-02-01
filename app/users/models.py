@@ -377,6 +377,24 @@ class Profile(PhotoModel, GeoPointModel):
             comment=self.comment or '',
         )
 
+    def tg_data(self):
+        """
+        Найти профиль среди telegtam ouath's, вернуть данные
+        """
+        result = dict()
+        try:
+            oauth = Oauth.objects.filter(user=self.user, provider=Oauth.PROVIDER_TELEGRAM)[0]
+            result = dict(
+                uid=oauth.uid,
+                username=oauth.username,
+                # пока больше не надо
+            )
+        except IndexError:
+            # У пользователя нет аккаунта в телеграме
+            pass
+        return result
+
+
     @transaction.atomic
     def merge(self, profile_from):
         # Проверку на один и тот же профиль производить

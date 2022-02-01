@@ -1,7 +1,7 @@
 import logging, re
 
 import settings
-from utils import get_user_photo, api_request, OperationType, KeyboardType
+from utils import Misc, OperationType, KeyboardType
 
 from aiogram import Bot, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ContentType
@@ -38,18 +38,19 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
     Действия по (не)доверию, благодарностям
 
     На входе строка:
-        <KeyboardType.TRUST_THANK>
+        <KeyboardType.TRUST_THANK>      # 0
         <KeyboardType.SEP>
-        <operation_type_id>
+        <operation_type_id>             # 1
         <KeyboardType.SEP>
-        <user_from_id>
+        <user_from_id>                  # 2
         <KeyboardType.SEP>
-        <user_to_id>,
-        например: 1~2~326~387
+        <user_to_id>                    # 3
+        <KeyboardType.SEP>
+        например: 1~2~326~387~
     """
     code = callback_query.data.split(KeyboardType.SEP)
     try:
-        p = dict(
+        post = dict(
             tg_token=settings.TOKEN,
             operation_type_id=int(code[1]),
             user_id_from=int(code[2]),
@@ -57,31 +58,61 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         )
     except (ValueError, IndexError,):
         return
-    logging.info('post operation, payload: %s' % p)
-    status, response = await api_request(
+    logging.info('post operation, payload: %s' % post)
+    status, response = await Misc.api_request(
         path='/api/addoperation',
         method='post',
-        data=p,
+        data=post,
     )
     logging.info('post operation, status: %s' % status)
-    logging.info('post operation, response: %s' % response)
-    text = None
+    logging.debug('post operation, response: %s' % response)
+    text = text_link = None
+    operation_done = False
     if status == 200:
-        if p['operation_type_id'] == OperationType.TRUST:
-            text = 'Доверие установлено'
-        elif p['operation_type_id'] == OperationType.MISTRUST:
-            text = 'Установлено недоверие'
-        elif p['operation_type_id'] == OperationType.NULLIFY_TRUST:
-            text = 'Установлено, что не знакомы'
-        elif p['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
-            text = 'Отправлена благодарность'
+        if post['operation_type_id'] == OperationType.TRUST:
+            text = 'Установлено доверие с %(full_name_to)s'
+            text_link = 'Установлено доверие с %(full_name_to_link)s'
+            operation_done = True
+        elif post['operation_type_id'] == OperationType.MISTRUST:
+            text = 'Установлено недоверие с %(full_name_to)s'
+            text_link = 'Установлено недоверие с %(full_name_to_link)s'
+            operation_done = True
+        elif post['operation_type_id'] == OperationType.NULLIFY_TRUST:
+            text = 'Установлено, что не знакомы с %(full_name_to)s'
+            text_link = 'Установлено, что не знакомы с %(full_name_to_link)s'
+            operation_done = True
+        elif post['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
+            text = 'Отправлена благодарность к %(full_name_to)s'
+            text_link = 'Отправлена благодарность к %(full_name_to_link)s'
+            operation_done = True
     elif status == 400 and response.get('code', '') == 'already':
-        if p['operation_type_id'] == OperationType.TRUST:
+        if post['operation_type_id'] == OperationType.TRUST:
             text = 'Уже было установлено доверие'
-        elif p['operation_type_id'] == OperationType.MISTRUST:
+        elif post['operation_type_id'] == OperationType.MISTRUST:
             text = 'Уже было установлено недоверие'
-        elif p['operation_type_id'] == OperationType.NULLIFY_TRUST:
+        elif post['operation_type_id'] == OperationType.NULLIFY_TRUST:
             text = 'Вы и так не знакомы'
+
+    user_link_template = '<a href="%(frontend_host)s/profile/?id=%(uuid)s">%(full_name)s</a>'
+
+    if operation_done:
+        profile_to = response['profile_to']
+        try:
+            tg_user_to_uid = profile_to['tg_data']['uid']
+        except KeyError:
+            tg_user_to_uid = None
+        full_name_to = ('%s %s' % (profile_to['first_name'], profile_to['last_name'],)).strip()
+        full_name_to_link = user_link_template % dict(
+            frontend_host=settings.FRONTEND_HOST,
+            uuid=profile_to['uuid'],
+            full_name=full_name_to,
+        )
+        d = dict(
+            full_name_to=full_name_to,
+            full_name_to_link=full_name_to_link,
+        )
+        text = text % d
+        text_link = text_link % d
 
     if not text:
         if status == 200:
@@ -93,6 +124,11 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         else:
             text = 'Простите, произошла ошибка'
 
+    if not text_link:
+        text_link = text
+
+    # Это отправителю благодарности и т.п.
+    #
     await bot.answer_callback_query(
             callback_query.id,
             text=text,
@@ -101,11 +137,59 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
     try:
         await bot.send_message(
             callback_query.message.chat.id,
-            text=text,
+            text=text_link,
+            disable_web_page_preview=True,
         )
     except (ChatNotFound, CantInitiateConversation):
         pass
-    #await callback_query.message.delete_reply_markup()
+
+    # Это получателю благодарности и т.п.
+    #
+    if operation_done and tg_user_to_uid:
+        profile_from = response.get('profile_from')
+
+        if post['operation_type_id'] == OperationType.TRUST:
+            text_link = 'Установлено доверие с %(full_name_from_link)s'
+        elif post['operation_type_id'] == OperationType.MISTRUST:
+            text_link = 'Установлено недоверие с %(full_name_from_link)s'
+        elif post['operation_type_id'] == OperationType.NULLIFY_TRUST:
+            text_link = 'Установлено, что не знакомы с %(full_name_from_link)s'
+        elif post['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
+            text_link = 'Получена благодарность от %(full_name_from_link)s'
+
+        full_name_from = ('%s %s' % (profile_from['first_name'], profile_from['last_name'],)).strip()
+        full_name_from_link = user_link_template % dict(
+            frontend_host=settings.FRONTEND_HOST,
+            uuid=profile_from['uuid'],
+            full_name=full_name_from,
+        )
+        reply = text_link % dict(full_name_from_link=full_name_from_link)
+
+        if False:
+            reply_markup = InlineKeyboardMarkup()
+            inline_btn_go = InlineKeyboardButton(
+                'Перейти',
+                url="%(frontend_host)s/profile/?id=%(uuid)s" % dict(
+                    frontend_host=settings.FRONTEND_HOST,
+                    uuid=profile_to['uuid'],
+            ))
+            reply_markup.row(inline_btn_go)
+            username = username_in_text
+            reply = Misc.reply_user_card(
+                response=profile_to,
+                username=profile_to.get('tg_username_to') or ''
+            )
+
+        try:
+            # Учесть aiogram.utils.exceptions.BadRequest: Replied message not found
+            await bot.send_message(
+                tg_user_to_uid,
+                text=reply,
+                disable_web_page_preview=True,
+            )
+        except (ChatNotFound, CantInitiateConversation):
+            pass
+
 
 @dp.message_handler(commands=["help",])
 async def cmd_start_help(message: types.Message):
@@ -165,61 +249,6 @@ async def echo_send(message: types.Message):
         Благодарность   Недоверие   Не знакомы
     """
 
-    def make_reply(response, username):
-        """
-        Карточка пользователя, каким он на сайте
-        
-        response: ответ от сервера
-        username: @username в телеграме, если задано
-        """
-        if not response:
-            return ''
-        reply = (
-                '<b>%(first_name)s %(last_name)s</b>\n'
-                'Доверий: %(trust_count)s\n'
-                'Благодарностей: %(sum_thanks_count)s\n'
-                'Недоверий: %(mistrust_count)s\n'
-                '\n'
-            ) % dict(
-            first_name=response['first_name'],
-            last_name=response['last_name'],
-            trust_count=response['trust_count'],
-            sum_thanks_count=response['sum_thanks_count'],
-            mistrust_count=response['mistrust_count'],
-        )
-        abilities_text = '\n'.join(
-            ability['text'] for ability in response['abilities']
-        ) if response.get('abilities') else 'не задано'
-        reply += ('Возможности: %s' % abilities_text) + '\n\n'
-
-        wishes_text = '\n'.join(
-            wish['text'] for wish in response['wishes']
-        ) if response.get('wishes') else 'не задано'
-        reply += ('Потребности: %s' % wishes_text) + '\n\n'
-
-        map_text = (
-            '<a href="%(frontend_host)s/profile/?id=%(user_from_uuid)s&q=1&map_visible=true">тут</a>'
-        ) % dict(
-            frontend_host=settings.FRONTEND_HOST,
-            user_from_uuid=response['uuid'],
-        ) if response.get('latitude') is not None and response.get('longitude') is not None \
-            else  'не задано'
-        reply += ('Местоположение: %s' % map_text) + '\n\n'
-
-        keys = []
-        if username:
-            keys.append("@%s" % username)
-        keys += [key['text'] for key in response['keys']]
-        keys_text = '\n' + '\n'.join(
-            key for key in keys
-        ) if keys else 'не задано'
-
-        reply += ('Контакты: %s' % keys_text) + '\n\n'
-
-        return reply
-
-# ------ starting ------
-
     reply = ''
     reply_markup = None
 
@@ -241,6 +270,7 @@ async def echo_send(message: types.Message):
 
     username_in_text = ''
     state = ''
+
     if tg_user_sender.is_bot:
         reply = 'Сообщения от ботов пока не обрабатываются'
     else:
@@ -265,12 +295,12 @@ async def echo_send(message: types.Message):
                 m = re.search(r'\@(\w+)', message.text)
                 if m:
                     username_in_text = m.group(1)
-                    logging.info('username "@%s" found\n' % username_in_text) 
+                    logging.info('username "@%s" found in message text\n' % username_in_text) 
                     payload_username = dict(
                         tg_token=settings.TOKEN,
                         tg_username=username_in_text,
                     )
-                    status, response = await api_request(
+                    status, response = await Misc.api_request(
                         path='/api/profile',
                         method='post',
                         data=payload_username,
@@ -310,7 +340,7 @@ async def echo_send(message: types.Message):
             activate=True,
         )
         try:
-            status, response_from = await api_request(
+            status, response_from = await Misc.api_request(
                 path='/api/profile',
                 method='post',
                 data=payload_from,
@@ -332,7 +362,7 @@ async def echo_send(message: types.Message):
             activate=False,
         )
         try:
-            status, response_to = await api_request(
+            status, response_to = await Misc.api_request(
                 path='/api/profile',
                 method='post',
                 data=payload_to,
@@ -361,14 +391,14 @@ async def echo_send(message: types.Message):
             response = response_from
             if not username:
                 username = tg_user_sender and tg_user_sender.username
-        reply = make_reply(response, username)
+        reply = Misc.reply_user_card(response, username)
 
     if user_from_id and user_to_id:
         payload_relation = dict(
             user_id_from=response_from['uuid'],
             user_id_to=response_to['uuid'],
         )
-        status, response = await api_request(
+        status, response = await Misc.api_request(
             path='/api/user/relations/',
             method='get',
             params=payload_relation,
@@ -376,11 +406,7 @@ async def echo_send(message: types.Message):
         logging.info('get users relations, status: %s' % status)
         logging.debug('get users relations: %s' % response)
         if status == 200:
-            reply += '\n'.join((
-                'От Вас: %s' % OperationType.relation_text(response['to_from']['is_trust']),
-                'К Вам: %s' % OperationType.relation_text(response['from_to']['is_trust']),
-                '\n',
-            ))
+            reply += Misc.reply_relations(response)
 
         dict_reply = dict(
             sep=KeyboardType.SEP,
@@ -394,7 +420,7 @@ async def echo_send(message: types.Message):
                 '%(keyboard_type)s%(sep)s'
                 '%(operation)s%(sep)s'
                 '%(user_from_id)s%(sep)s'
-                '%(user_to_id)s'
+                '%(user_to_id)s%(sep)s'
             )
         dict_reply.update(operation=OperationType.TRUST_AND_THANK)
         inline_btn_thank = InlineKeyboardButton(
@@ -421,7 +447,7 @@ async def echo_send(message: types.Message):
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
     if user_from_id and response_from.get('created'):
-        tg_user_sender_photo = await get_user_photo(bot, tg_user_sender)
+        tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
         logging.info('put tg_user_sender_photo...')
         if tg_user_sender_photo:
             payload_photo = dict(
@@ -429,7 +455,7 @@ async def echo_send(message: types.Message):
                 photo=tg_user_sender_photo,
                 uuid=response_from['uuid'],
             )
-            status, response = await api_request(
+            status, response = await Misc.api_request(
                 path='/api/profile',
                 method='put',
                 data=payload_photo,
@@ -438,7 +464,7 @@ async def echo_send(message: types.Message):
             logging.debug('put tg_user_sender_photo, response: %s' % response)
 
     if user_to_id and response_to.get('created'):
-        tg_user_forwarded_photo = await get_user_photo(bot, tg_user_forwarded)
+        tg_user_forwarded_photo = await Misc.get_user_photo(bot, tg_user_forwarded)
         if tg_user_forwarded_photo:
             logging.info('put tg_user_forwarded_photo...')
             payload_photo = dict(
@@ -446,7 +472,7 @@ async def echo_send(message: types.Message):
                 photo=tg_user_forwarded_photo,
                 uuid=response_to['uuid'],
             )
-            status, response = await api_request(
+            status, response = await Misc.api_request(
                 path='/api/profile',
                 method='put',
                 data=payload_photo,
