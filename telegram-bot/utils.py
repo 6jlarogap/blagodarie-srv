@@ -219,3 +219,11 @@ class Misc(object):
                 'К Вам: %s' % OperationType.relation_text(response['to_from']['is_trust']),
                 '\n',
             ))
+
+    @classmethod
+    def make_full_name(cls, profile):
+        return (
+            '%s %s' % (
+                profile.get('first_name', ''),
+                profile.get('last_name', ''),
+        )).strip()

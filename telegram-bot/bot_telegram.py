@@ -93,16 +93,16 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         elif post['operation_type_id'] == OperationType.NULLIFY_TRUST:
             text = 'Вы и так не знакомы'
 
-    user_link_template = '<a href="%(frontend_host)s/profile/?id=%(uuid)s">%(full_name)s</a>'
-
     if operation_done:
         profile_to = response['profile_to']
         try:
             tg_user_to_uid = profile_to['tg_data']['uid']
         except KeyError:
             tg_user_to_uid = None
-        full_name_to = ('%s %s' % (profile_to['first_name'], profile_to['last_name'],)).strip()
-        full_name_to_link = user_link_template % dict(
+        full_name_to = Misc.make_full_name(profile_to)
+        full_name_to_link = (
+                '<a href="%(frontend_host)s/profile/?id=%(uuid)s">%(full_name)s</a>'
+            ) % dict(
             frontend_host=settings.FRONTEND_HOST,
             uuid=profile_to['uuid'],
             full_name=full_name_to,
@@ -149,36 +149,43 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         profile_from = response.get('profile_from')
 
         if post['operation_type_id'] == OperationType.TRUST:
-            text_link = 'Установлено доверие с %(full_name_from_link)s'
+            text_link = 'Установлено доверие с:'
         elif post['operation_type_id'] == OperationType.MISTRUST:
-            text_link = 'Установлено недоверие с %(full_name_from_link)s'
+            text_link = 'Установлено недоверие с:'
         elif post['operation_type_id'] == OperationType.NULLIFY_TRUST:
-            text_link = 'Установлено, что не знакомы с %(full_name_from_link)s'
+            text_link = 'Установлено, что не знакомы с:'
         elif post['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
-            text_link = 'Получена благодарность от %(full_name_from_link)s'
+            text_link = 'Получена благодарность от:'
 
-        full_name_from = ('%s %s' % (profile_from['first_name'], profile_from['last_name'],)).strip()
-        full_name_from_link = user_link_template % dict(
+        reply = text_link + '\n\n'
+        reply += Misc.reply_user_card(
+            response=profile_from,
+            username=profile_from.get('tg_username_to') or ''
+        )
+        payload_relation = dict(
+            user_id_from=profile_to['uuid'],
+            user_id_to=profile_from['uuid'],
+        )
+        status_r, response_r = await Misc.api_request(
+            path='/api/user/relations/',
+            method='get',
+            params=payload_relation,
+        )
+        logging.info('get users relations, status: %s' % status_r)
+        logging.debug('get users relations: %s' % response_r)
+        if status == 200:
+            reply += Misc.reply_relations(response_r)
+
+        reply_markup = InlineKeyboardMarkup()
+        goto_from_link = '%(frontend_host)s/profile/?id=%(uuid)s' % dict(
             frontend_host=settings.FRONTEND_HOST,
             uuid=profile_from['uuid'],
-            full_name=full_name_from,
         )
-        reply = text_link % dict(full_name_from_link=full_name_from_link)
-
-        if False:
-            reply_markup = InlineKeyboardMarkup()
-            inline_btn_go = InlineKeyboardButton(
-                'Перейти',
-                url="%(frontend_host)s/profile/?id=%(uuid)s" % dict(
-                    frontend_host=settings.FRONTEND_HOST,
-                    uuid=profile_to['uuid'],
-            ))
-            reply_markup.row(inline_btn_go)
-            username = username_in_text
-            reply = Misc.reply_user_card(
-                response=profile_to,
-                username=profile_to.get('tg_username_to') or ''
-            )
+        inline_btn_go = InlineKeyboardButton(
+            'Перейти',
+            url=goto_from_link,
+        )
+        reply_markup.row(inline_btn_go)
 
         try:
             # Учесть aiogram.utils.exceptions.BadRequest: Replied message not found
@@ -186,6 +193,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
                 tg_user_to_uid,
                 text=reply,
                 disable_web_page_preview=True,
+                reply_markup=reply_markup,
             )
         except (ChatNotFound, CantInitiateConversation):
             pass

@@ -394,6 +394,30 @@ class Profile(PhotoModel, GeoPointModel):
             pass
         return result
 
+    def data_WAK(self):
+        Wish = get_model('contact', 'Wish')
+        Ability = get_model('contact', 'Ability')
+        Key = get_model('contact', 'Key')
+        user = self.user
+        wishes = [
+            {
+                'text': wish.text,
+            } \
+            for wish in Wish.objects.filter(owner=user).order_by('insert_timestamp')
+        ]
+        abilities = [
+            {
+                'text': ability.text,
+            } \
+            for ability in Ability.objects.filter(owner=user).order_by('insert_timestamp')
+        ]
+        keys = [
+            {
+                'text': key.value,
+            } \
+            for key in Key.objects.filter(owner=user).order_by('type__pk')
+        ]
+        return dict(wishes=wishes, abilities=abilities, keys=keys)
 
     @transaction.atomic
     def merge(self, profile_from):
@@ -408,7 +432,6 @@ class Profile(PhotoModel, GeoPointModel):
 
         Wish = get_model('contact', 'Wish')
         Ability = get_model('contact', 'Ability')
-
         Key = get_model('contact', 'Key')
 
         user = self.user
