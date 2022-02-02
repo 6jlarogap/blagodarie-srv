@@ -234,7 +234,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
 
 @dp.message_handler(commands=["help",])
 async def cmd_start_help(message: types.Message):
-    await message.reply("Текст в разработке")
+    await message.reply("Перешлите мне сообщение или напишите @имя пользователя чтобы увидеть возможножные действия.")
 
 @dp.message_handler(content_types=ContentType.all())
 async def echo_send(message: types.Message):

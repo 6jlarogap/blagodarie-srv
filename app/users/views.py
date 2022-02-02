@@ -423,8 +423,8 @@ class ApiAuthTelegram(CreateUserMixin, SendMessageMixin, APIView):
                     oauth.save()
 
                 user_tg_field_map = dict(
-                    last_name='last_name',
-                    first_name='first_name',
+                    # last_name='last_name',
+                    # first_name='first_name',
                 )
                 changed = False
                 for f in user_tg_field_map:
