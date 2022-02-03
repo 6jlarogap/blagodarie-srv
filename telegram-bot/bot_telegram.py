@@ -46,6 +46,8 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         <KeyboardType.SEP>
         <user_to_id>                    # 3
         <KeyboardType.SEP>
+        <message_to_forward_id>         # 4
+        <KeyboardType.SEP>
         например: 1~2~326~387~
     """
     code = callback_query.data.split(KeyboardType.SEP)
@@ -58,6 +60,11 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         )
     except (ValueError, IndexError,):
         return
+    try:
+        message_to_forward_id = int(code[4])
+    except (ValueError, IndexError,):
+        message_to_forward_id = None
+
     logging.info('post operation, payload: %s' % post)
     status, response = await Misc.api_request(
         path='/api/addoperation',
@@ -147,15 +154,28 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
     #
     if operation_done and tg_user_to_uid:
         profile_from = response.get('profile_from')
+        try:
+            tg_user_from_uid = profile_from['tg_data']['uid']
+        except KeyError:
+            tg_user_from_uid = None
 
         if post['operation_type_id'] == OperationType.TRUST:
-            text_link = 'Установлено доверие с:'
+            text_link = 'Установлено доверие с'
         elif post['operation_type_id'] == OperationType.MISTRUST:
-            text_link = 'Установлено недоверие с:'
+            text_link = 'Установлено недоверие с'
         elif post['operation_type_id'] == OperationType.NULLIFY_TRUST:
-            text_link = 'Установлено, что не знакомы с:'
+            text_link = 'Установлено, что не знакомы с'
         elif post['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
-            text_link = 'Получена благодарность от:'
+            text_link = 'Получена благодарность от'
+
+        try:
+            tg_user_from_username = profile_from['tg_data']['username']
+        except KeyError:
+            tg_user_from_username = None
+        if tg_user_from_username:
+            text_link += ' @%s :' % tg_user_from_username
+        else:
+            text_link += ':'
 
         reply = text_link + '\n\n'
         reply += Misc.reply_user_card(
@@ -192,12 +212,14 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             sep=KeyboardType.SEP,
             user_from_id=profile_to['user_id'],
             user_to_id=profile_from['user_id'],
+            message_to_forward_id='',
         )
         callback_data_template = (
                 '%(keyboard_type)s%(sep)s'
                 '%(operation)s%(sep)s'
                 '%(user_from_id)s%(sep)s'
                 '%(user_to_id)s%(sep)s'
+                '%(message_to_forward_id)s%(sep)s'
             )
         dict_reply.update(operation=OperationType.TRUST_AND_THANK)
         inline_btn_thank = InlineKeyboardButton(
@@ -220,8 +242,16 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             inline_btn_nullify_trust
         )
 
+        if message_to_forward_id and tg_user_from_uid:
+            try:
+                await bot.forward_message(
+                    chat_id=tg_user_to_uid,
+                    from_chat_id=tg_user_from_uid,
+                    message_id=message_to_forward_id,
+                )
+            except:
+                pass
         try:
-            # Учесть aiogram.utils.exceptions.BadRequest: Replied message not found
             await bot.send_message(
                 tg_user_to_uid,
                 text=reply,
@@ -302,6 +332,7 @@ async def echo_send(message: types.Message):
     response_from = dict()
 
     tg_user_forwarded = None
+    message_to_forward_id = None
 
     # Кого будут благодарить...
     # Это из апи, user_id & profile_dict:
@@ -454,12 +485,14 @@ async def echo_send(message: types.Message):
             sep=KeyboardType.SEP,
             user_from_id=user_from_id,
             user_to_id=user_to_id,
+            message_to_forward_id=state == 'forwarded_from_other' and message.message_id or ''
         )
         callback_data_template = (
                 '%(keyboard_type)s%(sep)s'
                 '%(operation)s%(sep)s'
                 '%(user_from_id)s%(sep)s'
                 '%(user_to_id)s%(sep)s'
+                '%(message_to_forward_id)s%(sep)s'
             )
         dict_reply.update(operation=OperationType.TRUST_AND_THANK)
         inline_btn_thank = InlineKeyboardButton(
