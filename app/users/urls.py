@@ -27,4 +27,7 @@ urlpatterns = [
     re_path(r'^api/profile/?$', views.api_profile),
 
     re_path(r'^api/user/relations/?$', views.api_user_relations),
+
+    re_path(r'^test/goto/(?P<temp_token>[a-f0-9]{40})/link/?$', views.test_goto_auth_link),
+
 ]

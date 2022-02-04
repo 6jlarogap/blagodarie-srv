@@ -65,7 +65,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
     except (ValueError, IndexError,):
         message_to_forward_id = None
 
-    logging.info('post operation, payload: %s' % post)
+    logging.debug('post operation, payload: %s' % post)
     status, response = await Misc.api_request(
         path='/api/addoperation',
         method='post',
@@ -106,6 +106,10 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             tg_user_to_uid = profile_to['tg_data']['uid']
         except KeyError:
             tg_user_to_uid = None
+        try:
+            tg_user_to_username = profile_to['tg_data']['username']
+        except KeyError:
+            tg_user_to_username = ''
         full_name_to = Misc.make_full_name(profile_to)
         full_name_to_link = (
                 '<a href="%(frontend_host)s/profile/?id=%(uuid)s">%(full_name)s</a>'
@@ -120,6 +124,8 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         )
         text = text % d
         text_link = text_link % d
+        if tg_user_to_username:
+            text_link += ' ( @%s )' % tg_user_to_username
 
     if not text:
         if status == 200:

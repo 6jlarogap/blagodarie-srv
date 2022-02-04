@@ -6,6 +6,7 @@ from django.db import transaction, IntegrityError, connection
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
+from django.http import Http404
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -1270,3 +1271,46 @@ class ApiUserRelations(UuidMixin, APIView):
         return Response(data=data, status=status_code)
 
 api_user_relations = ApiUserRelations.as_view()
+
+class ApiTestGoToLink(FrontendMixin, APIView):
+
+    """
+    Тест для проверки авторизованного get запроса с временным токеном
+    """
+    def get(self, request, temp_token):
+        try:
+            try:
+                user = User.objects.get(auth_token__key=temp_token)
+            except User.DoesNotExist:
+                raise Http404()
+            uuid = request.GET.get('uuid')
+            if uuid:
+                path = '/profile/?id=%s' % uuid
+            else:
+                path = '/'
+            provider = Oauth.PROVIDER_TELEGRAM
+            redirect_from_callback = self.get_frontend_url(
+                request,
+                path,
+            )
+            # print(redirect_from_callback)
+            response = redirect(redirect_from_callback)
+            to_cookie = dict(
+                provider=provider,
+                user_uuid=str(user.profile.uuid),
+                auth_token=user.auth_token.key
+            )
+            response.set_cookie(
+                key='auth_data',
+                value=json.dumps(to_cookie),
+                max_age=600,
+                path='/',
+                domain=self.get_frontend_name(request),
+            )
+            return response
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+test_goto_auth_link = ApiTestGoToLink.as_view()
