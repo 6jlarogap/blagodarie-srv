@@ -2193,6 +2193,10 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, APIView):
         в порядке убывания даты регистрации пользователя
         из ближайшего окружения опрашиваемого
 
+        Если пользователь, выполняющий запрос, авторизован,
+        то он будет обязательно в выводе метода, возможно,
+        со связями пользователей, попавших в выборку
+
         Пример вызова:
         /api/profile_graph?uuid=91c49fe2-3f74-49a8-906e-f4f711f8e3a1
         Возвращает:
@@ -2407,6 +2411,10 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, APIView):
             connections = []
 
             user_pks.append(user_q.pk)
+            user_a = request.user
+            if user_a.is_authenticated and user_a.pk not in user_pks:
+                users.append(user_a.profile.data_dict(request))
+                user_pks.append(user_a.pk)
             q = Q(user_from__in=user_pks) & Q(user_to__in=user_pks)
             q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust__isnull=False)
             for cs in CurrentState.objects.filter(q).select_related(
