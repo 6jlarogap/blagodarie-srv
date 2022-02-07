@@ -326,6 +326,12 @@ async def echo_send(message: types.Message):
         Благодарность   Недоверие   Не знакомы
     """
 
+    if not message.is_forward() and message.content_type != ContentType.TEXT:
+        await message.reply(
+            'Сюда можно слать только текст или пересылать сообщения любого типа'
+        )
+        return
+
     reply = ''
     reply_markup = None
 
