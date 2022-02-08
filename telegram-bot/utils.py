@@ -1,4 +1,5 @@
 import base64
+from urllib.parse import urlencode
 
 import aiohttp
 
@@ -226,3 +227,21 @@ class Misc(object):
                 profile.get('first_name', ''),
                 profile.get('last_name', ''),
         )).strip()
+
+    @classmethod
+    def make_login_url(cls, redirect_path):
+        """
+        Сформировать ссылку, которая будет открываться авторизованным пользователем
+        """
+        redirect_path = urlencode(dict(
+            redirect_path=redirect_path
+        ))
+        return (
+            '%(frontend_host)s'
+            '%(frontend_auth_path)s'
+            '?%(redirect_path)s'
+        ) % dict(
+            frontend_host=settings.FRONTEND_HOST,
+            frontend_auth_path=settings.FRONTEND_AUTH_PATH,
+            redirect_path=redirect_path,
+        )

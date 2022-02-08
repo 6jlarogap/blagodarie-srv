@@ -344,11 +344,11 @@ class ApiAuthSignUpIncognito(APIView):
 
 api_auth_signup_incognito = ApiAuthSignUpIncognito.as_view()
 
-class ApiAuthTelegram(CreateUserMixin, SendMessageMixin, APIView):
+class ApiAuthTelegram(CreateUserMixin, SendMessageMixin, FrontendMixin, APIView):
     """
     Callback функция авторизации через telegram
 
-     Принимает:
+     Принимает, при post запросе:
      {
         "id": 78342834,
         "first_name": Иван",
@@ -357,142 +357,206 @@ class ApiAuthTelegram(CreateUserMixin, SendMessageMixin, APIView):
         "photo_url": "https://t.me/i/userpic/320/92dcFhXhdjdjdjFwsiBzo1_M9HT-fyfAxJhoY.jpg",
         "auth_date": 1615848699,
         "hash": "bfdd33573729c511ad5bb969487b2e2ce9714e88cd8268929c010711ede3ed5d"
+        # необязательно
+        "redirect_path: путь к <frontend-url>/, например "/profile/id=....'
      }
+     При get запросе: аналогичные данные в строке запроса
 
     Проверяет правильность данных по hash,
     создает нового пользователя из telegram с id, при необходимости,
-    выполняет его login()
+
+    Возвращает:
+        при отсутствии redirect_path:
+            {
+                "user_uuid": <uuid пользователеля>,
+                "auth_token": <его токен авторизации>,
+            }
+        при наличиии redirect_path:
+            перенаправляет на <frontend>/<redirect_path>, с аналогичной кукой:
+                key='auth_data',
+                value=json.dumps({
+                    provider=provider,
+                    user_uuid=<uuid пользователеля>,
+                    auth_token=<его токен авторизации>
+                }),
+                max_age=600,
+                path='/',
+                domain=<frontend domain>,
     """
 
-    @transaction.atomic
-    def post(self, request):
+    def check_input(self, request):
+        if request.method == 'POST':
+            rd = request.data
+        elif request.method == 'GET':
+            rd = request.GET
+        if not rd or not rd.get('auth_date') or not rd.get('hash') or not rd.get('id'):
+            raise ServiceException('Неверный запрос')
+        if not settings.TELEGRAM_BOT_TOKEN:
+            raise ServiceException('В системе не определен TELEGRAM_BOT_TOKEN')
+
+        request_data = rd.copy()
+        unix_time_now = int(time.time())
+        unix_time_auth_date = int(rd['auth_date'])
+        if unix_time_now - unix_time_auth_date > settings.TELEGRAM_AUTH_DATA_OUTDATED:
+            raise ServiceException('Неверный запрос, данные устарели')
+
+        request_data.pop("hash", None)
         try:
-            tg = request.data
-            if not tg or not tg.get('auth_date') or not tg.get('hash') or not tg.get('id'):
-                raise ServiceException('Неверный запрос')
+            request_data.pop("redirect_path", None)
+        except KeyError:
+            pass
+        request_data_alphabetical_order = sorted(request_data.items(), key=lambda x: x[0])
+        data_check_string = []
+        for data_pair in request_data_alphabetical_order:
+            key, value = data_pair[0], data_pair[1]
+            data_check_string.append(key + "=" + str(value))
+        data_check_string = "\n".join(data_check_string)
+        secret_key = hashlib.sha256(settings.TELEGRAM_BOT_TOKEN.encode()).digest()
+        calculated_hash = hmac.new(
+            secret_key,
+            msg=data_check_string.encode(),
+            digestmod=hashlib.sha256,
+        ).hexdigest()
+        if calculated_hash != rd['hash']:
+            raise ServiceException('Неверный запрос, данные не прошли проверку на hash')
+        return rd
 
-            if not settings.TELEGRAM_BOT_TOKEN:
-                raise ServiceException('В системе не определен TELEGRAM_BOT_TOKEN')
-
-            request_data = tg.copy()
-            unix_time_now = int(time.time())
-            unix_time_auth_date = int(tg['auth_date'])
-            if unix_time_now - unix_time_auth_date > settings.TELEGRAM_AUTH_DATA_OUTDATED:
-                raise ServiceException('Неверный запрос, данные устарели')
-
-            request_data.pop("hash", None)
-            request_data_alphabetical_order = sorted(request_data.items(), key=lambda x: x[0])
-            data_check_string = []
-            for data_pair in request_data_alphabetical_order:
-                key, value = data_pair[0], data_pair[1]
-                data_check_string.append(key + "=" + str(value))
-            data_check_string = "\n".join(data_check_string)
-            secret_key = hashlib.sha256(settings.TELEGRAM_BOT_TOKEN.encode()).digest()
-            calculated_hash = hmac.new(
-                secret_key,
-                msg=data_check_string.encode(),
-                digestmod=hashlib.sha256,
-            ).hexdigest()
-            if calculated_hash != tg['hash']:
-                raise ServiceException('Неверный запрос, данные не прошли проверку на hash')
-
-            try:
-                oauth = Oauth.objects.select_related('user', 'user__profile').get(
-                    provider = Oauth.PROVIDER_TELEGRAM,
-                    uid=tg['id'],
-                )
-                # При повторном логине проверяется, не изменились ли данные пользователя
-                #
-                user = oauth.user
-                profile = user.profile
-
-                oauth_tg_field_map = dict(
-                    last_name='last_name',
-                    first_name='first_name',
-                    username='username',
-                    photo='photo_url',
-                )
-                changed = False
-                for f in oauth_tg_field_map:
-                    if getattr(oauth, f) != tg.get(oauth_tg_field_map[f], ''):
-                        changed = True
-                        break
-                if changed:
-                    for f in oauth_tg_field_map:
-                        setattr(oauth, f, tg.get(oauth_tg_field_map[f], ''))
-                    oauth.update_timestamp = int(time.time())
-                    oauth.save()
-
-                user_tg_field_map = dict(
-                    # last_name='last_name',
-                    # first_name='first_name',
-                )
-                changed = False
-                for f in user_tg_field_map:
-                    if getattr(user, f) != tg.get(user_tg_field_map[f], ''):
-                        changed = True
-                        break
-                was_not_active = False
-                if not user.is_active:
-                    changed = True
-                    user.is_active = True
-                    was_not_active = True
-                if changed:
-                    for f in user_tg_field_map:
-                        setattr(user, f, tg.get(user_tg_field_map[f], ''))
-                    user.save()
-
-                profile_tg_field_map = dict(
-                    photo_url='photo_url',
-                )
-                changed = False
-                for f in profile_tg_field_map:
-                    if getattr(profile, f) != tg.get(profile_tg_field_map[f], ''):
-                        changed = True
-                        break
-                if changed:
-                    for f in profile_tg_field_map:
-                        setattr(profile, f, tg.get(profile_tg_field_map[f], ''))
-                    profile.save()
-                if was_not_active and profile.is_notified:
-                    try:
-                        telegram_uid = Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)[0].uid
-                        fio = profile.full_name(last_name_first=False) or 'Без имени'
-                        message = "Cвязанный профиль '%s' восстановлен" % fio
-                        self.send_to_telegram(message, telegram_uid=telegram_uid)
-                    except IndexError:
-                        pass
-            except Oauth.DoesNotExist:
-                last_name = tg.get('last_name', '')
-                first_name = tg.get('first_name', '')
-                photo_url = tg.get('photo_url', '')
-                user = self.create_user(
-                    last_name=last_name,
-                    first_name=first_name,
-                    photo_url=photo_url,
-                )
-                oauth = Oauth.objects.create(
-                    provider = Oauth.PROVIDER_TELEGRAM,
-                    uid=tg['id'],
-                    user=user,
-                    last_name=last_name,
-                    first_name=first_name,
-                    username=tg.get('username', ''),
-                    photo=photo_url,
-                )
-            token, created_token = Token.objects.get_or_create(user=user)
-
-            data = dict(
-                user_uuid=user.profile.uuid,
-                auth_token=token.key,
+    def process_input(self, rd):
+        try:
+            oauth = Oauth.objects.select_related('user', 'user__profile').get(
+                provider = Oauth.PROVIDER_TELEGRAM,
+                uid=rd['id'],
             )
-            status_code = 200
+            # При повторном логине проверяется, не изменились ли данные пользователя
+            #
+            user = oauth.user
+            profile = user.profile
 
+            oauth_tg_field_map = dict(
+                last_name='last_name',
+                first_name='first_name',
+                username='username',
+                photo='photo_url',
+            )
+            changed = False
+            for f in oauth_tg_field_map:
+                if getattr(oauth, f) != rd.get(oauth_tg_field_map[f], ''):
+                    changed = True
+                    break
+            if changed:
+                for f in oauth_tg_field_map:
+                    setattr(oauth, f, rd.get(oauth_tg_field_map[f], ''))
+                oauth.update_timestamp = int(time.time())
+                oauth.save()
+
+            user_tg_field_map = dict(
+                # last_name='last_name',
+                # first_name='first_name',
+            )
+            changed = False
+            for f in user_tg_field_map:
+                if getattr(user, f) != rd.get(user_tg_field_map[f], ''):
+                    changed = True
+                    break
+            was_not_active = False
+            if not user.is_active:
+                changed = True
+                user.is_active = True
+                was_not_active = True
+            if changed:
+                for f in user_tg_field_map:
+                    setattr(user, f, rd.get(user_tg_field_map[f], ''))
+                user.save()
+
+            profile_tg_field_map = dict(
+                photo_url='photo_url',
+            )
+            changed = False
+            for f in profile_tg_field_map:
+                if getattr(profile, f) != rd.get(profile_tg_field_map[f], ''):
+                    changed = True
+                    break
+            if changed:
+                for f in profile_tg_field_map:
+                    setattr(profile, f, rd.get(profile_tg_field_map[f], ''))
+                profile.save()
+            if was_not_active and profile.is_notified:
+                fio = profile.full_name(last_name_first=False) or 'Без имени'
+                message = "Cвязанный профиль '%s' восстановлен" % fio
+                self.send_to_telegram(message, telegram_uid=rd['id'])
+        except Oauth.DoesNotExist:
+            last_name = rd.get('last_name', '')
+            first_name = rd.get('first_name', '')
+            photo_url = rd.get('photo_url', '')
+            user = self.create_user(
+                last_name=last_name,
+                first_name=first_name,
+                photo_url=photo_url,
+            )
+            oauth = Oauth.objects.create(
+                provider = Oauth.PROVIDER_TELEGRAM,
+                uid=rd['id'],
+                user=user,
+                last_name=last_name,
+                first_name=first_name,
+                username=rd.get('username', ''),
+                photo=photo_url,
+            )
+        token, created_token = Token.objects.get_or_create(user=user)
+        return dict(
+            user_uuid=str(user.profile.uuid),
+            auth_token=token.key,
+        )
+
+    def do_redirect(self, request, rd, data):
+        redirect_path = rd.get('redirect_path')
+        if redirect_path:
+            response = redirect(self.get_frontend_url(
+                request=request,
+                path=redirect_path,
+            ))
+            to_cookie = dict(provider=Oauth.PROVIDER_TELEGRAM, )
+            to_cookie.update(data)
+            response.set_cookie(
+                key='auth_data',
+                value=json.dumps(to_cookie),
+                max_age=600,
+                path='/',
+                domain=self.get_frontend_name(request),
+            )
+            return response
+        else:
+            return None
+
+    @transaction.atomic
+    def process_request(self, request):
+        try:
+            # request data, got by GET or POST
+            #
+            rd = self.check_input(request)
+
+            # output data
+            #
+            data = self.process_input(rd)
+
+            # redirect with output data as cookie или return output data
+            #
+            redirected_response = self.do_redirect(request, rd, data)
+            if redirected_response:
+                return redirected_response
+
+            status_code = 200
         except ServiceException as excpt:
             transaction.set_rollback(True)
             data = dict(message=excpt.args[0])
             status_code = 400
         return Response(data=data, status=status_code)
+
+    def get(self, request):
+        return self.process_request(request)
+
+    def post(self, request):
+        return self.process_request(request)
 
 api_auth_telegram = ApiAuthTelegram.as_view()
 

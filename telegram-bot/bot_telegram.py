@@ -5,6 +5,7 @@ from utils import Misc, OperationType, KeyboardType
 
 from aiogram import Bot, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ContentType
+from aiogram.types.login_url import LoginUrl
 from aiogram.dispatcher import Dispatcher
 from aiogram.utils.executor import start_polling, start_webhook
 
@@ -203,13 +204,18 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             reply += Misc.reply_relations(response_r)
 
         reply_markup = InlineKeyboardMarkup()
-        goto_from_link = '%(frontend_host)s/profile/?id=%(uuid)s' % dict(
+
+        path = '/profile/?id=%(uuid)s' % dict(
             frontend_host=settings.FRONTEND_HOST,
             uuid=profile_from['uuid'],
         )
+        url = settings.FRONTEND_HOST + path
+        login_url = Misc.make_login_url(path)
+
         inline_btn_go = InlineKeyboardButton(
             'Перейти',
-            url=goto_from_link,
+            url=url,
+            # login_url=login_url,
         )
         reply_markup.row(inline_btn_go)
 
@@ -459,12 +465,17 @@ async def echo_send(message: types.Message):
 
     if user_from_id:
         reply_markup = InlineKeyboardMarkup()
+        path = "/profile/?id=%(uuid)s" % dict(
+            uuid=response_to['uuid'] if user_to_id else response_from['uuid'],
+        )
+        url = settings.FRONTEND_HOST + path
+        login_url = Misc.make_login_url(path)
+        login_url = LoginUrl(url=login_url)
         inline_btn_go = InlineKeyboardButton(
             'Перейти',
-            url="%(frontend_host)s/profile/?id=%(uuid)s" % dict(
-                frontend_host=settings.FRONTEND_HOST,
-                uuid=response_to['uuid'] if user_to_id else response_from['uuid'],
-        ))
+            url=url,
+            # login_url=login_url,
+        )
         reply_markup.row(inline_btn_go)
         username = username_in_text
         if user_to_id:
