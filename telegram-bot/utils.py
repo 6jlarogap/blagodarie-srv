@@ -232,6 +232,11 @@ class Misc(object):
     def make_login_url(cls, redirect_path):
         """
         Сформировать ссылку, которая будет открываться авторизованным пользователем
+
+        Пример результата:
+        https://dev.blagodarie.org/auth/telegram/?redirect_path=/profile/?id=...
+
+        где /profile/?id=... - путь на фронте, куда после авторизации уходим
         """
         redirect_path = urlencode(dict(
             redirect_path=redirect_path

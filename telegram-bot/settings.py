@@ -37,7 +37,7 @@ FRONTEND_HOST_TITLE = 'БлагоДари.РФ (dev)'
 
 # Ссылка на фронте, которая будет открываться там под авторизованным
 # пользователем:
-# <FRONTEND_HOST><FRONTEND_AUTH_PATH>?<frontend_path>
+# <FRONTEND_HOST><FRONTEND_AUTH_PATH>?redirect_path=<frontend_path>
 #
 FRONTEND_AUTH_PATH = '/auth/telegram/'
 
