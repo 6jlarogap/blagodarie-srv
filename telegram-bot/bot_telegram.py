@@ -193,15 +193,18 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             user_id_from=profile_to['uuid'],
             user_id_to=profile_from['uuid'],
         )
-        status_r, response_r = await Misc.api_request(
+        status, response = await Misc.api_request(
             path='/api/user/relations/',
             method='get',
             params=payload_relation,
         )
-        logging.info('get users relations, status: %s' % status_r)
-        logging.debug('get users relations: %s' % response_r)
+        logging.info('get users relations, status: %s' % status)
+        logging.debug('get users relations: %s' % response)
         if status == 200:
-            reply += Misc.reply_relations(response_r)
+            reply += Misc.reply_relations(response)
+            response_relations = response
+        else:
+            response_relations = None
 
         reply_markup = InlineKeyboardMarkup()
 
@@ -243,16 +246,24 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             'Не доверяю',
             callback_data=callback_data_template % dict_reply,
         )
-        dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-        inline_btn_nullify_trust = InlineKeyboardButton(
-            'Не знакомы',
-            callback_data=callback_data_template % dict_reply,
-        )
-        reply_markup.row(
-            inline_btn_thank,
-            inline_btn_mistrust,
-            inline_btn_nullify_trust
-        )
+        inline_btn_nullify_trust = None
+        if response_relations and response_relations['from_to']['is_trust'] is not None:
+            dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+            inline_btn_nullify_trust = InlineKeyboardButton(
+                'Не знакомы',
+                callback_data=callback_data_template % dict_reply,
+            )
+        if inline_btn_nullify_trust:
+            reply_markup.row(
+                inline_btn_thank,
+                inline_btn_mistrust,
+                inline_btn_nullify_trust
+            )
+        else:
+            reply_markup.row(
+                inline_btn_thank,
+                inline_btn_mistrust,
+            )
 
         if message_to_forward_id and tg_user_from_uid:
             try:
@@ -502,6 +513,9 @@ async def echo_send(message: types.Message):
         logging.debug('get users relations: %s' % response)
         if status == 200:
             reply += Misc.reply_relations(response)
+            response_relations = response
+        else:
+            response_relations = None
 
         dict_reply = dict(
             keyboard_type=KeyboardType.TRUST_THANK,
@@ -527,16 +541,24 @@ async def echo_send(message: types.Message):
             'Не доверяю',
             callback_data=callback_data_template % dict_reply,
         )
-        dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-        inline_btn_nullify_trust = InlineKeyboardButton(
-            'Не знакомы',
-            callback_data=callback_data_template % dict_reply,
-        )
-        reply_markup.row(
-            inline_btn_thank,
-            inline_btn_mistrust,
-            inline_btn_nullify_trust
-        )
+        inline_btn_nullify_trust = None
+        if response_relations and response_relations['from_to']['is_trust'] is not None:
+            dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+            inline_btn_nullify_trust = InlineKeyboardButton(
+                'Не знакомы',
+                callback_data=callback_data_template % dict_reply,
+            )
+        if inline_btn_nullify_trust:
+            reply_markup.row(
+                inline_btn_thank,
+                inline_btn_mistrust,
+                inline_btn_nullify_trust
+            )
+        else:
+            reply_markup.row(
+                inline_btn_thank,
+                inline_btn_mistrust,
+            )
 
     if reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
