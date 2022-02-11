@@ -400,11 +400,19 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
         Если запрос приходит из телеграм бота:
             tg_token
                 токен бота, должен соответствовать тому, что в api local_settings
-            user_id_to
-                (не uuid!) пользователя от кого
-                NB! при передаче данных по кнопке есть ограничение, строка не больше 64 символов, uuid не подходит
+
+            ИЛИ
+                user_id_to
+                    (не uuid!) пользователя от кого
+            или
+                tg_user_id_from
+                    Ид телеграм прользователя
+            TODO
+                убрать возможность по user_id_to, он пока остается для совместимости со старыми кнопками
+
             user_id_from
                 (не uuid!) пользователя к кому
+                    NB! при передаче данных по кнопке есть ограничение, строка не больше 64 символов, uuid не подходит
             тип операции может быть любой, кроме назначения/снятия родственников
 
         Иначе требует авторизации
@@ -505,12 +513,33 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
             if request.data.get('tg_token'):
                 if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
                     raise ServiceException('Неверный токен телеграм бота')
+
+                #TODO --------------------------
+                # user_id_from здесь на умирание! Должен остаться только tg_user_id_from
+                #
+                if not request.data.get('user_id_from') and not request.data.get('tg_user_id_from'):
+                    raise ServiceException('Не заданы ни user_id_from, ни tg_user_id_from')
+                if request.data.get('user_id_from') and request.data.get('tg_user_id_from'):
+                    raise ServiceException('Заданы и user_id_from, и tg_user_id_from')
+
                 user_id_from = request.data.get('user_id_from')
-                try:
-                    user_from = User.objects.select_related('profile').get(pk=user_id_from)
-                    profile_from = user_from.profile
-                except (User.DoesNotExist, ValueError,):
-                    raise ServiceException('Не задан или не найден user_id_from')
+                if user_id_from:
+                    try:
+                        user_from = User.objects.select_related('profile').get(pk=user_id_from)
+                    except (User.DoesNotExist, ValueError,):
+                        raise ServiceException('Не найден user_id_from')
+                tg_user_id_from = request.data.get('tg_user_id_from')
+                if tg_user_id_from:
+                    try:
+                        user_from = Oauth.objects.get(
+                            provider=Oauth.PROVIDER_TELEGRAM,
+                            uid= str(tg_user_id_from),
+                        ).user
+                    except Oauth.DoesNotExist:
+                        raise ServiceException('Не найден пользователь с этим ид телеграма')
+                profile_from = user_from.profile
+                #TODO --------------------------
+
                 user_id_to = request.data.get('user_id_to')
                 try:
                     user_to = User.objects.select_related('profile').get(pk=user_id_to)

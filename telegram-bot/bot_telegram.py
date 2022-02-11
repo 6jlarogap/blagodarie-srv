@@ -30,10 +30,12 @@ async def on_shutdown(dp):
         await bot.delete_webhook()
 
 @dp.callback_query_handler(
-    lambda c: c.data and c.data.startswith('%s%s' % (
-        KeyboardType.TRUST_THANK,
+    lambda c: c.data and re.search(r'^(%s|%s)%s' % (
+        KeyboardType.TRUST_THANK_VER_1,
+        KeyboardType.TRUST_THANK_VER_2,
         KeyboardType.SEP,
-)))
+    ), c.data
+    ))
 async def process_callback_tn(callback_query: types.CallbackQuery):
     """
     Действия по (не)доверию, благодарностям
@@ -43,28 +45,40 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         <KeyboardType.SEP>
         <operation_type_id>             # 1
         <KeyboardType.SEP>
-        <user_from_id>                  # 2
+        <user_to_id>                    # 2
         <KeyboardType.SEP>
-        <user_to_id>                    # 3
+        <message_to_forward_id>         # 3
         <KeyboardType.SEP>
-        <message_to_forward_id>         # 4
-        <KeyboardType.SEP>
+        ''                              # 4
         например: 1~2~326~387~
     """
     code = callback_query.data.split(KeyboardType.SEP)
     try:
-        post = dict(
-            tg_token=settings.TOKEN,
-            operation_type_id=int(code[1]),
-            user_id_from=int(code[2]),
-            user_id_to=int(code[3]),
-        )
+        #TODO это должно устареть (14.02.22)
+        if int(code[0]) == KeyboardType.TRUST_THANK_VER_1:
+            post = dict(
+                tg_token=settings.TOKEN,
+                operation_type_id=int(code[1]),
+                user_id_from=int(code[2]),
+                user_id_to=int(code[3]),
+            )
+            try:
+                message_to_forward_id = int(code[4])
+            except (ValueError, IndexError,):
+                message_to_forward_id = None
+        else:
+            post = dict(
+                tg_token=settings.TOKEN,
+                operation_type_id=int(code[1]),
+                tg_user_id_from=str(callback_query.from_user.id),
+                user_id_to=int(code[2]),
+            )
+            try:
+                message_to_forward_id = int(code[3])
+            except (ValueError, IndexError,):
+                message_to_forward_id = None
     except (ValueError, IndexError,):
         return
-    try:
-        message_to_forward_id = int(code[4])
-    except (ValueError, IndexError,):
-        message_to_forward_id = None
 
     logging.debug('post operation, payload: %s' % post)
     status, response = await Misc.api_request(
@@ -150,7 +164,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         )
     try:
         await bot.send_message(
-            callback_query.message.chat.id,
+            callback_query.from_user.id,
             text=text_link,
             disable_web_page_preview=True,
         )
@@ -161,10 +175,6 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
     #
     if operation_done and tg_user_to_uid:
         profile_from = response.get('profile_from')
-        try:
-            tg_user_from_uid = profile_from['tg_data']['uid']
-        except KeyError:
-            tg_user_from_uid = None
 
         if post['operation_type_id'] == OperationType.TRUST:
             text_link = 'Установлено доверие с'
@@ -223,16 +233,14 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         reply_markup.row(inline_btn_go)
 
         dict_reply = dict(
-            keyboard_type=KeyboardType.TRUST_THANK,
+            keyboard_type=KeyboardType.TRUST_THANK_VER_2,
             sep=KeyboardType.SEP,
-            user_from_id=profile_to['user_id'],
             user_to_id=profile_from['user_id'],
             message_to_forward_id='',
         )
         callback_data_template = (
                 '%(keyboard_type)s%(sep)s'
                 '%(operation)s%(sep)s'
-                '%(user_from_id)s%(sep)s'
                 '%(user_to_id)s%(sep)s'
                 '%(message_to_forward_id)s%(sep)s'
             )
@@ -265,11 +273,11 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
                 inline_btn_mistrust,
             )
 
-        if message_to_forward_id and tg_user_from_uid:
+        if message_to_forward_id:
             try:
                 await bot.forward_message(
                     chat_id=tg_user_to_uid,
-                    from_chat_id=tg_user_from_uid,
+                    from_chat_id=callback_query.from_user.id,
                     message_id=message_to_forward_id,
                 )
             except:
@@ -518,16 +526,14 @@ async def echo_send(message: types.Message):
             response_relations = None
 
         dict_reply = dict(
-            keyboard_type=KeyboardType.TRUST_THANK,
+            keyboard_type=KeyboardType.TRUST_THANK_VER_2,
             sep=KeyboardType.SEP,
-            user_from_id=user_from_id,
             user_to_id=user_to_id,
             message_to_forward_id=state == 'forwarded_from_other' and message.message_id or ''
         )
         callback_data_template = (
                 '%(keyboard_type)s%(sep)s'
                 '%(operation)s%(sep)s'
-                '%(user_from_id)s%(sep)s'
                 '%(user_to_id)s%(sep)s'
                 '%(message_to_forward_id)s%(sep)s'
             )

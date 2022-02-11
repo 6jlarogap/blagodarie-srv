@@ -30,7 +30,10 @@ class KeyboardType(object):
     """
     # Багодарность, доверие, недоверие...
     #
-    TRUST_THANK = 1
+    # Версия 1 устарела, но кнопки в чатах остались
+    #
+    TRUST_THANK_VER_1 = 1
+    TRUST_THANK_VER_2 = 2
 
     # Разделитель данных в call back data
     #
