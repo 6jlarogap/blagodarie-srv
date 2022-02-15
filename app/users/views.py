@@ -389,8 +389,12 @@ class ApiAuthTelegram(CreateUserMixin, SendMessageMixin, FrontendMixin, APIView)
             rd = request.data
         elif request.method == 'GET':
             rd = request.GET
-        if not rd or not rd.get('auth_date') or not rd.get('hash') or not rd.get('id'):
-            raise ServiceException('Неверный запрос')
+        msg_invalid_request = 'Неверный запрос'
+        try:
+            if not rd or not rd.get('auth_date') or not rd.get('hash') or not rd.get('id'):
+                raise ServiceException(msg_invalid_request)
+        except AttributeError:
+            raise ServiceException(msg_invalid_request)
         if not settings.TELEGRAM_BOT_TOKEN:
             raise ServiceException('В системе не определен TELEGRAM_BOT_TOKEN')
 
