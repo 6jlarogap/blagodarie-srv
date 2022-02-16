@@ -611,12 +611,10 @@ async def echo_send_to_bot(message: types.Message):
             logging.debug('put tg_user_forwarded_photo, response: %s' % response)
 
 @dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.GROUP),
+    ChatTypeFilter(chat_type=(types.ChatType.GROUP, types.ChatType.SUPERGROUP)),
     content_types=ContentType.all(),
 )
 async def echo_send_to_bot(message: types.Message):
-    return
-
     tg_user_sender = message.from_user
     if tg_user_sender.is_bot:
         return
@@ -641,56 +639,14 @@ async def echo_send_to_bot(message: types.Message):
     except:
         return
 
-    reply_markup = InlineKeyboardMarkup()
     path = "/profile/?id=%(uuid)s" % dict(
         uuid=response_from['uuid'],
     )
-    url = settings.FRONTEND_HOST + path
-    login_url = Misc.make_login_url(path)
-    login_url = LoginUrl(url=login_url)
-    inline_btn_go = InlineKeyboardButton(
-        'Перейти',
-        url=url,
-        # login_url=login_url,
+    reply = '<a href="%(url)s">%(full_name)s</a>' % dict(
+        url=settings.FRONTEND_HOST + path,
+        full_name=tg_user_sender.full_name
     )
-    reply_markup.row(inline_btn_go)
-
-    dict_reply = dict(
-        keyboard_type=KeyboardType.TRUST_THANK_VER_2,
-        sep=KeyboardType.SEP,
-        user_to_id=user_from_id,
-        message_to_forward_id=''
-    )
-    callback_data_template = (
-            '%(keyboard_type)s%(sep)s'
-            '%(operation)s%(sep)s'
-            '%(user_to_id)s%(sep)s'
-            '%(message_to_forward_id)s%(sep)s'
-        )
-    dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-    inline_btn_thank = InlineKeyboardButton(
-        'Благодарность',
-        callback_data=callback_data_template % dict_reply,
-    )
-    dict_reply.update(operation=OperationType.MISTRUST)
-    inline_btn_mistrust = InlineKeyboardButton(
-        'Не доверяю',
-        callback_data=callback_data_template % dict_reply,
-    )
-    inline_btn_nullify_trust = InlineKeyboardButton(
-        'Не знакомы',
-        callback_data=callback_data_template % dict_reply,
-    )
-    reply_markup.row(
-        inline_btn_thank,
-        inline_btn_mistrust,
-        inline_btn_nullify_trust
-    )
-
-    reply = '<b>%s</b>' % tg_user_sender.full_name
-    if tg_user_sender.username:
-        reply += ' (@' + tg_user_sender.username + ')'
-    await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+    await message.answer(reply, disable_web_page_preview=True)
 
     if response_from.get('created'):
         tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
