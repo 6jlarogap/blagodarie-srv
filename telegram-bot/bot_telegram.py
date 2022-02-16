@@ -147,7 +147,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         if status == 200:
             text = 'Операция выполнена'
         elif status == 400:
-            text = 'Простите, произошла ошибка'
+            text = 'Ошибка'
             if response.get('message'):
                 text += ': %s' % response['message']
         else:
@@ -609,6 +609,107 @@ async def echo_send_to_bot(message: types.Message):
             )
             logging.info('put tg_user_forwarded_photo, status: %s' % status)
             logging.debug('put tg_user_forwarded_photo, response: %s' % response)
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.GROUP),
+    content_types=ContentType.all(),
+)
+async def echo_send_to_bot(message: types.Message):
+    return
+
+    tg_user_sender = message.from_user
+    if tg_user_sender.is_bot:
+        return
+
+    payload_from = dict(
+        tg_token=settings.TOKEN,
+        tg_uid=tg_user_sender.id,
+        last_name=tg_user_sender.last_name or '',
+        first_name=tg_user_sender.first_name or '',
+        username=tg_user_sender.username or '',
+        activate=True,
+    )
+    try:
+        status, response_from = await Misc.api_request(
+            path='/api/profile',
+            method='post',
+            data=payload_from,
+        )
+        logging.info('get_or_create tg_user_sender data in api, status: %s' % status)
+        logging.debug('get_or_create tg_user_sender data in api, response_from: %s' % response_from)
+        user_from_id = response_from.get('user_id')
+    except:
+        return
+
+    reply_markup = InlineKeyboardMarkup()
+    path = "/profile/?id=%(uuid)s" % dict(
+        uuid=response_from['uuid'],
+    )
+    url = settings.FRONTEND_HOST + path
+    login_url = Misc.make_login_url(path)
+    login_url = LoginUrl(url=login_url)
+    inline_btn_go = InlineKeyboardButton(
+        'Перейти',
+        url=url,
+        # login_url=login_url,
+    )
+    reply_markup.row(inline_btn_go)
+
+    dict_reply = dict(
+        keyboard_type=KeyboardType.TRUST_THANK_VER_2,
+        sep=KeyboardType.SEP,
+        user_to_id=user_from_id,
+        message_to_forward_id=''
+    )
+    callback_data_template = (
+            '%(keyboard_type)s%(sep)s'
+            '%(operation)s%(sep)s'
+            '%(user_to_id)s%(sep)s'
+            '%(message_to_forward_id)s%(sep)s'
+        )
+    dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+    inline_btn_thank = InlineKeyboardButton(
+        'Благодарность',
+        callback_data=callback_data_template % dict_reply,
+    )
+    dict_reply.update(operation=OperationType.MISTRUST)
+    inline_btn_mistrust = InlineKeyboardButton(
+        'Не доверяю',
+        callback_data=callback_data_template % dict_reply,
+    )
+    inline_btn_nullify_trust = InlineKeyboardButton(
+        'Не знакомы',
+        callback_data=callback_data_template % dict_reply,
+    )
+    reply_markup.row(
+        inline_btn_thank,
+        inline_btn_mistrust,
+        inline_btn_nullify_trust
+    )
+
+    reply = '<b>%s</b>' % tg_user_sender.full_name
+    if tg_user_sender.username:
+        reply += ' (@' + tg_user_sender.username + ')'
+    await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+
+    if response_from.get('created'):
+        tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
+        logging.info('put tg_user_sender_photo...')
+        if tg_user_sender_photo:
+            payload_photo = dict(
+                tg_token=settings.TOKEN,
+                photo=tg_user_sender_photo,
+                uuid=response_from['uuid'],
+            )
+            status, response = await Misc.api_request(
+                path='/api/profile',
+                method='put',
+                data=payload_photo,
+            )
+            logging.info('put tg_user_sender_photo, status: %s' % status)
+            logging.debug('put tg_user_sender_photo, response: %s' % response)
+
+# ---------------------------------
 
 if __name__ == '__main__':
     if settings.START_MODE == 'poll':
