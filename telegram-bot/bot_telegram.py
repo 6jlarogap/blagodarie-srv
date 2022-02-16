@@ -7,6 +7,7 @@ from aiogram import Bot, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ContentType
 from aiogram.types.login_url import LoginUrl
 from aiogram.dispatcher import Dispatcher
+from aiogram.dispatcher.filters import ChatTypeFilter
 from aiogram.utils.executor import start_polling, start_webhook
 
 from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation
@@ -293,12 +294,18 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             pass
 
 
-@dp.message_handler(commands=["help",])
-async def cmd_start_help(message: types.Message):
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=["help",],
+)
+async def echo_help_to_bot(message: types.Message):
     await message.reply("Перешлите мне сообщение или напишите @имя пользователя чтобы увидеть возможные действия.")
 
-@dp.message_handler(content_types=ContentType.all())
-async def echo_send(message: types.Message):
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+)
+async def echo_send_to_bot(message: types.Message):
     """
     Обработка остальных сообщений в бот
     
