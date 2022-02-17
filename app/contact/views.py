@@ -2848,6 +2848,34 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
     def get(self, request):
         """
         Дерево родни, если задан 1 uuid, или кратчайший путь (пути, если несколько) между 2 родственниками
+
+        Если указан один uuid:
+            Возвращает информацию о пользователе, а также его родственных связях (дерево рода).
+
+        Если указаны 2 uuid через запятую:
+            Возвращает кратчайший путь (пути) между двумя родственниками
+        В любом случае возвращаются данные авторизованного пользователя и
+        его доверия (недоверия) к пользователям в цепочках связей.
+
+        Параметры
+        uuid:
+            uuid пользователя
+        depth:
+            0 или отсутствие параметра или он неверен:
+                показать без ограничения глубины рекурсии
+                (в этом случае она таки ограничена, но немыслимо большИм для глубины рекурсии числом: 100)
+            1 или более:
+                показать в рекурсии связи не дальше указанной глубины рекурсии
+        up:
+            (если указан один uuid)
+            =что-то: true; отсутствует или пусто: false
+            показать прямых предков от пользователя с uuid
+        down:
+            (если указан один uuid)
+            =что-то: true; отсутствует или пусто: false
+            показать прямых потомков от пользователя с uuid
+        Если указан один uuid и отсутствуют или пустые оба параметра up и down,
+        будет показана вся сеть родни от пользователя с uuid, включая двоюродных и т.д.
         """
         try:
             try:
@@ -2952,24 +2980,56 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
         return dict(users=users, connections=connections, trust_connections=trust_connections)
 
     def get_gen_tree(self, request, uuid, recursion_depth):
-        """
-        Строит рекурсивно дерево родни
 
-        Пример вызова:
-        /api/profile_genesis?uuid=4d02e22c-b6eb-4307-a440-ccafdeedd9b8
-        Если задан uuid родственника, то выводится дерево родни
-        владельца
-        """
         related = ('user', 'owner', 'ability',)
         user_q, profile_q = self.check_user_uuid(uuid, related=related)
-        connections = []
+
+        v_up = bool(request.GET.get('up'))
+        v_down = bool(request.GET.get('down'))
+        v_all = not v_up and not v_down
+        v_is_child = 'True' if v_down else 'False'
+        sql_req_dict = dict(
+                user_id=user_q.pk,
+                recursion_depth=recursion_depth,
+                v_all='True' if v_all else 'False',
+                v_is_child=v_is_child,
+        )
+        sql_req_str = (
+
+            # Вызов postgresql функции. 
+            # Родственные связи, начиная с пользователя user_id
+            #  recursion_depth:
+            #      максимальное число итераций при проходе по дереву связей
+            #  v_all:
+            #      показывать ли все связи, то есть проходим и по потомкам,
+            #      и по предкам, получаем в т.ч. тетей, двоюродных и т.д.
+            #      Если True, то v_is_child роли не играет
+            #  v_is_child:
+            #      При v_all == False:
+            #          v_is_child == True:     проходим только по детям.
+            #          v_is_child == False:    проходим только по предкам.
+
+            'select * from find_rel_mother_father('
+                '%(user_id)s,'
+                '%(recursion_depth)s,'
+                '%(v_all)s,'
+                '%(v_is_child)s'
+            ')'
+        )
+
+        recs = []
         with connection.cursor() as cursor:
-            cursor.execute(
-                'select * from find_rel_mother_father(%(user_id)s, %(recursion_depth)s)' % dict(
-                    user_id=user_q.pk,
-                    recursion_depth=recursion_depth,
-            ))
-            recs = self.dictfetchall(cursor)
+            cursor.execute(sql_req_str % sql_req_dict)
+            recs += self.dictfetchall(cursor)
+
+        if not v_all and v_up and v_down:
+            # v_is_child сейчас 'True'. Потомков нашли. Ищем предков
+            sql_req_dict.update(v_is_child='False',)
+            with connection.cursor() as cursor:
+                cursor.execute(sql_req_str % sql_req_dict)
+                recs += self.dictfetchall(cursor)
+
+        connections = []
         user_pks = set()
         pairs = []
         for rec in recs:
