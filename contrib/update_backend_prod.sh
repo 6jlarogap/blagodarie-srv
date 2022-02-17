@@ -1,6 +1,6 @@
 #! /bin/bash
 
-# Процедура обновления по изменению кода служб
+# Процедура обновления по изменении кода API
 
 PROJECT_='/home/www-data/django/api_blagodarie_org'
 APP='app'
