@@ -952,6 +952,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 user, profile = self.check_user_uuid(uuid)
                 data = profile.data_dict(request)
                 data.update(profile.parents_dict(request))
+                data.update(profile.data_WAK())
             else:
                 if not request.user.is_authenticated:
                     raise NotAuthenticated

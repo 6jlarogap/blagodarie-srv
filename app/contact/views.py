@@ -514,9 +514,6 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
                     raise ServiceException('Неверный токен телеграм бота')
 
-                #TODO --------------------------
-                # user_id_from здесь на умирание! Должен остаться только tg_user_id_from
-                #
                 if not request.data.get('user_id_from') and not request.data.get('tg_user_id_from'):
                     raise ServiceException('Не заданы ни user_id_from, ни tg_user_id_from')
                 if request.data.get('user_id_from') and request.data.get('tg_user_id_from'):
@@ -538,7 +535,6 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                     except Oauth.DoesNotExist:
                         raise ServiceException('Не найден пользователь с этим ид телеграма')
                 profile_from = user_from.profile
-                #TODO --------------------------
 
                 user_id_to = request.data.get('user_id_to')
                 try:
