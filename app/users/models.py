@@ -400,22 +400,16 @@ class Profile(PhotoModel, GeoPointModel):
         Key = get_model('contact', 'Key')
         user = self.user
         wishes = [
-            {
-                'text': wish.text,
-            } \
-            for wish in Wish.objects.filter(owner=user).order_by('insert_timestamp')
+            wish.data_dict(
+            ) for wish in Wish.objects.filter(owner=user).order_by('insert_timestamp')
         ]
         abilities = [
-            {
-                'text': ability.text,
-            } \
-            for ability in Ability.objects.filter(owner=user).order_by('insert_timestamp')
+            ability.data_dict(
+            ) for ability in Ability.objects.filter(owner=user).order_by('insert_timestamp')
         ]
         keys = [
-            {
-                'text': key.value,
-            } \
-            for key in Key.objects.filter(owner=user).order_by('type__pk')
+            key.data_dict(
+            )  for key in Key.objects.filter(owner=user).order_by('type__pk')
         ]
         return dict(wishes=wishes, abilities=abilities, keys=keys)
 

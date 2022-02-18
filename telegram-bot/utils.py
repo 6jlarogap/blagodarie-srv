@@ -203,7 +203,7 @@ class Misc(object):
         keys = []
         if username:
             keys.append("@%s" % username)
-        keys += [key['text'] for key in response['keys']]
+        keys += [key['value'] for key in response['keys']]
         keys_text = '\n' + '\n'.join(
             key for key in keys
         ) if keys else 'не задано'
