@@ -31,8 +31,7 @@ async def on_shutdown(dp):
         await bot.delete_webhook()
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s|%s)%s' % (
-        KeyboardType.TRUST_THANK_VER_1,
+    lambda c: c.data and re.search(r'^(%s)%s' % (
         KeyboardType.TRUST_THANK_VER_2,
         KeyboardType.SEP,
     ), c.data
@@ -42,82 +41,97 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
     Действия по (не)доверию, благодарностям
 
     На входе строка:
-        <KeyboardType.TRUST_THANK>      # 0
+        <KeyboardType.TRUST_THANK_VER_2>    # 0
         <KeyboardType.SEP>
-        <operation_type_id>             # 1
+        <operation_type_id>                 # 1
         <KeyboardType.SEP>
-        <user_to_id>                    # 2
+        <user_to_id>                        # 2
         <KeyboardType.SEP>
-        <message_to_forward_id>         # 3
+        <message_to_forward_id>             # 3
         <KeyboardType.SEP>
-        ''                              # 4
-        например: 1~2~326~387~
+        <group_id>                          # 4
+        <KeyboardType.SEP>
+        ''                                  # 5
+        например: 1~2~326~387~62525~-52626~
     """
     code = callback_query.data.split(KeyboardType.SEP)
+    tg_user_sender = callback_query.from_user
     try:
-        #TODO это должно устареть (14.02.22)
-        if int(code[0]) == KeyboardType.TRUST_THANK_VER_1:
-            post = dict(
-                tg_token=settings.TOKEN,
-                operation_type_id=int(code[1]),
-                user_id_from=int(code[2]),
-                user_id_to=int(code[3]),
-            )
-            try:
-                message_to_forward_id = int(code[4])
-            except (ValueError, IndexError,):
-                message_to_forward_id = None
-        else:
-            post = dict(
-                tg_token=settings.TOKEN,
-                operation_type_id=int(code[1]),
-                tg_user_id_from=str(callback_query.from_user.id),
-                user_id_to=int(code[2]),
-            )
-            try:
-                message_to_forward_id = int(code[3])
-            except (ValueError, IndexError,):
-                message_to_forward_id = None
+        post_op = dict(
+            tg_token=settings.TOKEN,
+            operation_type_id=int(code[1]),
+            tg_user_id_from=str(tg_user_sender.id),
+            user_id_to=int(code[2]),
+        )
+        try:
+            message_to_forward_id = int(code[3])
+        except (ValueError, IndexError,):
+            message_to_forward_id = None
+        try:
+            group_id = int(code[4])
+        except (ValueError, IndexError,):
+            group_id = None
     except (ValueError, IndexError,):
         return
 
-    logging.debug('post operation, payload: %s' % post)
+    payload_sender = dict(
+        tg_token=settings.TOKEN,
+        tg_uid=tg_user_sender.id,
+        last_name=tg_user_sender.last_name or '',
+        first_name=tg_user_sender.first_name or '',
+        username=tg_user_sender.username or '',
+        activate=True,
+    )
+    try:
+        status_sender, response_sender = await Misc.api_request(
+            path='/api/profile',
+            method='post',
+            data=payload_sender,
+        )
+        logging.info('get_or_create tg_user_sender data in api, status_sender: %s' % status_sender)
+        logging.debug('get_or_create tg_user_sender data in api, response_sender: %s' % response_sender)
+        user_from_id = response_sender.get('user_id')
+    except:
+        return
+
+    logging.debug('post operation, payload: %s' % post_op)
     status, response = await Misc.api_request(
         path='/api/addoperation',
         method='post',
-        data=post,
+        data=post_op,
     )
     logging.info('post operation, status: %s' % status)
     logging.debug('post operation, response: %s' % response)
     text = text_link = None
     operation_done = False
     if status == 200:
-        if post['operation_type_id'] == OperationType.TRUST:
+        if post_op['operation_type_id'] == OperationType.TRUST:
             text = 'Установлено доверие с %(full_name_to)s'
             text_link = 'Установлено доверие с %(full_name_to_link)s'
             operation_done = True
-        elif post['operation_type_id'] == OperationType.MISTRUST:
+        elif post_op['operation_type_id'] == OperationType.MISTRUST:
             text = 'Установлено недоверие с %(full_name_to)s'
             text_link = 'Установлено недоверие с %(full_name_to_link)s'
             operation_done = True
-        elif post['operation_type_id'] == OperationType.NULLIFY_TRUST:
+        elif post_op['operation_type_id'] == OperationType.NULLIFY_TRUST:
             text = 'Установлено, что не знакомы с %(full_name_to)s'
             text_link = 'Установлено, что не знакомы с %(full_name_to_link)s'
             operation_done = True
-        elif post['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
+        elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
             text = 'Отправлена благодарность к %(full_name_to)s'
             text_link = 'Отправлена благодарность к %(full_name_to_link)s'
             operation_done = True
     elif status == 400 and response.get('code', '') == 'already':
-        if post['operation_type_id'] == OperationType.TRUST:
-            text = 'Уже было установлено доверие'
-        elif post['operation_type_id'] == OperationType.MISTRUST:
-            text = 'Уже было установлено недоверие'
-        elif post['operation_type_id'] == OperationType.NULLIFY_TRUST:
+        if post_op['operation_type_id'] == OperationType.TRUST:
+            text = 'Уже установлено доверие'
+        elif post_op['operation_type_id'] == OperationType.MISTRUST:
+            text = 'Уже установлено недоверие'
+        elif post_op['operation_type_id'] == OperationType.NULLIFY_TRUST:
             text = 'Вы и так не знакомы'
 
     if operation_done:
         profile_to = response['profile_to']
+        profile_from = response['profile_from']
         try:
             tg_user_to_uid = profile_to['tg_data']['uid']
         except KeyError:
@@ -126,6 +140,10 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             tg_user_to_username = profile_to['tg_data']['username']
         except KeyError:
             tg_user_to_username = ''
+        try:
+            tg_user_from_username = profile_from['tg_data']['username']
+        except KeyError:
+            tg_user_from_username = None
         full_name_to = Misc.make_full_name(profile_to)
         full_name_to_link = (
                 '<a href="%(frontend_host)s/profile/?id=%(uuid)s">%(full_name)s</a>'
@@ -146,10 +164,8 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
     if not text:
         if status == 200:
             text = 'Операция выполнена'
-        elif status == 400:
-            text = 'Ошибка'
-            if response.get('message'):
-                text += ': %s' % response['message']
+        elif status == 400 and response.get('message'):
+            text = response['message']
         else:
             text = 'Простите, произошла ошибка'
 
@@ -158,38 +174,78 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
 
     # Это отправителю благодарности и т.п.
     #
-    await bot.answer_callback_query(
-            callback_query.id,
-            text=text,
-            show_alert=True,
-        )
     try:
-        await bot.send_message(
-            callback_query.from_user.id,
-            text=text_link,
-            disable_web_page_preview=True,
-        )
+        await bot.answer_callback_query(
+                callback_query.id,
+                text=text,
+                show_alert=True,
+            )
     except (ChatNotFound, CantInitiateConversation):
         pass
+    if operation_done and not group_id:
+        # Не отправляем в личку, если сообщение в группу
+        try:
+            await bot.send_message(
+                tg_user_sender.id,
+                text=text_link,
+                disable_web_page_preview=True,
+            )
+        except (ChatNotFound, CantInitiateConversation):
+            pass
+
+    # Это в группу
+    #
+    if group_id and operation_done:
+        if post_op['operation_type_id'] == OperationType.TRUST:
+            text_link = '%(full_name_from_link)s%(tg_username_from_str)s доверяет %(full_name_to_link)s%(tg_username_to_str)s'
+        elif post_op['operation_type_id'] == OperationType.MISTRUST:
+            text_link = '%(full_name_from_link)s%(tg_username_from_str)s не доверяет %(full_name_to_link)s%(tg_username_to_str)s'
+        elif post_op['operation_type_id'] == OperationType.NULLIFY_TRUST:
+            text_link = '%(full_name_from_link)s%(tg_username_from_str)s заявляет, что не знаком(а) с %(full_name_to_link)s%(tg_username_to_str)s'
+        elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
+            text_link = '%(full_name_from_link)s%(tg_username_from_str)s отправил(а) благодарность к %(full_name_to_link)s%(tg_username_to_str)s'
+        if text_link:
+            full_name_from = Misc.make_full_name(profile_from)
+            full_name_from_link = (
+                    '<a href="%(frontend_host)s/profile/?id=%(uuid)s">%(full_name)s</a>'
+                ) % dict(
+                frontend_host=settings.FRONTEND_HOST,
+                uuid=profile_from['uuid'],
+                full_name=full_name_from,
+            )
+            tg_username_from_str = tg_username_to_str = ''
+            tg_username_template = ' ( @%s )'
+            if tg_user_from_username:
+                tg_username_from_str = tg_username_template % tg_user_from_username
+            if tg_user_to_username:
+                tg_username_to_str = tg_username_template % tg_user_to_username
+            text_link = text_link % dict(
+                full_name_from_link=full_name_from_link,
+                tg_username_from_str=tg_username_from_str,
+                full_name_to_link=full_name_to_link,
+                tg_username_to_str=tg_username_to_str,
+            )
+            try:
+                await bot.send_message(
+                    group_id,
+                    text=text_link,
+                    disable_web_page_preview=True,
+                )
+            except (ChatNotFound, CantInitiateConversation):
+                pass
 
     # Это получателю благодарности и т.п.
     #
     if operation_done and tg_user_to_uid:
-        profile_from = response.get('profile_from')
-
-        if post['operation_type_id'] == OperationType.TRUST:
+        if post_op['operation_type_id'] == OperationType.TRUST:
             text_link = 'Установлено доверие с'
-        elif post['operation_type_id'] == OperationType.MISTRUST:
+        elif post_op['operation_type_id'] == OperationType.MISTRUST:
             text_link = 'Установлено недоверие с'
-        elif post['operation_type_id'] == OperationType.NULLIFY_TRUST:
+        elif post_op['operation_type_id'] == OperationType.NULLIFY_TRUST:
             text_link = 'Установлено, что не знакомы с'
-        elif post['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
+        elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
             text_link = 'Получена благодарность от'
 
-        try:
-            tg_user_from_username = profile_from['tg_data']['username']
-        except KeyError:
-            tg_user_from_username = None
         if tg_user_from_username:
             text_link += ' @%s :' % tg_user_from_username
         else:
@@ -238,12 +294,14 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             sep=KeyboardType.SEP,
             user_to_id=profile_from['user_id'],
             message_to_forward_id='',
+            group_id='',
         )
         callback_data_template = (
                 '%(keyboard_type)s%(sep)s'
                 '%(operation)s%(sep)s'
                 '%(user_to_id)s%(sep)s'
                 '%(message_to_forward_id)s%(sep)s'
+                '%(group_id)s%(sep)s'
             )
         dict_reply.update(operation=OperationType.TRUST_AND_THANK)
         inline_btn_thank = InlineKeyboardButton(
@@ -278,7 +336,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             try:
                 await bot.forward_message(
                     chat_id=tg_user_to_uid,
-                    from_chat_id=callback_query.from_user.id,
+                    from_chat_id=tg_user_sender.id,
                     message_id=message_to_forward_id,
                 )
             except:
@@ -292,6 +350,23 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             )
         except (ChatNotFound, CantInitiateConversation):
             pass
+
+    if response_sender.get('created'):
+        tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
+        logging.info('put tg_user_sender_photo...')
+        if tg_user_sender_photo:
+            payload_photo = dict(
+                tg_token=settings.TOKEN,
+                photo=tg_user_sender_photo,
+                uuid=response_sender['uuid'],
+            )
+            status, response = await Misc.api_request(
+                path='/api/profile',
+                method='put',
+                data=payload_photo,
+            )
+            logging.info('put tg_user_sender_photo, status: %s' % status)
+            logging.debug('put tg_user_sender_photo, response: %s' % response)
 
 
 @dp.message_handler(
@@ -536,13 +611,15 @@ async def echo_send_to_bot(message: types.Message):
             keyboard_type=KeyboardType.TRUST_THANK_VER_2,
             sep=KeyboardType.SEP,
             user_to_id=user_to_id,
-            message_to_forward_id=state == 'forwarded_from_other' and message.message_id or ''
+            message_to_forward_id=state == 'forwarded_from_other' and message.message_id or '',
+            group_id='',
         )
         callback_data_template = (
                 '%(keyboard_type)s%(sep)s'
                 '%(operation)s%(sep)s'
                 '%(user_to_id)s%(sep)s'
                 '%(message_to_forward_id)s%(sep)s'
+                '%(group_id)s%(sep)s'
             )
         dict_reply.update(operation=OperationType.TRUST_AND_THANK)
         inline_btn_thank = InlineKeyboardButton(
@@ -615,10 +692,42 @@ async def echo_send_to_bot(message: types.Message):
     content_types=ContentType.all(),
 )
 async def echo_send_to_bot(message: types.Message):
+    """
+    Обработка сообщений в группу
+
+    При добавлении пользователя в группу:
+        Карточка профиля:
+            Имя Фамилия
+            Доверий:
+            Благодарностей:
+            Недоверий:
+
+            Возможности: водитель Камаз шашлык виноград курага изюм
+
+            Потребности: не задано
+
+            Местоположение: не задано/ссылка на карту
+
+            Контакты:
+            @username
+            +3752975422568
+            https://username.com
+
+            От Вас: доверие
+            К Вам: не знакомы
+    Иначе:
+        Имя Фамилия /ссылка/ (@username)
+
+    Кнопки:
+        Благодарность   Недоверие   Не знакомы
+    """
     tg_user_sender = message.from_user
-    if tg_user_sender.is_bot:
+    if tg_user_sender.is_bot or \
+       message.content_type == ContentType.LEFT_CHAT_MEMBER or \
+       message.content_type == ContentType.NEW_CHAT_MEMBERS:
         return
 
+    group_id = message.chat.id
     payload_from = dict(
         tg_token=settings.TOKEN,
         tg_uid=tg_user_sender.id,
@@ -639,6 +748,42 @@ async def echo_send_to_bot(message: types.Message):
     except:
         return
 
+    reply_markup = InlineKeyboardMarkup()
+    dict_reply = dict(
+        keyboard_type=KeyboardType.TRUST_THANK_VER_2,
+        sep=KeyboardType.SEP,
+        user_to_id=user_from_id,
+        message_to_forward_id='',
+        group_id=group_id,
+    )
+    callback_data_template = (
+            '%(keyboard_type)s%(sep)s'
+            '%(operation)s%(sep)s'
+            '%(user_to_id)s%(sep)s'
+            '%(message_to_forward_id)s%(sep)s'
+            '%(group_id)s%(sep)s'
+        )
+    dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+    inline_btn_thank = InlineKeyboardButton(
+        'Благодарность',
+        callback_data=callback_data_template % dict_reply,
+    )
+    dict_reply.update(operation=OperationType.MISTRUST)
+    inline_btn_mistrust = InlineKeyboardButton(
+        'Не доверяю',
+        callback_data=callback_data_template % dict_reply,
+    )
+    dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+    inline_btn_nullify_trust = InlineKeyboardButton(
+        'Не знакомы',
+        callback_data=callback_data_template % dict_reply,
+    )
+    reply_markup.row(
+        inline_btn_thank,
+        inline_btn_mistrust,
+        inline_btn_nullify_trust
+    )
+
     path = "/profile/?id=%(uuid)s" % dict(
         uuid=response_from['uuid'],
     )
@@ -646,7 +791,10 @@ async def echo_send_to_bot(message: types.Message):
         url=settings.FRONTEND_HOST + path,
         full_name=tg_user_sender.full_name
     )
-    await message.answer(reply, disable_web_page_preview=True)
+
+    # Это сообщение идет в группу!
+    #
+    await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
     if response_from.get('created'):
         tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
