@@ -765,7 +765,7 @@ async def echo_send_to_bot(message: types.Message):
         )
     dict_reply.update(operation=OperationType.TRUST_AND_THANK)
     inline_btn_thank = InlineKeyboardButton(
-        'Благодарность',
+        'Благодарю',
         callback_data=callback_data_template % dict_reply,
     )
     dict_reply.update(operation=OperationType.MISTRUST)
