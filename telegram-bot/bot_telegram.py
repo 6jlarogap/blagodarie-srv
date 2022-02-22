@@ -721,11 +721,19 @@ async def echo_send_to_bot(message: types.Message):
     Кнопки:
         Благодарность   Недоверие   Не знакомы
     """
-    tg_user_sender = message.from_user
-    if tg_user_sender.is_bot or \
-       message.content_type == ContentType.LEFT_CHAT_MEMBER or \
-       message.content_type == ContentType.NEW_CHAT_MEMBERS:
+    if message.content_type == ContentType.LEFT_CHAT_MEMBER:
         return
+
+    try:
+        tg_user_new = message.new_chat_members[0]
+    except (IndexError, TypeError,):
+        tg_user_new = None
+    if tg_user_new:
+        tg_user_sender = tg_user_new
+    else:
+        tg_user_sender = message.from_user
+        if tg_user_sender.is_bot:
+            return
 
     group_id = message.chat.id
     payload_from = dict(
@@ -749,6 +757,19 @@ async def echo_send_to_bot(message: types.Message):
         return
 
     reply_markup = InlineKeyboardMarkup()
+    path = "/profile/?id=%(uuid)s" % dict(uuid=response_from['uuid'],)
+
+    if tg_user_new:
+        url = settings.FRONTEND_HOST + path
+        login_url = Misc.make_login_url(path)
+        login_url = LoginUrl(url=login_url)
+        inline_btn_go = InlineKeyboardButton(
+            'Перейти',
+            url=url,
+            # login_url=login_url,
+        )
+        reply_markup.row(inline_btn_go)
+
     dict_reply = dict(
         keyboard_type=KeyboardType.TRUST_THANK_VER_2,
         sep=KeyboardType.SEP,
@@ -784,13 +805,14 @@ async def echo_send_to_bot(message: types.Message):
         inline_btn_nullify_trust
     )
 
-    path = "/profile/?id=%(uuid)s" % dict(
-        uuid=response_from['uuid'],
-    )
-    reply = '<a href="%(url)s">%(full_name)s</a>' % dict(
-        url=settings.FRONTEND_HOST + path,
-        full_name=tg_user_sender.full_name
-    )
+    if tg_user_new:
+        username = tg_user_new.username
+        reply = Misc.reply_user_card(response_from, username)
+    else:
+        reply = '<a href="%(url)s">%(full_name)s</a>' % dict(
+            url=settings.FRONTEND_HOST + path,
+            full_name=tg_user_sender.full_name
+        )
 
     # Это сообщение идет в группу!
     #
