@@ -27,7 +27,7 @@ from app.models import UnclearDate
 from contact.models import KeyType, Key, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
                            Journal, CurrentState, OperationType, Wish, \
-                           AnyText, Ability
+                           AnyText, Ability, TgJournal
 from users.models import CreateUserMixin, IncognitoUser, Profile, TempToken, Oauth, UuidMixin
 
 MSG_NO_PARM = 'Не задан или не верен какой-то из параметров в связке номер %s (начиная с 0)'
@@ -82,6 +82,8 @@ class ApiAddOperationMixin(object):
         operationtype_id,
         comment,
         insert_timestamp,
+        tg_from_chat_id=None,
+        tg_message_id=None,
     ):
         try:
             operationtype = OperationType.objects.get(pk=operationtype_id)
@@ -374,13 +376,19 @@ class ApiAddOperationMixin(object):
         else:
             raise ServiceException('Неизвестный operation_type_id')
 
-        Journal.objects.create(
+        journal = Journal.objects.create(
             user_from=user_from,
             user_to=user_to,
             operationtype=operationtype,
             insert_timestamp=insert_timestamp,
             comment=comment,
         )
+        if tg_message_id and tg_from_chat_id:
+            TgJournal.objects.create(
+                journal=journal,
+                from_chat_id=tg_from_chat_id,
+                message_id=tg_message_id,
+            )
 
         return data
 
@@ -407,12 +415,14 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
             или
                 tg_user_id_from
                     Ид телеграм прользователя
-            TODO
-                убрать возможность по user_id_to, он пока остается для совместимости со старыми кнопками
-
             user_id_from
                 (не uuid!) пользователя к кому
                     NB! при передаче данных по кнопке есть ограничение, строка не больше 64 символов, uuid не подходит
+            tg_from_chat_id (необязательно):
+                id пользователя (1) телеграма, который составил сообщение, что перенаправил другой пользователь (2).
+                Пользователь (2) отправил благодарность к (1) или выполнил другое действие
+            tg_message_id (необязательно):
+                Ид того сообщения
             тип операции может быть любой, кроме назначения/снятия родственников
 
         Иначе требует авторизации
@@ -510,6 +520,7 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 raise ServiceException('Не задан или неверный operation_type_id')
 
             got_tg_token = False
+            tg_from_chat_id = tg_message_id = None
             if request.data.get('tg_token'):
                 if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
                     raise ServiceException('Неверный токен телеграм бота')
@@ -550,6 +561,8 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                         OperationType.TRUST_AND_THANK,
                     )):
                     raise ServiceException('Недопустимый operation_type_id для операции от бота')
+                tg_from_chat_id = request.data.get('tg_from_chat_id')
+                tg_message_id = request.data.get('tg_message_id')
                 got_tg_token = True
 
             elif not request.user.is_authenticated:
@@ -600,6 +613,8 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 operationtype_id,
                 comment,
                 insert_timestamp,
+                tg_from_chat_id,
+                tg_message_id,
             )
             if got_tg_token:
                 profile_from_data=profile_from.data_dict(request)

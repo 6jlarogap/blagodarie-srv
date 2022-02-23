@@ -63,6 +63,14 @@ class Journal(BaseModelInsertTimestamp):
                     verbose_name=_("Тип операции"), on_delete=models.CASCADE)
     comment = models.TextField(verbose_name=_("Комментарий"), null=True)
 
+class TgJournal(models.Model):
+    """
+    Ссылки на сообщения телеграма при благодарностях и др. действиях
+    """
+    journal = models.ForeignKey(Journal, verbose_name=_("Журнал"), on_delete=models.CASCADE)
+    from_chat_id = models.BigIntegerField(_("Chat Id"),)
+    message_id = models.BigIntegerField(_("Message Id"),)
+
 class CurrentState(BaseModelInsertUpdateTimestamp):
 
     user_from = models.ForeignKey('auth.User',

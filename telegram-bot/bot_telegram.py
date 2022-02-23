@@ -67,6 +67,11 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             message_to_forward_id = int(code[3])
         except (ValueError, IndexError,):
             message_to_forward_id = None
+        if message_to_forward_id:
+            post_op.update(
+                tg_from_chat_id=tg_user_sender.id,
+                tg_message_id=message_to_forward_id,
+            )
         try:
             group_id = int(code[4])
         except (ValueError, IndexError,):
