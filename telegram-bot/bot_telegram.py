@@ -746,7 +746,12 @@ async def echo_send_to_bot(message: types.Message):
     Кнопки:
         Благодарность   Недоверие   Не знакомы
     """
-    if message.content_type == ContentType.LEFT_CHAT_MEMBER:
+    if message.content_type in(
+            ContentType.LEFT_CHAT_MEMBER,
+            ContentType.NEW_CHAT_PHOTO,
+            ContentType.NEW_CHAT_TITLE,
+            ContentType.DELETE_CHAT_PHOTO,
+       ):
         return
 
     try:
