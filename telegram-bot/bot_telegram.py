@@ -376,6 +376,26 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=["geo",]
+)
+async def geo(message):
+    keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True, one_time_keyboard=True)
+    button_geo = types.KeyboardButton(text="Отправить местоположение", request_location=True)
+    keyboard.add(button_geo)
+    await bot.send_message(message.chat.id, "Нажмите на кнопку и передайте мне свое местоположение", reply_markup=keyboard)
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=["location",],
+)
+async def location(message):
+    if message.location is not None:
+        pass
+        # print(message.location)
+        # print("latitude: %s; longitude: %s" % (message.location.latitude, message.location.longitude))
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     commands=["help",],
 )
 async def echo_help_to_bot(message: types.Message):
