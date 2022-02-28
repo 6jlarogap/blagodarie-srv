@@ -101,10 +101,7 @@ class Misc(object):
                         try:
                             status = int(resp.status)
                             if status == 200:
-                                byte_s = await resp.read()
-                                import logging
-                                logging.info(byte_s)
-                                result = base64.b64encode(byte_s).decode('UTF-8')
+                                result = base64.b64encode(await resp.read()).decode('UTF-8')
                         except ValueError:
                             pass
                 except:
