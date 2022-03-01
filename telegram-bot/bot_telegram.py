@@ -382,7 +382,7 @@ async def geo(message):
     keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True, one_time_keyboard=True)
     button_geo = types.KeyboardButton(text="Отправить местоположение", request_location=True)
     keyboard.add(button_geo)
-    await bot.send_message(message.chat.id, "Нажмите на кнопку и передайте мне свое местоположение", reply_markup=keyboard)
+    await bot.send_message(message.chat.id, "Пожалуйста укажите своё примерное или точное местоположение", reply_markup=keyboard)
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
@@ -390,9 +390,64 @@ async def geo(message):
 )
 async def location(message):
     if message.location is not None:
-        pass
-        # print(message.location)
-        # print("latitude: %s; longitude: %s" % (message.location.latitude, message.location.longitude))
+        latitude = longitude = None
+        try:
+            latitude = getattr(message.location, 'latitude')
+            longitude = getattr(message.location, 'longitude')
+        except AttributeError:
+            pass
+        if latitude and longitude:
+            user_from_uuid = None
+            tg_user_sender = message.from_user
+            payload_from = dict(
+                tg_token=settings.TOKEN,
+                tg_uid=tg_user_sender.id,
+                last_name=tg_user_sender.last_name or '',
+                first_name=tg_user_sender.first_name or '',
+                username=tg_user_sender.username or '',
+                activate=True,
+            )
+            try:
+                status, response_from = await Misc.api_request(
+                    path='/api/profile',
+                    method='post',
+                    data=payload_from,
+                )
+                logging.info('get_or_create tg_user_sender data in api, status: %s' % status)
+                logging.debug('get_or_create tg_user_sender data in api, response_from: %s' % response_from)
+                user_from_uuid = response_from.get('uuid')
+            except:
+                pass
+
+            if user_from_uuid:
+                payload_location = dict(
+                    tg_token=settings.TOKEN,
+                    uuid=user_from_uuid,
+                    latitude = latitude,
+                    longitude = longitude,
+                )
+                status, response = await Misc.api_request(
+                    path='/api/profile',
+                    method='put',
+                    data=payload_location,
+                )
+                logging.info('put tg_user_sender_location, status: %s' % status)
+                logging.debug('put tg_user_sender_location, response: %s' % response)
+                if status == 200:
+                    response_from.update(
+                        latitude=latitude,
+                        longitude=longitude,
+                    )
+                    reply = Misc.reply_user_card(response_from, tg_user_sender.username or '')
+                    reply += 'Вы можете уточнить свое местоположение: ввести здесь /geo'
+                    try:
+                        await bot.send_message(
+                            tg_user_sender.id,
+                            text=reply,
+                            disable_web_page_preview=True,
+                        )
+                    except (ChatNotFound, CantInitiateConversation):
+                        pass
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
@@ -532,10 +587,11 @@ async def echo_send_to_bot(message: types.Message):
                             response_to = response
                             user_to_id = response['user_id']
                             state = 'username_from_other'
+    if not state and not reply:
+        state = 'not_found'
+        reply = 'Профиль не найден'
     if state:
         logging.debug('State is: %s' % state)
-    if not state and not reply:
-        reply = 'Профиль не найден'
 
     # Сейчас возможные остояния (state)
     #   '': готов ответ. Ничего дальше делать не надо
@@ -544,8 +600,9 @@ async def echo_send_to_bot(message: types.Message):
     #   forwarded_from_other
     #   username_from_me:       готовы user_from_id, response_from
     #   username_from_other:    готовы user_to_id, response_to
+    #   not_found:              не найден пользователь
 
-    if state in ('start', 'forwarded_from_me', 'forwarded_from_other', 'username_from_other'):
+    if state in ('not_found', 'start', 'forwarded_from_me', 'forwarded_from_other', 'username_from_other'):
         logging.info('get_or_create tg_user_sender data in api...')
         payload_from = dict(
             tg_token=settings.TOKEN,
@@ -589,7 +646,7 @@ async def echo_send_to_bot(message: types.Message):
         except:
             pass
 
-    if user_from_id:
+    if state and state not in ('not_found',) and user_from_id:
         reply_markup = InlineKeyboardMarkup()
         path = "/profile/?id=%(uuid)s" % dict(
             uuid=response_to['uuid'] if user_to_id else response_from['uuid'],
@@ -677,6 +734,8 @@ async def echo_send_to_bot(message: types.Message):
 
     if reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+        if not (response_from.get('latitude') and response_from.get('longitude')):
+            await geo(message)
 
     if user_from_id and response_from.get('created'):
         tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)

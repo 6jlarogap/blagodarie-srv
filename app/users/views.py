@@ -1176,6 +1176,13 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                     raise ServiceException('Неверный токен телеграм бота')
                 user, profile = self.check_user_uuid(request.data.get('uuid'))
                 self.save_photo(request, profile)
+                do_save = False
+                for f in ('latitude', 'longitude',):
+                    if f in  request.data:
+                        setattr(profile, f, request.data.get(f) or None)
+                        do_save = True
+                if do_save:
+                    profile.save()
                 data = {}
                 raise SkipException
 
