@@ -515,7 +515,7 @@ async def echo_send_to_bot(message: types.Message):
 
     if not message.is_forward() and message.content_type != ContentType.TEXT:
         await message.reply(
-            'Сюда можно слать только текст или пересылать сообщения любого типа'
+            'Сюда можно слать текст для поиска, включая @username, или пересылать сообщения любого типа'
         )
         return
 
@@ -525,21 +525,18 @@ async def echo_send_to_bot(message: types.Message):
     tg_user_sender = message.from_user
 
     # Кто будет благодарить... или чей профиль показывать, когда некого благодарить...
-    # Это из апи, user_id & profile_dict:
     #
     user_from_id = None
     response_from = dict()
 
     tg_user_forwarded = None
-    message_to_forward_id = None
 
-    # Кого будут благодарить...
-    # Это из апи, user_id & profile_dict:
+    # Кого будут благодарить
+    # или свой профиль в массиве
+    # или массив найденных профилей
     #
-    user_to_id = None
-    response_to = dict()
+    a_response_to = []
 
-    username_in_text = ''
     state = ''
 
     if tg_user_sender.is_bot:
@@ -560,10 +557,11 @@ async def echo_send_to_bot(message: types.Message):
             else:
                 state = 'forwarded_from_other'
         else:
-            if message.text == '/start':
+            message_text = message.text.strip()
+            if message_text == '/start':
                 state = 'start'
             else:
-                m = re.search(r'\@(\w+)', message.text)
+                m = re.search(r'^\@(\w+)', message_text)
                 if m:
                     username_in_text = m.group(1)
                     logging.info('username "@%s" found in message text\n' % username_in_text) 
@@ -577,16 +575,25 @@ async def echo_send_to_bot(message: types.Message):
                         data=payload_username,
                     )
                     logging.info('get by username, status: %s' % status)
-                    logging.debug('get by username, response: %s' % response_to)
+                    logging.debug('get by username, response: %s' % response)
                     if status == 200 and response:
                         if int(response['tg_uid']) == int(tg_user_sender.id):
                             response_from = response
                             user_from_id = response['user_id']
                             state = 'username_from_me'
                         else:
-                            response_to = response
-                            user_to_id = response['user_id']
                             state = 'username_from_other'
+                        response.update(tg_username=username_in_text)
+                        a_response_to = [response, ]
+                else:
+                    if len(message_text) <= settings.MIN_LEN_SEARCHED_TEXT:
+                        state = 'invalid_message_text'
+                        reply = 'Минимальное число символов в тексте для поиска: %s' % settings.MIN_LEN_SEARCHED_TEXT
+                    else:
+                        state = 'found_in_search'
+
+                        state = 'not_found'
+                        reply = 'Поиск участников %s по потребностям, возможностям пока в разработке' % settings.FRONTEND_HOST_TITLE
     if not state and not reply:
         state = 'not_found'
         reply = 'Профиль не найден'
@@ -598,11 +605,20 @@ async def echo_send_to_bot(message: types.Message):
     #   start
     #   forwarded_from_me
     #   forwarded_from_other
-    #   username_from_me:       готовы user_from_id, response_from
-    #   username_from_other:    готовы user_to_id, response_to
-    #   not_found:              не найден пользователь
+    #   username_from_me:
+    #   username_from_other:
+    #   not_found:              не найдены пользователи
+    #   invalid_message_text:   минимальное число смволов в поиске
 
-    if state in ('not_found', 'start', 'forwarded_from_me', 'forwarded_from_other', 'username_from_other'):
+    if state in (
+        'invalid_message_text',
+        'not_found',
+        'found_in_search',
+        'start',
+        'forwarded_from_me',
+        'forwarded_from_other',
+        'username_from_other',
+       ):
         logging.info('get_or_create tg_user_sender data in api...')
         payload_from = dict(
             tg_token=settings.TOKEN,
@@ -620,7 +636,11 @@ async def echo_send_to_bot(message: types.Message):
             )
             logging.info('get_or_create tg_user_sender data in api, status: %s' % status)
             logging.debug('get_or_create tg_user_sender data in api, response_from: %s' % response_from)
-            user_from_id = response_from.get('user_id')
+            if status == 200:
+                response_from.update(tg_username=tg_user_sender.username)
+                user_from_id = response_from.get('user_id')
+                if state not in ('username_from_other',):
+                    a_response_to = [response_from, ]
         except:
             pass
 
@@ -642,95 +662,87 @@ async def echo_send_to_bot(message: types.Message):
             )
             logging.info('get_or_create tg_user_forwarded data in api, status: %s' % status)
             logging.debug('get_or_create get tg_user_forwarded data in api, response_to: %s' % response_to)
-            user_to_id = response_to.get('user_id')
+            if status == 200:
+                response_to.update(tg_username=tg_user_forwarded.username)
+                a_response_to = [response_to, ]
         except:
             pass
 
-    if state and state not in ('not_found',) and user_from_id:
-        reply_markup = InlineKeyboardMarkup()
-        path = "/profile/?id=%(uuid)s" % dict(
-            uuid=response_to['uuid'] if user_to_id else response_from['uuid'],
-        )
-        url = settings.FRONTEND_HOST + path
-        login_url = Misc.make_login_url(path)
-        login_url = LoginUrl(url=login_url)
-        inline_btn_go = InlineKeyboardButton(
-            'Перейти',
-            url=url,
-            # login_url=login_url,
-        )
-        reply_markup.row(inline_btn_go)
-        username = username_in_text
-        if user_to_id:
-            response = response_to
-            if not username:
-                username = tg_user_forwarded and tg_user_forwarded.username
-        else:
-            response = response_from
-            if not username:
-                username = tg_user_sender and tg_user_sender.username
-        reply = Misc.reply_user_card(response, username)
-
-    if user_from_id and user_to_id:
-        payload_relation = dict(
-            user_id_from=response_from['uuid'],
-            user_id_to=response_to['uuid'],
-        )
-        status, response = await Misc.api_request(
-            path='/api/user/relations/',
-            method='get',
-            params=payload_relation,
-        )
-        logging.info('get users relations, status: %s' % status)
-        logging.debug('get users relations: %s' % response)
-        if status == 200:
-            reply += Misc.reply_relations(response)
-            response_relations = response
-        else:
-            response_relations = None
-
-        dict_reply = dict(
-            keyboard_type=KeyboardType.TRUST_THANK_VER_2,
-            sep=KeyboardType.SEP,
-            user_to_id=user_to_id,
-            message_to_forward_id=state == 'forwarded_from_other' and message.message_id or '',
-            group_id='',
-        )
-        callback_data_template = (
-                '%(keyboard_type)s%(sep)s'
-                '%(operation)s%(sep)s'
-                '%(user_to_id)s%(sep)s'
-                '%(message_to_forward_id)s%(sep)s'
-                '%(group_id)s%(sep)s'
+    if state and state not in ('not_found', 'invalid_message_text',) and user_from_id and a_response_to:
+        for response_to in a_response_to:
+            reply_markup = InlineKeyboardMarkup()
+            path = "/profile/?id=%s" % response_to['uuid']
+            url = settings.FRONTEND_HOST + path
+            login_url = Misc.make_login_url(path)
+            login_url = LoginUrl(url=login_url)
+            inline_btn_go = InlineKeyboardButton(
+                'Перейти',
+                url=url,
+                # login_url=login_url,
             )
-        dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-        inline_btn_thank = InlineKeyboardButton(
-            'Благодарю',
-            callback_data=callback_data_template % dict_reply,
-        )
-        dict_reply.update(operation=OperationType.MISTRUST)
-        inline_btn_mistrust = InlineKeyboardButton(
-            'Не доверяю',
-            callback_data=callback_data_template % dict_reply,
-        )
-        inline_btn_nullify_trust = None
-        if response_relations and response_relations['from_to']['is_trust'] is not None:
-            dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-            inline_btn_nullify_trust = InlineKeyboardButton(
-                'Не знакомы',
+            reply_markup.row(inline_btn_go)
+            reply = Misc.reply_user_card(response_to)
+
+        if user_from_id != response_to['user_id']:
+            payload_relation = dict(
+                user_id_from=response_from['uuid'],
+                user_id_to=response_to['uuid'],
+            )
+            status, response = await Misc.api_request(
+                path='/api/user/relations/',
+                method='get',
+                params=payload_relation,
+            )
+            logging.info('get users relations, status: %s' % status)
+            logging.debug('get users relations: %s' % response)
+            if status == 200:
+                reply += Misc.reply_relations(response)
+                response_relations = response
+            else:
+                response_relations = None
+
+            dict_reply = dict(
+                keyboard_type=KeyboardType.TRUST_THANK_VER_2,
+                sep=KeyboardType.SEP,
+                user_to_id=response_to['user_id'],
+                message_to_forward_id=state == 'forwarded_from_other' and message.message_id or '',
+                group_id='',
+            )
+            callback_data_template = (
+                    '%(keyboard_type)s%(sep)s'
+                    '%(operation)s%(sep)s'
+                    '%(user_to_id)s%(sep)s'
+                    '%(message_to_forward_id)s%(sep)s'
+                    '%(group_id)s%(sep)s'
+                )
+            dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+            inline_btn_thank = InlineKeyboardButton(
+                'Благодарю',
                 callback_data=callback_data_template % dict_reply,
             )
-        if inline_btn_nullify_trust:
-            reply_markup.row(
-                inline_btn_thank,
-                inline_btn_mistrust,
-                inline_btn_nullify_trust
+            dict_reply.update(operation=OperationType.MISTRUST)
+            inline_btn_mistrust = InlineKeyboardButton(
+                'Не доверяю',
+                callback_data=callback_data_template % dict_reply,
             )
-        else:
-            reply_markup.row(
-                inline_btn_thank,
-                inline_btn_mistrust,
-            )
+            inline_btn_nullify_trust = None
+            if response_relations and response_relations['from_to']['is_trust'] is not None:
+                dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+                inline_btn_nullify_trust = InlineKeyboardButton(
+                    'Не знакомы',
+                    callback_data=callback_data_template % dict_reply,
+                )
+            if inline_btn_nullify_trust:
+                reply_markup.row(
+                    inline_btn_thank,
+                    inline_btn_mistrust,
+                    inline_btn_nullify_trust
+                )
+            else:
+                reply_markup.row(
+                    inline_btn_thank,
+                    inline_btn_mistrust,
+                )
 
     if reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
@@ -754,7 +766,7 @@ async def echo_send_to_bot(message: types.Message):
             logging.info('put tg_user_sender_photo, status: %s' % status)
             logging.debug('put tg_user_sender_photo, response: %s' % response)
 
-    if user_to_id and response_to.get('created'):
+    if state == 'forwarded_from_other' and a_response_to and a_response_to[0].get('created'):
         tg_user_forwarded_photo = await Misc.get_user_photo(bot, tg_user_forwarded)
         if tg_user_forwarded_photo:
             logging.info('put tg_user_forwarded_photo...')

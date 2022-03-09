@@ -141,13 +141,13 @@ class Misc(object):
                 return status, response
 
     @classmethod
-    def reply_user_card(cls, response, username):
+    def reply_user_card(cls, response, username=None):
         """
         Карточка пользователя, каким он на сайте
 
         На входе:
         response: ответ от сервера
-        username: @username в телеграме, если задано
+        username: от телеграма. Если не задано, ищется в response.get('tg_username')
 
         На выходе:
         Имя Фамилия
@@ -201,6 +201,8 @@ class Misc(object):
         reply += ('Местоположение: %s' % map_text) + '\n\n'
 
         keys = []
+        if not username:
+            username = response.get('tg_username')
         if username:
             keys.append("@%s" % username)
         keys += [key['value'] for key in response['keys']]

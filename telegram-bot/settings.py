@@ -48,6 +48,11 @@ FRONTEND_AUTH_PATH = '/auth/telegram/'
 #
 PHOTO_MAX_SIZE = 320 * 320
 
+# Минимальный размер сообщения для поиска:
+#
+MIN_LEN_SEARCHED_TEXT = 3
+
+
 try:
     from local_settings import *
 except ModuleNotFoundError:
