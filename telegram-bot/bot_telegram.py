@@ -810,6 +810,7 @@ async def echo_send_to_bot(message: types.Message):
             ContentType.NEW_CHAT_PHOTO,
             ContentType.NEW_CHAT_TITLE,
             ContentType.DELETE_CHAT_PHOTO,
+            ContentType.PINNED_MESSAGE,
        ):
         return
 
