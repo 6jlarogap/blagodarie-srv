@@ -824,6 +824,9 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             если запрос авторизован.
         с параметром uuid=...
             получить данные по одному пользователю, необязательно родственнику,
+        с параметром tg_username:
+            Ищем у нас в базе такой телеграм- username, возвращаем
+            "карточку пользователя", включая его telegram id
             заодно вернуть abilities, wishes, keys
 
     PUT
@@ -854,16 +857,10 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                     - или пустая строка, тогда текущее фото, если имеется, то удаляется
     POST
         * Добавить пользователя из бота телеграма.
-        Не требует авторизации.
-        На входе:
-        Обязательны:
-            tg_token: токен бота. Такой же записан в настройках АПИ
-        Дальше варианты:
-            - задан tg_username:
-                Ищем у нас в базе такой телеграм- username, возвращаем
-                "карточку пользователя", включая его telegram id
-            - иначе:
-                обязательно:
+            Не требует авторизации.
+            На входе:
+            Обязательны:
+                tg_token: токен бота. Такой же записан в настройках АПИ
                 tg_uid: uid пользователя в телеграме
                 В этом случае не обязательны:
                     last_name
@@ -948,12 +945,28 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
 
     def get(self, request):
         try:
-            uuid = request.GET.get('uuid')
-            if uuid:
-                user, profile = self.check_user_uuid(uuid)
+            data = dict()
+            if request.GET.get('uuid'):
+                user, profile = self.check_user_uuid(request.GET['uuid'])
                 data = profile.data_dict(request)
                 data.update(profile.parents_dict(request))
                 data.update(profile.data_WAK())
+            elif request.GET.get('tg_username'):
+                try:
+                    oauth = Oauth.objects.select_related(
+                        'user', 'user__profile'
+                    ).filter(
+                        provider=Oauth.PROVIDER_TELEGRAM,
+                        username=request.GET['tg_username']
+                    )[0]
+                    user = oauth.user
+                    profile = user.profile
+                    data = profile.data_dict(request)
+                    data.update(tg_uid=oauth.uid)
+                    data.update(user_id=user.pk)
+                    data.update(profile.data_WAK())
+                except IndexError:
+                    pass
             else:
                 if not request.user.is_authenticated:
                     raise NotAuthenticated
@@ -992,63 +1005,51 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
         data = dict()
         if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
             raise ServiceException('Неверный токен телеграм бота')
-        if request.data.get('tg_username'):
-            try:
-                oauth = Oauth.objects.select_related(
-                    'user', 'user__profile'
-                ).filter(
-                    username=request.data['tg_username']
-                )[0]
-                user = oauth.user
-                profile = user.profile
-                data.update(tg_uid=oauth.uid)
-            except IndexError:
-                pass
-        else:
-            last_name=request.data.get('last_name', '')
-            first_name=request.data.get('first_name', '')
-            created_ = False
-            try:
-                oauth = Oauth.objects.get(
-                    provider=Oauth.PROVIDER_TELEGRAM,
-                    uid=request.data.get('tg_uid'),
-                )
-                user = oauth.user
-                profile = user.profile
-                save_ = False
-                for f in ('last_name', 'first_name', 'username', ):
-                    input_val = request.data.get(f, '')
-                    if getattr(oauth, f) != input_val and (input_val or f == 'username'):
-                        setattr(oauth, f, input_val)
-                        save_ = True
-                if save_:
-                    oauth.update_timestamp = int(time.time())
-                    oauth.save()
+        if not request.data.get('tg_uid'):
+            raise ServiceException('Не задан id пользователя в телеграме')
+        last_name=request.data.get('last_name', '')
+        first_name=request.data.get('first_name', '')
+        try:
+            oauth = Oauth.objects.get(
+                provider=Oauth.PROVIDER_TELEGRAM,
+                uid=request.data['tg_uid'],
+            )
+            user = oauth.user
+            profile = user.profile
+            save_ = False
+            for f in ('last_name', 'first_name', 'username', ):
+                input_val = request.data.get(f, '')
+                if getattr(oauth, f) != input_val and (input_val or f == 'username'):
+                    setattr(oauth, f, input_val)
+                    save_ = True
+            if save_:
+                oauth.update_timestamp = int(time.time())
+                oauth.save()
 
-            except Oauth.DoesNotExist:
-                user = self.create_user(
-                    last_name=last_name,
-                    first_name=first_name,
-                )
-                profile = user.profile
-                oauth = Oauth.objects.create(
-                    provider = Oauth.PROVIDER_TELEGRAM,
-                    uid=request.data.get('tg_uid'),
-                    user=user,
-                    last_name=last_name,
-                    first_name=first_name,
-                    username=request.data.get('username'),
-                )
-                self.save_photo(request, profile)
-                data.update(created=True)
+        except Oauth.DoesNotExist:
+            user = self.create_user(
+                last_name=last_name,
+                first_name=first_name,
+            )
+            profile = user.profile
+            oauth = Oauth.objects.create(
+                provider = Oauth.PROVIDER_TELEGRAM,
+                uid=request.data.get('tg_uid'),
+                user=user,
+                last_name=last_name,
+                first_name=first_name,
+                username=request.data.get('username'),
+            )
+            self.save_photo(request, profile)
+            data.update(created=True)
 
-            token, created_token = Token.objects.get_or_create(user=user)
-            # Существующий Пользователь может быть обезличен
-            if created_token and request.data.get('activate'):
-                user.last_name = last_name
-                user.first_name = first_name
-                user.is_active = True
-                user.save()
+        token, created_token = Token.objects.get_or_create(user=user)
+        # Существующий Пользователь может быть обезличен
+        if created_token and request.data.get('activate'):
+            user.last_name = last_name
+            user.first_name = first_name
+            user.is_active = True
+            user.save()
 
         if profile:
             data.update(profile.data_dict(request))

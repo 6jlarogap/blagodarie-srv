@@ -566,17 +566,16 @@ async def echo_send_to_bot(message: types.Message):
                     username_in_text = m.group(1)
                     logging.info('username "@%s" found in message text\n' % username_in_text) 
                     payload_username = dict(
-                        tg_token=settings.TOKEN,
                         tg_username=username_in_text,
                     )
                     status, response = await Misc.api_request(
                         path='/api/profile',
-                        method='post',
-                        data=payload_username,
+                        method='get',
+                        params=payload_username,
                     )
                     logging.info('get by username, status: %s' % status)
                     logging.debug('get by username, response: %s' % response)
-                    if status == 200 and response:
+                    if status == 200 and response and response.get('tg_uid'):
                         if int(response['tg_uid']) == int(tg_user_sender.id):
                             response_from = response
                             user_from_id = response['user_id']
