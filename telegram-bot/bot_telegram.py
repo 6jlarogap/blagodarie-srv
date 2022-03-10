@@ -454,7 +454,7 @@ async def location(message):
     commands=["help",],
 )
 async def echo_help_to_bot(message: types.Message):
-    await message.reply("Перешлите мне сообщение или напишите @имя пользователя чтобы увидеть возможные действия.")
+    await message.reply(Misc.help_text())
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
@@ -585,14 +585,26 @@ async def echo_send_to_bot(message: types.Message):
                         response.update(tg_username=username_in_text)
                         a_response_to = [response, ]
                 else:
-                    if len(message_text) <= settings.MIN_LEN_SEARCHED_TEXT:
+                    if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
                         state = 'invalid_message_text'
-                        reply = 'Минимальное число символов в тексте для поиска: %s' % settings.MIN_LEN_SEARCHED_TEXT
+                        reply = Misc.help_text()
                     else:
-                        state = 'found_in_search'
-
-                        state = 'not_found'
-                        reply = 'Поиск участников %s по потребностям, возможностям пока в разработке' % settings.FRONTEND_HOST_TITLE
+                        payload_query = dict(
+                            query=message_text,
+                        )
+                        status, response = await Misc.api_request(
+                            path='/api/profile',
+                            method='get',
+                            params=payload_query
+                        )
+                        logging.info('get by query, status: %s' % status)
+                        logging.debug('get by query, response: %s' % response)
+                        if status == 200 and response:
+                            a_response_to = response
+                            state = 'found_in_search'
+                        else:
+                            state = 'not_found'
+                            reply = 'Профиль не найден'
     if not state and not reply:
         state = 'not_found'
         reply = 'Профиль не найден'
@@ -638,7 +650,7 @@ async def echo_send_to_bot(message: types.Message):
             if status == 200:
                 response_from.update(tg_username=tg_user_sender.username)
                 user_from_id = response_from.get('user_id')
-                if state not in ('username_from_other',):
+                if state not in ('username_from_other', 'found_in_search', ):
                     a_response_to = [response_from, ]
         except:
             pass
@@ -682,71 +694,73 @@ async def echo_send_to_bot(message: types.Message):
             reply_markup.row(inline_btn_go)
             reply = Misc.reply_user_card(response_to)
 
-        if user_from_id != response_to['user_id']:
-            payload_relation = dict(
-                user_id_from=response_from['uuid'],
-                user_id_to=response_to['uuid'],
-            )
-            status, response = await Misc.api_request(
-                path='/api/user/relations/',
-                method='get',
-                params=payload_relation,
-            )
-            logging.info('get users relations, status: %s' % status)
-            logging.debug('get users relations: %s' % response)
-            if status == 200:
-                reply += Misc.reply_relations(response)
-                response_relations = response
-            else:
-                response_relations = None
-
-            dict_reply = dict(
-                keyboard_type=KeyboardType.TRUST_THANK_VER_2,
-                sep=KeyboardType.SEP,
-                user_to_id=response_to['user_id'],
-                message_to_forward_id=state == 'forwarded_from_other' and message.message_id or '',
-                group_id='',
-            )
-            callback_data_template = (
-                    '%(keyboard_type)s%(sep)s'
-                    '%(operation)s%(sep)s'
-                    '%(user_to_id)s%(sep)s'
-                    '%(message_to_forward_id)s%(sep)s'
-                    '%(group_id)s%(sep)s'
+            if user_from_id != response_to['user_id']:
+                payload_relation = dict(
+                    user_id_from=response_from['uuid'],
+                    user_id_to=response_to['uuid'],
                 )
-            dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-            inline_btn_thank = InlineKeyboardButton(
-                'Благодарю',
-                callback_data=callback_data_template % dict_reply,
-            )
-            dict_reply.update(operation=OperationType.MISTRUST)
-            inline_btn_mistrust = InlineKeyboardButton(
-                'Не доверяю',
-                callback_data=callback_data_template % dict_reply,
-            )
-            inline_btn_nullify_trust = None
-            if response_relations and response_relations['from_to']['is_trust'] is not None:
-                dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-                inline_btn_nullify_trust = InlineKeyboardButton(
-                    'Не знакомы',
+                status, response = await Misc.api_request(
+                    path='/api/user/relations/',
+                    method='get',
+                    params=payload_relation,
+                )
+                logging.info('get users relations, status: %s' % status)
+                logging.debug('get users relations: %s' % response)
+                if status == 200:
+                    reply += Misc.reply_relations(response)
+                    response_relations = response
+                else:
+                    response_relations = None
+
+                dict_reply = dict(
+                    keyboard_type=KeyboardType.TRUST_THANK_VER_2,
+                    sep=KeyboardType.SEP,
+                    user_to_id=response_to['user_id'],
+                    message_to_forward_id=state == 'forwarded_from_other' and message.message_id or '',
+                    group_id='',
+                )
+                callback_data_template = (
+                        '%(keyboard_type)s%(sep)s'
+                        '%(operation)s%(sep)s'
+                        '%(user_to_id)s%(sep)s'
+                        '%(message_to_forward_id)s%(sep)s'
+                        '%(group_id)s%(sep)s'
+                    )
+                dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+                inline_btn_thank = InlineKeyboardButton(
+                    'Благодарю',
                     callback_data=callback_data_template % dict_reply,
                 )
-            if inline_btn_nullify_trust:
-                reply_markup.row(
-                    inline_btn_thank,
-                    inline_btn_mistrust,
-                    inline_btn_nullify_trust
+                dict_reply.update(operation=OperationType.MISTRUST)
+                inline_btn_mistrust = InlineKeyboardButton(
+                    'Не доверяю',
+                    callback_data=callback_data_template % dict_reply,
                 )
-            else:
-                reply_markup.row(
-                    inline_btn_thank,
-                    inline_btn_mistrust,
-                )
+                inline_btn_nullify_trust = None
+                if response_relations and response_relations['from_to']['is_trust'] is not None:
+                    dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+                    inline_btn_nullify_trust = InlineKeyboardButton(
+                        'Не знакомы',
+                        callback_data=callback_data_template % dict_reply,
+                    )
+                if inline_btn_nullify_trust:
+                    reply_markup.row(
+                        inline_btn_thank,
+                        inline_btn_mistrust,
+                        inline_btn_nullify_trust
+                    )
+                else:
+                    reply_markup.row(
+                        inline_btn_thank,
+                        inline_btn_mistrust,
+                    )
+            await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
-    if reply:
+    elif reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
-        if not (response_from.get('latitude') and response_from.get('longitude')):
-            await geo(message)
+
+    if not (response_from.get('latitude') and response_from.get('longitude')):
+        await geo(message)
 
     if user_from_id and response_from.get('created'):
         tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)

@@ -967,6 +967,27 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                     data.update(profile.data_WAK())
                 except IndexError:
                     pass
+            elif request.GET.get('query'):
+                data = []
+                query = request.GET['query']
+                q_oauth = Q(provider=Oauth.PROVIDER_TELEGRAM)
+                q_oauth &= \
+                    Q(user__last_name__icontains=query) | \
+                    Q(user__first_name__icontains=query) | \
+                    Q(user__wish__text__icontains=query) | \
+                    Q(user__ability__text__icontains=query)
+                for oauth in Oauth.objects.filter(q_oauth).distinct().select_related(
+                    'user',
+                    'user__profile',
+                    'user__profile__ability',
+                    ):
+                    user = oauth.user
+                    profile = user.profile
+                    data_item = profile.data_dict(request)
+                    data_item.update(tg_uid=oauth.uid)
+                    data_item.update(user_id=user.pk)
+                    data_item.update(profile.data_WAK())
+                    data.append(data_item)
             else:
                 if not request.user.is_authenticated:
                     raise NotAuthenticated

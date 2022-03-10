@@ -42,6 +42,21 @@ class Misc(object):
     """
 
     @classmethod
+    def help_text(cls):
+        return (
+            ('Поиск участников %s по:\n' % settings.FRONTEND_HOST_TITLE) + \
+            '\n'
+            '- @имени участника в телеграме,\n'
+            '- фамилии, имени, возможностям, потребностям,\n'
+            '\n' + \
+            ('Минимальное число символов в тексте для поиска: %s\n' % settings.MIN_LEN_SEARCHED_TEXT) + \
+            '\n'
+            'Также можно переслать сюда сообщение от любого пользователя телеграма\n'
+            '\n'
+            'Дальнейшие действия будут Вам предложены\n'
+        )
+
+    @classmethod
     async def get_user_photo(cls, bot, user):
         """
         Получить фото пользователя, base64-строку, фото размером не больше settings.PHOTO_MAX_SIZE, если возможно
