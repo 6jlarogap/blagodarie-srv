@@ -32,6 +32,10 @@ class KeyboardType(object):
     #
     TRUST_THANK_VER_2 = 2
 
+    # Багодарность, доверие, недоверие...
+    #
+    LOCATION = 3
+
     # Разделитель данных в call back data
     #
     SEP = '~'

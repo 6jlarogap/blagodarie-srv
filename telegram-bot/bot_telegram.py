@@ -52,7 +52,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         <group_id>                          # 4
         <KeyboardType.SEP>
         ''                                  # 5
-        например: 1~2~326~387~62525~-52626~
+        например: 2~2~326~387~62525~-52626~
     """
     code = callback_query.data.split(KeyboardType.SEP)
     tg_user_sender = callback_query.from_user
@@ -384,6 +384,25 @@ async def geo(message):
     keyboard.add(button_geo)
     await bot.send_message(message.chat.id, "Пожалуйста укажите своё примерное или точное местоположение", reply_markup=keyboard)
 
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.LOCATION,
+        KeyboardType.SEP,
+    ), c.data
+    ))
+async def process_callback_location(callback_query: types.CallbackQuery):
+    """
+    Действия по (не)доверию, благодарностям
+
+    На входе строка:
+        <KeyboardType.LOCATION>             # 0
+        <KeyboardType.SEP>
+        ''                                  # 1
+        например: 3~2~
+    """
+    if callback_query.message:
+        await geo(callback_query.message)
+
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     content_types=["location",],
@@ -439,7 +458,6 @@ async def location(message):
                         longitude=longitude,
                     )
                     reply = Misc.reply_user_card(response_from, tg_user_sender.username or '')
-                    reply += 'Вы можете уточнить свое местоположение: ввести здесь /geo'
                     try:
                         await bot.send_message(
                             tg_user_sender.id,
@@ -754,13 +772,26 @@ async def echo_send_to_bot(message: types.Message):
                         inline_btn_thank,
                         inline_btn_mistrust,
                     )
+            else:
+                # Карточка самому пользователю
+                #
+                dict_location = dict(
+                    keyboard_type=KeyboardType.LOCATION,
+                    sep=KeyboardType.SEP,
+                )
+                callback_data_template = (
+                        '%(keyboard_type)s%(sep)s'
+                    )
+                inline_btn_location = InlineKeyboardButton(
+                    'Местоположение',
+                    callback_data=callback_data_template % dict_location,
+                )
+                reply_markup.row(inline_btn_location)
+
             await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
     elif reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
-
-    if not (response_from.get('latitude') and response_from.get('longitude')):
-        await geo(message)
 
     if user_from_id and response_from.get('created'):
         tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
