@@ -831,7 +831,7 @@ async def echo_send_to_bot(message: types.Message):
     ChatTypeFilter(chat_type=(types.ChatType.GROUP, types.ChatType.SUPERGROUP)),
     content_types=ContentType.all(),
 )
-async def echo_send_to_bot(message: types.Message):
+async def echo_send_to_group(message: types.Message):
     """
     Обработка сообщений в группу
 
@@ -862,7 +862,6 @@ async def echo_send_to_bot(message: types.Message):
         Благодарность   Недоверие   Не знакомы
     """
     if message.content_type in(
-            ContentType.LEFT_CHAT_MEMBER,
             ContentType.NEW_CHAT_PHOTO,
             ContentType.NEW_CHAT_TITLE,
             ContentType.DELETE_CHAT_PHOTO,
@@ -870,12 +869,16 @@ async def echo_send_to_bot(message: types.Message):
        ):
         return
 
+    tg_user_new_or_left = None
     try:
-        tg_user_new = message.new_chat_members[0]
+        tg_user_new_or_left = message.new_chat_members[0]
     except (IndexError, TypeError,):
-        tg_user_new = None
-    if tg_user_new:
-        tg_user_sender = tg_user_new
+        try:
+            tg_user_new_or_left = message.left_chat_member
+        except  (IndexError, TypeError,):
+            pass
+    if tg_user_new_or_left:
+        tg_user_sender = tg_user_new_or_left
     else:
         tg_user_sender = message.from_user
         if tg_user_sender.is_bot:
@@ -905,7 +908,7 @@ async def echo_send_to_bot(message: types.Message):
     reply_markup = InlineKeyboardMarkup()
     path = "/profile/?id=%(uuid)s" % dict(uuid=response_from['uuid'],)
 
-    if tg_user_new:
+    if tg_user_new_or_left:
         url = settings.FRONTEND_HOST + path
         login_url = Misc.make_login_url(path)
         login_url = LoginUrl(url=login_url)
@@ -951,8 +954,8 @@ async def echo_send_to_bot(message: types.Message):
         inline_btn_nullify_trust
     )
 
-    if tg_user_new:
-        username = tg_user_new.username
+    if tg_user_new_or_left:
+        username = tg_user_new_or_left.username
         reply = Misc.reply_user_card(response_from, username)
     else:
         reply = '<a href="%(url)s">%(full_name)s</a>' % dict(
