@@ -6,17 +6,21 @@ from utils import Misc, OperationType, KeyboardType
 from aiogram import Bot, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ContentType
 from aiogram.types.login_url import LoginUrl
-from aiogram.dispatcher import Dispatcher
+from aiogram.dispatcher import Dispatcher, FSMContext
 from aiogram.dispatcher.filters import ChatTypeFilter
+from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_polling, start_webhook
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation
+
+storage = MemoryStorage()
 
 bot = Bot(
     token=settings.TOKEN,
     parse_mode=types.ParseMode.HTML,
 )
-dp = Dispatcher(bot)
+dp = Dispatcher(bot, storage=storage)
 
 logging.basicConfig(level=settings.LOG_LEVEL)
 
