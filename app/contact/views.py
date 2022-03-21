@@ -1807,15 +1807,18 @@ class ApiAddOrUpdateWish(UuidMixin, APIView):
         """
         Создать либо обновить желание
 
-        Если желание с заданным uuid существует,
-        то проверить принадлежит ли оно пользователю,
-        пославшему запрос, или его родственнику,
-        и если принадлежит, то обновить его.
-        Если же не принадлежит, то вернуть сообщение об ошибке.
-        Если желания с таким uuid не существует, то создать.
-        Может быть параметр user_uuid, чье желание изменять/добавлять.
-        Если параметр user_uuid отсутствует, желание добавляется или
-        изменяется у авторизованного пользователя
+        - задан параметр tg_token, совпадающий с токеном бота телеграма:
+            - user_uuid, обязательно
+            - update_main, true или false, необязательно, править первое желание, если оно имеется
+            - uuid: uuid желания:  если задано, то update_main не учитывается
+            - text: обязательно, текст желания
+            - last_edit: необязательно, время добавления/правки
+        - не задан параметр tg_token. Авторизация обязательна
+            - user_uuid, не обязательно, если не задан, то правим или добавляем свое желание
+            - update_main, true или false, необязательно, править первое желание, если оно имеется
+            - uuid: uuid желания:  если задано, то update_main не учитывается
+            - text: обязательно, текст желания
+            - last_edit: необязательно, время добавления/правки
 
         Пример исходных данных:
         * Создать желание (uuid не задан)
@@ -2630,21 +2633,24 @@ class ApiGetThanksUsersForAnytext(APIView):
 api_get_thanks_users_for_anytext = ApiGetThanksUsersForAnytext.as_view()
 
 class ApiAddOrUpdateAbility(UuidMixin, APIView):
-    permission_classes = (IsAuthenticated, )
 
     @transaction.atomic
     def post(self, request, *args, **kwargs,):
         """
         Создать либо обновить возможность uuid
 
-        Если возможность с заданным uuid существует, то проверить 
-        принадлежит ли она пользователю, пославшему запрос,
-        или его родственнику, и если принадлежит, то обновить ее.
-        Если же не принадлежит, то вернуть сообщение об ошибке.
-        Если возможности с таким uuid не существует, то создать.
-        Может быть параметр user_uuid, чью возможность изменять
-        или добавлять. Если параметр user_uuid отсутствует,
-        возможность добавляется или изменяется у авторизованного пользователя.
+        - задан параметр tg_token, совпадающий с токеном бота телеграма:
+            - user_uuid, обязательно
+            - update_main, true или false, необязательно, править первую возможность, если она имеется
+            - uuid: uuid возможности:  если задано, то update_main не учитывается
+            - text: обязательно, текст возможности
+            - last_edit: необязательно, время добавления/правки
+        - не задан параметр tg_token. Авторизация обязательна
+            - user_uuid, не обязательно, если не задан, то правим или добавляем свою возможность
+            - update_main, true или false, необязательно, править первую возможность, если она имеется
+            - uuid: uuid возможности:  если задано, то update_main не учитывается
+            - text: обязательно, текст возможности
+            - last_edit: необязательно, время добавления/правки
 
         Пример исходных данных:
         * Создать возможность (uuid не задан)
@@ -2668,12 +2674,31 @@ class ApiAddOrUpdateAbility(UuidMixin, APIView):
         Возвращает: {}
         """
         try:
-            text = request.data.get('text')
+            text = request.data.get('text', '').strip()
             if not text:
-                raise ServiceException('Возможность без текста')
+                raise ServiceException('Текст обязателен')
             update_timestamp = request.data.get('last_edit', int(time.time()))
-            uuid = request.data.get('uuid')
-            owner, profile = self.check_user_or_owned_uuid(request, uuid_field='user_uuid')
+            tg_token = request.data.get('tg_token')
+            if tg_token and tg_token != settings.TELEGRAM_BOT_TOKEN:
+                raise ServiceException('Неверный токен телеграм бота')
+            user_uuid = request.data.get('user_uuid')
+            if tg_token and not user_uuid:
+                raise ServiceException('Не задан user_uuid')
+            if not tg_token and not request.user.is_authenticated:
+                raise NotAuthenticated
+            if tg_token:
+                owner, profile = self.check_user_uuid(user_uuid)
+            else:
+                owner, profile = self.check_user_or_owned_uuid(request, uuid_field='user_uuid')
+            uuid = None
+            update_main = request.data.get('update_main')
+            if update_main:
+                try:
+                    uuid = Ability.objects.filter(owner=owner).order_by('insert_timestamp')[0].uuid
+                except IndexError:
+                    pass
+            if not uuid:
+                uuid = request.data.get('uuid')
             if uuid:
                 do_create = False
                 try:
@@ -2689,12 +2714,11 @@ class ApiAddOrUpdateAbility(UuidMixin, APIView):
                         update_timestamp=update_timestamp,
                     )
                 if not do_create:
-                    if ability.owner == request.user or ability.owner.profile.owner == request.user:
-                        ability.text = text
-                        ability.update_timestamp = update_timestamp
-                        ability.save()
-                    else:
+                    if not tg_token and ability.owner != request.user and ability.owner.profile.owner != request.user:
                         raise ServiceException('Возможность с uuid = %s не принадлежит ни Вам, ни Вашему родственнику' % uuid)
+                    ability.text = text
+                    ability.update_timestamp = update_timestamp
+                    ability.save()
             else:
                 do_create = True
                 ability = Ability.objects.create(
