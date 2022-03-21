@@ -1800,7 +1800,6 @@ class ApiGetSymptoms(APIView):
 api_getsymptoms = ApiGetSymptoms.as_view()
 
 class ApiAddOrUpdateWish(UuidMixin, APIView):
-    permission_classes = (IsAuthenticated, )
 
     @transaction.atomic
     def post(self, request, *args, **kwargs,):
@@ -1810,13 +1809,15 @@ class ApiAddOrUpdateWish(UuidMixin, APIView):
         - задан параметр tg_token, совпадающий с токеном бота телеграма:
             - user_uuid, обязательно
             - update_main, true или false, необязательно, править первое желание, если оно имеется
-            - uuid: uuid желания:  если задано, то update_main не учитывается
+            - uuid: uuid желания:  если задано, то update_main не учитывается.
+                    Если желания с таким uuid не существует, то создать.
             - text: обязательно, текст желания
             - last_edit: необязательно, время добавления/правки
         - не задан параметр tg_token. Авторизация обязательна
             - user_uuid, не обязательно, если не задан, то правим или добавляем свое желание
             - update_main, true или false, необязательно, править первое желание, если оно имеется
-            - uuid: uuid желания:  если задано, то update_main не учитывается
+            - uuid: uuid желания:  если задано, то update_main не учитывается.
+                    Если желания с таким uuid не существует, то создать.
             - text: обязательно, текст желания
             - last_edit: необязательно, время добавления/правки
 
@@ -1835,12 +1836,31 @@ class ApiAddOrUpdateWish(UuidMixin, APIView):
         Возвращает: {}
         """
         try:
-            text = request.data.get('text')
+            text = request.data.get('text', '').strip()
             if not text:
-                raise ServiceException('Желание без текста')
+                raise ServiceException('Текст обязателен')
             update_timestamp = request.data.get('last_edit', int(time.time()))
-            uuid = request.data.get('uuid')
-            owner, profile = self.check_user_or_owned_uuid(request, uuid_field='user_uuid')
+            tg_token = request.data.get('tg_token')
+            if tg_token and tg_token != settings.TELEGRAM_BOT_TOKEN:
+                raise ServiceException('Неверный токен телеграм бота')
+            user_uuid = request.data.get('user_uuid')
+            if tg_token and not user_uuid:
+                raise ServiceException('Не задан user_uuid')
+            if not tg_token and not request.user.is_authenticated:
+                raise NotAuthenticated
+            if tg_token:
+                owner, profile = self.check_user_uuid(user_uuid)
+            else:
+                owner, profile = self.check_user_or_owned_uuid(request, uuid_field='user_uuid')
+            uuid = None
+            update_main = request.data.get('update_main')
+            if update_main:
+                try:
+                    uuid = Wish.objects.filter(owner=owner).order_by('insert_timestamp')[0].uuid
+                except IndexError:
+                    pass
+            if not uuid:
+                uuid = request.data.get('uuid')
             if uuid:
                 do_create = False
                 try:
@@ -1856,13 +1876,13 @@ class ApiAddOrUpdateWish(UuidMixin, APIView):
                         update_timestamp=update_timestamp,
                     )
                 if not do_create:
-                    if wish.owner == request.user or wish.owner.profile.owner == request.user:
-                        wish.text = text
-                        wish.update_timestamp = update_timestamp
-                        wish.save()
-                    else:
+                    if not tg_token and wish.owner != request.user and wish.owner.profile.owner != request.user:
                         raise ServiceException('Желание с uuid = %s не принадлежит ни Вам, ни Вашему родственнику' % uuid)
+                    wish.text = text
+                    wish.update_timestamp = update_timestamp
+                    wish.save()
             else:
+                do_create = True
                 wish = Wish.objects.create(
                     owner=owner,
                     text=text,
@@ -2642,13 +2662,15 @@ class ApiAddOrUpdateAbility(UuidMixin, APIView):
         - задан параметр tg_token, совпадающий с токеном бота телеграма:
             - user_uuid, обязательно
             - update_main, true или false, необязательно, править первую возможность, если она имеется
-            - uuid: uuid возможности:  если задано, то update_main не учитывается
+            - uuid: uuid возможности:  если задано, то update_main не учитывается.
+                    Если возможности с таким uuid не существует, то создать.
             - text: обязательно, текст возможности
             - last_edit: необязательно, время добавления/правки
         - не задан параметр tg_token. Авторизация обязательна
             - user_uuid, не обязательно, если не задан, то правим или добавляем свою возможность
             - update_main, true или false, необязательно, править первую возможность, если она имеется
-            - uuid: uuid возможности:  если задано, то update_main не учитывается
+            - uuid: uuid возможности:  если задано, то update_main не учитывается.
+                    Если возможности с таким uuid не существует, то создать.
             - text: обязательно, текст возможности
             - last_edit: необязательно, время добавления/правки
 
