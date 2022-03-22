@@ -1074,7 +1074,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
 
         if profile:
             data.update(profile.data_dict(request))
-            data.update(user_id=user.pk)
+            data.update(user_id=user.pk, tg_uid=oauth.uid)
             data.update(profile.data_WAK())
         else:
             data = {}

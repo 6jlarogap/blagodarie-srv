@@ -211,7 +211,7 @@ class Misc(object):
         reply += ('Потребности: %s' % wishes_text) + '\n\n'
 
         map_text = (
-            '<a href="%(frontend_host)s/profile/?id=%(user_from_uuid)s&q=1&map_visible=true">тут</a>'
+            '<a href="%(frontend_host)s/profile/?id=%(user_from_uuid)s&q=0&map_visible=true">тут</a>'
         ) % dict(
             frontend_host=settings.FRONTEND_HOST,
             user_from_uuid=response['uuid'],

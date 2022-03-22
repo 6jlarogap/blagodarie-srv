@@ -702,6 +702,7 @@ async def echo_send_to_bot(message: types.Message):
             pass
 
     if state and state not in ('not_found', 'invalid_message_text',) and user_from_id and a_response_to:
+        bot_data = await bot.get_me()
         for response_to in a_response_to:
             reply_markup = InlineKeyboardMarkup()
             path = "/profile/?id=%s" % response_to['uuid']
@@ -734,48 +735,49 @@ async def echo_send_to_bot(message: types.Message):
                 else:
                     response_relations = None
 
-                dict_reply = dict(
-                    keyboard_type=KeyboardType.TRUST_THANK_VER_2,
-                    sep=KeyboardType.SEP,
-                    user_to_id=response_to['user_id'],
-                    message_to_forward_id=state == 'forwarded_from_other' and message.message_id or '',
-                    group_id='',
-                )
-                callback_data_template = (
-                        '%(keyboard_type)s%(sep)s'
-                        '%(operation)s%(sep)s'
-                        '%(user_to_id)s%(sep)s'
-                        '%(message_to_forward_id)s%(sep)s'
-                        '%(group_id)s%(sep)s'
+                if str(bot_data.id) != str(response_to['tg_uid']):
+                    dict_reply = dict(
+                        keyboard_type=KeyboardType.TRUST_THANK_VER_2,
+                        sep=KeyboardType.SEP,
+                        user_to_id=response_to['user_id'],
+                        message_to_forward_id=state == 'forwarded_from_other' and message.message_id or '',
+                        group_id='',
                     )
-                dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-                inline_btn_thank = InlineKeyboardButton(
-                    'Благодарю',
-                    callback_data=callback_data_template % dict_reply,
-                )
-                dict_reply.update(operation=OperationType.MISTRUST)
-                inline_btn_mistrust = InlineKeyboardButton(
-                    'Не доверяю',
-                    callback_data=callback_data_template % dict_reply,
-                )
-                inline_btn_nullify_trust = None
-                if response_relations and response_relations['from_to']['is_trust'] is not None:
-                    dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-                    inline_btn_nullify_trust = InlineKeyboardButton(
-                        'Не знакомы',
+                    callback_data_template = (
+                            '%(keyboard_type)s%(sep)s'
+                            '%(operation)s%(sep)s'
+                            '%(user_to_id)s%(sep)s'
+                            '%(message_to_forward_id)s%(sep)s'
+                            '%(group_id)s%(sep)s'
+                        )
+                    dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+                    inline_btn_thank = InlineKeyboardButton(
+                        'Благодарю',
                         callback_data=callback_data_template % dict_reply,
                     )
-                if inline_btn_nullify_trust:
-                    reply_markup.row(
-                        inline_btn_thank,
-                        inline_btn_mistrust,
-                        inline_btn_nullify_trust
+                    dict_reply.update(operation=OperationType.MISTRUST)
+                    inline_btn_mistrust = InlineKeyboardButton(
+                        'Не доверяю',
+                        callback_data=callback_data_template % dict_reply,
                     )
-                else:
-                    reply_markup.row(
-                        inline_btn_thank,
-                        inline_btn_mistrust,
-                    )
+                    inline_btn_nullify_trust = None
+                    if response_relations and response_relations['from_to']['is_trust'] is not None:
+                        dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+                        inline_btn_nullify_trust = InlineKeyboardButton(
+                            'Не знакомы',
+                            callback_data=callback_data_template % dict_reply,
+                        )
+                    if inline_btn_nullify_trust:
+                        reply_markup.row(
+                            inline_btn_thank,
+                            inline_btn_mistrust,
+                            inline_btn_nullify_trust
+                        )
+                    else:
+                        reply_markup.row(
+                            inline_btn_thank,
+                            inline_btn_mistrust,
+                        )
             else:
                 # Карточка самому пользователю
                 #
@@ -923,40 +925,42 @@ async def echo_send_to_group(message: types.Message):
         )
         reply_markup.row(inline_btn_go)
 
-    dict_reply = dict(
-        keyboard_type=KeyboardType.TRUST_THANK_VER_2,
-        sep=KeyboardType.SEP,
-        user_to_id=user_from_id,
-        message_to_forward_id='',
-        group_id=group_id,
-    )
-    callback_data_template = (
-            '%(keyboard_type)s%(sep)s'
-            '%(operation)s%(sep)s'
-            '%(user_to_id)s%(sep)s'
-            '%(message_to_forward_id)s%(sep)s'
-            '%(group_id)s%(sep)s'
+    bot_data = await bot.get_me()
+    if str(bot_data.id) != str(response_from['tg_uid']):
+        dict_reply = dict(
+            keyboard_type=KeyboardType.TRUST_THANK_VER_2,
+            sep=KeyboardType.SEP,
+            user_to_id=user_from_id,
+            message_to_forward_id='',
+            group_id=group_id,
         )
-    dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-    inline_btn_thank = InlineKeyboardButton(
-        'Благодарю',
-        callback_data=callback_data_template % dict_reply,
-    )
-    dict_reply.update(operation=OperationType.MISTRUST)
-    inline_btn_mistrust = InlineKeyboardButton(
-        'Не доверяю',
-        callback_data=callback_data_template % dict_reply,
-    )
-    dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-    inline_btn_nullify_trust = InlineKeyboardButton(
-        'Не знакомы',
-        callback_data=callback_data_template % dict_reply,
-    )
-    reply_markup.row(
-        inline_btn_thank,
-        inline_btn_mistrust,
-        inline_btn_nullify_trust
-    )
+        callback_data_template = (
+                '%(keyboard_type)s%(sep)s'
+                '%(operation)s%(sep)s'
+                '%(user_to_id)s%(sep)s'
+                '%(message_to_forward_id)s%(sep)s'
+                '%(group_id)s%(sep)s'
+            )
+        dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+        inline_btn_thank = InlineKeyboardButton(
+            'Благодарю',
+            callback_data=callback_data_template % dict_reply,
+        )
+        dict_reply.update(operation=OperationType.MISTRUST)
+        inline_btn_mistrust = InlineKeyboardButton(
+            'Не доверяю',
+            callback_data=callback_data_template % dict_reply,
+        )
+        dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+        inline_btn_nullify_trust = InlineKeyboardButton(
+            'Не знакомы',
+            callback_data=callback_data_template % dict_reply,
+        )
+        reply_markup.row(
+            inline_btn_thank,
+            inline_btn_mistrust,
+            inline_btn_nullify_trust
+        )
 
     if tg_user_new_or_left:
         username = tg_user_new_or_left.username
