@@ -32,9 +32,17 @@ class KeyboardType(object):
     #
     TRUST_THANK_VER_2 = 2
 
-    # Багодарность, доверие, недоверие...
+    # Благодарность, доверие, недоверие...
     #
     LOCATION = 3
+
+    # Возможности
+    #
+    ABILITY = 4
+
+    # Желания
+    #
+    WISH = 5
 
     # Разделитель данных в call back data
     #
@@ -42,9 +50,14 @@ class KeyboardType(object):
 
 class Misc(object):
     """
-    Различные функции
+    Различные функции, сообщения, константы
     """
 
+    MSG_ERROR_API = 'Ошибка доступа к данным'
+    MSG_ERROR_TEXT_ONLY = 'Принимается только текст'
+    PROMPT_ABILITY = 'Введите Ваши <b>возможности</b>. Введите <i>Отмена</i>, чтоб отказаться'
+    PROMPT_WISH = 'Введите Ваши <b>желания</b>. Введите <i>Отмена</i>, чтоб отказаться'
+    
     @classmethod
     def help_text(cls):
         return (
@@ -271,3 +284,26 @@ class Misc(object):
             frontend_auth_path=settings.FRONTEND_AUTH_PATH,
             redirect_path=redirect_path,
         )
+
+    @classmethod
+    async def post_tg_user(cls, tg_user_sender, activate=True):
+        """
+        Получить данные и/или сформировать пользователя
+        """
+        payload_sender = dict(
+            tg_token=settings.TOKEN,
+            tg_uid=tg_user_sender.id,
+            last_name=tg_user_sender.last_name or '',
+            first_name=tg_user_sender.first_name or '',
+            username=tg_user_sender.username or '',
+            activate=activate,
+        )
+        try:
+            status_sender, response_sender = await cls.api_request(
+                path='/api/profile',
+                method='post',
+                data=payload_sender,
+            )
+        except:
+            status_sender = response_sender = None
+        return status_sender, response_sender

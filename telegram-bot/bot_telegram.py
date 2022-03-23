@@ -7,7 +7,7 @@ from aiogram import Bot, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ContentType
 from aiogram.types.login_url import LoginUrl
 from aiogram.dispatcher import Dispatcher, FSMContext
-from aiogram.dispatcher.filters import ChatTypeFilter
+from aiogram.dispatcher.filters import ChatTypeFilter, Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_polling, start_webhook
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
@@ -15,6 +15,12 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation
 
 storage = MemoryStorage()
+
+class FSMability(StatesGroup):
+    ask = State()
+
+class FSMwish(StatesGroup):
+    ask = State()
 
 bot = Bot(
     token=settings.TOKEN,
@@ -29,10 +35,148 @@ async def on_startup(dp):
     if settings.START_MODE == 'webhook':
         await bot.set_webhook(settings.WEBHOOK_URL)
 
+
 async def on_shutdown(dp):
     logging.warning('Shutting down..')
     if settings.START_MODE == 'webhook':
         await bot.delete_webhook()
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.ABILITY,
+        KeyboardType.SEP,
+    ), c.data
+    ))
+async def process_callback_ability(callback_query: types.CallbackQuery):
+    await FSMability.ask.set()
+    await callback_query.message.reply(Misc.PROMPT_ABILITY)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.WISH,
+        KeyboardType.SEP,
+    ), c.data
+    ))
+async def process_callback_wish(callback_query: types.CallbackQuery):
+    await FSMwish.ask.set()
+    await callback_query.message.reply(Misc.PROMPT_WISH)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    Text(equals='отмена', ignore_case=True),
+    state=FSMability.ask,
+)
+async def fcm_ability_cancel(message, state):
+        await state.finish()
+        await message.reply('Вы отказались от ввода Ваших возможностей')
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    Text(equals='отмена', ignore_case=True),
+    state=FSMwish.ask,
+)
+async def fcm_wish_cancel(message, state):
+        await state.finish()
+        await message.reply('Вы отказались от ввода Ваших желаний')
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMability.ask,
+)
+async def put_ability(message, state):
+    if message.content_type != ContentType.TEXT:
+        await message.reply(
+            Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + \
+            Misc.PROMPT_ABILITY
+        )
+        return
+
+    logging.info('put_ability: post tg_user data')
+    tg_user_sender = message.from_user
+    status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+    logging.info('get_or_create tg_user_sender data in api, status_sender: %s' % status_sender)
+    logging.debug('get_or_create tg_user_sender data in api, response_sender: %s' % response_sender)
+    if status_sender == 200:
+        payload_add = dict(
+            tg_token=settings.TOKEN,
+            user_uuid=response_sender['uuid'],
+            update_main=True,
+            text=message.text.strip(),
+        )
+        try:
+            status_add, response_add = await Misc.api_request(
+                path='/api/addorupdateability',
+                method='post',
+                json=payload_add,
+            )
+        except:
+            status_add = response_add = None
+        if status_add == 200:
+            await message.reply('Возможности помечены')
+            status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+            if status_sender == 200:
+                await message.reply(
+                    Misc.reply_user_card(response=response_sender),
+                    disable_web_page_preview=True
+                )
+        else:
+            await message.reply(Misc.MSG_ERROR_API)
+    else:
+        await message.reply(Misc.MSG_ERROR_API)
+    await state.finish()
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMwish.ask,
+)
+async def put_wish(message, state):
+    if message.content_type != ContentType.TEXT:
+        await message.reply(
+            Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + \
+            Misc.PROMPT_WISH
+        )
+        return
+
+    logging.info('put_wish: post tg_user data')
+    tg_user_sender = message.from_user
+    status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+    logging.info('get_or_create tg_user_sender data in api, status_sender: %s' % status_sender)
+    logging.debug('get_or_create tg_user_sender data in api, response_sender: %s' % response_sender)
+    if status_sender == 200:
+        payload_add = dict(
+            tg_token=settings.TOKEN,
+            user_uuid=response_sender['uuid'],
+            update_main=True,
+            text=message.text.strip(),
+        )
+        try:
+            status_add, response_add = await Misc.api_request(
+                path='/api/addorupdatewish',
+                method='post',
+                json=payload_add,
+            )
+        except:
+            status_add = response_add = None
+        if status_add == 200:
+            await message.reply('Желания помечены')
+            status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+            if status_sender == 200:
+                await message.reply(
+                    Misc.reply_user_card(response=response_sender),
+                    disable_web_page_preview=True
+                )
+        else:
+            await message.reply(Misc.MSG_ERROR_API)
+    else:
+        await message.reply(Misc.MSG_ERROR_API)
+    await state.finish()
+
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(r'^(%s)%s' % (
@@ -388,6 +532,7 @@ async def geo(message):
     keyboard.add(button_geo)
     await bot.send_message(message.chat.id, "Пожалуйста укажите своё примерное или точное местоположение", reply_markup=keyboard)
 
+
 @dp.callback_query_handler(
     lambda c: c.data and re.search(r'^(%s)%s' % (
         KeyboardType.LOCATION,
@@ -406,6 +551,7 @@ async def process_callback_location(callback_query: types.CallbackQuery):
     """
     if callback_query.message:
         await geo(callback_query.message)
+
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
@@ -471,12 +617,14 @@ async def location(message):
                     except (ChatNotFound, CantInitiateConversation):
                         pass
 
+
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     commands=["help",],
 )
 async def echo_help_to_bot(message: types.Message):
     await message.reply(Misc.help_text())
+
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
@@ -794,6 +942,24 @@ async def echo_send_to_bot(message: types.Message):
                 )
                 reply_markup.row(inline_btn_location)
 
+                dict_abwish = dict(
+                    keyboard_type=KeyboardType.ABILITY,
+                    sep=KeyboardType.SEP,
+                )
+                callback_data_template = (
+                        '%(keyboard_type)s%(sep)s'
+                    )
+                inline_btn_ability = InlineKeyboardButton(
+                    'Возможности',
+                    callback_data=callback_data_template % dict_abwish,
+                )
+                dict_abwish.update(keyboard_type=KeyboardType.WISH)
+                inline_btn_wish = InlineKeyboardButton(
+                    'Желания',
+                    callback_data=callback_data_template % dict_abwish,
+                )
+                reply_markup.row(inline_btn_ability, inline_btn_wish)
+
             await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
     elif reply:
@@ -832,6 +998,7 @@ async def echo_send_to_bot(message: types.Message):
             )
             logging.info('put tg_user_forwarded_photo, status: %s' % status)
             logging.debug('put tg_user_forwarded_photo, response: %s' % response)
+
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=(types.ChatType.GROUP, types.ChatType.SUPERGROUP)),
