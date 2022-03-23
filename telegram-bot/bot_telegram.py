@@ -80,7 +80,7 @@ async def fcm_ability_cancel(message, state):
 )
 async def fcm_wish_cancel(message, state):
         await state.finish()
-        await message.reply('Вы отказались от ввода Ваших желаний')
+        await message.reply('Вы отказались от ввода Ваших потребностей')
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
@@ -116,7 +116,7 @@ async def put_ability(message, state):
         except:
             status_add = response_add = None
         if status_add == 200:
-            await message.reply('Возможности помечены')
+            await message.reply('Возможности учтены')
             status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
             if status_sender == 200:
                 await message.reply(
@@ -164,7 +164,7 @@ async def put_wish(message, state):
         except:
             status_add = response_add = None
         if status_add == 200:
-            await message.reply('Желания помечены')
+            await message.reply('Потребности учтены')
             status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
             if status_sender == 200:
                 await message.reply(
@@ -955,7 +955,7 @@ async def echo_send_to_bot(message: types.Message):
                 )
                 dict_abwish.update(keyboard_type=KeyboardType.WISH)
                 inline_btn_wish = InlineKeyboardButton(
-                    'Желания',
+                    'Потребности',
                     callback_data=callback_data_template % dict_abwish,
                 )
                 reply_markup.row(inline_btn_ability, inline_btn_wish)
