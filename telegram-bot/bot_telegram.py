@@ -728,7 +728,7 @@ async def echo_send_to_bot(message: types.Message):
                 state = 'forwarded_from_other'
         else:
             message_text = message.text.strip()
-            if message_text == '/start':
+            if message_text in ('/start', '/ya'):
                 state = 'start'
             else:
                 m = re.search(r'^\@(\w+)', message_text)
