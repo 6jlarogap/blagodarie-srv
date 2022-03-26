@@ -530,7 +530,7 @@ async def geo(message):
     keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True, one_time_keyboard=True)
     button_geo = types.KeyboardButton(text="Отправить местоположение", request_location=True)
     keyboard.add(button_geo)
-    await bot.send_message(message.chat.id, "Пожалуйста укажите своё примерное или точное местоположение", reply_markup=keyboard)
+    await bot.send_message(message.chat.id, 'Пожалуйста, нажмите на кнопку "Отправить местоположение" снизу', reply_markup=keyboard)
 
 
 @dp.callback_query_handler(
