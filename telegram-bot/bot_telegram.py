@@ -42,6 +42,20 @@ async def on_shutdown(dp):
         await bot.delete_webhook()
 
 
+async def do_process_ability(message: types.Message):
+    await FSMability.ask.set()
+    await message.reply(Misc.PROMPT_ABILITY)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('setvozm', 'возможности'),
+    state=None,
+)
+async def process_command_ability(message):
+    await do_process_ability(message)
+
+
 @dp.callback_query_handler(
     lambda c: c.data and re.search(r'^(%s)%s' % (
         KeyboardType.ABILITY,
@@ -49,8 +63,21 @@ async def on_shutdown(dp):
     ), c.data
     ))
 async def process_callback_ability(callback_query: types.CallbackQuery):
-    await FSMability.ask.set()
-    await callback_query.message.reply(Misc.PROMPT_ABILITY)
+    await do_process_ability(callback_query.message)
+
+
+async def do_process_wish(message: types.Message):
+    await FSMwish.ask.set()
+    await message.reply(Misc.PROMPT_WISH)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('setpotr', 'потребности'),
+    state=None,
+)
+async def process_command_wish(message):
+    await do_process_wish(message)
 
 
 @dp.callback_query_handler(
@@ -60,9 +87,7 @@ async def process_callback_ability(callback_query: types.CallbackQuery):
     ), c.data
     ))
 async def process_callback_wish(callback_query: types.CallbackQuery):
-    await FSMwish.ask.set()
-    await callback_query.message.reply(Misc.PROMPT_WISH)
-
+    await do_process_wish(callback_query.message)
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
@@ -524,9 +549,9 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=["geo",]
+    commands=["setplace", "место"]
 )
-async def geo(message):
+async def geo(message: types.Message):
     keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True, one_time_keyboard=True)
     button_geo = types.KeyboardButton(text="Отправить местоположение", request_location=True)
     keyboard.add(button_geo)
