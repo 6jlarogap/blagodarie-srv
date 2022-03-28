@@ -1088,6 +1088,7 @@ async def echo_send_to_group(message: types.Message):
         Имя Фамилия /ссылка/ (@username)
 
     Кнопки:
+        Перейти
         Благодарность   Недоверие   Не знакомы
     """
     if message.content_type in(
@@ -1137,16 +1138,15 @@ async def echo_send_to_group(message: types.Message):
     reply_markup = InlineKeyboardMarkup()
     path = "/profile/?id=%(uuid)s" % dict(uuid=response_from['uuid'],)
 
-    if tg_user_new_or_left:
-        url = settings.FRONTEND_HOST + path
-        login_url = Misc.make_login_url(path)
-        login_url = LoginUrl(url=login_url)
-        inline_btn_go = InlineKeyboardButton(
-            'Перейти',
-            url=url,
-            # login_url=login_url,
-        )
-        reply_markup.row(inline_btn_go)
+    url = settings.FRONTEND_HOST + path
+    login_url = Misc.make_login_url(path)
+    login_url = LoginUrl(url=login_url)
+    inline_btn_go = InlineKeyboardButton(
+        'Перейти',
+        url=url,
+        # login_url=login_url,
+    )
+    reply_markup.row(inline_btn_go)
 
     bot_data = await bot.get_me()
     if str(bot_data.id) != str(response_from['tg_uid']):
@@ -1189,9 +1189,13 @@ async def echo_send_to_group(message: types.Message):
         username = tg_user_new_or_left.username
         reply = Misc.reply_user_card(response_from, username)
     else:
-        reply = '<a href="%(url)s">%(full_name)s</a>' % dict(
-            url=settings.FRONTEND_HOST + path,
-            full_name=tg_user_sender.full_name
+        reply_template = '<b>%(full_name)s</b>'
+        username = response_from.get('tg_username', '')
+        if username:
+            reply_template += ' ( @%(username)s )'
+        reply = reply_template % dict(
+            full_name=tg_user_sender.full_name,
+            username=username,
         )
 
     # Это сообщение идет в группу!
