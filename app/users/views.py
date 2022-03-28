@@ -1046,6 +1046,14 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             if save_:
                 oauth.update_timestamp = int(time.time())
                 oauth.save()
+            save_ = False
+            for f in ('last_name', 'first_name', ):
+                input_val = request.data.get(f, '')
+                if (getattr(user, f) != input_val) and input_val:
+                    setattr(user, f, input_val)
+                    save_ = True
+            if save_:
+                user.save()
 
         except Oauth.DoesNotExist:
             user = self.create_user(
