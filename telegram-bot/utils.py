@@ -44,6 +44,14 @@ class KeyboardType(object):
     #
     WISH = 5
 
+    # Возможности
+    #
+    CANCEL_ABILITY = 6
+
+    # Потребности
+    #
+    CANCEL_WISH = 7
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -55,8 +63,8 @@ class Misc(object):
 
     MSG_ERROR_API = 'Ошибка доступа к данным'
     MSG_ERROR_TEXT_ONLY = 'Принимается только текст'
-    PROMPT_ABILITY = 'Отправьте мне текст с Вашими <b>возможностями</b>. Введите <i>Отмена</i>, чтоб отказаться'
-    PROMPT_WISH = 'Отправьте мне текст с Вашими <b>потребностями</b>. Введите <i>Отмена</i>, чтоб отказаться'
+    PROMPT_ABILITY = 'Отправьте мне текст с Вашими <b>возможностями</b>'
+    PROMPT_WISH = 'Отправьте мне текст с Вашими <b>потребностями</b>'
     
     @classmethod
     def help_text(cls):

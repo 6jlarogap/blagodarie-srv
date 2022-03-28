@@ -43,8 +43,35 @@ async def on_shutdown(dp):
 
 
 async def do_process_ability(message: types.Message):
+    callback_data = '%(keyboard_type)s%(sep)s' % dict(
+        keyboard_type=KeyboardType.CANCEL_ABILITY,
+        sep=KeyboardType.SEP,
+    )
+    inline_btn_cancel = InlineKeyboardButton(
+        'Отмена',
+        callback_data=callback_data,
+    )
+    reply_markup = InlineKeyboardMarkup()
+    reply_markup.row(inline_btn_cancel)
+
     await FSMability.ask.set()
-    await message.reply(Misc.PROMPT_ABILITY)
+    await message.reply(Misc.PROMPT_ABILITY, reply_markup=reply_markup)
+
+
+async def do_process_wish(message: types.Message):
+    callback_data = '%(keyboard_type)s%(sep)s' % dict(
+        keyboard_type=KeyboardType.CANCEL_WISH,
+        sep=KeyboardType.SEP,
+    )
+    inline_btn_cancel = InlineKeyboardButton(
+        'Отмена',
+        callback_data=callback_data,
+    )
+    reply_markup = InlineKeyboardMarkup()
+    reply_markup.row(inline_btn_cancel)
+
+    await FSMwish.ask.set()
+    await message.reply(Misc.PROMPT_WISH, reply_markup=reply_markup)
 
 
 @dp.message_handler(
@@ -66,11 +93,6 @@ async def process_callback_ability(callback_query: types.CallbackQuery):
     await do_process_ability(callback_query.message)
 
 
-async def do_process_wish(message: types.Message):
-    await FSMwish.ask.set()
-    await message.reply(Misc.PROMPT_WISH)
-
-
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     commands=('setpotr', 'потребности'),
@@ -89,23 +111,32 @@ async def process_command_wish(message):
 async def process_callback_wish(callback_query: types.CallbackQuery):
     await do_process_wish(callback_query.message)
 
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    Text(equals='отмена', ignore_case=True),
-    state=FSMability.ask,
-)
-async def fcm_ability_cancel(message, state):
-        await state.finish()
-        await message.reply('Вы отказались от ввода Ваших возможностей')
 
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    Text(equals='отмена', ignore_case=True),
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.CANCEL_ABILITY,
+        KeyboardType.SEP,
+        ), c.data
+    ),
+    state=FSMability.ask,
+    )
+async def process_callback_cancel_ability(callback_query: types.CallbackQuery, state: FSMContext):
+    await state.finish()
+    await callback_query.message.reply('Вы отказались от ввода Ваших возможностей')
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.CANCEL_WISH,
+        KeyboardType.SEP,
+        ), c.data
+    ),
     state=FSMwish.ask,
-)
-async def fcm_wish_cancel(message, state):
-        await state.finish()
-        await message.reply('Вы отказались от ввода Ваших потребностей')
+    )
+async def process_callback_cancel_ability(callback_query: types.CallbackQuery, state: FSMContext):
+    await state.finish()
+    await callback_query.message.reply('Вы отказались от ввода Ваших потребностей')
+
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
