@@ -825,8 +825,10 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
         с параметром uuid=...
             получить данные по одному пользователю, необязательно родственнику,
         с параметром tg_username:
-            Ищем у нас в базе такой телеграм- username, возвращаем
-            "карточку пользователя", включая его telegram id
+            Это строка telegram @usernames (без @ вначале), разделенных запятой
+            например, username1,username2 ...
+            Ищем у нас в базе все эти телеграм- usernames, возвращаем
+            "карточки пользователей", включая их telegram id
             заодно вернуть abilities, wishes, keys
 
     PUT
@@ -952,21 +954,25 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 data.update(profile.parents_dict(request))
                 data.update(profile.data_WAK())
             elif request.GET.get('tg_username'):
-                try:
-                    oauth = Oauth.objects.select_related(
-                        'user', 'user__profile'
-                    ).filter(
-                        provider=Oauth.PROVIDER_TELEGRAM,
-                        username=request.GET['tg_username']
-                    )[0]
-                    user = oauth.user
-                    profile = user.profile
-                    data = profile.data_dict(request)
-                    data.update(tg_uid=oauth.uid)
-                    data.update(user_id=user.pk)
-                    data.update(profile.data_WAK())
-                except IndexError:
-                    pass
+                data = []
+                usernames = request.GET['tg_username'].split(',')
+                for username in usernames:
+                    try:
+                        oauth = Oauth.objects.select_related(
+                            'user', 'user__profile'
+                        ).filter(
+                            provider=Oauth.PROVIDER_TELEGRAM,
+                            username=username,
+                        )[0]
+                        user = oauth.user
+                        profile = user.profile
+                        data_p = profile.data_dict(request)
+                        data_p.update(tg_uid=oauth.uid)
+                        data_p.update(user_id=user.pk)
+                        data_p.update(profile.data_WAK())
+                        data.append(data_p)
+                    except IndexError:
+                        pass
             elif request.GET.get('query'):
                 data = []
                 query = request.GET['query']

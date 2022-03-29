@@ -757,13 +757,13 @@ async def echo_send_to_bot(message: types.Message):
 
     tg_user_forwarded = None
 
+    state = ''
+
     # Кого будут благодарить
     # или свой профиль в массиве
     # или массив найденных профилей
     #
     a_response_to = []
-
-    state = ''
 
     if tg_user_sender.is_bot:
         reply = 'Сообщения от ботов пока не обрабатываются'
@@ -801,15 +801,11 @@ async def echo_send_to_bot(message: types.Message):
                     )
                     logging.info('get by username, status: %s' % status)
                     logging.debug('get by username, response: %s' % response)
-                    if status == 200 and response and response.get('tg_uid'):
-                        if int(response['tg_uid']) == int(tg_user_sender.id):
-                            response_from = response
-                            user_from_id = response['user_id']
-                            state = 'username_from_me'
-                        else:
-                            state = 'username_from_other'
-                        response.update(tg_username=username_in_text)
-                        a_response_to = [response, ]
+                    if status == 200 and response:
+                        a_response_to += response
+                        state = 'found_username'
+                    else:
+                        state = 'not_found'
                 else:
                     if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
                         state = 'invalid_message_text'
@@ -826,36 +822,15 @@ async def echo_send_to_bot(message: types.Message):
                         logging.info('get by query, status: %s' % status)
                         logging.debug('get by query, response: %s' % response)
                         if status == 200 and response:
-                            a_response_to = response
+                            a_response_to += response
                             state = 'found_in_search'
                         else:
                             state = 'not_found'
-                            reply = 'Профиль не найден'
-    if not state and not reply:
-        state = 'not_found'
+
+    if state == 'not_found':
         reply = 'Профиль не найден'
+
     if state:
-        logging.debug('State is: %s' % state)
-
-    # Сейчас возможные остояния (state)
-    #   '': готов ответ. Ничего дальше делать не надо
-    #   start
-    #   forwarded_from_me
-    #   forwarded_from_other
-    #   username_from_me:
-    #   username_from_other:
-    #   not_found:              не найдены пользователи
-    #   invalid_message_text:   минимальное число смволов в поиске
-
-    if state in (
-        'invalid_message_text',
-        'not_found',
-        'found_in_search',
-        'start',
-        'forwarded_from_me',
-        'forwarded_from_other',
-        'username_from_other',
-       ):
         logging.info('get_or_create tg_user_sender data in api...')
         payload_from = dict(
             tg_token=settings.TOKEN,
@@ -876,8 +851,6 @@ async def echo_send_to_bot(message: types.Message):
             if status == 200:
                 response_from.update(tg_username=tg_user_sender.username)
                 user_from_id = response_from.get('user_id')
-                if state not in ('username_from_other', 'found_in_search', ):
-                    a_response_to = [response_from, ]
         except:
             pass
 
@@ -906,8 +879,13 @@ async def echo_send_to_bot(message: types.Message):
             pass
 
     if state and state not in ('not_found', 'invalid_message_text',) and user_from_id and a_response_to:
+        tg_uids = set()
         bot_data = await bot.get_me()
         for response_to in a_response_to:
+            if response_to['tg_uid'] in tg_uids:
+                continue
+            else:
+                tg_uids.add(response_to['tg_uid'])
             reply_markup = InlineKeyboardMarkup()
             path = "/profile/?id=%s" % response_to['uuid']
             url = settings.FRONTEND_HOST + path
@@ -1017,6 +995,9 @@ async def echo_send_to_bot(message: types.Message):
                 reply_markup.row(inline_btn_ability, inline_btn_wish)
 
             await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+
+        if not tg_uids and not reply:
+            await message.reply('Профиль не найден')
 
     elif reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
