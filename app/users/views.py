@@ -966,11 +966,10 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                         )[0]
                         user = oauth.user
                         profile = user.profile
-                        data_p = profile.data_dict(request)
-                        data_p.update(tg_uid=oauth.uid)
-                        data_p.update(user_id=user.pk)
-                        data_p.update(profile.data_WAK())
-                        data.append(data_p)
+                        data_item = profile.data_dict(request)
+                        data_item.update(user_id=user.pk, tg_uid=oauth.uid, tg_username=oauth.username)
+                        data_item.update(profile.data_WAK())
+                        data.append(data_item)
                     except IndexError:
                         pass
             elif request.GET.get('query'):
@@ -990,8 +989,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                     user = oauth.user
                     profile = user.profile
                     data_item = profile.data_dict(request)
-                    data_item.update(tg_uid=oauth.uid)
-                    data_item.update(user_id=user.pk)
+                    data_item.update(user_id=user.pk, tg_uid=oauth.uid, tg_username=oauth.username)
                     data_item.update(profile.data_WAK())
                     data.append(data_item)
             else:

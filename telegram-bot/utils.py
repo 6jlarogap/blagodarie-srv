@@ -1,9 +1,13 @@
-import base64
+import base64, re
 from urllib.parse import urlencode
 
+from aiogram.types.login_url import LoginUrl
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 import aiohttp
 
 import settings
+
+from settings import logging
 
 TIMEOUT = aiohttp.ClientTimeout(total=settings.HTTP_TIMEOUT)
 
@@ -72,7 +76,7 @@ class Misc(object):
             ('Поиск участников %s по:\n' % settings.FRONTEND_HOST_TITLE) + \
             '\n'
             '- @имени участника в телеграме,\n'
-            '- фамилии, имени, возможностям, потребностям,\n'
+            '- фамилии, имени, возможностям, потребностям.\n'
             '\n' + \
             ('Минимальное число символов в тексте для поиска: %s\n' % settings.MIN_LEN_SEARCHED_TEXT) + \
             '\n'
@@ -315,3 +319,160 @@ class Misc(object):
         except:
             status_sender = response_sender = None
         return status_sender, response_sender
+
+    @classmethod
+    def get_text_usernames(cls, s):
+        """
+        Выделить из текста @usernames и вернуть еще текст без @usernames
+        """
+        usernames = []
+        for m in re.finditer(r'\@\w+', s):
+            username = m.group(0)
+            if username not in usernames:
+                usernames.append(username)
+        text = s
+        for username in usernames:
+            text = re.sub(re.escape(username), '', text)
+        text = re.sub(r'\s{2,}', ' ', text)
+        text = text.strip()
+        for i, v in enumerate(usernames):
+            usernames[i] = usernames[i][1:]
+        return usernames, text
+
+
+    @classmethod
+    async def show_cards(cls,
+        a_response_to,
+        message,
+        bot_data,
+        exclude_tg_uids=[],
+        response_from={},
+        message_to_forward_id='',
+    ):
+        """
+        Показать карточки пользователей
+        """
+        tg_uids = set(exclude_tg_uids)
+        user_from_id = response_from.get('user_id')
+        for response_to in a_response_to:
+            if str(response_to['tg_uid']) in tg_uids:
+                continue
+            else:
+                tg_uids.add(str(response_to['tg_uid']))
+            reply_markup = InlineKeyboardMarkup()
+            path = "/profile/?id=%s" % response_to['uuid']
+            url = settings.FRONTEND_HOST + path
+            login_url = cls.make_login_url(path)
+            login_url = LoginUrl(url=login_url)
+            inline_btn_go = InlineKeyboardButton(
+                'Перейти',
+                url=url,
+                # login_url=login_url,
+            )
+            reply_markup.row(inline_btn_go)
+            reply = cls.reply_user_card(response_to)
+
+            response_relations = None
+            if user_from_id and user_from_id != response_to['user_id']:
+                payload_relation = dict(
+                    user_id_from=response_from['uuid'],
+                    user_id_to=response_to['uuid'],
+                )
+                status, response = await cls.api_request(
+                    path='/api/user/relations/',
+                    method='get',
+                    params=payload_relation,
+                )
+                logging.info('get users relations, status: %s' % status)
+                logging.debug('get users relations: %s' % response)
+                if status == 200:
+                    reply += cls.reply_relations(response)
+                    response_relations = response
+
+            if (not user_from_id or user_from_id != response_to['user_id']) and \
+               str(bot_data.id) != str(response_to['tg_uid']):
+                dict_reply = dict(
+                    keyboard_type=KeyboardType.TRUST_THANK_VER_2,
+                    sep=KeyboardType.SEP,
+                    user_to_id=response_to['user_id'],
+                    message_to_forward_id=message_to_forward_id,
+                    group_id='',
+                )
+                callback_data_template = (
+                        '%(keyboard_type)s%(sep)s'
+                        '%(operation)s%(sep)s'
+                        '%(user_to_id)s%(sep)s'
+                        '%(message_to_forward_id)s%(sep)s'
+                        '%(group_id)s%(sep)s'
+                    )
+                dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+                inline_btn_thank = InlineKeyboardButton(
+                    'Благодарю',
+                    callback_data=callback_data_template % dict_reply,
+                )
+                dict_reply.update(operation=OperationType.MISTRUST)
+                inline_btn_mistrust = InlineKeyboardButton(
+                    'Не доверяю',
+                    callback_data=callback_data_template % dict_reply,
+                )
+                show_inline_btn_nullify_trust = True
+                dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+                inline_btn_nullify_trust = InlineKeyboardButton(
+                    'Не знакомы',
+                    callback_data=callback_data_template % dict_reply,
+                )
+                if response_relations and response_relations['from_to']['is_trust'] is None:
+                    show_inline_btn_nullify_trust = False
+                if show_inline_btn_nullify_trust:
+                    reply_markup.row(
+                        inline_btn_thank,
+                        inline_btn_mistrust,
+                        inline_btn_nullify_trust
+                    )
+                else:
+                    reply_markup.row(
+                        inline_btn_thank,
+                        inline_btn_mistrust,
+                    )
+            if user_from_id and user_from_id == response_to['user_id']:
+                # Карточка самому пользователю
+                #
+                dict_location = dict(
+                    keyboard_type=KeyboardType.LOCATION,
+                    sep=KeyboardType.SEP,
+                )
+                callback_data_template = (
+                        '%(keyboard_type)s%(sep)s'
+                    )
+                inline_btn_location = InlineKeyboardButton(
+                    'Местоположение',
+                    callback_data=callback_data_template % dict_location,
+                )
+                reply_markup.row(inline_btn_location)
+
+                dict_abwish = dict(
+                    keyboard_type=KeyboardType.ABILITY,
+                    sep=KeyboardType.SEP,
+                )
+                callback_data_template = (
+                        '%(keyboard_type)s%(sep)s'
+                    )
+                inline_btn_ability = InlineKeyboardButton(
+                    'Возможности',
+                    callback_data=callback_data_template % dict_abwish,
+                )
+                dict_abwish.update(keyboard_type=KeyboardType.WISH)
+                inline_btn_wish = InlineKeyboardButton(
+                    'Потребности',
+                    callback_data=callback_data_template % dict_abwish,
+                )
+                reply_markup.row(inline_btn_ability, inline_btn_wish)
+
+            if user_from_id:
+                # в бот
+                await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+            else:
+                # в группу
+                await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+
+        return bool(tg_uids)

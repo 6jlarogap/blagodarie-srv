@@ -57,5 +57,6 @@ try:
     from local_settings import *
 except ModuleNotFoundError:
     pass
+logging.basicConfig(level=LOG_LEVEL)
 
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"

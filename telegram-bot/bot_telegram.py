@@ -1,6 +1,7 @@
-import logging, re
+import re
 
 import settings
+from settings import logging
 from utils import Misc, OperationType, KeyboardType
 
 from aiogram import Bot, types
@@ -27,8 +28,6 @@ bot = Bot(
     parse_mode=types.ParseMode.HTML,
 )
 dp = Dispatcher(bot, storage=storage)
-
-logging.basicConfig(level=settings.LOG_LEVEL)
 
 async def on_startup(dp):
     logging.info('Starting...')
@@ -784,35 +783,36 @@ async def echo_send_to_bot(message: types.Message):
                 state = 'forwarded_from_other'
         else:
             message_text = message.text.strip()
+
             if message_text in ('/start', '/ya', '/я'):
                 state = 'start'
             else:
-                m = re.search(r'^\@(\w+)', message_text)
-                if m:
-                    username_in_text = m.group(1)
-                    logging.info('username "@%s" found in message text\n' % username_in_text) 
-                    payload_username = dict(
-                        tg_username=username_in_text,
-                    )
-                    status, response = await Misc.api_request(
-                        path='/api/profile',
-                        method='get',
-                        params=payload_username,
-                    )
-                    logging.info('get by username, status: %s' % status)
-                    logging.debug('get by username, response: %s' % response)
-                    if status == 200 and response:
-                        a_response_to += response
-                        state = 'found_username'
-                    else:
-                        state = 'not_found'
+                if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
+                    state = 'invalid_message_text'
+                    reply = Misc.help_text()
                 else:
-                    if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
-                        state = 'invalid_message_text'
-                        reply = Misc.help_text()
-                    else:
+                    usernames, text_stripped = Misc.get_text_usernames(message.text)
+                    if usernames:
+                        logging.info('@usernames found in message text\n') 
+                        payload_username = dict(
+                            tg_username=','.join(usernames),
+                        )
+                        status, response = await Misc.api_request(
+                            path='/api/profile',
+                            method='get',
+                            params=payload_username,
+                        )
+                        logging.info('get by username, status: %s' % status)
+                        logging.debug('get by username, response: %s' % response)
+                        if status == 200 and response:
+                            a_response_to += response
+                            state = 'found_username'
+                        else:
+                            state = 'not_found'
+
+                    if text_stripped and len(text_stripped) >= settings.MIN_LEN_SEARCHED_TEXT:
                         payload_query = dict(
-                            query=message_text,
+                            query=text_stripped,
                         )
                         status, response = await Misc.api_request(
                             path='/api/profile',
@@ -824,7 +824,7 @@ async def echo_send_to_bot(message: types.Message):
                         if status == 200 and response:
                             a_response_to += response
                             state = 'found_in_search'
-                        else:
+                        elif state != 'found_username':
                             state = 'not_found'
 
     if state == 'not_found':
@@ -851,6 +851,8 @@ async def echo_send_to_bot(message: types.Message):
             if status == 200:
                 response_from.update(tg_username=tg_user_sender.username)
                 user_from_id = response_from.get('user_id')
+                if state in ('start', 'forwarded_from_me',):
+                    a_response_to += [response_from, ]
         except:
             pass
 
@@ -879,124 +881,18 @@ async def echo_send_to_bot(message: types.Message):
             pass
 
     if state and state not in ('not_found', 'invalid_message_text',) and user_from_id and a_response_to:
-        tg_uids = set()
         bot_data = await bot.get_me()
-        for response_to in a_response_to:
-            if response_to['tg_uid'] in tg_uids:
-                continue
-            else:
-                tg_uids.add(response_to['tg_uid'])
-            reply_markup = InlineKeyboardMarkup()
-            path = "/profile/?id=%s" % response_to['uuid']
-            url = settings.FRONTEND_HOST + path
-            login_url = Misc.make_login_url(path)
-            login_url = LoginUrl(url=login_url)
-            inline_btn_go = InlineKeyboardButton(
-                'Перейти',
-                url=url,
-                # login_url=login_url,
-            )
-            reply_markup.row(inline_btn_go)
-            reply = Misc.reply_user_card(response_to)
+        message_to_forward_id = state == 'forwarded_from_other' and message.message_id or ''
 
-            if user_from_id != response_to['user_id']:
-                payload_relation = dict(
-                    user_id_from=response_from['uuid'],
-                    user_id_to=response_to['uuid'],
-                )
-                status, response = await Misc.api_request(
-                    path='/api/user/relations/',
-                    method='get',
-                    params=payload_relation,
-                )
-                logging.info('get users relations, status: %s' % status)
-                logging.debug('get users relations: %s' % response)
-                if status == 200:
-                    reply += Misc.reply_relations(response)
-                    response_relations = response
-                else:
-                    response_relations = None
-
-                if str(bot_data.id) != str(response_to['tg_uid']):
-                    dict_reply = dict(
-                        keyboard_type=KeyboardType.TRUST_THANK_VER_2,
-                        sep=KeyboardType.SEP,
-                        user_to_id=response_to['user_id'],
-                        message_to_forward_id=state == 'forwarded_from_other' and message.message_id or '',
-                        group_id='',
-                    )
-                    callback_data_template = (
-                            '%(keyboard_type)s%(sep)s'
-                            '%(operation)s%(sep)s'
-                            '%(user_to_id)s%(sep)s'
-                            '%(message_to_forward_id)s%(sep)s'
-                            '%(group_id)s%(sep)s'
-                        )
-                    dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-                    inline_btn_thank = InlineKeyboardButton(
-                        'Благодарю',
-                        callback_data=callback_data_template % dict_reply,
-                    )
-                    dict_reply.update(operation=OperationType.MISTRUST)
-                    inline_btn_mistrust = InlineKeyboardButton(
-                        'Не доверяю',
-                        callback_data=callback_data_template % dict_reply,
-                    )
-                    inline_btn_nullify_trust = None
-                    if response_relations and response_relations['from_to']['is_trust'] is not None:
-                        dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-                        inline_btn_nullify_trust = InlineKeyboardButton(
-                            'Не знакомы',
-                            callback_data=callback_data_template % dict_reply,
-                        )
-                    if inline_btn_nullify_trust:
-                        reply_markup.row(
-                            inline_btn_thank,
-                            inline_btn_mistrust,
-                            inline_btn_nullify_trust
-                        )
-                    else:
-                        reply_markup.row(
-                            inline_btn_thank,
-                            inline_btn_mistrust,
-                        )
-            else:
-                # Карточка самому пользователю
-                #
-                dict_location = dict(
-                    keyboard_type=KeyboardType.LOCATION,
-                    sep=KeyboardType.SEP,
-                )
-                callback_data_template = (
-                        '%(keyboard_type)s%(sep)s'
-                    )
-                inline_btn_location = InlineKeyboardButton(
-                    'Местоположение',
-                    callback_data=callback_data_template % dict_location,
-                )
-                reply_markup.row(inline_btn_location)
-
-                dict_abwish = dict(
-                    keyboard_type=KeyboardType.ABILITY,
-                    sep=KeyboardType.SEP,
-                )
-                callback_data_template = (
-                        '%(keyboard_type)s%(sep)s'
-                    )
-                inline_btn_ability = InlineKeyboardButton(
-                    'Возможности',
-                    callback_data=callback_data_template % dict_abwish,
-                )
-                dict_abwish.update(keyboard_type=KeyboardType.WISH)
-                inline_btn_wish = InlineKeyboardButton(
-                    'Потребности',
-                    callback_data=callback_data_template % dict_abwish,
-                )
-                reply_markup.row(inline_btn_ability, inline_btn_wish)
-
-            await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
-
-        if not tg_uids and not reply:
+        any_cards_shown = await Misc.show_cards(
+            a_response_to,
+            message,
+            bot_data,
+            exclude_tg_uids=[],
+            response_from=response_from,
+            message_to_forward_id=message_to_forward_id,
+        )
+        if not any_cards_shown and not reply:
             await message.reply('Профиль не найден')
 
     elif reply:
@@ -1178,6 +1074,33 @@ async def echo_send_to_group(message: types.Message):
             full_name=tg_user_sender.full_name,
             username=username,
         )
+
+    # Найдем @usernames в сообщении
+    #
+    message_text = getattr(message, 'text', '') and message.text.strip()
+    if message_text:
+        usernames, text_stripped = Misc.get_text_usernames(message.text)
+        if usernames:
+            logging.info('@usernames found in message text\n') 
+            payload_username = dict(
+                tg_username=','.join(usernames),
+            )
+            status, a_response_to = await Misc.api_request(
+                path='/api/profile',
+                method='get',
+                params=payload_username,
+            )
+            logging.info('get by username, status: %s' % status)
+            logging.debug('get by username, response: %s' % a_response_to)
+            if status == 200 and a_response_to:
+                await Misc.show_cards(
+                    a_response_to,
+                    message,
+                    bot_data,
+                    exclude_tg_uids=[str(tg_user_sender.id)],
+                    response_from={},
+                    message_to_forward_id='',
+                )
 
     # Это сообщение идет в группу!
     #
