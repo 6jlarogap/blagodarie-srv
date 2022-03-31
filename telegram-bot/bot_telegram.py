@@ -764,6 +764,7 @@ async def echo_send_to_bot(message: types.Message):
     #
     a_response_to = []
 
+    message_text = getattr(message, 'text', '') and message.text.strip()
     if tg_user_sender.is_bot:
         reply = 'Сообщения от ботов пока не обрабатываются'
     else:
@@ -782,8 +783,6 @@ async def echo_send_to_bot(message: types.Message):
             else:
                 state = 'forwarded_from_other'
         else:
-            message_text = message.text.strip()
-
             if message_text in ('/start', '/ya', '/я'):
                 state = 'start'
             else:
@@ -791,7 +790,7 @@ async def echo_send_to_bot(message: types.Message):
                     state = 'invalid_message_text'
                     reply = Misc.help_text()
                 else:
-                    usernames, text_stripped = Misc.get_text_usernames(message.text)
+                    usernames, text_stripped = Misc.get_text_usernames(message_text)
                     if usernames:
                         logging.info('@usernames found in message text\n') 
                         payload_username = dict(
@@ -879,6 +878,24 @@ async def echo_send_to_bot(message: types.Message):
                 a_response_to = [response_to, ]
         except:
             pass
+
+    if user_from_id and state in ('forwarded_from_other', 'forwarded_from_me'):
+        usernames, text_stripped = Misc.get_text_usernames(message_text)
+        if usernames:
+            logging.info('@usernames found in message text\n')
+            payload_username = dict(
+                tg_username=','.join(usernames),
+            )
+            status, response = await Misc.api_request(
+                path='/api/profile',
+                method='get',
+                params=payload_username,
+            )
+            logging.info('get by username, status: %s' % status)
+            logging.debug('get by username, response: %s' % response)
+            if status == 200 and response:
+                a_response_to += response
+
 
     if state and state not in ('not_found', 'invalid_message_text',) and user_from_id and a_response_to:
         bot_data = await bot.get_me()
@@ -1081,7 +1098,7 @@ async def echo_send_to_group(message: types.Message):
     if message_text:
         usernames, text_stripped = Misc.get_text_usernames(message.text)
         if usernames:
-            logging.info('@usernames found in message text\n') 
+            logging.info('@usernames found in message text\n')
             payload_username = dict(
                 tg_username=','.join(usernames),
             )
