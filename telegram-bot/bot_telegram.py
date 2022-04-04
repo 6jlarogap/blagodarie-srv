@@ -742,8 +742,6 @@ async def echo_send_to_bot(message: types.Message):
         Благодарность   Недоверие   Не знакомы
     """
 
-    print(message.date)
-
     if not message.is_forward() and message.content_type != ContentType.TEXT:
         await message.reply(
             'Сюда можно слать текст для поиска, включая @username, или пересылать сообщения любого типа'

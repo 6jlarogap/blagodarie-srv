@@ -41,7 +41,7 @@ install-readme.txt
  
     * Д.б. установлено на Linux:
         - средства разработки:
-            * python3:
+            * python3.6, не ниже:
                   * sudo apt install python3-all-dev
                   * sudo apt install python3-virtualenv python3-pycurl virtualenv
 
