@@ -23,6 +23,11 @@ class FSMability(StatesGroup):
 class FSMwish(StatesGroup):
     ask = State()
 
+class FSMgroup(StatesGroup):
+    current_user = State()
+
+last_user_in_group = None
+
 bot = Bot(
     token=settings.TOKEN,
     parse_mode=types.ParseMode.HTML,
@@ -30,7 +35,6 @@ bot = Bot(
 dp = Dispatcher(bot, storage=storage)
 
 async def on_startup(dp):
-    logging.info('Starting...')
     if settings.START_MODE == 'webhook':
         await bot.set_webhook(settings.WEBHOOK_URL)
 
@@ -738,6 +742,8 @@ async def echo_send_to_bot(message: types.Message):
         Благодарность   Недоверие   Не знакомы
     """
 
+    print(message.date)
+
     if not message.is_forward() and message.content_type != ContentType.TEXT:
         await message.reply(
             'Сюда можно слать текст для поиска, включая @username, или пересылать сообщения любого типа'
@@ -993,6 +999,19 @@ async def echo_send_to_group(message: types.Message):
        ):
         return
 
+    global last_user_in_group
+    previous_user_in_group = last_user_in_group
+
+    # Было ли предыдущее сообщение в группу отправлено этом пользователем?
+    # Полезно, т.к. в сообщении из 10 фоток, а это 10 сообщений в бот,
+    # надо бы только одну реакцию
+    #
+    is_previous_his = True
+    if previous_user_in_group != message.from_user.id:
+        last_user_in_group = message.from_user.id
+        is_previous_his = False
+
+    reply_markup = None
     tg_user_new_or_left = None
     try:
         tg_user_new_or_left = message.new_chat_members[0]
@@ -1029,60 +1048,65 @@ async def echo_send_to_group(message: types.Message):
     except:
         return
 
-    reply_markup = InlineKeyboardMarkup()
-    path = "/profile/?id=%(uuid)s" % dict(uuid=response_from['uuid'],)
-
-    url = settings.FRONTEND_HOST + path
-    login_url = Misc.make_login_url(path)
-    login_url = LoginUrl(url=login_url)
-    inline_btn_go = InlineKeyboardButton(
-        'Перейти',
-        url=url,
-        # login_url=login_url,
-    )
-    reply_markup.row(inline_btn_go)
 
     bot_data = await bot.get_me()
-    if str(bot_data.id) != str(response_from['tg_uid']):
-        dict_reply = dict(
-            keyboard_type=KeyboardType.TRUST_THANK_VER_2,
-            sep=KeyboardType.SEP,
-            user_to_id=user_from_id,
-            message_to_forward_id='',
-            group_id=group_id,
+    if not is_previous_his:
+        reply_markup = InlineKeyboardMarkup()
+        path = "/profile/?id=%(uuid)s" % dict(uuid=response_from['uuid'],)
+
+        url = settings.FRONTEND_HOST + path
+        login_url = Misc.make_login_url(path)
+        login_url = LoginUrl(url=login_url)
+        inline_btn_go = InlineKeyboardButton(
+            'Перейти',
+            url=url,
+            # login_url=login_url,
         )
-        callback_data_template = (
-                '%(keyboard_type)s%(sep)s'
-                '%(operation)s%(sep)s'
-                '%(user_to_id)s%(sep)s'
-                '%(message_to_forward_id)s%(sep)s'
-                '%(group_id)s%(sep)s'
+        reply_markup.row(inline_btn_go)
+
+        if str(bot_data.id) != str(response_from['tg_uid']):
+            dict_reply = dict(
+                keyboard_type=KeyboardType.TRUST_THANK_VER_2,
+                sep=KeyboardType.SEP,
+                user_to_id=user_from_id,
+                message_to_forward_id='',
+                group_id=group_id,
             )
-        dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-        inline_btn_thank = InlineKeyboardButton(
-            'Благодарю',
-            callback_data=callback_data_template % dict_reply,
-        )
-        dict_reply.update(operation=OperationType.MISTRUST)
-        inline_btn_mistrust = InlineKeyboardButton(
-            'Не доверяю',
-            callback_data=callback_data_template % dict_reply,
-        )
-        dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-        inline_btn_nullify_trust = InlineKeyboardButton(
-            'Не знакомы',
-            callback_data=callback_data_template % dict_reply,
-        )
-        reply_markup.row(
-            inline_btn_thank,
-            inline_btn_mistrust,
-            inline_btn_nullify_trust
-        )
+            callback_data_template = (
+                    '%(keyboard_type)s%(sep)s'
+                    '%(operation)s%(sep)s'
+                    '%(user_to_id)s%(sep)s'
+                    '%(message_to_forward_id)s%(sep)s'
+                    '%(group_id)s%(sep)s'
+                )
+            dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+            inline_btn_thank = InlineKeyboardButton(
+                'Благодарю',
+                callback_data=callback_data_template % dict_reply,
+            )
+            dict_reply.update(operation=OperationType.MISTRUST)
+            inline_btn_mistrust = InlineKeyboardButton(
+                'Не доверяю',
+                callback_data=callback_data_template % dict_reply,
+            )
+            dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+            inline_btn_nullify_trust = InlineKeyboardButton(
+                'Не знакомы',
+                callback_data=callback_data_template % dict_reply,
+            )
+            reply_markup.row(
+                inline_btn_thank,
+                inline_btn_mistrust,
+                inline_btn_nullify_trust
+            )
+
+    exclude_tg_uids=[]
 
     if tg_user_new_or_left:
         username = tg_user_new_or_left.username
         reply = Misc.reply_user_card(response_from, username)
-    else:
+    elif not is_previous_his:
+        exclude_tg_uids = [str(tg_user_sender.id)]
         reply_template = '<b>%(full_name)s</b>'
         username = response_from.get('tg_username', '')
         if username:
@@ -1114,14 +1138,15 @@ async def echo_send_to_group(message: types.Message):
                     a_response_to,
                     message,
                     bot_data,
-                    exclude_tg_uids=[str(tg_user_sender.id)],
+                    exclude_tg_uids=exclude_tg_uids,
                     response_from={},
                     message_to_forward_id='',
                 )
 
     # Это сообщение идет в группу!
     #
-    await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+    if not is_previous_his:
+        await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
     if response_from.get('created'):
         tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
