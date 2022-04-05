@@ -1427,3 +1427,21 @@ class ApiTestGoToLink(FrontendMixin, APIView):
         return Response(data=data, status=status_code)
 
 test_goto_auth_link = ApiTestGoToLink.as_view()
+
+class ApiBotStat(APIView):
+    """
+    Статистика по пользователям для бота
+
+    Количество пользователей - всего в нашей базе
+    Всего сколько нажало старт
+    Всего с заданными координатами
+    """
+    def get(self, request):
+        data = {
+            'all': Profile.objects.filter(user__is_superuser=False).count(),
+            'did_bot_start': Profile.objects.filter(did_bot_start=True).count(),
+            'with_geodata': Profile.objects.filter(latitude__isnull=False).count(),
+        }
+        return Response(data=data, status=200)
+
+api_bot_stat = ApiBotStat.as_view()

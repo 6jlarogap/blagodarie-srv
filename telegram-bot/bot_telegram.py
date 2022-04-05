@@ -679,10 +679,36 @@ async def location(message):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=["help",],
+    commands=['help',],
 )
 async def echo_help_to_bot(message: types.Message):
     await message.reply(Misc.help_text())
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=['stat',],
+)
+async def echo_stat_to_bot(message: types.Message):
+    status, response = await Misc.api_request(
+        path='/api/bot/stat',
+        method='get',
+    )
+    if status == 200 and response:
+        reply = (
+            '<b>Статистика</b>\n'
+            '\n'
+            'Всего пользователей: %(all)s\n'
+            'Стартовали бот: %(did_bot_start)s\n'
+            'Указали местоположение: %(with_geodata)s\n'
+        ) % {
+            'all': response['all'],
+            'did_bot_start': response['did_bot_start'],
+            'with_geodata': response['with_geodata'],
+        }
+    else:
+        reply = 'Произошла ошибка'
+    await message.reply(reply)
 
 
 @dp.message_handler(
