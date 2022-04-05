@@ -868,7 +868,7 @@ async def echo_send_to_bot(message: types.Message):
             first_name=tg_user_sender.first_name or '',
             username=tg_user_sender.username or '',
             activate='1',
-            did_bot_start='1' if state == 'start' else '',
+            did_bot_start='1',
         )
         try:
             status, response_from = await Misc.api_request(
