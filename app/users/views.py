@@ -784,7 +784,6 @@ class ApiUpdateFrontendSite(APIView):
             if rc:
                 raise ServiceException("Update script '%s' failed, rc = %s" % (script, rc,))
             data = dict(message="Success: updated branch '%s'" % branch)
-            print(data['message'])
             status_code = 200
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
@@ -1075,6 +1074,10 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             )
             self.save_photo(request, profile)
             data.update(created=True)
+
+        if request.data.get('did_bot_start') and not profile.did_bot_start:
+            profile.did_bot_start = True
+            profile.save(update_fields=('did_bot_start',))
 
         token, created_token = Token.objects.get_or_create(user=user)
         # Существующий Пользователь может быть обезличен
@@ -1404,7 +1407,6 @@ class ApiTestGoToLink(FrontendMixin, APIView):
                 request,
                 path,
             )
-            # print(redirect_from_callback)
             response = redirect(redirect_from_callback)
             to_cookie = dict(
                 provider=provider,

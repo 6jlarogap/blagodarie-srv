@@ -292,7 +292,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         last_name=tg_user_sender.last_name or '',
         first_name=tg_user_sender.first_name or '',
         username=tg_user_sender.username or '',
-        activate=True,
+        activate='1',
     )
     try:
         status_sender, response_sender = await Misc.api_request(
@@ -633,7 +633,7 @@ async def location(message):
                 last_name=tg_user_sender.last_name or '',
                 first_name=tg_user_sender.first_name or '',
                 username=tg_user_sender.username or '',
-                activate=True,
+                activate='1',
             )
             try:
                 status, response_from = await Misc.api_request(
@@ -841,7 +841,8 @@ async def echo_send_to_bot(message: types.Message):
             last_name=tg_user_sender.last_name or '',
             first_name=tg_user_sender.first_name or '',
             username=tg_user_sender.username or '',
-            activate=True,
+            activate='1',
+            did_bot_start='1' if state == 'start' else '',
         )
         try:
             status, response_from = await Misc.api_request(
@@ -867,7 +868,7 @@ async def echo_send_to_bot(message: types.Message):
             last_name=tg_user_forwarded.last_name or '',
             first_name=tg_user_forwarded.first_name or '',
             username=tg_user_forwarded.username or '',
-            activate=False,
+            activate='',
         )
         try:
             status, response_to = await Misc.api_request(
@@ -1032,7 +1033,7 @@ async def echo_send_to_group(message: types.Message):
         last_name=tg_user_sender.last_name or '',
         first_name=tg_user_sender.first_name or '',
         username=tg_user_sender.username or '',
-        activate=True,
+        activate='1',
     )
     try:
         status, response_from = await Misc.api_request(

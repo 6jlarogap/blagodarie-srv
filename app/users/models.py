@@ -340,6 +340,7 @@ class Profile(PhotoModel, GeoPointModel):
     sum_thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
     trust_count = models.PositiveIntegerField(_("Число оказанных доверий"), default=0)
     mistrust_count = models.PositiveIntegerField(_("Число утрат доверия"), default=0)
+    did_bot_start = models.BooleanField(_("Стартовал телеграм бот"), default=False)
     ability = models.ForeignKey('contact.Ability', verbose_name=_("Способность"), null=True, on_delete=models.SET_NULL)
     # Для родни:
     owner = models.ForeignKey('auth.User', on_delete=models.CASCADE, null=True, related_name='profile_owner_set')
