@@ -833,7 +833,7 @@ async def echo_send_to_bot(message: types.Message):
                 state = 'start'
             else:
                 m = re.search(
-                    r'\/start\s+([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
+                    r'^\/start\s+([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
                     message_text,
                     flags=re.I,
                 )
