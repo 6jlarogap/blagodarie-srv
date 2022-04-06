@@ -952,6 +952,19 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 data = profile.data_dict(request)
                 data.update(profile.parents_dict(request))
                 data.update(profile.data_WAK())
+                data.update(user_id=user.pk)
+                try:
+                    oauth = Oauth.objects.select_related(
+                        'user', 'user__profile'
+                    ).filter(
+                        provider=Oauth.PROVIDER_TELEGRAM,
+                        user=user,
+                    )[0]
+                    user = oauth.user
+                    profile = user.profile
+                    data.update(tg_uid=oauth.uid, tg_username=oauth.username)
+                except IndexError:
+                    pass
             elif request.GET.get('tg_username'):
                 data = []
                 usernames = request.GET['tg_username'].split(',')

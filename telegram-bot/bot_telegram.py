@@ -832,45 +832,57 @@ async def echo_send_to_bot(message: types.Message):
             if message_text in ('/start', '/ya', '/я'):
                 state = 'start'
             else:
-                if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
-                    state = 'invalid_message_text'
-                    reply = Misc.help_text()
+                m = re.search(
+                    r'\/start\s+([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
+                    message_text,
+                    flags=re.I,
+                )
+                if m:
+                    # /start 293d987f-4ee8-407c-a614-7110cad3552f
+                    # state = 'start_uuid'
+                    uuid_to_search = m.group(1).lower()
+                    # print(uuid_to_search)
+                    pass
                 else:
-                    usernames, text_stripped = Misc.get_text_usernames(message_text)
-                    if usernames:
-                        logging.debug('@usernames found in message text\n') 
-                        payload_username = dict(
-                            tg_username=','.join(usernames),
-                        )
-                        status, response = await Misc.api_request(
-                            path='/api/profile',
-                            method='get',
-                            params=payload_username,
-                        )
-                        logging.debug('get by username, status: %s' % status)
-                        logging.debug('get by username, response: %s' % response)
-                        if status == 200 and response:
-                            a_response_to += response
-                            state = 'found_username'
-                        else:
-                            state = 'not_found'
+                    if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
+                        state = 'invalid_message_text'
+                        reply = Misc.help_text()
+                    else:
+                        usernames, text_stripped = Misc.get_text_usernames(message_text)
+                        if usernames:
+                            logging.debug('@usernames found in message text\n') 
+                            payload_username = dict(
+                                tg_username=','.join(usernames),
+                            )
+                            status, response = await Misc.api_request(
+                                path='/api/profile',
+                                method='get',
+                                params=payload_username,
+                            )
+                            logging.debug('get by username, status: %s' % status)
+                            logging.debug('get by username, response: %s' % response)
+                            if status == 200 and response:
+                                a_response_to += response
+                                state = 'found_username'
+                            else:
+                                state = 'not_found'
 
-                    if text_stripped and len(text_stripped) >= settings.MIN_LEN_SEARCHED_TEXT:
-                        payload_query = dict(
-                            query=text_stripped,
-                        )
-                        status, response = await Misc.api_request(
-                            path='/api/profile',
-                            method='get',
-                            params=payload_query
-                        )
-                        logging.debug('get by query, status: %s' % status)
-                        logging.debug('get by query, response: %s' % response)
-                        if status == 200 and response:
-                            a_response_to += response
-                            state = 'found_in_search'
-                        elif state != 'found_username':
-                            state = 'not_found'
+                        if text_stripped and len(text_stripped) >= settings.MIN_LEN_SEARCHED_TEXT:
+                            payload_query = dict(
+                                query=text_stripped,
+                            )
+                            status, response = await Misc.api_request(
+                                path='/api/profile',
+                                method='get',
+                                params=payload_query
+                            )
+                            logging.debug('get by query, status: %s' % status)
+                            logging.debug('get by query, response: %s' % response)
+                            if status == 200 and response:
+                                a_response_to += response
+                                state = 'found_in_search'
+                            elif state != 'found_username':
+                                state = 'not_found'
 
     if state == 'not_found':
         reply = 'Профиль не найден'
