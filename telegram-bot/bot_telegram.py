@@ -154,10 +154,10 @@ async def put_ability(message, state):
         )
         return
 
-    logging.info('put_ability: post tg_user data')
+    logging.debug('put_ability: post tg_user data')
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
-    logging.info('get_or_create tg_user_sender data in api, status_sender: %s' % status_sender)
+    logging.debug('get_or_create tg_user_sender data in api, status_sender: %s' % status_sender)
     logging.debug('get_or_create tg_user_sender data in api, response_sender: %s' % response_sender)
     if status_sender == 200:
         payload_add = dict(
@@ -202,10 +202,10 @@ async def put_wish(message, state):
         )
         return
 
-    logging.info('put_wish: post tg_user data')
+    logging.debug('put_wish: post tg_user data')
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
-    logging.info('get_or_create tg_user_sender data in api, status_sender: %s' % status_sender)
+    logging.debug('get_or_create tg_user_sender data in api, status_sender: %s' % status_sender)
     logging.debug('get_or_create tg_user_sender data in api, response_sender: %s' % response_sender)
     if status_sender == 200:
         payload_add = dict(
@@ -300,7 +300,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             method='post',
             data=payload_sender,
         )
-        logging.info('get_or_create tg_user_sender data in api, status_sender: %s' % status_sender)
+        logging.debug('get_or_create tg_user_sender data in api, status_sender: %s' % status_sender)
         logging.debug('get_or_create tg_user_sender data in api, response_sender: %s' % response_sender)
         user_from_id = response_sender.get('user_id')
     except:
@@ -312,7 +312,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         method='post',
         data=post_op,
     )
-    logging.info('post operation, status: %s' % status)
+    logging.debug('post operation, status: %s' % status)
     logging.debug('post operation, response: %s' % response)
     text = text_link = None
     operation_done = False
@@ -477,7 +477,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             method='get',
             params=payload_relation,
         )
-        logging.info('get users relations, status: %s' % status)
+        logging.debug('get users relations, status: %s' % status)
         logging.debug('get users relations: %s' % response)
         if status == 200:
             reply += Misc.reply_relations(response)
@@ -565,7 +565,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
 
     if response_sender.get('created'):
         tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
-        logging.info('put tg_user_sender_photo...')
+        logging.debug('put tg_user_sender_photo...')
         if tg_user_sender_photo:
             payload_photo = dict(
                 tg_token=settings.TOKEN,
@@ -577,7 +577,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
                 method='put',
                 data=payload_photo,
             )
-            logging.info('put tg_user_sender_photo, status: %s' % status)
+            logging.debug('put tg_user_sender_photo, status: %s' % status)
             logging.debug('put tg_user_sender_photo, response: %s' % response)
 
 
@@ -641,7 +641,7 @@ async def location(message):
                     method='post',
                     data=payload_from,
                 )
-                logging.info('get_or_create tg_user_sender data in api, status: %s' % status)
+                logging.debug('get_or_create tg_user_sender data in api, status: %s' % status)
                 logging.debug('get_or_create tg_user_sender data in api, response_from: %s' % response_from)
                 user_from_uuid = response_from.get('uuid')
             except:
@@ -659,7 +659,7 @@ async def location(message):
                     method='put',
                     data=payload_location,
                 )
-                logging.info('put tg_user_sender_location, status: %s' % status)
+                logging.debug('put tg_user_sender_location, status: %s' % status)
                 logging.debug('put tg_user_sender_location, response: %s' % response)
                 if status == 200:
                     response_from.update(
@@ -822,7 +822,7 @@ async def echo_send_to_bot(message: types.Message):
                 else:
                     usernames, text_stripped = Misc.get_text_usernames(message_text)
                     if usernames:
-                        logging.info('@usernames found in message text\n') 
+                        logging.debug('@usernames found in message text\n') 
                         payload_username = dict(
                             tg_username=','.join(usernames),
                         )
@@ -831,7 +831,7 @@ async def echo_send_to_bot(message: types.Message):
                             method='get',
                             params=payload_username,
                         )
-                        logging.info('get by username, status: %s' % status)
+                        logging.debug('get by username, status: %s' % status)
                         logging.debug('get by username, response: %s' % response)
                         if status == 200 and response:
                             a_response_to += response
@@ -848,7 +848,7 @@ async def echo_send_to_bot(message: types.Message):
                             method='get',
                             params=payload_query
                         )
-                        logging.info('get by query, status: %s' % status)
+                        logging.debug('get by query, status: %s' % status)
                         logging.debug('get by query, response: %s' % response)
                         if status == 200 and response:
                             a_response_to += response
@@ -860,7 +860,7 @@ async def echo_send_to_bot(message: types.Message):
         reply = 'Профиль не найден'
 
     if state:
-        logging.info('get_or_create tg_user_sender data in api...')
+        logging.debug('get_or_create tg_user_sender data in api...')
         payload_from = dict(
             tg_token=settings.TOKEN,
             tg_uid=tg_user_sender.id,
@@ -876,7 +876,7 @@ async def echo_send_to_bot(message: types.Message):
                 method='post',
                 data=payload_from,
             )
-            logging.info('get_or_create tg_user_sender data in api, status: %s' % status)
+            logging.debug('get_or_create tg_user_sender data in api, status: %s' % status)
             logging.debug('get_or_create tg_user_sender data in api, response_from: %s' % response_from)
             if status == 200:
                 response_from.update(tg_username=tg_user_sender.username)
@@ -887,7 +887,7 @@ async def echo_send_to_bot(message: types.Message):
             pass
 
     if user_from_id and state == 'forwarded_from_other':
-        logging.info('get_or_create tg_user_forwarded data in api...')
+        logging.debug('get_or_create tg_user_forwarded data in api...')
         payload_to = dict(
             tg_token=settings.TOKEN,
             tg_uid=tg_user_forwarded.id,
@@ -902,7 +902,7 @@ async def echo_send_to_bot(message: types.Message):
                 method='post',
                 data=payload_to,
             )
-            logging.info('get_or_create tg_user_forwarded data in api, status: %s' % status)
+            logging.debug('get_or_create tg_user_forwarded data in api, status: %s' % status)
             logging.debug('get_or_create get tg_user_forwarded data in api, response_to: %s' % response_to)
             if status == 200:
                 response_to.update(tg_username=tg_user_forwarded.username)
@@ -913,7 +913,7 @@ async def echo_send_to_bot(message: types.Message):
     if user_from_id and state in ('forwarded_from_other', 'forwarded_from_me'):
         usernames, text_stripped = Misc.get_text_usernames(message_text)
         if usernames:
-            logging.info('@usernames found in message text\n')
+            logging.debug('@usernames found in message text\n')
             payload_username = dict(
                 tg_username=','.join(usernames),
             )
@@ -922,7 +922,7 @@ async def echo_send_to_bot(message: types.Message):
                 method='get',
                 params=payload_username,
             )
-            logging.info('get by username, status: %s' % status)
+            logging.debug('get by username, status: %s' % status)
             logging.debug('get by username, response: %s' % response)
             if status == 200 and response:
                 a_response_to += response
@@ -948,7 +948,7 @@ async def echo_send_to_bot(message: types.Message):
 
     if user_from_id and response_from.get('created'):
         tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
-        logging.info('put tg_user_sender_photo...')
+        logging.debug('put tg_user_sender_photo...')
         if tg_user_sender_photo:
             payload_photo = dict(
                 tg_token=settings.TOKEN,
@@ -960,13 +960,13 @@ async def echo_send_to_bot(message: types.Message):
                 method='put',
                 data=payload_photo,
             )
-            logging.info('put tg_user_sender_photo, status: %s' % status)
+            logging.debug('put tg_user_sender_photo, status: %s' % status)
             logging.debug('put tg_user_sender_photo, response: %s' % response)
 
     if state == 'forwarded_from_other' and a_response_to and a_response_to[0].get('created'):
         tg_user_forwarded_photo = await Misc.get_user_photo(bot, tg_user_forwarded)
         if tg_user_forwarded_photo:
-            logging.info('put tg_user_forwarded_photo...')
+            logging.debug('put tg_user_forwarded_photo...')
             payload_photo = dict(
                 tg_token=settings.TOKEN,
                 photo=tg_user_forwarded_photo,
@@ -977,7 +977,7 @@ async def echo_send_to_bot(message: types.Message):
                 method='put',
                 data=payload_photo,
             )
-            logging.info('put tg_user_forwarded_photo, status: %s' % status)
+            logging.debug('put tg_user_forwarded_photo, status: %s' % status)
             logging.debug('put tg_user_forwarded_photo, response: %s' % response)
 
 
@@ -1025,170 +1025,183 @@ async def echo_send_to_group(message: types.Message):
         return
 
     global last_user_in_group
-    previous_user_in_group = last_user_in_group
 
-    # Было ли предыдущее сообщение в группу отправлено этом пользователем?
-    # Полезно, т.к. в сообщении из 10 фоток, а это 10 сообщений в бот,
-    # надо бы только одну реакцию
+    # Данные из телеграма пользователя /пользователей/, данные которых надо выводить при поступлении
+    # сообщения в группу
     #
-    is_previous_his = True
-    if previous_user_in_group != message.from_user.id:
-        last_user_in_group = message.from_user.id
-        is_previous_his = False
+    a_users_in = []
 
-    reply_markup = None
-    tg_user_new_or_left = None
+    # Данные из базы пользователя /пользователей/, данные которых надо выводить при поступлении
+    # сообщения в группу
+    #
+    a_users_out = []
+
+    tg_user_sender = message.from_user
+    a_users_in = [ message.from_user ]
     try:
-        tg_user_new_or_left = message.new_chat_members[0]
-    except (IndexError, TypeError,):
-        try:
-            tg_user_new_or_left = message.left_chat_member
-        except  (IndexError, TypeError,):
-            pass
-    if tg_user_new_or_left:
-        tg_user_sender = tg_user_new_or_left
-    else:
-        tg_user_sender = message.from_user
-        if tg_user_sender.is_bot:
-            return
-
-    group_id = message.chat.id
-    payload_from = dict(
-        tg_token=settings.TOKEN,
-        tg_uid=tg_user_sender.id,
-        last_name=tg_user_sender.last_name or '',
-        first_name=tg_user_sender.first_name or '',
-        username=tg_user_sender.username or '',
-        activate='1',
-    )
+        tg_user_left = message.left_chat_member
+    except  (TypeError, ):
+        tg_user_left = None
+    if tg_user_left:
+        a_users_in = [ tg_user_left ]
     try:
-        status, response_from = await Misc.api_request(
-            path='/api/profile',
-            method='post',
-            data=payload_from,
-        )
-        logging.info('get_or_create tg_user_sender data in api, status: %s' % status)
-        logging.debug('get_or_create tg_user_sender data in api, response_from: %s' % response_from)
-        user_from_id = response_from.get('user_id')
-    except:
-        return
-
+        tg_users_new = message.new_chat_members
+    except (TypeError, ):
+        tg_users_new = []
+    if tg_users_new:
+        a_users_in = tg_users_new
 
     bot_data = await bot.get_me()
-    if not is_previous_his:
-        reply_markup = InlineKeyboardMarkup()
-        path = "/profile/?id=%(uuid)s" % dict(uuid=response_from['uuid'],)
-
-        url = settings.FRONTEND_HOST + path
-        login_url = Misc.make_login_url(path)
-        login_url = LoginUrl(url=login_url)
-        inline_btn_go = InlineKeyboardButton(
-            'Перейти',
-            url=url,
-            # login_url=login_url,
-        )
-        reply_markup.row(inline_btn_go)
-
-        if str(bot_data.id) != str(response_from['tg_uid']):
-            dict_reply = dict(
-                keyboard_type=KeyboardType.TRUST_THANK_VER_2,
-                sep=KeyboardType.SEP,
-                user_to_id=user_from_id,
-                message_to_forward_id='',
-                group_id=group_id,
-            )
-            callback_data_template = (
-                    '%(keyboard_type)s%(sep)s'
-                    '%(operation)s%(sep)s'
-                    '%(user_to_id)s%(sep)s'
-                    '%(message_to_forward_id)s%(sep)s'
-                    '%(group_id)s%(sep)s'
-                )
-            dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-            inline_btn_thank = InlineKeyboardButton(
-                'Благодарю',
-                callback_data=callback_data_template % dict_reply,
-            )
-            dict_reply.update(operation=OperationType.MISTRUST)
-            inline_btn_mistrust = InlineKeyboardButton(
-                'Не доверяю',
-                callback_data=callback_data_template % dict_reply,
-            )
-            dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-            inline_btn_nullify_trust = InlineKeyboardButton(
-                'Не знакомы',
-                callback_data=callback_data_template % dict_reply,
-            )
-            reply_markup.row(
-                inline_btn_thank,
-                inline_btn_mistrust,
-                inline_btn_nullify_trust
-            )
-
-    exclude_tg_uids=[]
-
-    if tg_user_new_or_left:
-        username = tg_user_new_or_left.username
-        reply = Misc.reply_user_card(response_from, username)
-    elif not is_previous_his:
+    if tg_user_left or tg_users_new:
+        exclude_tg_uids = []
+        is_previous_his = False
+        last_user_in_group = None
+    else:
         exclude_tg_uids = [str(tg_user_sender.id)]
-        reply_template = '<b>%(full_name)s</b>'
-        username = response_from.get('tg_username', '')
-        if username:
-            reply_template += ' ( @%(username)s )'
-        reply = reply_template % dict(
-            full_name=tg_user_sender.full_name,
-            username=username,
-        )
+        # Было ли предыдущее сообщение в группу отправлено этом пользователем?
+        # Полезно, т.к. в сообщении из 10 фоток, а это 10 сообщений в бот,
+        # надо бы только одну реакцию
+        # Если сообщение о новом, убывшем пользователе, то любое следующее
+        # сообщение будет как бы от нового пользователя
+        #
+        previous_user_in_group = last_user_in_group
+        is_previous_his = True
+        if previous_user_in_group != message.from_user.id:
+            last_user_in_group = message.from_user.id
+            is_previous_his = False
 
-    # Найдем @usernames в сообщении
-    #
-    message_text = getattr(message, 'text', '') and message.text.strip()
-    if message_text:
-        usernames, text_stripped = Misc.get_text_usernames(message.text)
-        if usernames:
-            logging.info('@usernames found in message text\n')
-            payload_username = dict(
-                tg_username=','.join(usernames),
-            )
-            status, a_response_to = await Misc.api_request(
+        # Найдем @usernames в сообщении
+        #
+        message_text = getattr(message, 'text', '') and message.text.strip()
+        if message_text:
+            usernames, text_stripped = Misc.get_text_usernames(message.text)
+            if usernames:
+                logging.debug('@usernames found in message text\n')
+                payload_username = dict(
+                    tg_username=','.join(usernames),
+                )
+                status, a_response_to = await Misc.api_request(
+                    path='/api/profile',
+                    method='get',
+                    params=payload_username,
+                )
+                logging.debug('get by username, status: %s' % status)
+                logging.debug('get by username, response: %s' % a_response_to)
+                if status == 200 and a_response_to:
+                    await Misc.show_cards(
+                        a_response_to,
+                        message,
+                        bot_data,
+                        exclude_tg_uids=exclude_tg_uids,
+                        response_from={},
+                        message_to_forward_id='',
+                    )
+
+    for user_in in a_users_in:
+        reply_markup = None
+        payload_from = dict(
+            tg_token=settings.TOKEN,
+            tg_uid=user_in.id,
+            last_name=user_in.last_name or '',
+            first_name=user_in.first_name or '',
+            username=user_in.username or '',
+            activate='1',
+        )
+        try:
+            status, response_from = await Misc.api_request(
                 path='/api/profile',
-                method='get',
-                params=payload_username,
+                method='post',
+                data=payload_from,
             )
-            logging.info('get by username, status: %s' % status)
-            logging.debug('get by username, response: %s' % a_response_to)
-            if status == 200 and a_response_to:
-                await Misc.show_cards(
-                    a_response_to,
-                    message,
-                    bot_data,
-                    exclude_tg_uids=exclude_tg_uids,
-                    response_from={},
+            logging.debug('get_or_create tg_user_sender data in api, status: %s' % status)
+            logging.debug('get_or_create tg_user_sender data in api, response_from: %s' % response_from)
+            if status != 200:
+                continue
+            a_users_out.append(response_from)
+        except:
+            continue
+
+        if tg_user_left or tg_users_new:
+            reply = Misc.reply_user_card(response_from)
+        else:
+            reply_template = '<b>%(full_name)s</b>'
+            username = response_from.get('tg_username', '')
+            if username:
+                reply_template += ' ( @%(username)s )'
+            reply = reply_template % dict(
+                full_name=tg_user_sender.full_name,
+                username=username,
+            )
+
+        if not is_previous_his:
+            reply_markup = InlineKeyboardMarkup()
+            path = "/profile/?id=%(uuid)s" % dict(uuid=response_from['uuid'],)
+
+            url = settings.FRONTEND_HOST + path
+            login_url = Misc.make_login_url(path)
+            login_url = LoginUrl(url=login_url)
+            inline_btn_go = InlineKeyboardButton(
+                'Перейти',
+                url=url,
+                # login_url=login_url,
+            )
+            reply_markup.row(inline_btn_go)
+
+            if str(bot_data.id) != str(response_from['tg_uid']):
+                dict_reply = dict(
+                    keyboard_type=KeyboardType.TRUST_THANK_VER_2,
+                    sep=KeyboardType.SEP,
+                    user_to_id=response_from['user_id'],
                     message_to_forward_id='',
+                    group_id=message.chat.id,
+                )
+                callback_data_template = (
+                        '%(keyboard_type)s%(sep)s'
+                        '%(operation)s%(sep)s'
+                        '%(user_to_id)s%(sep)s'
+                        '%(message_to_forward_id)s%(sep)s'
+                        '%(group_id)s%(sep)s'
+                    )
+                dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+                inline_btn_thank = InlineKeyboardButton(
+                    'Благодарю',
+                    callback_data=callback_data_template % dict_reply,
+                )
+                dict_reply.update(operation=OperationType.MISTRUST)
+                inline_btn_mistrust = InlineKeyboardButton(
+                    'Не доверяю',
+                    callback_data=callback_data_template % dict_reply,
+                )
+                dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+                inline_btn_nullify_trust = InlineKeyboardButton(
+                    'Не знакомы',
+                    callback_data=callback_data_template % dict_reply,
+                )
+                reply_markup.row(
+                    inline_btn_thank,
+                    inline_btn_mistrust,
+                    inline_btn_nullify_trust
                 )
 
-    # Это сообщение идет в группу!
-    #
-    if not is_previous_his:
-        await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+            await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
-    if response_from.get('created'):
-        tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
-        logging.info('put tg_user_sender_photo...')
-        if tg_user_sender_photo:
-            payload_photo = dict(
-                tg_token=settings.TOKEN,
-                photo=tg_user_sender_photo,
-                uuid=response_from['uuid'],
-            )
-            status, response = await Misc.api_request(
-                path='/api/profile',
-                method='put',
-                data=payload_photo,
-            )
-            logging.info('put tg_user_sender_photo, status: %s' % status)
-            logging.debug('put tg_user_sender_photo, response: %s' % response)
+    for response_from in a_users_out:
+        if response_from.get('created'):
+            tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
+            logging.debug('put tg_user_sender_photo...')
+            if tg_user_sender_photo:
+                payload_photo = dict(
+                    tg_token=settings.TOKEN,
+                    photo=tg_user_sender_photo,
+                    uuid=response_from['uuid'],
+                )
+                status, response = await Misc.api_request(
+                    path='/api/profile',
+                    method='put',
+                    data=payload_photo,
+                )
+                logging.debug('put tg_user_sender_photo, status: %s' % status)
+                logging.debug('put tg_user_sender_photo, response: %s' % response)
 
 # ---------------------------------
 
