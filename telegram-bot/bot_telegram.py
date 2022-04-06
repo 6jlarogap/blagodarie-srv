@@ -560,6 +560,22 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
                 disable_web_page_preview=True,
                 reply_markup=reply_markup,
             )
+            # TODO здесь временно сделано, что юзер стартанул бот ----------------
+            # Потом удалить
+            #
+            payload_did_bot_start = dict(
+                tg_token=settings.TOKEN,
+                uuid=profile_to['uuid'],
+                did_bot_start='1',
+            )
+            status, response = await Misc.api_request(
+                path='/api/profile',
+                method='put',
+                data=payload_did_bot_start,
+            )
+            logging.debug('put tg_user_sender_payload_did_bot_start, status: %s' % status)
+            logging.debug('put tg_user_sender_payload_did_bot_start, response: %s' % response)
+            # --------------------------------------------------------------------
         except (ChatNotFound, CantInitiateConversation):
             pass
 

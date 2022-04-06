@@ -1218,6 +1218,9 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                     if f in  request.data:
                         setattr(profile, f, request.data.get(f) or None)
                         do_save = True
+                if request.data.get('did_bot_start') and not profile.did_bot_start:
+                    profile.did_bot_start = True
+                    do_save = True
                 if do_save:
                     profile.save()
                 data = {}
