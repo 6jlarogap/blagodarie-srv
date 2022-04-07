@@ -841,8 +841,7 @@ async def echo_send_to_bot(message: types.Message):
                     # /start 293d987f-4ee8-407c-a614-7110cad3552f
                     # state = 'start_uuid'
                     uuid_to_search = m.group(1).lower()
-                    # print(uuid_to_search)
-                    pass
+                    state = 'start_uuid'
                 else:
                     if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
                         state = 'invalid_message_text'
@@ -909,8 +908,25 @@ async def echo_send_to_bot(message: types.Message):
             if status == 200:
                 response_from.update(tg_username=tg_user_sender.username)
                 user_from_id = response_from.get('user_id')
-                if state in ('start', 'forwarded_from_me',):
+                if state in ('start', 'forwarded_from_me', 'start_uuid', ):
                     a_response_to += [response_from, ]
+        except:
+            pass
+
+    if user_from_id and state == 'start_uuid':
+        logging.debug('get tg_user_by_start_uuid data in api...')
+        payload_uuid = dict(
+            uuid=uuid_to_search,
+        )
+        try:
+            status, response_uuid = await Misc.api_request(
+                path='/api/profile',
+                method='get',
+                params=payload_uuid,
+            )
+            logging.debug('get tg_user_by_start_uuid in api, response_to: %s' % response_uuid)
+            if status == 200:
+                a_response_to += [response_uuid, ]
         except:
             pass
 
