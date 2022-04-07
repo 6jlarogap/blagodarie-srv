@@ -355,10 +355,11 @@ class Misc(object):
         tg_uids = set(exclude_tg_uids)
         user_from_id = response_from.get('user_id')
         for response_to in a_response_to:
-            if str(response_to['tg_uid']) in tg_uids:
-                continue
-            else:
-                tg_uids.add(str(response_to['tg_uid']))
+            if response_to.get('tg_uid'):
+                if str(response_to['tg_uid']) in tg_uids:
+                    continue
+                else:
+                    tg_uids.add(str(response_to['tg_uid']))
             reply_markup = InlineKeyboardMarkup()
             path = "/profile/?id=%s" % response_to['uuid']
             url = settings.FRONTEND_HOST + path
@@ -390,7 +391,7 @@ class Misc(object):
                     response_relations = response
 
             if (not user_from_id or user_from_id != response_to['user_id']) and \
-               str(bot_data.id) != str(response_to['tg_uid']):
+               (not response_to.get('tg_uid') or str(bot_data.id) != str(response_to['tg_uid'])):
                 dict_reply = dict(
                     keyboard_type=KeyboardType.TRUST_THANK_VER_2,
                     sep=KeyboardType.SEP,

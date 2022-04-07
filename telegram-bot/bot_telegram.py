@@ -1191,7 +1191,7 @@ async def echo_send_to_group(message: types.Message):
             )
             reply_markup.row(inline_btn_go)
 
-            if str(bot_data.id) != str(response_from['tg_uid']):
+            if response_from.get('tg_uid') and str(bot_data.id) != str(response_from['tg_uid']):
                 dict_reply = dict(
                     keyboard_type=KeyboardType.TRUST_THANK_VER_2,
                     sep=KeyboardType.SEP,
