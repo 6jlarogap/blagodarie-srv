@@ -810,7 +810,7 @@ async def echo_send_to_bot(message: types.Message):
     #
     a_response_to = []
 
-    message_text = getattr(message, 'text', '') and message.text.strip()
+    message_text = getattr(message, 'text', '') and message.text.strip() or ''
     if tg_user_sender.is_bot:
         reply = 'Сообщения от ботов пока не обрабатываются'
     else:
@@ -1100,7 +1100,7 @@ async def echo_send_to_group(message: types.Message):
 
         # Найдем @usernames в сообщении
         #
-        message_text = getattr(message, 'text', '') and message.text.strip()
+        message_text = getattr(message, 'text', '') and message.text.strip() or ''
         if message_text:
             usernames, text_stripped = Misc.get_text_usernames(message.text)
             if usernames:
