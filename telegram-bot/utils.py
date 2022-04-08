@@ -185,7 +185,18 @@ class Misc(object):
                 return status, response
 
     @classmethod
-    def reply_user_card(cls, response, username=None):
+    def get_deeplink(cls, response, bot_data):
+        """
+        Получить ссылку типа http://t.me/BotNameBot?start=:uuid
+        """
+        return "http://t.me/%(bot_data_username)s?start=%(resonse_uuid)s" % dict(
+            bot_data_username=bot_data['username'],
+            resonse_uuid=response['uuid']
+        )
+
+
+    @classmethod
+    def reply_user_card(cls, response, bot_data, username=None):
         """
         Карточка пользователя, каким он на сайте
 
@@ -212,14 +223,20 @@ class Misc(object):
         """
         if not response:
             return ''
+        iof = cls.get_iof(response, put_middle_name=bool(response.get('owner_id')))
+        lifetime_str = cls.get_lifetime_str(response)
+        if lifetime_str:
+            lifetime_str += '\n'
         reply = (
-                '<b>%(first_name)s %(last_name)s</b>\n'
+                '<b>%(iof)s</b>\n'
+                '%(lifetime_str)s'
                 'Доверий: %(trust_count)s\n'
                 'Благодарностей: %(sum_thanks_count)s\n'
                 'Недоверий: %(mistrust_count)s\n'
                 '\n'
             ) % dict(
-            first_name=response['first_name'],
+            iof=iof,
+            lifetime_str=lifetime_str,
             last_name=response['last_name'],
             trust_count=response['trust_count'],
             sum_thanks_count=response['sum_thanks_count'],
@@ -250,6 +267,7 @@ class Misc(object):
         if username:
             keys.append("@%s" % username)
         keys += [key['value'] for key in response['keys']]
+        keys.append(cls.get_deeplink(response, bot_data))
         keys_text = '\n' + '\n'.join(
             key for key in keys
         ) if keys else 'не задано'
@@ -320,6 +338,7 @@ class Misc(object):
             status_sender = response_sender = None
         return status_sender, response_sender
 
+
     @classmethod
     def get_text_usernames(cls, s):
         """
@@ -371,7 +390,7 @@ class Misc(object):
                 # login_url=login_url,
             )
             reply_markup.row(inline_btn_go)
-            reply = cls.reply_user_card(response_to)
+            reply = cls.reply_user_card(response_to, bot_data=bot_data)
 
             response_relations = None
             if user_from_id and user_from_id != response_to['user_id']:
@@ -477,3 +496,23 @@ class Misc(object):
                 await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
         return bool(tg_uids)
+
+    @classmethod
+    def get_iof(cls, response, put_middle_name=True):
+        result = '%s %s %s' % (
+            response.get('first_name') or '',
+            put_middle_name and response.get('middle_name') or '',
+            response.get('last_name') or '',
+        )
+        result = re.sub(r'\s{2,}', ' ', result)
+        return result.strip()
+
+    @classmethod
+    def get_lifetime_str(cls, response):
+        if response.get('owner_id'):
+            if response.get('dob') or response.get('dod'):
+                lifetime = "%s – %s" % (response['dob'] or '', response['dod'] or '')
+                lifetime = lifetime.strip()
+        else:
+            lifetime = ''
+        return lifetime

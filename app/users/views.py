@@ -952,7 +952,10 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 data = profile.data_dict(request)
                 data.update(profile.parents_dict(request))
                 data.update(profile.data_WAK())
-                data.update(user_id=user.pk)
+                data.update(
+                    user_id=user.pk,
+                    owner_id=profile.owner and profile.owner.pk or None,
+                )
                 try:
                     oauth = Oauth.objects.select_related(
                         'user', 'user__profile'

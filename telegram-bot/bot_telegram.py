@@ -154,6 +154,7 @@ async def put_ability(message, state):
         )
         return
 
+    bot_data = await bot.get_me()
     logging.debug('put_ability: post tg_user data')
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
@@ -179,7 +180,7 @@ async def put_ability(message, state):
             status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
             if status_sender == 200:
                 await message.reply(
-                    Misc.reply_user_card(response=response_sender),
+                    Misc.reply_user_card(response=response_sender, bot_data=bot_data),
                     disable_web_page_preview=True
                 )
         else:
@@ -202,6 +203,7 @@ async def put_wish(message, state):
         )
         return
 
+    bot_data = await bot.get_me()
     logging.debug('put_wish: post tg_user data')
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
@@ -227,7 +229,7 @@ async def put_wish(message, state):
             status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
             if status_sender == 200:
                 await message.reply(
-                    Misc.reply_user_card(response=response_sender),
+                    Misc.reply_user_card(response=response_sender, bot_data=bot_data),
                     disable_web_page_preview=True
                 )
         else:
@@ -286,6 +288,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
     except (ValueError, IndexError,):
         return
 
+    bot_data = await bot.get_me()
     payload_sender = dict(
         tg_token=settings.TOKEN,
         tg_uid=tg_user_sender.id,
@@ -466,6 +469,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         reply = text_link + '\n\n'
         reply += Misc.reply_user_card(
             response=profile_from,
+            bot_data=bot_data,
             username=profile_from.get('tg_username_to') or ''
         )
         payload_relation = dict(
@@ -641,6 +645,7 @@ async def location(message):
         except AttributeError:
             pass
         if latitude and longitude:
+            bot_data = await bot.get_me()
             user_from_uuid = None
             tg_user_sender = message.from_user
             payload_from = dict(
@@ -682,7 +687,7 @@ async def location(message):
                         latitude=latitude,
                         longitude=longitude,
                     )
-                    reply = Misc.reply_user_card(response_from, tg_user_sender.username or '')
+                    reply = Misc.reply_user_card(response_from, bot_data=bot_data, username=tg_user_sender.username or '')
                     try:
                         await bot.send_message(
                             tg_user_sender.id,
@@ -811,6 +816,7 @@ async def echo_send_to_bot(message: types.Message):
     a_response_to = []
 
     message_text = getattr(message, 'text', '') and message.text.strip() or ''
+    bot_data = await bot.get_me()
     if tg_user_sender.is_bot:
         reply = 'Сообщения от ботов пока не обрабатываются'
     else:
@@ -908,7 +914,8 @@ async def echo_send_to_bot(message: types.Message):
             if status == 200:
                 response_from.update(tg_username=tg_user_sender.username)
                 user_from_id = response_from.get('user_id')
-                if state in ('start', 'forwarded_from_me', 'start_uuid', ):
+                if state in ('start', 'forwarded_from_me', ) or \
+                   state == 'start_uuid' and response_from.get('created'):
                     a_response_to += [response_from, ]
         except:
             pass
@@ -973,10 +980,9 @@ async def echo_send_to_bot(message: types.Message):
 
 
     if state and state not in ('not_found', 'invalid_message_text',) and user_from_id and a_response_to:
-        bot_data = await bot.get_me()
         message_to_forward_id = state == 'forwarded_from_other' and message.message_id or ''
 
-        any_cards_shown = await Misc.show_cards(
+        await Misc.show_cards(
             a_response_to,
             message,
             bot_data,
@@ -984,8 +990,6 @@ async def echo_send_to_bot(message: types.Message):
             response_from=response_from,
             message_to_forward_id=message_to_forward_id,
         )
-        if not any_cards_shown and not reply:
-            await message.reply('Профиль не найден')
 
     elif reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
@@ -1166,7 +1170,7 @@ async def echo_send_to_group(message: types.Message):
             continue
 
         if tg_user_left or tg_users_new:
-            reply = Misc.reply_user_card(response_from)
+            reply = Misc.reply_user_card(response_from, bot_data=bot_data)
         else:
             reply_template = '<b>%(full_name)s</b>'
             username = response_from.get('tg_username', '')
