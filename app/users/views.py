@@ -1007,6 +1007,21 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                     data_item.update(user_id=user.pk, tg_uid=oauth.uid, tg_username=oauth.username)
                     data_item.update(profile.data_WAK())
                     data.append(data_item)
+            elif request.GET.get('uuid_owner'):
+                data = []
+                users_selected = Profile.objects.filter(owner__profile__uuid=request.GET['uuid_owner']). \
+                    select_related('user', 'ability',).order_by(
+                        'user__last_name',
+                        'user__first_name',
+                        'middle_name',
+                    )
+                for profile in users_selected:
+                    data_item = profile.data_dict(request)
+                    data_item.update(
+                        user_id=profile.user.pk,
+                        owner_id=profile.owner and profile.owner.pk or None,
+                    )
+                    data.append(data_item)
             else:
                 if not request.user.is_authenticated:
                     raise NotAuthenticated

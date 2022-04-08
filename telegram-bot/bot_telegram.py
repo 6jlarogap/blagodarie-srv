@@ -700,6 +700,60 @@ async def location(message):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=['getowned', 'listown'],
+)
+async def echo_getowned_to_bot(message: types.Message):
+    tg_user_sender = message.from_user
+    payload_from = dict(
+        tg_token=settings.TOKEN,
+        tg_uid=tg_user_sender.id,
+        last_name=tg_user_sender.last_name or '',
+        first_name=tg_user_sender.first_name or '',
+        username=tg_user_sender.username or '',
+        activate='1',
+    )
+    try:
+        status, response_from = await Misc.api_request(
+            path='/api/profile',
+            method='post',
+            data=payload_from,
+        )
+        logging.debug('get_or_create tg_user_sender data in api, status: %s' % status)
+        logging.debug('get_or_create tg_user_sender data in api, response_from: %s' % response_from)
+        user_from_uuid = response_from['uuid']
+    except:
+        return
+
+    try:
+        status, a_response_to = await Misc.api_request(
+            path='/api/profile',
+            method='get',
+            params=dict(uuid_owner=user_from_uuid),
+        )
+        logging.debug('get_tg_user_sender_owned data in api, status: %s' % status)
+        logging.debug('get_tg_user_sender_owned data in api, response: %s' % a_response_to)
+    except:
+        return
+
+    if not a_response_to:
+        await message.reply('У вас нет запрошенных данных')
+        return
+
+    bot_data = await bot.get_me()
+    reply = ''
+    for response in a_response_to:
+        deeplink=Misc.get_deeplink(response, bot_data)
+        iof = Misc.get_iof(response, put_middle_name=True)
+        lifetime_years_str = Misc.get_lifetime_years_str(response)
+        if lifetime_years_str:
+            lifetime_years_str = ', ' + lifetime_years_str
+        reply += '<a href="%(deeplink)s">%(iof)s%(lifetime_years_str)s</a>\n'
+        reply %= dict(deeplink=deeplink, iof=iof, lifetime_years_str=lifetime_years_str)
+    await message.reply(reply)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     commands=['help',],
 )
 async def echo_help_to_bot(message: types.Message):

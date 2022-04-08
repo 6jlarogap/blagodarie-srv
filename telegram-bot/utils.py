@@ -497,6 +497,7 @@ class Misc(object):
 
         return bool(tg_uids)
 
+
     @classmethod
     def get_iof(cls, response, put_middle_name=True):
         result = '%s %s %s' % (
@@ -507,12 +508,28 @@ class Misc(object):
         result = re.sub(r'\s{2,}', ' ', result)
         return result.strip()
 
+
     @classmethod
     def get_lifetime_str(cls, response):
+        lifetime = ''
         if response.get('owner_id'):
-            if response.get('dob') or response.get('dod'):
-                lifetime = "%s – %s" % (response['dob'] or '', response['dod'] or '')
-                lifetime = lifetime.strip()
-        else:
-            lifetime = ''
+            if response.get('dob'):
+                lifetime += response['dob']
+            elif response.get('dod'):
+                lifetime += '...'
+            if response.get('dod'):
+                lifetime += " – %s" % response['dod']
+        return lifetime
+
+
+    @classmethod
+    def get_lifetime_years_str(cls, response):
+        lifetime = ''
+        if response.get('owner_id'):
+            if response.get('dob'):
+                lifetime += response['dob'][-4:]
+            elif response.get('dod'):
+                lifetime += '...'
+            if response.get('dod'):
+                lifetime += " – %s" % response['dod'][-4:]
         return lifetime
