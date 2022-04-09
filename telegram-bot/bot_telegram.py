@@ -1287,14 +1287,15 @@ async def echo_send_to_group(message: types.Message):
 
             await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
-    for response_from in a_users_out:
+    for i, response_from in enumerate(a_users_out):
         if response_from.get('created'):
-            tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
-            logging.debug('put tg_user_sender_photo...')
-            if tg_user_sender_photo:
+            tg_user = a_users_in[i]
+            tg_user_photo = await Misc.get_user_photo(bot, tg_user)
+            logging.debug('put tg_user_photo...')
+            if tg_user_photo:
                 payload_photo = dict(
                     tg_token=settings.TOKEN,
-                    photo=tg_user_sender_photo,
+                    photo=tg_user_photo,
                     uuid=response_from['uuid'],
                 )
                 status, response = await Misc.api_request(
@@ -1302,8 +1303,8 @@ async def echo_send_to_group(message: types.Message):
                     method='put',
                     data=payload_photo,
                 )
-                logging.debug('put tg_user_sender_photo, status: %s' % status)
-                logging.debug('put tg_user_sender_photo, response: %s' % response)
+                logging.debug('put tg_user_photo, status: %s' % status)
+                logging.debug('put tg_user_photo, response: %s' % response)
 
 # ---------------------------------
 
