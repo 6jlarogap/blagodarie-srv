@@ -1218,9 +1218,11 @@ async def echo_send_to_group(message: types.Message):
             logging.debug('get_or_create tg_user_sender data in api, status: %s' % status)
             logging.debug('get_or_create tg_user_sender data in api, response_from: %s' % response_from)
             if status != 200:
+                a_users_out.append({})
                 continue
             a_users_out.append(response_from)
         except:
+            a_users_out.append({})
             continue
 
         if tg_user_left or tg_users_new:
