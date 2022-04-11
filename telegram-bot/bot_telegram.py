@@ -11,6 +11,7 @@ from aiogram.dispatcher import Dispatcher, FSMContext
 from aiogram.dispatcher.filters import ChatTypeFilter, Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_polling, start_webhook
+from aiogram.utils.parts import safe_split_text
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation
@@ -418,7 +419,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         elif post_op['operation_type_id'] == OperationType.NULLIFY_TRUST:
             text_link = '%(full_name_from_link)s%(tg_username_from_str)s заявляет, что не знаком(а) с %(full_name_to_link)s%(tg_username_to_str)s'
         elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
-            text_link = '%(full_name_from_link)s%(tg_username_from_str)s отправил(а) благодарность к %(full_name_to_link)s%(tg_username_to_str)s'
+            text_link = '%(full_name_from_link)s%(tg_username_from_str)s поблагодарил(а) %(full_name_to_link)s%(tg_username_to_str)s'
         if text_link:
             full_name_from = Misc.make_full_name(profile_from)
             full_name_from_link = (
@@ -749,7 +750,9 @@ async def echo_getowned_to_bot(message: types.Message):
             lifetime_years_str = ', ' + lifetime_years_str
         reply += '<a href="%(deeplink)s">%(iof)s%(lifetime_years_str)s</a>\n'
         reply %= dict(deeplink=deeplink, iof=iof, lifetime_years_str=lifetime_years_str)
-    await message.reply(reply)
+    parts = safe_split_text(reply, split_separator='\n')
+    for part in parts:
+        await message.reply(part, disable_web_page_preview=True)
 
 
 @dp.message_handler(
