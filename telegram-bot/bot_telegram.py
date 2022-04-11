@@ -360,7 +360,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             tg_user_from_username = profile_from['tg_data']['username']
         except KeyError:
             tg_user_from_username = None
-        full_name_to = Misc.make_full_name(profile_to)
+        full_name_to = Misc.get_iof(profile_to, put_middle_name=False)
         full_name_to_link = (
                 '<a href="%(frontend_host)s/profile/?id=%(uuid)s">%(full_name)s</a>'
             ) % dict(
@@ -412,39 +412,30 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
     # Это в группу
     #
     if group_id and operation_done:
+        reply = ''
         if post_op['operation_type_id'] == OperationType.TRUST:
-            text_link = '%(full_name_from_link)s%(tg_username_from_str)s доверяет %(full_name_to_link)s%(tg_username_to_str)s'
+            reply = '%(deeplink_sender)s доверяет %(deeplink_receiver)s'
         elif post_op['operation_type_id'] == OperationType.MISTRUST:
-            text_link = '%(full_name_from_link)s%(tg_username_from_str)s не доверяет %(full_name_to_link)s%(tg_username_to_str)s'
+            reply = '%(deeplink_sender)s не доверяет %(deeplink_receiver)s'
         elif post_op['operation_type_id'] == OperationType.NULLIFY_TRUST:
-            text_link = '%(full_name_from_link)s%(tg_username_from_str)s заявляет, что не знаком(а) с %(full_name_to_link)s%(tg_username_to_str)s'
+            reply = '%(deeplink_sender)s заявляет, что не знаком(а) с %(deeplink_receiver)s'
         elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
-            text_link = '%(full_name_from_link)s%(tg_username_from_str)s поблагодарил(а) %(full_name_to_link)s%(tg_username_to_str)s'
-        if text_link:
-            full_name_from = Misc.make_full_name(profile_from)
-            full_name_from_link = (
-                    '<a href="%(frontend_host)s/profile/?id=%(uuid)s">%(full_name)s</a>'
-                ) % dict(
-                frontend_host=settings.FRONTEND_HOST,
-                uuid=profile_from['uuid'],
-                full_name=full_name_from,
+            reply = '%(deeplink_sender)s поблагодарил(а) %(deeplink_receiver)s'
+        if reply:
+            deeplink_template = '<a href="%(deeplink)s">%(full_name)s</a>'
+            deeplink_sender = deeplink_template % dict(
+                deeplink=Misc.get_deeplink(profile_from, bot_data),
+                full_name=tg_user_sender.full_name,
             )
-            tg_username_from_str = tg_username_to_str = ''
-            tg_username_template = ' ( @%s )'
-            if tg_user_from_username:
-                tg_username_from_str = tg_username_template % tg_user_from_username
-            if tg_user_to_username:
-                tg_username_to_str = tg_username_template % tg_user_to_username
-            text_link = text_link % dict(
-                full_name_from_link=full_name_from_link,
-                tg_username_from_str=tg_username_from_str,
-                full_name_to_link=full_name_to_link,
-                tg_username_to_str=tg_username_to_str,
+            deeplink_receiver = deeplink_template % dict(
+                deeplink=Misc.get_deeplink(profile_to, bot_data),
+                full_name=Misc.get_iof(profile_to, put_middle_name=False)
             )
+            reply %= dict(deeplink_sender=deeplink_sender, deeplink_receiver=deeplink_receiver)
             try:
                 await bot.send_message(
                     group_id,
-                    text=text_link,
+                    text=reply,
                     disable_web_page_preview=True,
                 )
             except (ChatNotFound, CantInitiateConversation):
@@ -453,6 +444,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
     # Это получателю благодарности и т.п.
     #
     if operation_done and tg_user_to_uid:
+        reply = ''
         if post_op['operation_type_id'] == OperationType.TRUST:
             reply = 'Установлено доверие с'
         elif post_op['operation_type_id'] == OperationType.MISTRUST:
@@ -462,44 +454,45 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
         elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
             reply = 'Получена благодарность от'
 
-        reply += ' <a href="%(deeplink_sender)s">%(full_name_sender)s</a>' % dict(
-            deeplink_sender=Misc.get_deeplink(response_sender, bot_data),
-            full_name_sender=tg_user_sender.full_name,
-        )
+        if reply:
+            reply += ' <a href="%(deeplink_sender)s">%(full_name_sender)s</a>' % dict(
+                deeplink_sender=Misc.get_deeplink(response_sender, bot_data),
+                full_name_sender=tg_user_sender.full_name,
+            )
 
-        if message_to_forward_id:
+            if message_to_forward_id:
+                try:
+                    await bot.forward_message(
+                        chat_id=tg_user_to_uid,
+                        from_chat_id=tg_user_sender.id,
+                        message_id=message_to_forward_id,
+                    )
+                except:
+                    pass
             try:
-                await bot.forward_message(
-                    chat_id=tg_user_to_uid,
-                    from_chat_id=tg_user_sender.id,
-                    message_id=message_to_forward_id,
+                await bot.send_message(
+                    tg_user_to_uid,
+                    text=reply,
+                    disable_web_page_preview=True,
                 )
-            except:
+                # TODO здесь временно сделано, что юзер стартанул бот ----------------
+                # Потом удалить
+                #
+                payload_did_bot_start = dict(
+                    tg_token=settings.TOKEN,
+                    uuid=profile_to['uuid'],
+                    did_bot_start='1',
+                )
+                status, response = await Misc.api_request(
+                    path='/api/profile',
+                    method='put',
+                    data=payload_did_bot_start,
+                )
+                logging.debug('put tg_user_sender_payload_did_bot_start, status: %s' % status)
+                logging.debug('put tg_user_sender_payload_did_bot_start, response: %s' % response)
+                # --------------------------------------------------------------------
+            except (ChatNotFound, CantInitiateConversation):
                 pass
-        try:
-            await bot.send_message(
-                tg_user_to_uid,
-                text=reply,
-                disable_web_page_preview=True,
-            )
-            # TODO здесь временно сделано, что юзер стартанул бот ----------------
-            # Потом удалить
-            #
-            payload_did_bot_start = dict(
-                tg_token=settings.TOKEN,
-                uuid=profile_to['uuid'],
-                did_bot_start='1',
-            )
-            status, response = await Misc.api_request(
-                path='/api/profile',
-                method='put',
-                data=payload_did_bot_start,
-            )
-            logging.debug('put tg_user_sender_payload_did_bot_start, status: %s' % status)
-            logging.debug('put tg_user_sender_payload_did_bot_start, response: %s' % response)
-            # --------------------------------------------------------------------
-        except (ChatNotFound, CantInitiateConversation):
-            pass
 
     if response_sender.get('created'):
         tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)

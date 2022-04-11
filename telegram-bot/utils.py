@@ -285,14 +285,6 @@ class Misc(object):
             ))
 
     @classmethod
-    def make_full_name(cls, profile):
-        return (
-            '%s %s' % (
-                profile.get('first_name', ''),
-                profile.get('last_name', ''),
-        )).strip()
-
-    @classmethod
     def make_login_url(cls, redirect_path):
         """
         Сформировать ссылку, которая будет открываться авторизованным пользователем
