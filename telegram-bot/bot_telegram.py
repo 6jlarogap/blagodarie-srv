@@ -1138,6 +1138,36 @@ async def echo_send_to_group(message: types.Message):
             a_users_out.append({})
             continue
 
+        if tg_users_new and response_from.get('tg_uid') and str(tg_user_sender.id) != str(response_from['tg_uid']):
+            # Сразу доверие добавляемому пользователю
+            post_op = dict(
+                tg_token=settings.TOKEN,
+                operation_type_id=OperationType.TRUST,
+                tg_user_id_from=tg_user_sender.id,
+                user_id_to=response_from['user_id'],
+            )
+            logging.debug('post operation, payload: %s' % post_op)
+            status, response = await Misc.api_request(
+                path='/api/addoperation',
+                method='post',
+                data=post_op,
+            )
+            logging.debug('post operation, status: %s' % status)
+            logging.debug('post operation, response: %s' % response)
+            # Обновить, ибо уже на доверие больше у него может быть
+            try:
+                status, response_from = await Misc.api_request(
+                    path='/api/profile',
+                    method='post',
+                    data=payload_from,
+                )
+                logging.debug('get_or_create tg_user_to data in api, status: %s' % status)
+                logging.debug('get_or_create tg_user_to data in api, response_from: %s' % response_from)
+                if status != 200:
+                    continue
+            except:
+                continue
+
         if tg_user_left or tg_users_new:
             reply = Misc.reply_user_card(response_from, bot_data=bot_data)
         else:
