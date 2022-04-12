@@ -189,7 +189,7 @@ class Misc(object):
         """
         Получить ссылку типа http://t.me/BotNameBot?start=:uuid
         """
-        return "https://t.me/%(bot_data_username)s?start=%(resonse_uuid)s" % dict(
+        return "t.me/%(bot_data_username)s?start=%(resonse_uuid)s" % dict(
             bot_data_username=bot_data['username'],
             resonse_uuid=response['uuid']
         )

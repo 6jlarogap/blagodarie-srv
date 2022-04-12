@@ -1472,7 +1472,7 @@ class ApiBotStat(APIView):
     """
     def get(self, request):
         data = {
-            'all': Profile.objects.filter(user__is_superuser=False).count(),
+            'all': Profile.objects.filter(user__is_superuser=False, owner__isnull=False).count(),
             'did_bot_start': Profile.objects.filter(did_bot_start=True).count(),
             'with_geodata': Profile.objects.filter(latitude__isnull=False).count(),
         }
