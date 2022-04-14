@@ -46,9 +46,9 @@ async def on_shutdown(dp):
         await bot.delete_webhook()
 
 
-async def do_process_ability(message: types.Message):
+async def do_process_ability(message: types.Message, uuid=None):
     callback_data = '%(keyboard_type)s%(sep)s' % dict(
-        keyboard_type=KeyboardType.CANCEL_ABILITY,
+        keyboard_type=KeyboardType.CANCEL_ANY,
         sep=KeyboardType.SEP,
     )
     inline_btn_cancel = InlineKeyboardButton(
@@ -59,12 +59,17 @@ async def do_process_ability(message: types.Message):
     reply_markup.row(inline_btn_cancel)
 
     await FSMability.ask.set()
+    state = dp.current_state()
+    if uuid:
+        async with state.proxy() as data:
+            data['uuid'] = uuid
+
     await message.reply(Misc.PROMPT_ABILITY, reply_markup=reply_markup)
 
 
-async def do_process_wish(message: types.Message):
+async def do_process_wish(message: types.Message, uuid=None):
     callback_data = '%(keyboard_type)s%(sep)s' % dict(
-        keyboard_type=KeyboardType.CANCEL_WISH,
+        keyboard_type=KeyboardType.CANCEL_ANY,
         sep=KeyboardType.SEP,
     )
     inline_btn_cancel = InlineKeyboardButton(
@@ -75,6 +80,11 @@ async def do_process_wish(message: types.Message):
     reply_markup.row(inline_btn_cancel)
 
     await FSMwish.ask.set()
+    state = dp.current_state()
+    if uuid:
+        async with state.proxy() as data:
+            data['uuid'] = uuid
+
     await message.reply(Misc.PROMPT_WISH, reply_markup=reply_markup)
 
 
@@ -89,12 +99,22 @@ async def process_command_ability(message):
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(r'^(%s)%s' % (
-        KeyboardType.ABILITY,
+        KeyboardType.ABILITY,       # 0
         KeyboardType.SEP,
+        # uuid, кому                # 1
+        # KeyboardType.SEP,
     ), c.data
     ))
 async def process_callback_ability(callback_query: types.CallbackQuery):
-    await do_process_ability(callback_query.message)
+    code = callback_query.data.split(KeyboardType.SEP)
+    tg_user_sender = callback_query.from_user
+    try:
+        uuid = code[1]
+        if uuid and not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+            return
+    except IndexError:
+        uuid = None
+    await do_process_ability(callback_query.message, uuid=uuid)
 
 
 @dp.message_handler(
@@ -108,38 +128,35 @@ async def process_command_wish(message):
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(r'^(%s)%s' % (
-        KeyboardType.WISH,
+        KeyboardType.WISH,       # 0
         KeyboardType.SEP,
+        # uuid, кому                # 1
+        # KeyboardType.SEP,
     ), c.data
     ))
 async def process_callback_wish(callback_query: types.CallbackQuery):
-    await do_process_wish(callback_query.message)
+    code = callback_query.data.split(KeyboardType.SEP)
+    tg_user_sender = callback_query.from_user
+    try:
+        uuid = code[1]
+        if uuid and not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+            return
+    except IndexError:
+        uuid = None
+    await do_process_wish(callback_query.message, uuid=uuid)
 
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(r'^(%s)%s' % (
-        KeyboardType.CANCEL_ABILITY,
+        KeyboardType.CANCEL_ANY,
         KeyboardType.SEP,
         ), c.data
     ),
-    state=FSMability.ask,
+    state='*',
     )
-async def process_callback_cancel_ability(callback_query: types.CallbackQuery, state: FSMContext):
-    await state.finish()
-    await callback_query.message.reply('Вы отказались от ввода Ваших возможностей')
-
-
-@dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
-        KeyboardType.CANCEL_WISH,
-        KeyboardType.SEP,
-        ), c.data
-    ),
-    state=FSMwish.ask,
-    )
-async def process_callback_cancel_ability(callback_query: types.CallbackQuery, state: FSMContext):
-    await state.finish()
-    await callback_query.message.reply('Вы отказались от ввода Ваших потребностей')
+async def process_callback_cancel_any(callback_query: types.CallbackQuery, state: FSMContext):
+    await Misc.state_finish(state)
+    await callback_query.message.reply('Вы отказались от ввода данных')
 
 
 @dp.message_handler(
@@ -159,12 +176,18 @@ async def put_ability(message, state):
     logging.debug('put_ability: post tg_user data')
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+
     logging.debug('get_or_create tg_user_sender data in api, status_sender: %s' % status_sender)
     logging.debug('get_or_create tg_user_sender data in api, response_sender: %s' % response_sender)
     if status_sender == 200:
+        user_uuid = response_sender['uuid']
+        async with state.proxy() as data:
+            if data.get('uuid'):
+                user_uuid = data['uuid']
+            data['uuid'] = ''
         payload_add = dict(
             tg_token=settings.TOKEN,
-            user_uuid=response_sender['uuid'],
+            user_uuid=user_uuid,
             update_main=True,
             text=message.text.strip(),
         )
@@ -178,17 +201,28 @@ async def put_ability(message, state):
             status_add = response_add = None
         if status_add == 200:
             await message.reply('Возможности учтены')
-            status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+        try:
+            status, response = await Misc.api_request(
+                path='/api/profile',
+                method='get',
+                params=dict(uuid=user_uuid),
+            )
+            logging.debug('get_user_profile after put ability, status: %s' % status)
+            logging.debug('get_user_profile after put ability, response: %s' % response)
             if status_sender == 200:
-                await message.reply(
-                    Misc.reply_user_card(response=response_sender, bot_data=bot_data),
-                    disable_web_page_preview=True
+                await Misc.show_cards(
+                    [response],
+                    message,
+                    bot_data,
+                    response_from=response_sender,
                 )
-        else:
-            await message.reply(Misc.MSG_ERROR_API)
+            else:
+                await message.reply(Misc.MSG_ERROR_API)
+        except:
+            pass
     else:
         await message.reply(Misc.MSG_ERROR_API)
-    await state.finish()
+    await Misc.state_finish(state)
 
 
 @dp.message_handler(
@@ -208,12 +242,18 @@ async def put_wish(message, state):
     logging.debug('put_wish: post tg_user data')
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+
     logging.debug('get_or_create tg_user_sender data in api, status_sender: %s' % status_sender)
     logging.debug('get_or_create tg_user_sender data in api, response_sender: %s' % response_sender)
     if status_sender == 200:
+        user_uuid = response_sender['uuid']
+        async with state.proxy() as data:
+            if data.get('uuid'):
+                user_uuid = data['uuid']
+            data['uuid'] = ''
         payload_add = dict(
             tg_token=settings.TOKEN,
-            user_uuid=response_sender['uuid'],
+            user_uuid=user_uuid,
             update_main=True,
             text=message.text.strip(),
         )
@@ -227,17 +267,28 @@ async def put_wish(message, state):
             status_add = response_add = None
         if status_add == 200:
             await message.reply('Потребности учтены')
-            status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+        try:
+            status, response = await Misc.api_request(
+                path='/api/profile',
+                method='get',
+                params=dict(uuid=user_uuid),
+            )
+            logging.debug('get_user_profile after put wish, status: %s' % status)
+            logging.debug('get_user_profile after put wish, response: %s' % response)
             if status_sender == 200:
-                await message.reply(
-                    Misc.reply_user_card(response=response_sender, bot_data=bot_data),
-                    disable_web_page_preview=True
+                await Misc.show_cards(
+                    [response],
+                    message,
+                    bot_data,
+                    response_from=response_sender,
                 )
-        else:
-            await message.reply(Misc.MSG_ERROR_API)
+            else:
+                await message.reply(Misc.MSG_ERROR_API)
+        except:
+            pass
     else:
         await message.reply(Misc.MSG_ERROR_API)
-    await state.finish()
+    await Misc.state_finish(state)
 
 
 @dp.callback_query_handler(
@@ -531,7 +582,7 @@ async def geo(message: types.Message):
     ))
 async def process_callback_location(callback_query: types.CallbackQuery):
     """
-    Действия по (не)доверию, благодарностям
+    Действия по местоположению
 
     На входе строка:
         <KeyboardType.LOCATION>             # 0

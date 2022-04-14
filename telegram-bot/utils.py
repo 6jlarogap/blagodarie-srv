@@ -48,13 +48,9 @@ class KeyboardType(object):
     #
     WISH = 5
 
-    # Возможности
+    # Клавиша Отмена
     #
-    CANCEL_ABILITY = 6
-
-    # Потребности
-    #
-    CANCEL_WISH = 7
+    CANCEL_ANY = 6
 
     # Разделитель данных в call back data
     #
@@ -67,8 +63,8 @@ class Misc(object):
 
     MSG_ERROR_API = 'Ошибка доступа к данным'
     MSG_ERROR_TEXT_ONLY = 'Принимается только текст'
-    PROMPT_ABILITY = 'Отправьте мне текст с Вашими <b>возможностями</b>'
-    PROMPT_WISH = 'Отправьте мне текст с Вашими <b>потребностями</b>'
+    PROMPT_ABILITY = 'Отправьте мне текст с <b>возможностями</b>'
+    PROMPT_WISH = 'Отправьте мне текст с <b>потребностями</b>'
     
     @classmethod
     def help_text(cls):
@@ -332,6 +328,28 @@ class Misc(object):
 
 
     @classmethod
+    async def check_owner(cls, owner_tg_user, uuid):
+        """
+        Проверить, принадлежит ли uuid к owner_tg_user
+        """
+        result = False
+        status_sender, response_sender = await cls.post_tg_user(owner_tg_user, activate=True)
+        if status_sender == 200 and response_sender.get('user_id'):
+            payload_uuid = dict(uuid=uuid, )
+            try:
+                status, response_uuid = await Misc.api_request(
+                    path='/api/profile',
+                    method='get',
+                    params=payload_uuid,
+                )
+                logging.debug('get tg_user_by_uuid in api, response_to: %s' % response_uuid)
+                if status == 200 and response_uuid.get('owner_id'):
+                    result = response_uuid['owner_id'] == response_sender['user_id']
+            except:
+                pass
+        return result
+
+    @classmethod
     def get_text_usernames(cls, s):
         """
         Выделить из текста @usernames и вернуть еще текст без @usernames
@@ -446,29 +464,34 @@ class Misc(object):
                         inline_btn_thank,
                         inline_btn_mistrust,
                     )
-            if user_from_id and user_from_id == response_to['user_id']:
-                # Карточка самому пользователю
+            if user_from_id and \
+               (user_from_id == response_to['user_id']) or \
+               (response_to.get('owner_id') and response_to['owner_id'] == user_from_id):
+
+                # Карточка самому пользователю или его родственнику
                 #
-                dict_location = dict(
-                    keyboard_type=KeyboardType.LOCATION,
-                    sep=KeyboardType.SEP,
-                )
+                uuid = response_to['uuid'] if response_to.get('owner_id') and response_to['owner_id'] == user_from_id else ''
                 callback_data_template = (
                         '%(keyboard_type)s%(sep)s'
+                        '%(uuid)s%(sep)s'
                     )
-                inline_btn_location = InlineKeyboardButton(
-                    'Местоположение',
-                    callback_data=callback_data_template % dict_location,
-                )
-                reply_markup.row(inline_btn_location)
+                if user_from_id == response_to['user_id']:
+                    dict_location = dict(
+                        keyboard_type=KeyboardType.LOCATION,
+                        uuid='',
+                        sep=KeyboardType.SEP,
+                    )
+                    inline_btn_location = InlineKeyboardButton(
+                        'Местоположение',
+                        callback_data=callback_data_template % dict_location,
+                    )
+                    reply_markup.row(inline_btn_location)
 
                 dict_abwish = dict(
                     keyboard_type=KeyboardType.ABILITY,
+                    uuid=uuid,
                     sep=KeyboardType.SEP,
                 )
-                callback_data_template = (
-                        '%(keyboard_type)s%(sep)s'
-                    )
                 inline_btn_ability = InlineKeyboardButton(
                     'Возможности',
                     callback_data=callback_data_template % dict_abwish,
@@ -525,3 +548,11 @@ class Misc(object):
             if response.get('dod'):
                 lifetime += " – %s" % response['dod'][-4:]
         return lifetime
+
+
+    @classmethod
+    async def state_finish(cls, state):
+        await state.finish()
+        async with state.proxy() as data:
+            for key in ('uuid', ):
+                data[key] = ''
