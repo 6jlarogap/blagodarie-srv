@@ -24,9 +24,6 @@ class FSMability(StatesGroup):
 class FSMwish(StatesGroup):
     ask = State()
 
-class FSMgroup(StatesGroup):
-    current_user = State()
-
 last_user_in_group = None
 
 bot = Bot(
@@ -563,21 +560,31 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             logging.debug('put tg_user_sender_photo, response: %s' % response)
 
 
+async def geo(message: types.Message, uuid=None):
+    keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True, one_time_keyboard=True)
+    button_geo = types.KeyboardButton(text="Отправить местоположение", request_location=True)
+    keyboard.add(button_geo)
+    state = dp.current_state()
+    if uuid:
+        async with state.proxy() as data:
+            data['uuid'] = uuid
+    await bot.send_message(message.chat.id, 'Пожалуйста, нажмите на кнопку "Отправить местоположение" снизу', reply_markup=keyboard)
+
+
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     commands=["setplace", "место"]
 )
-async def geo(message: types.Message):
-    keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True, one_time_keyboard=True)
-    button_geo = types.KeyboardButton(text="Отправить местоположение", request_location=True)
-    keyboard.add(button_geo)
-    await bot.send_message(message.chat.id, 'Пожалуйста, нажмите на кнопку "Отправить местоположение" снизу', reply_markup=keyboard)
+async def geo_command_handler(message: types.Message):
+    await geo(message)
 
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(r'^(%s)%s' % (
         KeyboardType.LOCATION,
         KeyboardType.SEP,
+        # uuid, кому                # 1
+        # KeyboardType.SEP,
     ), c.data
     ))
 async def process_callback_location(callback_query: types.CallbackQuery):
@@ -587,19 +594,35 @@ async def process_callback_location(callback_query: types.CallbackQuery):
     На входе строка:
         <KeyboardType.LOCATION>             # 0
         <KeyboardType.SEP>
-        ''                                  # 1
-        например: 3~2~
+        uuid                                # 1
+        <KeyboardType.SEP>
     """
     if callback_query.message:
-        await geo(callback_query.message)
+        tg_user_sender = callback_query.from_user
+        code = callback_query.data.split(KeyboardType.SEP)
+        try:
+            uuid = code[1]
+            if uuid and not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+                return
+        except IndexError:
+            uuid = None
+        await geo(callback_query.message, uuid)
 
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     content_types=["location",],
 )
-async def location(message):
+async def location(message: types.Message, state: FSMContext):
+    """
+    Записать местоположение пользователя телеграма или uuid в состоянии
+    """
+    state = dp.current_state()
     if message.location is not None:
+        user_uuid = None
+        async with state.proxy() as data:
+            user_uuid = data.get('uuid')
+
         latitude = longitude = None
         try:
             latitude = getattr(message.location, 'latitude')
@@ -608,32 +631,18 @@ async def location(message):
             pass
         if latitude and longitude:
             bot_data = await bot.get_me()
-            user_from_uuid = None
             tg_user_sender = message.from_user
-            payload_from = dict(
-                tg_token=settings.TOKEN,
-                tg_uid=tg_user_sender.id,
-                last_name=tg_user_sender.last_name or '',
-                first_name=tg_user_sender.first_name or '',
-                username=tg_user_sender.username or '',
-                activate='1',
-            )
-            try:
-                status, response_from = await Misc.api_request(
-                    path='/api/profile',
-                    method='post',
-                    data=payload_from,
-                )
-                logging.debug('get_or_create tg_user_sender data in api, status: %s' % status)
-                logging.debug('get_or_create tg_user_sender data in api, response_from: %s' % response_from)
-                user_from_uuid = response_from.get('uuid')
-            except:
-                pass
-
-            if user_from_uuid:
+            status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+            if status_sender == 200:
+                if user_uuid:
+                    status_this, response_this = await Misc.get_user_by_uuid(user_uuid)
+                else:
+                    status_this, response_this = status_sender, response_sender
+                    user_uuid = response_this.get('uuid')
+            if user_uuid:
                 payload_location = dict(
                     tg_token=settings.TOKEN,
-                    uuid=user_from_uuid,
+                    uuid=user_uuid,
                     latitude = latitude,
                     longitude = longitude,
                 )
@@ -645,19 +654,17 @@ async def location(message):
                 logging.debug('put tg_user_sender_location, status: %s' % status)
                 logging.debug('put tg_user_sender_location, response: %s' % response)
                 if status == 200:
-                    response_from.update(
+                    response_this.update(
                         latitude=latitude,
                         longitude=longitude,
                     )
-                    reply = Misc.reply_user_card(response_from, bot_data=bot_data, username=tg_user_sender.username or '')
-                    try:
-                        await bot.send_message(
-                            tg_user_sender.id,
-                            text=reply,
-                            disable_web_page_preview=True,
-                        )
-                    except (ChatNotFound, CantInitiateConversation):
-                        pass
+                    await Misc.show_cards(
+                        [response_this],
+                        message,
+                        bot_data,
+                        response_from=response_sender,
+                    )
+    await Misc.state_finish(state)
 
 
 @dp.message_handler(

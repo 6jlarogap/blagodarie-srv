@@ -314,7 +314,7 @@ class Misc(object):
             last_name=tg_user_sender.last_name or '',
             first_name=tg_user_sender.first_name or '',
             username=tg_user_sender.username or '',
-            activate=activate,
+            activate='1' if activate else '',
         )
         try:
             status_sender, response_sender = await cls.api_request(
@@ -322,9 +322,29 @@ class Misc(object):
                 method='post',
                 data=payload_sender,
             )
+            logging.debug('get_or_create tg_user by tg_uid in api, status: %s' % status_sender)
+            logging.debug('get_or_create tg_user by tg_uid in api, response_from: %s' % response_sender)
         except:
             status_sender = response_sender = None
         return status_sender, response_sender
+
+
+    @classmethod
+    async def get_user_by_uuid(cls, uuid):
+        """
+        Получить данные пользователя по uuid
+        """
+        try:
+            status, response = await Misc.api_request(
+                path='/api/profile',
+                method='get',
+                params=dict(uuid=uuid),
+            )
+            logging.debug('get_user_profile, status: %s' % status)
+            logging.debug('get_user_profile, response: %s' % response)
+        except:
+            status = response = None
+        return status, response
 
 
     @classmethod
@@ -413,7 +433,7 @@ class Misc(object):
                     method='get',
                     params=payload_relation,
                 )
-                logging.info('get users relations, status: %s' % status)
+                logging.debug('get users relations, status: %s' % status)
                 logging.debug('get users relations: %s' % response)
                 if status == 200:
                     reply += cls.reply_relations(response)
@@ -475,17 +495,16 @@ class Misc(object):
                         '%(keyboard_type)s%(sep)s'
                         '%(uuid)s%(sep)s'
                     )
-                if user_from_id == response_to['user_id']:
-                    dict_location = dict(
-                        keyboard_type=KeyboardType.LOCATION,
-                        uuid='',
-                        sep=KeyboardType.SEP,
-                    )
-                    inline_btn_location = InlineKeyboardButton(
-                        'Местоположение',
-                        callback_data=callback_data_template % dict_location,
-                    )
-                    reply_markup.row(inline_btn_location)
+                dict_location = dict(
+                    keyboard_type=KeyboardType.LOCATION,
+                    uuid=uuid,
+                    sep=KeyboardType.SEP,
+                )
+                inline_btn_location = InlineKeyboardButton(
+                    'Местоположение',
+                    callback_data=callback_data_template % dict_location,
+                )
+                reply_markup.row(inline_btn_location)
 
                 dict_abwish = dict(
                     keyboard_type=KeyboardType.ABILITY,
@@ -552,7 +571,8 @@ class Misc(object):
 
     @classmethod
     async def state_finish(cls, state):
-        await state.finish()
-        async with state.proxy() as data:
-            for key in ('uuid', ):
-                data[key] = ''
+        if state:
+            await state.finish()
+            async with state.proxy() as data:
+                for key in ('uuid', ):
+                    data[key] = ''
