@@ -1,4 +1,5 @@
-import re
+import base64, re
+from io import BytesIO
 
 import settings
 from settings import logging
@@ -22,6 +23,9 @@ class FSMability(StatesGroup):
     ask = State()
 
 class FSMwish(StatesGroup):
+    ask = State()
+
+class FSMphoto(StatesGroup):
     ask = State()
 
 last_user_in_group = None
@@ -50,7 +54,6 @@ async def do_process_ability(message: types.Message, uuid=None):
     if uuid:
         async with state.proxy() as data:
             data['uuid'] = uuid
-
     await message.reply(Misc.PROMPT_ABILITY, reply_markup=reply_markup)
 
 
@@ -61,8 +64,19 @@ async def do_process_wish(message: types.Message, uuid=None):
     if uuid:
         async with state.proxy() as data:
             data['uuid'] = uuid
-
     await message.reply(Misc.PROMPT_WISH, reply_markup=reply_markup)
+
+
+async def do_process_photo(message: types.Message, uuid=None):
+    reply_markup = Misc.reply_markup_cancel_row()
+    await FSMphoto.ask.set()
+    state = dp.current_state()
+    if uuid:
+        async with state.proxy() as data:
+            data['uuid'] = uuid
+        await message.reply(Misc.PROMPT_PHOTO, reply_markup=reply_markup)
+    else:
+        await Misc.state_finish(state)
 
 
 @dp.message_handler(
@@ -143,9 +157,11 @@ async def process_callback_cancel_any(callback_query: types.CallbackQuery, state
 )
 async def put_ability(message, state):
     if message.content_type != ContentType.TEXT:
+        reply_markup = Misc.reply_markup_cancel_row()
         await message.reply(
             Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + \
-            Misc.PROMPT_ABILITY
+            Misc.PROMPT_ABILITY,
+            reply_markup=reply_markup
         )
         return
 
@@ -209,9 +225,11 @@ async def put_ability(message, state):
 )
 async def put_wish(message, state):
     if message.content_type != ContentType.TEXT:
+        reply_markup = Misc.reply_markup_cancel_row()
         await message.reply(
             Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + \
-            Misc.PROMPT_WISH
+            Misc.PROMPT_WISH,
+            reply_markup=reply_markup,
         )
         return
 
@@ -266,6 +284,98 @@ async def put_wish(message, state):
     else:
         await message.reply(Misc.MSG_ERROR_API)
     await Misc.state_finish(state)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMphoto.ask,
+)
+async def put_photo(message, state):
+    if message.content_type != ContentType.PHOTO:
+        reply_markup = Misc.reply_markup_cancel_row()
+        await message.reply(
+            Misc.MSG_ERROR_PHOTO_ONLY + '\n\n' + \
+            Misc.PROMPT_PHOTO,
+            reply_markup=reply_markup,
+        )
+        return
+
+    bot_data = await bot.get_me()
+    logging.debug('put_photo: post tg_user data')
+    tg_user_sender = message.from_user
+    status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+
+    logging.debug('get_or_create tg_user_sender data in api, status_sender: %s' % status_sender)
+    logging.debug('get_or_create tg_user_sender data in api, response_sender: %s' % response_sender)
+    if status_sender == 200:
+        user_uuid = None
+        async with state.proxy() as data:
+            if data.get('uuid'):
+                user_uuid = data['uuid']
+            data['uuid'] = ''
+        if user_uuid:
+            image = BytesIO()
+            await message.photo[-1].download(destination_file=image)
+            image = base64.b64encode(image.read()).decode('UTF-8')
+
+            logging.debug('put tg_user_by_uuid photo...')
+            payload_photo = dict(
+                tg_token=settings.TOKEN,
+                photo=image,
+                uuid=user_uuid,
+            )
+            status_photo, response_photo = await Misc.api_request(
+                path='/api/profile',
+                method='put',
+                data=payload_photo,
+            )
+            logging.debug('put tg_user_by_uuid photo, status: %s' % status_photo)
+            logging.debug('put tg_user_by_uuid photo, response: %s' % response_photo)
+            if status_photo == 200:
+                await message.reply('Фото внесено')
+                try:
+                    status, response = await Misc.get_user_by_uuid(user_uuid)
+                    if status == 200:
+                        await Misc.show_cards(
+                            [response],
+                            message,
+                            bot_data,
+                            response_from=response_sender,
+                        )
+                except:
+                    pass
+            elif status_photo == 400:
+                if response_photo.get('message'):
+                    await message.reply(response_photo['message'])
+                else:
+                    await message.reply(Misc.MSG_ERROR_API)
+            else:
+                await message.reply(Misc.MSG_ERROR_API)
+        else:
+            await message.reply(Misc.MSG_ERROR_API)
+    await Misc.state_finish(state)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.PHOTO,       # 0
+        KeyboardType.SEP,
+        # uuid, кому              # 1
+        # KeyboardType.SEP,
+    ), c.data
+    ))
+async def process_callback_photo(callback_query: types.CallbackQuery):
+    code = callback_query.data.split(KeyboardType.SEP)
+    tg_user_sender = callback_query.from_user
+    try:
+        uuid = code[1]
+        if uuid and not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+            return
+    except IndexError:
+        uuid = None
+    if uuid:
+        await do_process_photo(callback_query.message, uuid=uuid)
 
 
 @dp.callback_query_handler(

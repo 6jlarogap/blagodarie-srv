@@ -52,6 +52,10 @@ class KeyboardType(object):
     #
     CANCEL_ANY = 6
 
+    # Получить фото родственника
+    #
+    PHOTO = 7
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -63,8 +67,10 @@ class Misc(object):
 
     MSG_ERROR_API = 'Ошибка доступа к данным'
     MSG_ERROR_TEXT_ONLY = 'Принимается только текст'
-    PROMPT_ABILITY = 'Отправьте мне текст с <b>возможностями</b>'
-    PROMPT_WISH = 'Отправьте мне текст с <b>потребностями</b>'
+    PROMPT_ABILITY = 'Отправьте мне <u>текст</u> с <b>возможностями</b>'
+    PROMPT_WISH = 'Отправьте мне <u>текст</u> с <b>потребностями</b>'
+    PROMPT_PHOTO = 'Отправьте мне <b>фото</b>. Не более %s Мб размером.' % settings.DOWNLOAD_PHOTO_MAX_SIZE
+    MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE
     
     @classmethod
     def help_text(cls):
@@ -492,13 +498,13 @@ class Misc(object):
                         inline_btn_thank,
                         inline_btn_mistrust,
                     )
-            if user_from_id and \
-               (user_from_id == response_to['user_id']) or \
-               (response_to.get('owner_id') and response_to['owner_id'] == user_from_id):
+            is_own_account = user_from_id and user_from_id == response_to['user_id']
+            is_owned_account = user_from_id and response_to.get('owner_id') and response_to['owner_id'] == user_from_id
+            if is_own_account or is_owned_account:
 
                 # Карточка самому пользователю или его родственнику
                 #
-                uuid = response_to['uuid'] if response_to.get('owner_id') and response_to['owner_id'] == user_from_id else ''
+                uuid = response_to['uuid'] if is_owned_account else ''
                 callback_data_template = (
                         '%(keyboard_type)s%(sep)s'
                         '%(uuid)s%(sep)s'
@@ -512,7 +518,23 @@ class Misc(object):
                     'Местоположение',
                     callback_data=callback_data_template % dict_location,
                 )
-                reply_markup.row(inline_btn_location)
+
+                if is_owned_account:
+                    dict_photo = dict(
+                        keyboard_type=KeyboardType.PHOTO,
+                        uuid=uuid,
+                        sep=KeyboardType.SEP,
+                    )
+                    inline_btn_photo = InlineKeyboardButton(
+                        'Фото',
+                        callback_data=callback_data_template % dict_photo,
+                    )
+                    reply_markup.row(
+                        inline_btn_photo,
+                        inline_btn_location
+                    )
+                else:
+                    reply_markup.row(inline_btn_location)
 
                 dict_abwish = dict(
                     keyboard_type=KeyboardType.ABILITY,
