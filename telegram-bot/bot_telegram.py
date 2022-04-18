@@ -1168,6 +1168,7 @@ async def echo_send_to_group(message: types.Message):
                         exclude_tg_uids=exclude_tg_uids,
                         response_from={},
                         message_to_forward_id='',
+                        are_to_group=True,
                     )
 
     for user_in in a_users_in:
@@ -1277,15 +1278,9 @@ async def echo_send_to_group(message: types.Message):
                     'Не доверяю',
                     callback_data=callback_data_template % dict_reply,
                 )
-                dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-                inline_btn_nullify_trust = InlineKeyboardButton(
-                    'Не знакомы',
-                    callback_data=callback_data_template % dict_reply,
-                )
                 reply_markup.row(
                     inline_btn_thank,
                     inline_btn_mistrust,
-                    inline_btn_nullify_trust
                 )
 
             await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)

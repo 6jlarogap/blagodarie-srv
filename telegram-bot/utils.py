@@ -391,12 +391,19 @@ class Misc(object):
 
     @classmethod
     async def show_cards(cls,
+        # Список данных пользователей
         a_response_to,
+        # в ответ на какое сообщение
         message,
         bot_data,
+        # не показывать карточку, если тг ид в этом списке
         exclude_tg_uids=[],
+        # данные пользователя-отправителя сообщения message
         response_from={},
+        # Ид сообщения, которое включить в кнопки, чтобы его потом перенаправить
         message_to_forward_id='',
+        # Список карточек отправляется в группу?
+        are_to_group=False,
     ):
         """
         Показать карточки пользователей
@@ -471,7 +478,8 @@ class Misc(object):
                     'Не знакомы',
                     callback_data=callback_data_template % dict_reply,
                 )
-                if response_relations and response_relations['from_to']['is_trust'] is None:
+                if are_to_group or \
+                   (response_relations and response_relations['from_to']['is_trust'] is None):
                     show_inline_btn_nullify_trust = False
                 if show_inline_btn_nullify_trust:
                     reply_markup.row(
