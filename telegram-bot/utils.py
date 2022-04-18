@@ -584,3 +584,21 @@ class Misc(object):
             async with state.proxy() as data:
                 for key in ('uuid', ):
                     data[key] = ''
+
+
+    @classmethod
+    def reply_markup_cancel_row(cls):
+        """
+        Одна inline кнопка с 'Отмена'
+        """
+        callback_data = '%(keyboard_type)s%(sep)s' % dict(
+            keyboard_type=KeyboardType.CANCEL_ANY,
+            sep=KeyboardType.SEP,
+        )
+        inline_btn_cancel = InlineKeyboardButton(
+            'Отмена',
+            callback_data=callback_data,
+        )
+        reply_markup = InlineKeyboardMarkup()
+        reply_markup.row(inline_btn_cancel)
+        return reply_markup

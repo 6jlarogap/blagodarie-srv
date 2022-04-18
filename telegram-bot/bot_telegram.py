@@ -44,17 +44,7 @@ async def on_shutdown(dp):
 
 
 async def do_process_ability(message: types.Message, uuid=None):
-    callback_data = '%(keyboard_type)s%(sep)s' % dict(
-        keyboard_type=KeyboardType.CANCEL_ANY,
-        sep=KeyboardType.SEP,
-    )
-    inline_btn_cancel = InlineKeyboardButton(
-        'Отмена',
-        callback_data=callback_data,
-    )
-    reply_markup = InlineKeyboardMarkup()
-    reply_markup.row(inline_btn_cancel)
-
+    reply_markup = Misc.reply_markup_cancel_row()
     await FSMability.ask.set()
     state = dp.current_state()
     if uuid:
@@ -65,17 +55,7 @@ async def do_process_ability(message: types.Message, uuid=None):
 
 
 async def do_process_wish(message: types.Message, uuid=None):
-    callback_data = '%(keyboard_type)s%(sep)s' % dict(
-        keyboard_type=KeyboardType.CANCEL_ANY,
-        sep=KeyboardType.SEP,
-    )
-    inline_btn_cancel = InlineKeyboardButton(
-        'Отмена',
-        callback_data=callback_data,
-    )
-    reply_markup = InlineKeyboardMarkup()
-    reply_markup.row(inline_btn_cancel)
-
+    reply_markup = Misc.reply_markup_cancel_row()
     await FSMwish.ask.set()
     state = dp.current_state()
     if uuid:
