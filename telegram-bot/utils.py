@@ -56,6 +56,14 @@ class KeyboardType(object):
     #
     PHOTO = 7
 
+    # Удалить фото родственника
+    #
+    PHOTO_REMOVE = 8
+
+    # Удалить фото родственника, подтверждено
+    #
+    PHOTO_REMOVE_CONFIRMED = 9
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -69,7 +77,10 @@ class Misc(object):
     MSG_ERROR_TEXT_ONLY = 'Принимается только текст'
     PROMPT_ABILITY = 'Отправьте мне <u>текст</u> с <b>возможностями</b>'
     PROMPT_WISH = 'Отправьте мне <u>текст</u> с <b>потребностями</b>'
-    PROMPT_PHOTO = 'Отправьте мне <b>фото</b>. Не более %s Мб размером.' % settings.DOWNLOAD_PHOTO_MAX_SIZE
+
+    PROMPT_PHOTO = 'Отправьте мне <b>фото</b>, не более %s Мб размером.' % settings.DOWNLOAD_PHOTO_MAX_SIZE
+    PROMPT_PHOTO_REMOVE = "Нажмите 'Удалить' для удаления имеющегося фото."
+
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE
     
     @classmethod
@@ -351,6 +362,18 @@ class Misc(object):
         except:
             status = response = None
         return status, response
+
+
+    @classmethod
+    def is_photo_downloaded(cls, profile):
+        """
+        Загружено ли фото в апи. Иначе или нет фото или это ссылка на другой ресурс
+        """
+        result = False
+        photo = profile.get('photo')
+        if photo and photo.lower().startswith(settings.API_HOST.lower()):
+            result = True
+        return result
 
 
     @classmethod

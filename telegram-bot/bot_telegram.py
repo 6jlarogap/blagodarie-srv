@@ -27,6 +27,7 @@ class FSMwish(StatesGroup):
 
 class FSMphoto(StatesGroup):
     ask = State()
+    remove = State()
 
 last_user_in_group = None
 
@@ -65,18 +66,6 @@ async def do_process_wish(message: types.Message, uuid=None):
         async with state.proxy() as data:
             data['uuid'] = uuid
     await message.reply(Misc.PROMPT_WISH, reply_markup=reply_markup)
-
-
-async def do_process_photo(message: types.Message, uuid=None):
-    reply_markup = Misc.reply_markup_cancel_row()
-    await FSMphoto.ask.set()
-    state = dp.current_state()
-    if uuid:
-        async with state.proxy() as data:
-            data['uuid'] = uuid
-        await message.reply(Misc.PROMPT_PHOTO, reply_markup=reply_markup)
-    else:
-        await Misc.state_finish(state)
 
 
 @dp.message_handler(
@@ -146,8 +135,10 @@ async def process_callback_wish(callback_query: types.CallbackQuery):
     state='*',
     )
 async def process_callback_cancel_any(callback_query: types.CallbackQuery, state: FSMContext):
-    await Misc.state_finish(state)
-    await callback_query.message.reply('Вы отказались от ввода данных')
+    current_state = await state.get_state()
+    if current_state:
+        await Misc.state_finish(state)
+        await callback_query.message.reply('Вы отказались от ввода данных')
 
 
 @dp.message_handler(
@@ -375,8 +366,143 @@ async def process_callback_photo(callback_query: types.CallbackQuery):
     except IndexError:
         uuid = None
     if uuid:
-        await do_process_photo(callback_query.message, uuid=uuid)
+        callback_data_cancel = '%(keyboard_type)s%(sep)s' % dict(
+            keyboard_type=KeyboardType.CANCEL_ANY,
+            sep=KeyboardType.SEP,
+        )
+        inline_btn_cancel = InlineKeyboardButton(
+            'Отмена',
+            callback_data=callback_data_cancel,
+        )
+        reply_markup = InlineKeyboardMarkup()
+        await FSMphoto.ask.set()
+        state = dp.current_state()
+        async with state.proxy() as data:
+            data['uuid'] = uuid
+        prompt_photo = Misc.PROMPT_PHOTO
+        status, response = await Misc.get_user_by_uuid(uuid)
+        if status == 200 and response and Misc.is_photo_downloaded(response):
+            prompt_photo += '\n' + Misc.PROMPT_PHOTO_REMOVE
+            callback_data_remove = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s' % dict(
+                keyboard_type=KeyboardType.PHOTO_REMOVE,
+                sep=KeyboardType.SEP,
+                uuid=uuid,
+            )
+            inline_btn_remove = InlineKeyboardButton(
+                'Удалить',
+                callback_data=callback_data_remove,
+            )
+            reply_markup.row(inline_btn_cancel, inline_btn_remove)
+        else:
+            reply_markup.row(inline_btn_cancel)
+        await callback_query.message.reply(prompt_photo, reply_markup=reply_markup)
 
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.PHOTO_REMOVE,      # 0
+        KeyboardType.SEP,
+        # uuid, кому                    # 1
+        # KeyboardType.SEP,
+    ), c.data
+    ),
+    state=FSMphoto.ask)
+async def process_callback_photo_remove(callback_query: types.CallbackQuery, state: FSMContext):
+    code = callback_query.data.split(KeyboardType.SEP)
+    try:
+        uuid = code[1]
+    except IndexError:
+        uuid = None
+    if uuid:
+        status, response = await Misc.get_user_by_uuid(uuid)
+        if status == 200 and response:
+            await FSMphoto.next()
+            callback_data_cancel = '%(keyboard_type)s%(sep)s' % dict(
+                keyboard_type=KeyboardType.CANCEL_ANY,
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_cancel = InlineKeyboardButton(
+                'Отмена',
+                callback_data=callback_data_cancel,
+            )
+            callback_data_remove = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s' % dict(
+                keyboard_type=KeyboardType.PHOTO_REMOVE_CONFIRMED,
+                sep=KeyboardType.SEP,
+                uuid=uuid,
+            )
+            inline_btn_remove = InlineKeyboardButton(
+                'Да, удалить',
+                callback_data=callback_data_remove,
+            )
+            reply_markup = InlineKeyboardMarkup()
+            reply_markup.row(inline_btn_cancel, inline_btn_remove)
+            full_name = Misc.get_iof(response)
+            prompt_photo_confirm = (
+                'Подтвердите <b>удаление фото</b> у:\n'
+                '<b>%s</b>\n' % full_name
+            )
+            await callback_query.message.reply(prompt_photo_confirm, reply_markup=reply_markup)
+        else:
+            await Misc.state_finish(state)
+    else:
+        await Misc.state_finish(state)
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.PHOTO_REMOVE_CONFIRMED,      # 0
+        KeyboardType.SEP,
+        # uuid, кому                    # 1
+        # KeyboardType.SEP,
+    ), c.data
+    ),
+    state=FSMphoto.remove)
+async def process_callback_photo_remove_confirmed(callback_query: types.CallbackQuery, state: FSMContext):
+    code = callback_query.data.split(KeyboardType.SEP)
+    try:
+        uuid = code[1]
+    except IndexError:
+        uuid = None
+    if uuid:
+        bot_data = await bot.get_me()
+        logging.debug('put (remove) photo: post tg_user data')
+        tg_user_sender = callback_query.message.from_user
+        status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+        if status_sender == 200 and response_sender:
+            payload_photo = dict(
+                tg_token=settings.TOKEN,
+                photo='',
+                uuid=uuid,
+            )
+            status_photo, response_photo = await Misc.api_request(
+                path='/api/profile',
+                method='put',
+                data=payload_photo,
+            )
+            logging.debug('put (remove) user_photo, status: %s' % status_photo)
+            logging.debug('put (remove) user_photo, response: %s' % response_photo)
+            if status_photo == 200:
+                await callback_query.message.reply('Фото удалено')
+                try:
+                    status, response = await Misc.get_user_by_uuid(uuid)
+                    if status == 200:
+                        await Misc.show_cards(
+                            [response],
+                            callback_query.message,
+                            bot_data,
+                            response_from=response_sender,
+                        )
+                except:
+                    pass
+            elif status_photo == 400:
+                if response_photo.get('message'):
+                    await message.reply(response_photo['message'])
+                else:
+                    await message.reply(Misc.MSG_ERROR_API)
+            else:
+                await message.reply(Misc.MSG_ERROR_API)
+        else:
+            await message.reply(Misc.MSG_ERROR_API)
+    await Misc.state_finish(state)
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(r'^(%s)%s' % (

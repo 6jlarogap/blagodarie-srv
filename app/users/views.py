@@ -1243,8 +1243,15 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
                     raise ServiceException('Неверный токен телеграм бота')
                 user, profile = self.check_user_uuid(request.data.get('uuid'))
-                self.save_photo(request, profile)
                 do_save = False
+                if 'photo' in request.data:
+                    do_save = True
+                    if request.data.get('photo'):
+                        self.save_photo(request, profile)
+                    else:
+                        profile.delete_from_media()
+                        profile.photo = None
+                        profile.photo_original_filename = ''
                 for f in ('latitude', 'longitude',):
                     if f in  request.data:
                         setattr(profile, f, request.data.get(f) or None)
