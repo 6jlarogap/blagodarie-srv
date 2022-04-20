@@ -1258,7 +1258,7 @@ async def echo_send_to_group(message: types.Message):
                         exclude_tg_uids=exclude_tg_uids,
                         response_from={},
                         message_to_forward_id='',
-                        are_to_group=True,
+                        group_id=message.chat.id,
                     )
 
     for user_in in a_users_in:

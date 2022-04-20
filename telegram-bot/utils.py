@@ -409,7 +409,7 @@ class Misc(object):
         # Ид сообщения, которое включить в кнопки, чтобы его потом перенаправить
         message_to_forward_id='',
         # Список карточек отправляется в группу?
-        are_to_group=False,
+        group_id='',
     ):
         """
         Показать карточки пользователей
@@ -459,7 +459,7 @@ class Misc(object):
                     sep=KeyboardType.SEP,
                     user_to_id=response_to['user_id'],
                     message_to_forward_id=message_to_forward_id,
-                    group_id='',
+                    group_id=group_id,
                 )
                 callback_data_template = (
                         '%(keyboard_type)s%(sep)s'
@@ -484,7 +484,7 @@ class Misc(object):
                     'Не знакомы',
                     callback_data=callback_data_template % dict_reply,
                 )
-                if are_to_group or \
+                if group_id or \
                    (response_relations and response_relations['from_to']['is_trust'] is None):
                     show_inline_btn_nullify_trust = False
                 if show_inline_btn_nullify_trust:
