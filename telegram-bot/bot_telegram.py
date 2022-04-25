@@ -520,6 +520,7 @@ async def put_new_iof(message, state):
     if status_sender == 200 and response_sender and response_sender.get('user_id'):
         message_text = message.text.strip()
         message_text = re.sub(r'\s{2,}', ' ', message_text)
+        message_text = re.sub(r'\s', ' ', message_text)
         payload_iof = dict(
             tg_token=settings.TOKEN,
             owner_id=response_sender['user_id'],

@@ -81,7 +81,7 @@ class Misc(object):
     PROMPT_PHOTO = 'Отправьте мне <b>фото</b>, не более %s Мб размером.' % settings.DOWNLOAD_PHOTO_MAX_SIZE
     PROMPT_PHOTO_REMOVE = "Нажмите 'Удалить' для удаления имеющегося фото."
 
-    PROMPT_NEW_IOF = 'Укажите <u>имя</u>, возможно <u>отчество</u>, и <u>фамилию</u> родственника'
+    PROMPT_NEW_IOF = 'Укажите в одной строке <u>имя</u>, возможно <u>отчество</u>, и <u>фамилию</u> родственника'
 
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE
     
