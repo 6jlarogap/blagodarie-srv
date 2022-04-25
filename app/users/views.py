@@ -453,23 +453,19 @@ class ApiAuthTelegram(CreateUserMixin, SendMessageMixin, FrontendMixin, APIView)
                 oauth.update_timestamp = int(time.time())
                 oauth.save()
 
-            user_tg_field_map = dict(
-                # last_name='last_name',
-                # first_name='first_name',
-            )
-            changed = False
-            for f in user_tg_field_map:
-                if getattr(user, f) != rd.get(user_tg_field_map[f], ''):
-                    changed = True
-                    break
+            if user.last_name != '':
+                user.last_name = ''
+                changed = True
+            first_name = Profile.make_first_name(rd['last_name'], rd['first_name'])
+            if user.first_name != first_name:
+                user.first_name = first_name
+                changed = True
             was_not_active = False
             if not user.is_active:
                 changed = True
                 user.is_active = True
                 was_not_active = True
             if changed:
-                for f in user_tg_field_map:
-                    setattr(user, f, rd.get(user_tg_field_map[f], ''))
                 user.save()
 
             profile_tg_field_map = dict(
@@ -485,7 +481,7 @@ class ApiAuthTelegram(CreateUserMixin, SendMessageMixin, FrontendMixin, APIView)
                     setattr(profile, f, rd.get(profile_tg_field_map[f], ''))
                 profile.save()
             if was_not_active and profile.is_notified:
-                fio = profile.full_name(last_name_first=False) or 'Без имени'
+                fio = profile.user.first_name or 'Без имени'
                 message = "Cвязанный профиль '%s' восстановлен" % fio
                 self.send_to_telegram(message, telegram_uid=rd['id'])
         except Oauth.DoesNotExist:
@@ -832,7 +828,8 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
 
     PUT
         Править родственника или себя.
-        Требует авторизации.
+        Если задан верный tg_token: токен бота, то не требует авторизации.
+        Иначе требует авторизации
         На входе:
         form-data. Или multipart/form-data при наличии файла фото.
         При отсутствии файла photo можно передать в json структуре
@@ -857,7 +854,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                   (для base64- строки/файла - не более 10Мб *4/3).
                     - или пустая строка, тогда текущее фото, если имеется, то удаляется
     POST
-        * Добавить пользователя из бота телеграма.
+        * Добавить активного пользователя из бота телеграма.
             Не требует авторизации.
             На входе:
             Обязательны:
@@ -876,7 +873,10 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                         активировать пользователя, если был обезличен
 
         * Добавить родственника.
-        Требует авторизации.
+            - если из телеграм бота, обязательны:
+                tg_token: токен бота. Такой же записан в настройках АПИ
+                owner_id: id пользователя, владельца
+            - иначе требует авторизации.
         На входе:
         form-data. Или multipart/form-data при наличии файла фото.
         При отсутствии файла photo можно передать в json структуре
@@ -992,7 +992,6 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 query = request.GET['query']
                 q_oauth = Q(provider=Oauth.PROVIDER_TELEGRAM)
                 q_oauth &= \
-                    Q(user__last_name__icontains=query) | \
                     Q(user__first_name__icontains=query) | \
                     Q(user__wish__text__icontains=query) | \
                     Q(user__ability__text__icontains=query)
@@ -1010,11 +1009,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             elif request.GET.get('uuid_owner'):
                 data = []
                 users_selected = Profile.objects.filter(owner__profile__uuid=request.GET['uuid_owner']). \
-                    select_related('user', 'ability',).order_by(
-                        'user__last_name',
-                        'user__first_name',
-                        'middle_name',
-                    )
+                    select_related('user', 'ability',).order_by('user__first_name',)
                 for profile in users_selected:
                     data_item = profile.data_dict(request)
                     data_item.update(
@@ -1056,12 +1051,13 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             profile.photo.save(getattr(request.data['photo'], 'name', 'photo.png'), photo)
 
     def post_tg_data(self, request):
+        """
+        Сделать, если не существует, нового пользователя по telegram id
+        """
         profile = None
         data = dict()
         if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
             raise ServiceException('Неверный токен телеграм бота')
-        if not request.data.get('tg_uid'):
-            raise ServiceException('Не задан id пользователя в телеграме')
         last_name=request.data.get('last_name', '')
         first_name=request.data.get('first_name', '')
         try:
@@ -1080,12 +1076,15 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             if save_:
                 oauth.update_timestamp = int(time.time())
                 oauth.save()
+
             save_ = False
-            for f in ('last_name', 'first_name', ):
-                input_val = request.data.get(f, '')
-                if (getattr(user, f) != input_val) and input_val:
-                    setattr(user, f, input_val)
-                    save_ = True
+            if user.last_name != '':
+                user.last_name = ''
+                save_ = True
+            user_first_name = Profile.make_first_name(last_name, first_name)
+            if user.first_name != user_first_name:
+                user.first_name = user_first_name
+                save_ = True
             if save_:
                 user.save()
 
@@ -1113,30 +1112,38 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
         token, created_token = Token.objects.get_or_create(user=user)
         # Существующий Пользователь может быть обезличен
         if created_token and request.data.get('activate'):
-            user.last_name = last_name
-            user.first_name = first_name
+            user.last_name = ''
+            user.first_name = Profile.make_first_name(last_name, first_name)
             user.is_active = True
             user.save()
 
-        if profile:
-            data.update(profile.data_dict(request))
-            data.update(user_id=user.pk, tg_uid=oauth.uid, tg_username=oauth.username)
-            data.update(profile.data_WAK())
-        else:
-            data = {}
+        data.update(profile.data_dict(request))
+        data.update(user_id=user.pk, tg_uid=oauth.uid, tg_username=oauth.username)
+        data.update(profile.data_WAK())
         return data
 
     @transaction.atomic
     def post(self, request):
         try:
             status_code = status.HTTP_200_OK
-            if request.data.get('tg_token') and \
-               (request.data.get('tg_uid') or request.data.get('tg_username')):
+            if request.data.get('tg_token') and request.data.get('tg_uid'):
                 data = self.post_tg_data(request)
                 raise SkipException
 
-            if not request.user.is_authenticated:
+            # Запрос на создание owned user из телеграма ?:
+            if request.data.get('tg_token') and request.data.get('owner_id'):
+                if request.data['tg_token'] != settings.TELEGRAM_BOT_TOKEN:
+                    raise ServiceException('Неверный токен телеграм бота')
+                try:
+                    owner = User.objects.select_related('profile').get(pk=request.data['owner_id'])
+                    owner_profile = owner.profile
+                except User.DoesNotExist:
+                    raise ServiceException('Неверный ид пользователя владельца, для создания owned profile, из телеграм- бота')
+            elif not request.user.is_authenticated:
                 raise NotAuthenticated
+            else:
+                owner = request.user
+                owner_profile = owner.profile
             if not request.data.get('last_name') and not request.data.get('first_name'):
                 raise ServiceException('Фамилия или имя обязательно для нового')
             dob, dod =self.check_dates(request)
@@ -1147,24 +1154,24 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 relation = request.data.get('link_relation', '')
                 if relation not in ('new_is_father', 'new_is_mother', 'link_is_father', 'link_is_mother'):
                     raise ServiceException('При заданном link_uuid не получен или получен неправильный link_relation')
-                if not (link_profile.owner == request.user or link_user == request.user):
+                if not (link_profile.owner == owner or link_user == owner):
                     if link_profile.owner:
                         msg_user_to = link_profile.owner
                     else:
                         msg_user_to = link_user
                     if not CurrentState.objects.filter(
-                        user_from__in=(request.user, msg_user_to,),
-                        user_to__in=(request.user, msg_user_to,),
+                        user_from__in=(owner, msg_user_to,),
+                        user_to__in=(owner, msg_user_to,),
                         user_to__isnull=False,
                         is_trust=False,
                        ).exists():
                         if link_profile.owner:
                             msg = '%s предлагает указать родственника для %s' % (
-                                self.profile_link(request, request.user.profile),
+                                self.profile_link(request, owner_profile),
                                 self.profile_link(request, link_profile),
                             )
                         else:
-                            msg = '%s предлагает указать для Вас родственника' % self.profile_link(request, request.user.profile)
+                            msg = '%s предлагает указать для Вас родственника' % self.profile_link(request, owner_profile)
                         self.send_to_telegram(msg, msg_user_to)
                     raise ServiceException('У Вас нет права указывать родственника к этому профилю')
 
@@ -1188,7 +1195,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 last_name=request.data.get('last_name', ''),
                 first_name=request.data.get('first_name', ''),
                 middle_name=request.data.get('middle_name', ''),
-                owner=request.user,
+                owner=owner,
                 dob=dob,
                 dod=dod,
                 is_active=False,
@@ -1227,6 +1234,8 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             profile = user.profile
             self.save_photo(request, profile)
             data = profile.data_dict(request)
+            data.update(user_id=user.pk)
+            data.update(profile.data_WAK())
         except SkipException:
             pass
         except ServiceException as excpt:
@@ -1237,36 +1246,20 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
 
     @transaction.atomic
     def put(self, request):
+        status_code = 200
         try:
-            status_code = status.HTTP_200_OK
-            if request.data.get('tg_token') and request.data.get('uuid'):
-                if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+            if request.data.get('tg_token'):
+                if request.data['tg_token'] != settings.TELEGRAM_BOT_TOKEN:
                     raise ServiceException('Неверный токен телеграм бота')
                 user, profile = self.check_user_uuid(request.data.get('uuid'))
-                do_save = False
-                if 'photo' in request.data:
-                    do_save = True
-                    if request.data.get('photo'):
-                        self.save_photo(request, profile)
-                    else:
-                        profile.delete_from_media()
-                        profile.photo = None
-                        profile.photo_original_filename = ''
-                for f in ('latitude', 'longitude',):
-                    if f in  request.data:
-                        setattr(profile, f, request.data.get(f) or None)
-                        do_save = True
-                if request.data.get('did_bot_start') and not profile.did_bot_start:
-                    profile.did_bot_start = True
-                    do_save = True
-                if do_save:
-                    profile.save()
-                data = {}
-                raise SkipException
-
-            if not request.user.is_authenticated:
+            elif not request.user.is_authenticated:
                 raise NotAuthenticated
-            user, profile = self.check_user_or_owned_uuid(request, need_uuid=True)
+            else:
+                user, profile = self.check_user_or_owned_uuid(request, need_uuid=True)
+
+            if request.data.get('did_bot_start'):
+                profile.did_bot_start = True
+
             owner_uuid = request.data.get('owner_uuid')
             if owner_uuid:
                 new_owner, new_owner_profile = self.check_user_uuid(owner_uuid)
@@ -1281,12 +1274,16 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 profile.dob = dob
             if 'dod' in request.data:
                 profile.dod = dod
-            for f in ('last_name', 'first_name',):
-                if f in request.data:
-                    setattr(user, f, request.data.get(f) or '')
-            for f in ('middle_name',):
-                if f in request.data:
-                    setattr(profile, f, request.data.get(f) or '')
+
+            if request.data.get('last_name') or request.data.get('first_name'):
+                first_name = Profile.make_first_name(
+                    request.data.get('last_name', ''),
+                    request.data.get('first_name', ''),
+                    request.data.get('middle_name', ''),
+                )
+                user.last_name = ''
+                user.first_name = first_name
+
             profile.gender = request.data.get('gender', '').lower() or None
             for f in ('latitude', 'longitude', 'comment',):
                 if f in  request.data:
@@ -1361,9 +1358,9 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                     setattr(oauth, f, '')
                 oauth.update_timestamp = int(time.time())
                 oauth.save()
-            for f in ('first_name', 'email'):
+            for f in ('last_name', 'email'):
                 setattr(user, f, '')
-            user.last_name = "Обезличен"
+            user.first_name = "Обезличен"
             user.is_active = False
             user.save()
             if message:

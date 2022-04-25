@@ -36,10 +36,9 @@ class SendMessageMixin(FrontendMixin):
 
     def profile_link(self, request, profile,):
         url_profile = self.get_frontend_url(request, 'profile') + '?id=%s' % profile.uuid
-        full_name = profile.full_name(last_name_first=False) or 'Без имени'
-        link = '<a href="%(url_profile)s">%(full_name)s</a>' % dict(
+        link = '<a href="%(url_profile)s">%(first_name)s</a>' % dict(
             url_profile=url_profile,
-            full_name=full_name,
+            first_name=profile.user.first_name or 'Без имени',
         )
         return link
 
@@ -1161,15 +1160,12 @@ class ApiGetStats(SQL_Mixin, APIView):
             # }
 
             users = dict()
-            for user in User.objects.filter(is_superuser=False):
-                initials = ''
-                first_name = user.first_name.strip()
-                if first_name:
-                    initials += first_name[0]
-                last_name = user.last_name.strip()
-                if last_name:
-                    initials += last_name[0]
-                users[user.pk] = dict(initials=initials)
+            for user in User.objects.filter(is_superuser=False, profile__owner__isnull=True):
+                names = user.first_name.split()
+                for i, name in enumerate(names):
+                    if i < len(names) - 1:
+                        names[i] = names[i][0].upper() + '.'
+                users[user.pk] = dict(initials=''.join(names) or 'Без имени')
             connections = []
             for cs in CurrentState.objects.filter(
                         user_to__isnull=False,
@@ -1216,9 +1212,7 @@ class ApiGetStats(SQL_Mixin, APIView):
             query = request.GET.get('query')
             if query:
                 q_users &= \
-                    Q(last_name__icontains=query) | \
                     Q(first_name__icontains=query) | \
-                    Q(profile__middle_name__icontains=query) | \
                     Q(wish__text__icontains=query) | \
                     Q(ability__text__icontains=query) | \
                     Q(key__value__icontains=query)
@@ -2355,7 +2349,6 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, APIView):
                 # '%QUERY%' :
                 like_value = "'%" + self.sql_like_value(query.upper()) + "%'"
                 query_where = """
-                    UPPER(auth_user.last_name) LIKE %(like_value)s OR
                     UPPER(auth_user.first_name) LIKE %(like_value)s OR
                     UPPER(contact_wish.text) LIKE %(like_value)s OR
                     UPPER(contact_ability.text) LIKE %(like_value)s OR
@@ -3000,8 +2993,8 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
             d = cs.data_dict()
             # TODO remove below, it is for debug
             d.update({
-                'source_fio': cs.user_from.profile.full_name(),
-                'target_fio': cs.user_to.profile.full_name(),
+                'source_fio': cs.user_from.first_name,
+                'target_fio': cs.user_to.first_name,
             })
             connections.append(d)
 
@@ -3029,8 +3022,8 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
             d = cs.data_dict(show_parent=False)
             # TODO remove below, it is for debug
             d.update({
-                'source_fio': cs.user_from.profile.full_name(),
-                'target_fio': cs.user_to.profile.full_name(),
+                'source_fio': cs.user_from.first_name,
+                'target_fio': cs.user_to.first_name,
             })
             trust_connections.append(d)
 
@@ -3115,9 +3108,7 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
             profiles_dict[profile.user.pk] = dict(
                 uuid=profile.uuid,
                 # TODO remove below, it is for debug
-                last_name=profile.user.last_name,
                 first_name=profile.user.first_name,
-                middle_name=profile.middle_name,
                 user_pk=profile.user.pk,
             )
             users.append(profile.data_dict(request))
@@ -3130,18 +3121,10 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
 
             # TODO: remove this debug:
             #
-            c['source_fio'] = "%s %s %s" % (
-                profiles_dict[c['source']]['last_name'] or '-',
-                profiles_dict[c['source']]['first_name'] or '-',
-                profiles_dict[c['source']]['middle_name'] or '-',
-            )
+            c['source_fio'] = profiles_dict[c['source']]['first_name']
             c['source_id'] = profiles_dict[c['source']]['user_pk']
 
-            c['target_fio'] = "%s %s %s" % (
-                profiles_dict[c['target']]['last_name'] or '-',
-                profiles_dict[c['target']]['first_name'] or '-',
-                profiles_dict[c['target']]['middle_name'] or '-',
-            )
+            c['target_fio'] = profiles_dict[c['target']]['first_name']
             c['target_id'] = profiles_dict[c['target']]['user_pk']
             # ------------------------
 
@@ -3166,8 +3149,8 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
             d = cs.data_dict(show_parent=False)
             # TODO remove below, it is for debug
             d.update({
-                'source_fio': cs.user_from.profile.full_name(),
-                'target_fio': cs.user_to.profile.full_name(),
+                'source_fio': cs.user_from.first_name,
+                'target_fio': cs.user_to.first_name,
             })
             trust_connections.append(d)
 

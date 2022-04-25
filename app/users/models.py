@@ -350,10 +350,10 @@ class Profile(PhotoModel, GeoPointModel):
     comment = models.TextField(verbose_name=_("Примечание"), null=True)
 
     class Meta:
-        ordering = ('user__last_name', 'user__first_name', 'middle_name', )
+        ordering = ('user__first_name', )
 
     def __str__(self):
-        return self.full_name() or str(self.pk)
+        return self.user.first_name or str(self.pk)
 
     def data_dict(self, request, google_photo_size=None):
         user = self.user
@@ -550,26 +550,17 @@ class Profile(PhotoModel, GeoPointModel):
         if do_save:
             self.save(update_fields=('fame', 'trust_count', 'mistrust_count',))
 
-    def full_name(self, put_middle_name=True, last_name_first=True):
-        name = ""
-        if last_name_first:
-            if self.user.last_name:
-                name = self.user.last_name
-                if self.user.first_name:
-                    name = "{0} {1}".format(name, self.user.first_name)
-                    if put_middle_name and self.middle_name:
-                        name = "{0} {1}".format(name, self.middle_name)
+    @classmethod
+    def make_first_name(cls, last_name, first_name, middle_name=''):
+        """
+        В user.first_name будет и о ф
+        """
+        if middle_name and not first_name:
+            result = (last_name or '').strip()
         else:
-            if self.user.last_name:
-                f = self.user.last_name.strip()
-                i_o = self.user.first_name.strip()
-                if i_o and self.middle_name and put_middle_name:
-                    i_o += ' ' + self.middle_name
-                name = i_o + ' ' + f
-                name = name.strip()
-        if not name:
-            name = self.user.get_full_name()
-        return name
+            result = " ".join(((first_name or ''), (middle_name or ''), (last_name or ''),)).strip()
+        result = re.sub(r'\s{2,}', ' ', result)
+        return result or 'Без имени'
 
     @classmethod
     def choose_photo_of(cls, request, photo, photo_url, google_photo_size=None):
@@ -656,8 +647,8 @@ class CreateUserMixin(object):
                     username = "%s-%s" % (dt_str, ''.join(random.choice(chars) for x in range(5)),)
                     user = User.objects.create(
                         username=username,
-                        last_name=last_name,
-                        first_name=first_name,
+                        last_name='',
+                        first_name=Profile.make_first_name(last_name, first_name, middle_name),
                         email=email,
                         is_active=is_active,
                     )
@@ -667,7 +658,7 @@ class CreateUserMixin(object):
         if user:
             Profile.objects.create(
                 user=user,
-                middle_name=middle_name,
+                middle_name='',
                 photo_url=photo_url,
                 owner=owner,
                 dob=dob,
@@ -690,8 +681,15 @@ class CreateUserMixin(object):
             oauth.save(update_fields=Oauth.OAUTH_EXTRA_FIELDS + ('update_timestamp',))
 
         user = oauth.user
-        user_fields = ('last_name', 'first_name', 'email',)
         changed = False
+        if user.last_name != '':
+            user.last_name = ''
+            changed = True
+        first_name = Profile.make_first_name(oauth_result['last_name'], oauth_result['first_name'])
+        if user.first_name != first_name:
+            user.first_name = first_name
+            changed = True
+        user_fields = ('email',)
         for f in user_fields:
             if oauth_result[f] and getattr(user, f) != oauth_result[f]:
                 setattr(user, f, oauth_result[f])

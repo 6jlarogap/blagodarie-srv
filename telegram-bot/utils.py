@@ -81,6 +81,8 @@ class Misc(object):
     PROMPT_PHOTO = 'Отправьте мне <b>фото</b>, не более %s Мб размером.' % settings.DOWNLOAD_PHOTO_MAX_SIZE
     PROMPT_PHOTO_REMOVE = "Нажмите 'Удалить' для удаления имеющегося фото."
 
+    PROMPT_NEW_IOF = 'Укажите <u>имя</u>, возможно <u>отчество</u>, и <u>фамилию</u> родственника'
+
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE
     
     @classmethod
@@ -236,7 +238,7 @@ class Misc(object):
         """
         if not response:
             return ''
-        iof = cls.get_iof(response, put_middle_name=bool(response.get('owner_id')))
+        iof = cls.get_iof(response)
         lifetime_str = cls.get_lifetime_str(response)
         if lifetime_str:
             lifetime_str += '\n'
@@ -250,7 +252,6 @@ class Misc(object):
             ) % dict(
             iof=iof,
             lifetime_str=lifetime_str,
-            last_name=response['last_name'],
             trust_count=response['trust_count'],
             sum_thanks_count=response['sum_thanks_count'],
             mistrust_count=response['mistrust_count'],
@@ -586,14 +587,16 @@ class Misc(object):
 
 
     @classmethod
-    def get_iof(cls, response, put_middle_name=True):
-        result = '%s %s %s' % (
-            response.get('first_name') or '',
-            put_middle_name and response.get('middle_name') or '',
-            response.get('last_name') or '',
-        )
+    def get_iof(cls, response):
+        last_name = response.get('last_name', '') or ''
+        first_name = response.get('first_name', '') or ''
+        middle_name = response.get('middle_name', '') or ''
+        if middle_name and not first_name:
+            result = (last_name or '').strip()
+        else:
+            result = " ".join(((first_name or ''), (middle_name or ''), (last_name or ''),)).strip()
         result = re.sub(r'\s{2,}', ' ', result)
-        return result.strip()
+        return result or 'Без имени'
 
 
     @classmethod
@@ -647,3 +650,21 @@ class Misc(object):
         reply_markup = InlineKeyboardMarkup()
         reply_markup.row(inline_btn_cancel)
         return reply_markup
+
+
+    @classmethod
+    async def put_tg_user_photo(cls, photo, response):
+        if photo and response and response.get('uuid'):
+            logging.debug('put tg_user_photo...')
+            payload_photo = dict(
+                tg_token=settings.TOKEN,
+                photo=photo,
+                uuid=response['uuid'],
+            )
+            status, response = await Misc.api_request(
+                path='/api/profile',
+                method='put',
+                data=payload_photo,
+            )
+            logging.debug('put tg_user_photo, status: %s' % status)
+            logging.debug('put tg_user_photo, response: %s' % response)

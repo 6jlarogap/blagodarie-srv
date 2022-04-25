@@ -25,6 +25,9 @@ class FSMability(StatesGroup):
 class FSMwish(StatesGroup):
     ask = State()
 
+class FSMnewIOF(StatesGroup):
+    ask = State()
+
 class FSMphoto(StatesGroup):
     ask = State()
     remove = State()
@@ -160,9 +163,6 @@ async def put_ability(message, state):
     logging.debug('put_ability: post tg_user data')
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
-
-    logging.debug('get_or_create tg_user_sender data in api, status_sender: %s' % status_sender)
-    logging.debug('get_or_create tg_user_sender data in api, response_sender: %s' % response_sender)
     if status_sender == 200:
         user_uuid = response_sender['uuid']
         async with state.proxy() as data:
@@ -228,9 +228,6 @@ async def put_wish(message, state):
     logging.debug('put_wish: post tg_user data')
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
-
-    logging.debug('get_or_create tg_user_sender data in api, status_sender: %s' % status_sender)
-    logging.debug('get_or_create tg_user_sender data in api, response_sender: %s' % response_sender)
     if status_sender == 200:
         user_uuid = response_sender['uuid']
         async with state.proxy() as data:
@@ -296,9 +293,6 @@ async def put_photo(message, state):
     logging.debug('put_photo: post tg_user data')
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
-
-    logging.debug('get_or_create tg_user_sender data in api, status_sender: %s' % status_sender)
-    logging.debug('get_or_create tg_user_sender data in api, response_sender: %s' % response_sender)
     if status_sender == 200:
         user_uuid = None
         async with state.proxy() as data:
@@ -504,6 +498,74 @@ async def process_callback_photo_remove_confirmed(callback_query: types.Callback
             await message.reply(Misc.MSG_ERROR_API)
     await Misc.state_finish(state)
 
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMnewIOF.ask,
+)
+async def put_new_iof(message, state):
+    if message.content_type != ContentType.TEXT:
+        reply_markup = Misc.reply_markup_cancel_row()
+        await message.reply(
+            Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + \
+            Misc.PROMPT_NEW_IOF,
+            reply_markup=reply_markup
+        )
+        return
+    bot_data = await bot.get_me()
+    logging.debug('put_new_iof: post tg_user data')
+    tg_user_sender = message.from_user
+    status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+    if status_sender == 200 and response_sender and response_sender.get('user_id'):
+        message_text = message.text.strip()
+        message_text = re.sub(r'\s{2,}', ' ', message_text)
+        payload_iof = dict(
+            tg_token=settings.TOKEN,
+            owner_id=response_sender['user_id'],
+            first_name=message_text,
+        )
+        logging.debug('post iof, payload: %s' % payload_iof)
+        status, response = await Misc.api_request(
+            path='/api/profile',
+            method='post',
+            data=payload_iof,
+        )
+        logging.debug('post iof, status: %s' % status)
+        logging.debug('post iof, response: %s' % response)
+        if status == 200:
+            await message.reply('Добавлен(а)')
+            try:
+                status, response = await Misc.get_user_by_uuid(response['uuid'])
+                if status == 200:
+                    await Misc.show_cards(
+                        [response],
+                        message,
+                        bot_data,
+                        response_from=response_sender,
+                    )
+            except:
+                pass
+    await Misc.state_finish(state)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('new', ),
+    state=None,
+)
+async def process_command_new(message):
+    reply_markup = Misc.reply_markup_cancel_row()
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    await FSMnewIOF.ask.set()
+    state = dp.current_state()
+    await message.reply(Misc.PROMPT_NEW_IOF, reply_markup=reply_markup)
+    if status_sender and response_sender.get('created'):
+        photo = await Misc.get_user_photo(bot, message.from_user)
+        if photo:
+            await Misc.put_tg_user_photo(photo, response_sender)
+
+
 @dp.callback_query_handler(
     lambda c: c.data and re.search(r'^(%s)%s' % (
         KeyboardType.TRUST_THANK_VER_2,
@@ -624,7 +686,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             tg_user_from_username = profile_from['tg_data']['username']
         except KeyError:
             tg_user_from_username = None
-        full_name_to = Misc.get_iof(profile_to, put_middle_name=False)
+        full_name_to = Misc.get_iof(profile_to)
         full_name_to_link = (
                 '<a href="%(frontend_host)s/profile/?id=%(uuid)s">%(full_name)s</a>'
             ) % dict(
@@ -693,7 +755,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
             )
             deeplink_receiver = deeplink_template % dict(
                 deeplink=Misc.get_deeplink(profile_to, bot_data),
-                full_name=Misc.get_iof(profile_to, put_middle_name=False)
+                full_name=Misc.get_iof(profile_to)
             )
             reply %= dict(deeplink_sender=deeplink_sender, deeplink_receiver=deeplink_receiver)
             try:
@@ -760,20 +822,8 @@ async def process_callback_tn(callback_query: types.CallbackQuery):
 
     if response_sender.get('created'):
         tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
-        logging.debug('put tg_user_sender_photo...')
         if tg_user_sender_photo:
-            payload_photo = dict(
-                tg_token=settings.TOKEN,
-                photo=tg_user_sender_photo,
-                uuid=response_sender['uuid'],
-            )
-            status, response = await Misc.api_request(
-                path='/api/profile',
-                method='put',
-                data=payload_photo,
-            )
-            logging.debug('put tg_user_sender_photo, status: %s' % status)
-            logging.debug('put tg_user_sender_photo, response: %s' % response)
+            await Misc.put_tg_user_photo(tg_user_sender_photo, response_sender)
 
 
 async def geo(message: types.Message, uuid=None):
@@ -928,7 +978,7 @@ async def echo_getowned_to_bot(message: types.Message):
     reply = ''
     for response in a_response_to:
         deeplink=Misc.get_deeplink(response, bot_data)
-        iof = Misc.get_iof(response, put_middle_name=True)
+        iof = Misc.get_iof(response)
         lifetime_years_str = Misc.get_lifetime_years_str(response)
         if lifetime_years_str:
             lifetime_years_str = ', ' + lifetime_years_str
@@ -1237,37 +1287,13 @@ async def echo_send_to_bot(message: types.Message):
 
     if user_from_id and response_from.get('created'):
         tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
-        logging.debug('put tg_user_sender_photo...')
         if tg_user_sender_photo:
-            payload_photo = dict(
-                tg_token=settings.TOKEN,
-                photo=tg_user_sender_photo,
-                uuid=response_from['uuid'],
-            )
-            status, response = await Misc.api_request(
-                path='/api/profile',
-                method='put',
-                data=payload_photo,
-            )
-            logging.debug('put tg_user_sender_photo, status: %s' % status)
-            logging.debug('put tg_user_sender_photo, response: %s' % response)
+            await Misc.put_tg_user_photo(tg_user_sender_photo, response_from)
 
     if state == 'forwarded_from_other' and a_response_to and a_response_to[0].get('created'):
         tg_user_forwarded_photo = await Misc.get_user_photo(bot, tg_user_forwarded)
         if tg_user_forwarded_photo:
-            logging.debug('put tg_user_forwarded_photo...')
-            payload_photo = dict(
-                tg_token=settings.TOKEN,
-                photo=tg_user_forwarded_photo,
-                uuid=response_to['uuid'],
-            )
-            status, response = await Misc.api_request(
-                path='/api/profile',
-                method='put',
-                data=payload_photo,
-            )
-            logging.debug('put tg_user_forwarded_photo, status: %s' % status)
-            logging.debug('put tg_user_forwarded_photo, response: %s' % response)
+            await Misc.put_tg_user_photo(tg_user_forwarded_photo, response_to)
 
 
 @dp.message_handler(
@@ -1506,20 +1532,8 @@ async def echo_send_to_group(message: types.Message):
         if response_from.get('created'):
             tg_user = a_users_in[i]
             tg_user_photo = await Misc.get_user_photo(bot, tg_user)
-            logging.debug('put tg_user_photo...')
             if tg_user_photo:
-                payload_photo = dict(
-                    tg_token=settings.TOKEN,
-                    photo=tg_user_photo,
-                    uuid=response_from['uuid'],
-                )
-                status, response = await Misc.api_request(
-                    path='/api/profile',
-                    method='put',
-                    data=payload_photo,
-                )
-                logging.debug('put tg_user_photo, status: %s' % status)
-                logging.debug('put tg_user_photo, response: %s' % response)
+                await Misc.put_tg_user_photo(tg_user_photo, response_from)
 
 # ---------------------------------
 
