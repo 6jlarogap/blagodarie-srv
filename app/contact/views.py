@@ -325,6 +325,10 @@ class ApiAddOperationMixin(object):
                     raise ServiceException('Такой папа уже задан')
                 elif is_mother and currentstate.is_mother:
                     raise ServiceException('Такая мама уже задана')
+                elif is_father and currentstate.is_mother:
+                    raise ServiceException('Попытка назначить человеку папу его маму')
+                elif is_mother and currentstate.is_father:
+                    raise ServiceException('Попытка назначить человеку маму его папу')
                 else:
                     currentstate.update_timestamp = update_timestamp
                     currentstate.is_father = is_father
