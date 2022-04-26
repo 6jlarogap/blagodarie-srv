@@ -518,7 +518,7 @@ async def put_new_iof(message, state):
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
     if status_sender == 200 and response_sender and response_sender.get('user_id'):
-        message_text = message.text.strip()
+        message_text = message.text.strip().strip("'").strip()
         message_text = re.sub(r'\s{2,}', ' ', message_text)
         message_text = re.sub(r'\s', ' ', message_text)
         payload_iof = dict(

@@ -17,6 +17,9 @@ class OperationType(object):
     TRUST = 3
     NULLIFY_TRUST = 4
     TRUST_AND_THANK = 5
+    FATHER = 6
+    NOT_PARENT = 7
+    MOTHER = 8
 
     @classmethod
     def relation_text(cls, is_trust):
@@ -81,7 +84,7 @@ class Misc(object):
     PROMPT_PHOTO = 'Отправьте мне <b>фото</b>, не более %s Мб размером.' % settings.DOWNLOAD_PHOTO_MAX_SIZE
     PROMPT_PHOTO_REMOVE = "Нажмите 'Удалить' для удаления имеющегося фото."
 
-    PROMPT_NEW_IOF = 'Укажите в одной строке имя фамилию и отчество, например: Иван Иванович Иванов'
+    PROMPT_NEW_IOF = "Укажите имя отчество и фамилию - в одной строке, например: 'Иван Иванович Иванов'"
 
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE
     

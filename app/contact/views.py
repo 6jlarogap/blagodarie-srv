@@ -552,14 +552,6 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                     profile_to = user_to.profile
                 except (User.DoesNotExist, ValueError,):
                     raise ServiceException('Не задан или не найден user_id_to')
-                if not (operationtype_id in (
-                        OperationType.THANK,
-                        OperationType.MISTRUST,
-                        OperationType.TRUST,
-                        OperationType.NULLIFY_TRUST,
-                        OperationType.TRUST_AND_THANK,
-                    )):
-                    raise ServiceException('Недопустимый operation_type_id для операции от бота')
                 tg_from_chat_id = request.data.get('tg_from_chat_id')
                 tg_message_id = request.data.get('tg_message_id')
                 got_tg_token = True
