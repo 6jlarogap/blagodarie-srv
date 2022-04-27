@@ -1,5 +1,6 @@
 import base64, re
 from io import BytesIO
+from uuid import UUID
 
 import settings
 from settings import logging
@@ -32,6 +33,9 @@ class FSMphoto(StatesGroup):
     ask = State()
     remove = State()
 
+class FSMpapaMama(StatesGroup):
+    ask = State()
+
 last_user_in_group = None
 
 bot = Bot(
@@ -50,6 +54,160 @@ async def on_shutdown(dp):
     if settings.START_MODE == 'webhook':
         await bot.delete_webhook()
 
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMpapaMama.ask,
+)
+async def put_papa_mama(message, state):
+    if message.content_type != ContentType.TEXT:
+        await message.reply(
+            Misc.MSG_ERROR_TEXT_ONLY,
+            reply_markup=Misc.reply_markup_cancel_row()
+        )
+        return
+    user_uuid_to = None
+    m = re.search(Misc.UUID_PATTERN, message.text)
+    if m:
+        s = m.group(0)
+        try:
+            UUID(s)
+            user_uuid_to = s
+        except (TypeError, ValueError,):
+            pass
+    if not user_uuid_to:
+        await message.reply(
+            Misc.MSG_ERROR_UUID_NOT_VALID + '\nПовторите, пожалуйста' ,
+            reply_markup=Misc.reply_markup_cancel_row()
+        )
+        return
+
+    user_uuid_from = is_father = ''
+    async with state.proxy() as data:
+        if data.get('uuid'):
+            user_uuid_from = data['uuid']
+            is_father = data.get('is_father')
+        data['uuid'] = data['is_father'] = ''
+    if not user_uuid_from or not isinstance(is_father, bool) or \
+       not await Misc.check_owner(owner_tg_user=message.from_user, uuid=user_uuid_from):
+        await Misc.state_finish(state)
+        return
+
+    post_op = dict(
+        tg_token=settings.TOKEN,
+        operation_type_id=OperationType.SET_FATHER if is_father else OperationType.SET_MOTHER,
+        user_uuid_from=user_uuid_from,
+        user_uuid_to=user_uuid_to,
+    )
+    logging.debug('post operation, payload: %s' % post_op)
+    status, response = await Misc.api_request(
+        path='/api/addoperation',
+        method='post',
+        data=post_op,
+    )
+    logging.debug('post operation, status: %s' % status)
+    logging.debug('post operation, response: %s' % response)
+    if not (status == 200 or \
+           status == 400 and response.get('code') == 'already'):
+        if status == 400  and response.get('message'):
+            await message.reply(
+                'Ошибка!\n%s\n\nНазначайте родителя по новой' % response['message']
+            )
+        else:
+            await message.reply(Misc.MSG_ERROR_API)
+    else:
+        if response and response.get('profile_from') and response.get('profile_to'):
+            await message.reply(
+                '%(iof_to)s\n'
+                'отмечен%(_a_)s как %(papa_or_mama)s для:\n'
+                '%(iof_from)s\n' % dict(
+                    iof_from = Misc.get_iof(response['profile_from']),
+                    iof_to = Misc.get_iof(response['profile_to']),
+                    papa_or_mama='папа' if is_father else 'мама',
+                    _a_='' if is_father else 'а',
+            ))
+        else:
+            await message.reply('Родитель внесен в данные')
+    await Misc.state_finish(state)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s|%s)%s' % (
+        KeyboardType.FATHER, KeyboardType.MOTHER,
+        KeyboardType.SEP,
+        # uuid папы или мамы           # 1
+        # KeyboardType.SEP,
+    ), c.data
+    ))
+async def process_callback_papa_mama(callback_query: types.CallbackQuery):
+    """
+    Действия по заданию папы, мамы
+    """
+    if callback_query.message:
+        tg_user_sender = callback_query.from_user
+        code = callback_query.data.split(KeyboardType.SEP)
+        uuid = None
+        try:
+            uuid = code[1]
+        except IndexError:
+            pass
+        if not uuid:
+            return
+        if not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+            return
+        is_father = str(code[0]) == str(KeyboardType.FATHER)
+        status_uuid, response_uuid = await Misc.get_user_by_uuid(uuid)
+        if status_uuid == 200 and response_uuid:
+            bot_data = await bot.get_me()
+            state = dp.current_state()
+            async with state.proxy() as data:
+                data['uuid'] = uuid
+                data['is_father'] = is_father
+            prompt_papa_mama = Misc.PROMPT_PAPA_MAMA % dict(
+                bot_data_username=bot_data['username'],
+                name=response_uuid['first_name'],
+                papy_or_mamy='папы' if is_father else 'мамы',
+            )
+            await FSMpapaMama.ask.set()
+            await callback_query.message.reply(
+                prompt_papa_mama,
+                reply_markup=Misc.reply_markup_cancel_row(),
+                disable_web_page_preview=True,
+            )
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.CHANGE_OWNER,
+        KeyboardType.SEP,
+        # uuid папы или мамы           # 1
+        # KeyboardType.SEP,
+    ), c.data
+    ))
+async def process_callback_change_owner(callback_query: types.CallbackQuery):
+    """
+    Действия по смене владельца
+    """
+    if callback_query.message:
+        tg_user_sender = callback_query.from_user
+        code = callback_query.data.split(KeyboardType.SEP)
+        uuid = None
+        try:
+            uuid = code[1]
+        except IndexError:
+            pass
+        if not uuid:
+            return
+        if not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+            return
+        try:
+            await bot.answer_callback_query(
+                    callback_query.id,
+                    text='Пока не реализовано: смена владельца',
+                    show_alert=True,
+                )
+        except (ChatNotFound, CantInitiateConversation):
+            pass
 
 async def do_process_ability(message: types.Message, uuid=None):
     reply_markup = Misc.reply_markup_cancel_row()
@@ -561,7 +719,7 @@ async def process_command_new(message):
     await FSMnewIOF.ask.set()
     state = dp.current_state()
     await message.reply(Misc.PROMPT_NEW_IOF, reply_markup=reply_markup)
-    if status_sender and response_sender.get('created'):
+    if status_sender == 200 and response_sender.get('created'):
         photo = await Misc.get_user_photo(bot, message.from_user)
         if photo:
             await Misc.put_tg_user_photo(photo, response_sender)
@@ -1027,8 +1185,9 @@ async def echo_stat_to_bot(message: types.Message):
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     content_types=ContentType.all(),
+    state=None,
 )
-async def echo_send_to_bot(message: types.Message):
+async def echo_send_to_bot(message: types.Message, state: FSMContext):
     """
     Обработка остальных сообщений в бот
     
@@ -1099,7 +1258,7 @@ async def echo_send_to_bot(message: types.Message):
 
     tg_user_forwarded = None
 
-    state = ''
+    state_ = ''
 
     # Кого будут благодарить
     # или свой профиль в массиве
@@ -1123,12 +1282,12 @@ async def echo_send_to_bot(message: types.Message):
             elif tg_user_forwarded.is_bot:
                 reply = 'Сообщения, пересланные от ботов, пока не обрабатываются'
             elif tg_user_forwarded.id == tg_user_sender.id:
-                state = 'forwarded_from_me'
+                state_ = 'forwarded_from_me'
             else:
-                state = 'forwarded_from_other'
+                state_ = 'forwarded_from_other'
         else:
             if message_text in ('/start', '/ya', '/я'):
-                state = 'start'
+                state_ = 'start'
             else:
                 m = re.search(
                     r'^\/start\s+([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
@@ -1137,12 +1296,12 @@ async def echo_send_to_bot(message: types.Message):
                 )
                 if m:
                     # /start 293d987f-4ee8-407c-a614-7110cad3552f
-                    # state = 'start_uuid'
+                    # state_ = 'start_uuid'
                     uuid_to_search = m.group(1).lower()
-                    state = 'start_uuid'
+                    state_ = 'start_uuid'
                 else:
                     if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
-                        state = 'invalid_message_text'
+                        state_ = 'invalid_message_text'
                         reply = Misc.help_text()
                     else:
                         usernames, text_stripped = Misc.get_text_usernames(message_text)
@@ -1160,9 +1319,9 @@ async def echo_send_to_bot(message: types.Message):
                             logging.debug('get by username, response: %s' % response)
                             if status == 200 and response:
                                 a_response_to += response
-                                state = 'found_username'
+                                state_ = 'found_username'
                             else:
-                                state = 'not_found'
+                                state_ = 'not_found'
 
                         if text_stripped and len(text_stripped) >= settings.MIN_LEN_SEARCHED_TEXT:
                             payload_query = dict(
@@ -1177,14 +1336,14 @@ async def echo_send_to_bot(message: types.Message):
                             logging.debug('get by query, response: %s' % response)
                             if status == 200 and response:
                                 a_response_to += response
-                                state = 'found_in_search'
-                            elif state != 'found_username':
-                                state = 'not_found'
+                                state_ = 'found_in_search'
+                            elif state_ != 'found_username':
+                                state_ = 'not_found'
 
-    if state == 'not_found':
+    if state_ == 'not_found':
         reply = 'Профиль не найден'
 
-    if state:
+    if state_:
         logging.debug('get_or_create tg_user_sender data in api...')
         payload_from = dict(
             tg_token=settings.TOKEN,
@@ -1206,13 +1365,13 @@ async def echo_send_to_bot(message: types.Message):
             if status == 200:
                 response_from.update(tg_username=tg_user_sender.username)
                 user_from_id = response_from.get('user_id')
-                if state in ('start', 'forwarded_from_me', ) or \
-                   state == 'start_uuid' and response_from.get('created'):
+                if state_ in ('start', 'forwarded_from_me', ) or \
+                   state_ == 'start_uuid' and response_from.get('created'):
                     a_response_to += [response_from, ]
         except:
             pass
 
-    if user_from_id and state == 'start_uuid':
+    if user_from_id and state_ == 'start_uuid':
         logging.debug('get tg_user_by_start_uuid data in api...')
         payload_uuid = dict(
             uuid=uuid_to_search,
@@ -1229,7 +1388,7 @@ async def echo_send_to_bot(message: types.Message):
         except:
             pass
 
-    if user_from_id and state == 'forwarded_from_other':
+    if user_from_id and state_ == 'forwarded_from_other':
         logging.debug('get_or_create tg_user_forwarded data in api...')
         payload_to = dict(
             tg_token=settings.TOKEN,
@@ -1253,7 +1412,7 @@ async def echo_send_to_bot(message: types.Message):
         except:
             pass
 
-    if user_from_id and state in ('forwarded_from_other', 'forwarded_from_me'):
+    if user_from_id and state_ in ('forwarded_from_other', 'forwarded_from_me'):
         usernames, text_stripped = Misc.get_text_usernames(message_text)
         if usernames:
             logging.debug('@usernames found in message text\n')
@@ -1271,8 +1430,8 @@ async def echo_send_to_bot(message: types.Message):
                 a_response_to += response
 
 
-    if state and state not in ('not_found', 'invalid_message_text',) and user_from_id and a_response_to:
-        message_to_forward_id = state == 'forwarded_from_other' and message.message_id or ''
+    if state_ and state_ not in ('not_found', 'invalid_message_text',) and user_from_id and a_response_to:
+        message_to_forward_id = state_ == 'forwarded_from_other' and message.message_id or ''
 
         await Misc.show_cards(
             a_response_to,
@@ -1291,7 +1450,7 @@ async def echo_send_to_bot(message: types.Message):
         if tg_user_sender_photo:
             await Misc.put_tg_user_photo(tg_user_sender_photo, response_from)
 
-    if state == 'forwarded_from_other' and a_response_to and a_response_to[0].get('created'):
+    if state_ == 'forwarded_from_other' and a_response_to and a_response_to[0].get('created'):
         tg_user_forwarded_photo = await Misc.get_user_photo(bot, tg_user_forwarded)
         if tg_user_forwarded_photo:
             await Misc.put_tg_user_photo(tg_user_forwarded_photo, response_to)

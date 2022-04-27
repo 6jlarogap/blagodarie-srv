@@ -284,14 +284,18 @@ class ApiAddOperationMixin(object):
 
             profile_to.recount_trust_fame()
 
-        elif operationtype_id in (OperationType.FATHER, OperationType.MOTHER,):
+        elif operationtype_id in (
+                OperationType.FATHER, OperationType.MOTHER,
+                OperationType.SET_FATHER, OperationType.SET_MOTHER,
+             ):
 
-            if operationtype_id == OperationType.FATHER:
+            if operationtype_id in (OperationType.FATHER, OperationType.SET_FATHER,):
                 is_father = True
                 is_mother = False
             else:
                 is_father = False
                 is_mother = True
+            do_set = operationtype_id in (OperationType.SET_FATHER, OperationType.SET_MOTHER,)
 
             q = Q(user_from=user_to, user_to=user_from, is_child=False)
             q &= Q(is_mother=True) | Q(is_father=True)
@@ -306,13 +310,33 @@ class ApiAddOperationMixin(object):
                 q = q_to & Q(is_father=True)
             else:
                 q = q_to & Q(is_mother=True)
-            try:
-                CurrentState.objects.filter(q)[0]
-                raise ServiceException('У человека уже есть %s' % ('папа' if is_father else 'мама'))
-            except IndexError:
-                pass
+            if do_set:
+                # При замене папы, если у человека уже есть другой папа, убираем это!
+                # Аналогично если есть другая мама.
+                #
+                CurrentState.objects.filter(q).update(
+                    is_father=False,
+                    is_mother=False,
+                    is_child=False,
+                )
+                q_to = Q(user_to=user_from, is_child=True) & ~Q(user_from=user_to)
+                if is_father:
+                    q = q_to & Q(is_father=True)
+                else:
+                    q = q_to & Q(is_mother=True)
+                CurrentState.objects.filter(q).update(
+                    is_father=False,
+                    is_mother=False,
+                    is_child=False,
+                )
+            else:
+                try:
+                    CurrentState.objects.filter(q)[0]
+                    raise ServiceException('У человека уже есть %s' % ('папа' if is_father else 'мама'))
+                except IndexError:
+                    pass
 
-            currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
+            currentstate, created_ = CurrentState.objects.get_or_create(
                 user_from=user_from,
                 user_to=user_to,
                 defaults=dict(
@@ -321,16 +345,13 @@ class ApiAddOperationMixin(object):
                     is_child=False,
             ))
             if not created_:
-                if is_father and currentstate.is_father:
-                    raise ServiceException('Такой папа уже задан')
-                elif is_mother and currentstate.is_mother:
-                    raise ServiceException('Такая мама уже задана')
-                elif is_father and currentstate.is_mother:
-                    raise ServiceException('Попытка назначить человеку папу его маму')
-                elif is_mother and currentstate.is_father:
-                    raise ServiceException('Попытка назначить человеку маму его папу')
+                if not do_set and is_father and currentstate.is_father and not currentstate.is_child:
+                    raise ServiceException('Такой папа уже задан', already_code)
+                elif not do_set and is_mother and currentstate.is_mother and not currentstate.is_child:
+                    raise ServiceException('Такая мама уже задана', already_code)
                 else:
                     currentstate.update_timestamp = update_timestamp
+                    currentstate.is_child = False
                     currentstate.is_father = is_father
                     currentstate.is_mother = is_mother
                     currentstate.save()
@@ -357,7 +378,7 @@ class ApiAddOperationMixin(object):
             q = Q(user_from=user_from, user_to=user_to, is_child=False)
             q &= Q(is_mother=True) | Q(is_father=True)
             try:
-                currentstate = CurrentState.objects.select_for_update().get(q)
+                currentstate = CurrentState.objects.get(q)
             except CurrentState.DoesNotExist:
                 raise ServiceException('Вы и так не связаны отношением потомок - родитель')
 
@@ -413,14 +434,24 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 токен бота, должен соответствовать тому, что в api local_settings
 
             ИЛИ
-                user_id_to
+                user_id_from
                     (не uuid!) пользователя от кого
+                        NB! при передаче данных по кнопке есть ограничение, строка не больше 64 символов, uuid не подходит
             или
                 tg_user_id_from
                     Ид телеграм прользователя
-            user_id_from
-                (не uuid!) пользователя к кому
-                    NB! при передаче данных по кнопке есть ограничение, строка не больше 64 символов, uuid не подходит
+            или
+                user_uuid_from
+                    Это uuid, от кого
+
+            ИЛИ
+                user_id_to
+                    (не uuid!) пользователя к кому
+                        NB! при передаче данных по кнопке есть ограничение, строка не больше 64 символов, uuid не подходит
+            или
+                user_uuid_to
+                    Это uuid, к кому
+
             tg_from_chat_id (необязательно):
                 id пользователя (1) телеграма, который составил сообщение, что перенаправил другой пользователь (2).
                 Пользователь (2) отправил благодарность к (1) или выполнил другое действие
@@ -528,17 +559,21 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
                     raise ServiceException('Неверный токен телеграм бота')
 
-                if not request.data.get('user_id_from') and not request.data.get('tg_user_id_from'):
+                if not request.data.get('user_uuid_from') and not request.data.get('tg_user_id_from'):
                     raise ServiceException('Не заданы ни user_id_from, ни tg_user_id_from')
-                if request.data.get('user_id_from') and request.data.get('tg_user_id_from'):
-                    raise ServiceException('Заданы и user_id_from, и tg_user_id_from')
+                if request.data.get('user_uuid_from') and request.data.get('tg_user_id_from'):
+                    raise ServiceException('Заданы и user_uuid_from, и tg_user_id_from')
 
-                user_id_from = request.data.get('user_id_from')
-                if user_id_from:
+                user_uuid_from = request.data.get('user_uuid_from')
+                if user_uuid_from:
                     try:
-                        user_from = User.objects.select_related('profile').get(pk=user_id_from)
-                    except (User.DoesNotExist, ValueError,):
-                        raise ServiceException('Не найден user_id_from')
+                        profile_from = Profile.objects.select_related('user').get(uuid=user_uuid_from)
+                        user_from = profile_from.user
+                    except ValidationError:
+                        raise ServiceException('Неверный user_uuid_from = "%s"' % user_uuid_from)
+                    except Profile.DoesNotExist:
+                        raise ServiceException('Не найден пользователь, user_uuid_from = "%s"' % user_uuid_from)
+
                 tg_user_id_from = request.data.get('tg_user_id_from')
                 if tg_user_id_from:
                     try:
@@ -546,16 +581,33 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                             provider=Oauth.PROVIDER_TELEGRAM,
                             uid= str(tg_user_id_from),
                         ).user
+                        profile_from = user_from.profile
                     except Oauth.DoesNotExist:
                         raise ServiceException('Не найден пользователь с этим ид телеграма')
-                profile_from = user_from.profile
+
+                if not request.data.get('user_uuid_to') and not request.data.get('user_id_to'):
+                    raise ServiceException('Не заданы ни user_uuid_to, ни user_id_to')
+                if request.data.get('user_uuid_to') and request.data.get('user_id_to'):
+                    raise ServiceException('Заданы и user_uuid_to, и user_id_to')
 
                 user_id_to = request.data.get('user_id_to')
-                try:
-                    user_to = User.objects.select_related('profile').get(pk=user_id_to)
-                    profile_to = user_to.profile
-                except (User.DoesNotExist, ValueError,):
-                    raise ServiceException('Не задан или не найден user_id_to')
+                if user_id_to:
+                    try:
+                        profile_to = Profile.objects.select_for_update().select_related('user').get(user__pk=user_id_to)
+                        user_to = profile_to.user
+                    except (Profile.DoesNotExist, ValueError,):
+                        raise ServiceException('Не задан или не найден user_id_to')
+
+                user_uuid_to = request.data.get('user_uuid_to')
+                if user_uuid_to:
+                    try:
+                        profile_to = Profile.objects.select_for_update().select_related('user').get(uuid=user_uuid_to)
+                        user_to = profile_to.user
+                    except ValidationError:
+                        raise ServiceException('Неверный uuid = "%s"' % user_uuid_to)
+                    except Profile.DoesNotExist:
+                        raise ServiceException('Не найден ничего с uuid = "%s"' % user_uuid_to)
+
                 tg_from_chat_id = request.data.get('tg_from_chat_id')
                 tg_message_id = request.data.get('tg_message_id')
                 got_tg_token = True
@@ -583,7 +635,7 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                     user_from_uuid = request.data.get("user_id_from")
                     if user_from_uuid:
                         try:
-                            profile_from = Profile.objects.select_for_update().select_related('user').get(uuid=user_from_uuid)
+                            profile_from = Profile.objects.select_related('user').get(uuid=user_from_uuid)
                             user_from = profile_from.user
                         except ValidationError:
                             raise ServiceException('Неверный user_id_from = "%s"' % user_from_uuid)
@@ -593,7 +645,11 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 raise ServiceException('Операция на самого себя не предусмотрена')
 
             if not got_tg_token:
-                if operationtype_id in (OperationType.FATHER, OperationType.MOTHER, OperationType.NOT_PARENT,):
+                if operationtype_id in (
+                    OperationType.SET_FATHER, OperationType.SET_MOTHER,
+                    OperationType.FATHER, OperationType.MOTHER,
+                    OperationType.NOT_PARENT,
+                ):
                     if not (
                         user_from == request.user or profile_from.owner == request.user
                     ):
@@ -611,6 +667,7 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 tg_from_chat_id,
                 tg_message_id,
             )
+
             if got_tg_token:
                 profile_from_data=profile_from.data_dict(request)
                 profile_from_data.update(profile_from.data_WAK())

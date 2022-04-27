@@ -37,6 +37,8 @@ class OperationType(models.Model):
     FATHER = 6
     NOT_PARENT = 7
     MOTHER = 8
+    SET_FATHER = 9
+    SET_MOTHER = 10
 
     title = models.CharField(_("Тип операции"), max_length=255, unique=True)
 

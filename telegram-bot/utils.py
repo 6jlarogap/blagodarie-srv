@@ -20,6 +20,8 @@ class OperationType(object):
     FATHER = 6
     NOT_PARENT = 7
     MOTHER = 8
+    SET_FATHER = 9
+    SET_MOTHER = 10
 
     @classmethod
     def relation_text(cls, is_trust):
@@ -67,6 +69,15 @@ class KeyboardType(object):
     #
     PHOTO_REMOVE_CONFIRMED = 9
 
+    # Задать папу, маму
+    #
+    FATHER = 10
+    MOTHER = 11
+
+    # Сменить владельца у owned user
+    #
+    CHANGE_OWNER = 12
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -86,8 +97,17 @@ class Misc(object):
 
     PROMPT_NEW_IOF = "Укажите имя отчество и фамилию - в одной строке, например: 'Иван Иванович Иванов'"
 
+    PROMPT_PAPA_MAMA = (
+        '%(name)s.\n'
+        'Отправьте мне ссылку на профиль его (ее) %(papy_or_mamy)s '
+        'вида t.me/%(bot_data_username)s?start=...'
+    )
+
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE
-    
+
+    UUID_PATTERN = re.compile(r'[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}', re.IGNORECASE)
+    MSG_ERROR_UUID_NOT_VALID = 'Не найден или негодный ид в сообщении'
+
     @classmethod
     def help_text(cls):
         return (
@@ -383,7 +403,7 @@ class Misc(object):
     @classmethod
     async def check_owner(cls, owner_tg_user, uuid):
         """
-        Проверить, принадлежит ли uuid к owner_tg_user
+        Проверить, принадлежит ли uuid к owner_tg_user или им является
         """
         result = False
         status_sender, response_sender = await cls.post_tg_user(owner_tg_user, activate=True)
@@ -396,8 +416,11 @@ class Misc(object):
                     params=payload_uuid,
                 )
                 logging.debug('get tg_user_by_uuid in api, response_to: %s' % response_uuid)
-                if status == 200 and response_uuid.get('owner_id'):
-                    result = response_uuid['owner_id'] == response_sender['user_id']
+                if status == 200:
+                    if response_uuid.get('owner_id'):
+                        result = response_uuid['owner_id'] == response_sender['user_id']
+                    else:
+                        result = response_uuid['user_id'] == response_sender['user_id']
             except:
                 pass
         return result
@@ -563,6 +586,34 @@ class Misc(object):
                 else:
                     reply_markup.row(inline_btn_location)
 
+                dict_papa_mama = dict(
+                    keyboard_type=KeyboardType.FATHER,
+                    uuid=response_to['uuid'],
+                    sep=KeyboardType.SEP,
+                )
+                inline_btn_papa = InlineKeyboardButton(
+                    'Папа',
+                    callback_data=callback_data_template % dict_papa_mama,
+                )
+                dict_papa_mama.update(keyboard_type=KeyboardType.MOTHER)
+                inline_btn_mama = InlineKeyboardButton(
+                    'Мама',
+                    callback_data=callback_data_template % dict_papa_mama,
+                )
+                args_papa_mama_owner = [inline_btn_papa, inline_btn_mama,]
+                if is_owned_account:
+                    dict_change_owner = dict(
+                        keyboard_type=KeyboardType.CHANGE_OWNER,
+                        uuid=response_to['uuid'],
+                        sep=KeyboardType.SEP,
+                    )
+                    inline_btn_change_owner = InlineKeyboardButton(
+                        'Владелец',
+                        callback_data=callback_data_template % dict_change_owner,
+                    )
+                    args_papa_mama_owner.append(inline_btn_change_owner)
+                reply_markup.row(*args_papa_mama_owner)
+
                 dict_abwish = dict(
                     keyboard_type=KeyboardType.ABILITY,
                     uuid=uuid,
@@ -633,7 +684,7 @@ class Misc(object):
         if state:
             await state.finish()
             async with state.proxy() as data:
-                for key in ('uuid', ):
+                for key in ('uuid', 'is_father', ):
                     data[key] = ''
 
 

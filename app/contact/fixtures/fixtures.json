@@ -83,5 +83,19 @@
     "fields": {
       "title": "Mother"
     }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 9,
+    "fields": {
+      "title": "Set Father"
+    }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 10,
+    "fields": {
+      "title": "Set Mother"
+    }
   }
 ]
