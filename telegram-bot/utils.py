@@ -78,6 +78,11 @@ class KeyboardType(object):
     #
     CHANGE_OWNER = 12
 
+    # Сделать нового папу, маму
+    #
+    NEW_FATHER = 13
+    NEW_MOTHER = 14
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -89,6 +94,8 @@ class Misc(object):
 
     MSG_ERROR_API = 'Ошибка доступа к данным'
     MSG_ERROR_TEXT_ONLY = 'Принимается только текст'
+    MSG_REPEATE_PLEASE = 'Повторите, пожалуйста!'
+
     PROMPT_ABILITY = 'Отправьте мне <u>текст</u> с <b>возможностями</b>'
     PROMPT_WISH = 'Отправьте мне <u>текст</u> с <b>потребностями</b>'
 
@@ -100,7 +107,15 @@ class Misc(object):
     PROMPT_PAPA_MAMA = (
         '%(name)s.\n'
         'Отправьте мне ссылку на профиль его (ее) %(papy_or_mamy)s '
-        'вида t.me/%(bot_data_username)s?start=...'
+        'вида t.me/%(bot_data_username)s?start=...\n\n'
+        'Или нажмите <u>%(novy_novaya)s</u> для ввода нового родственника, '
+        'который станет его (её) %(papoy_or_mamoy)s'
+    )
+
+    PROMPT_NEW_PAPA_MAMA = (
+        "Укажите имя отчество и фамилию человека - в одной строке, например: '%(fio_pama_mama)s'. "
+        '%(on_a)s <u>добавится</u> к вашим родственникам и станет %(papoy_or_mamoy)s для:\n'
+        '%(name)s.\n'
     )
 
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE
@@ -222,6 +237,7 @@ class Misc(object):
                     response = await resp.text('UTF-8')
                 return status, response
 
+
     @classmethod
     def get_deeplink(cls, response, bot_data):
         """
@@ -231,6 +247,18 @@ class Misc(object):
             bot_data_username=bot_data['username'],
             resonse_uuid=response['uuid']
         )
+
+
+    @classmethod
+    def get_deeplink_with_name(cls, response, bot_data):
+        """
+        Получить ссылку типа http://t.me/BotNameBot?start=:uuid с именем
+        """
+        href = cls.get_deeplink(response, bot_data)
+        https = 'https://'
+        if not href.startswith(https):
+            href = https + href
+        return '<a href="%s">%s</a>' % (href, cls.get_iof(response))
 
 
     @classmethod
@@ -421,6 +449,8 @@ class Misc(object):
                         result = response_uuid['owner_id'] == response_sender['user_id']
                     else:
                         result = response_uuid['user_id'] == response_sender['user_id']
+                    if result:
+                        result = response_sender
             except:
                 pass
         return result
@@ -689,18 +719,26 @@ class Misc(object):
 
 
     @classmethod
-    def reply_markup_cancel_row(cls):
+    def inline_button_cancel(cls):
         """
-        Одна inline кнопка с 'Отмена'
+        Inline кнопка с 'Отмена'
         """
         callback_data = '%(keyboard_type)s%(sep)s' % dict(
             keyboard_type=KeyboardType.CANCEL_ANY,
             sep=KeyboardType.SEP,
         )
-        inline_btn_cancel = InlineKeyboardButton(
+        return InlineKeyboardButton(
             'Отмена',
             callback_data=callback_data,
         )
+
+
+    @classmethod
+    def reply_markup_cancel_row(cls):
+        """
+        Ряд с одна inline кнопкой с 'Отмена'
+        """
+        inline_btn_cancel = cls.inline_button_cancel()
         reply_markup = InlineKeyboardMarkup()
         reply_markup.row(inline_btn_cancel)
         return reply_markup

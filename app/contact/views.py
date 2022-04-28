@@ -676,7 +676,6 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                 profile_to_data=profile_to.data_dict(request)
                 profile_to_data.update(profile_to.data_WAK())
                 profile_to_data.update(tg_data=profile_to.tg_data(), user_id=user_to.pk)
-
                 data.update(
                     profile_from=profile_from_data,
                     profile_to=profile_to_data,
@@ -1103,6 +1102,10 @@ class ApiGetTextOperationsView(APIView):
 api_get_text_operations = ApiGetTextOperationsView.as_view()
 
 class ApiGetUserOperationsView(APIView):
+
+    #TODO
+    # Смотри комментарии к модели Journal.
+    # Пока этот метод не используется, можно подождать.
 
     def post(self, request):
         """

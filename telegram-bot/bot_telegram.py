@@ -35,6 +35,7 @@ class FSMphoto(StatesGroup):
 
 class FSMpapaMama(StatesGroup):
     ask = State()
+    new = State()
 
 last_user_in_group = None
 
@@ -63,7 +64,7 @@ async def on_shutdown(dp):
 async def put_papa_mama(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         await message.reply(
-            Misc.MSG_ERROR_TEXT_ONLY,
+            Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + Misc.MSG_REPEATE_PLEASE,
             reply_markup=Misc.reply_markup_cancel_row()
         )
         return
@@ -89,16 +90,21 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
             user_uuid_from = data['uuid']
             is_father = data.get('is_father')
         data['uuid'] = data['is_father'] = ''
-    if not user_uuid_from or not isinstance(is_father, bool) or \
-       not await Misc.check_owner(owner_tg_user=message.from_user, uuid=user_uuid_from):
+    if not user_uuid_from or not isinstance(is_father, bool):
         await Misc.state_finish(state)
         return
+    owner = await Misc.check_owner(owner_tg_user=message.from_user, uuid=user_uuid_from)
+    if not owner or not owner.get('user_id'):
+        await Misc.state_finish(state)
+        return
+    owner_id = owner['user_id']
 
     post_op = dict(
         tg_token=settings.TOKEN,
         operation_type_id=OperationType.SET_FATHER if is_father else OperationType.SET_MOTHER,
         user_uuid_from=user_uuid_from,
         user_uuid_to=user_uuid_to,
+        owner_id=owner_id,
     )
     logging.debug('post operation, payload: %s' % post_op)
     status, response = await Misc.api_request(
@@ -118,18 +124,132 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
             await message.reply(Misc.MSG_ERROR_API)
     else:
         if response and response.get('profile_from') and response.get('profile_to'):
+            bot_data = await bot.get_me()
             await message.reply(
                 '%(iof_to)s\n'
                 'отмечен%(_a_)s как %(papa_or_mama)s для:\n'
                 '%(iof_from)s\n' % dict(
-                    iof_from = Misc.get_iof(response['profile_from']),
-                    iof_to = Misc.get_iof(response['profile_to']),
+                    iof_from = Misc.get_deeplink_with_name(response['profile_from'], bot_data),
+                    iof_to = Misc.get_deeplink_with_name(response['profile_to'], bot_data),
                     papa_or_mama='папа' if is_father else 'мама',
                     _a_='' if is_father else 'а',
             ))
         else:
             await message.reply('Родитель внесен в данные')
     await Misc.state_finish(state)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMpapaMama.new,
+)
+async def put_new_papa_mama(message: types.Message, state: FSMContext):
+    if message.content_type != ContentType.TEXT:
+        await message.reply(
+            Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + Misc.MSG_REPEATE_PLEASE,
+            reply_markup=Misc.reply_markup_cancel_row()
+        )
+        return
+
+    first_name_to = message.text
+    user_uuid_from = is_father = ''
+    async with state.proxy() as data:
+        if data.get('uuid'):
+            user_uuid_from = data['uuid']
+            is_father = data.get('is_father')
+        data['uuid'] = data['is_father'] = ''
+    if not user_uuid_from or not isinstance(is_father, bool):
+        await Misc.state_finish(state)
+        return
+    owner = await Misc.check_owner(owner_tg_user=message.from_user, uuid=user_uuid_from)
+    if not owner or not owner.get('user_id'):
+        await Misc.state_finish(state)
+        return
+    owner_id = owner['user_id']
+
+    post_data = dict(
+        tg_token=settings.TOKEN,
+        first_name = first_name_to,
+        link_relation='new_is_father' if is_father else 'new_is_mother',
+        link_uuid=user_uuid_from,
+        owner_id=owner_id,
+    )
+    logging.debug('post new owned user with link_uuid, payload: %s' % post_data)
+    status, response = await Misc.api_request(
+        path='/api/profile',
+        method='post',
+        data=post_data,
+    )
+    logging.debug('post new owned user with link_uuid, status: %s' % status)
+    logging.debug('post new owned user with link_uuid, response: %s' % response)
+    if status != 200:
+        if status == 400  and response.get('message'):
+            await message.reply(
+                'Ошибка!\n%s\n\nНазначайте родителя по новой' % response['message']
+            )
+        else:
+            await message.reply(Misc.MSG_ERROR_API)
+    else:
+        if response and response.get('profile_from'):
+            bot_data = await bot.get_me()
+            await message.reply(
+                '%(iof_to)s\n'
+                'отмечен%(_a_)s как %(papa_or_mama)s для:\n'
+                '%(iof_from)s\n' % dict(
+                    iof_from = Misc.get_deeplink_with_name(response['profile_from'], bot_data),
+                    iof_to = Misc.get_deeplink_with_name(response, bot_data),
+                    papa_or_mama='папа' if is_father else 'мама',
+                    _a_='' if is_father else 'а',
+            ))
+        else:
+            await message.reply('Родитель внесен в данные')
+    await Misc.state_finish(state)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s|%s)%s' % (
+        KeyboardType.NEW_FATHER, KeyboardType.NEW_MOTHER,
+        KeyboardType.SEP,
+        # uuid пользователя, включая owned, кому назначается новый папа/мама     # 1
+        # KeyboardType.SEP,
+    ), c.data),
+    state = FSMpapaMama.ask,
+    )
+async def process_callback_new_papa_mama(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Действия по заданию папы, мамы
+    """
+    if callback_query.message:
+        tg_user_sender = callback_query.from_user
+        code = callback_query.data.split(KeyboardType.SEP)
+        uuid = None
+        try:
+            uuid = code[1]
+        except IndexError:
+            pass
+        if not uuid:
+            return
+        if not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+            return
+        is_father = str(code[0]) == str(KeyboardType.NEW_FATHER)
+        status_uuid, response_uuid = await Misc.get_user_by_uuid(uuid)
+        if status_uuid == 200 and response_uuid:
+            prompt_new_papa_mama = Misc.PROMPT_NEW_PAPA_MAMA % dict(
+                name=response_uuid['first_name'],
+                papoy_or_mamoy='папой' if is_father else 'мамой',
+                fio_pama_mama='Иван Иванович Иванов'if is_father else 'Марья Ивановна Иванова',
+                on_a='Он' if is_father else 'Она',
+            )
+            await FSMpapaMama.next()
+            state = dp.current_state()
+            async with state.proxy() as data:
+                data['uuid'] = uuid
+                data['is_father'] = is_father
+            await callback_query.message.reply(
+                prompt_new_papa_mama,
+                reply_markup=Misc.reply_markup_cancel_row(),
+            )
 
 
 @dp.callback_query_handler(
@@ -169,13 +289,28 @@ async def process_callback_papa_mama(callback_query: types.CallbackQuery, state:
                 bot_data_username=bot_data['username'],
                 name=response_uuid['first_name'],
                 papy_or_mamy='папы' if is_father else 'мамы',
+                novy_novaya='Новый' if is_father else 'Новая',
+                papoy_or_mamoy='папой' if is_father else 'мамой',
             )
+            callback_data = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s' % dict(
+                keyboard_type=KeyboardType.NEW_FATHER if is_father else KeyboardType.NEW_MOTHER,
+                uuid=uuid,
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_new_papa_mama = InlineKeyboardButton(
+                'Новый' if is_father else 'Новая',
+                callback_data=callback_data,
+            )
+            inline_btn_cancel = Misc.inline_button_cancel()
+            reply_markup = InlineKeyboardMarkup()
+            reply_markup.row(inline_btn_new_papa_mama, inline_btn_cancel)
             await FSMpapaMama.ask.set()
             await callback_query.message.reply(
                 prompt_papa_mama,
-                reply_markup=Misc.reply_markup_cancel_row(),
+                reply_markup=reply_markup,
                 disable_web_page_preview=True,
             )
+
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(r'^(%s)%s' % (

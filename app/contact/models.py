@@ -53,6 +53,13 @@ class AnyText(BaseModelInsertTimestamp):
 
 class Journal(BaseModelInsertTimestamp):
 
+    #TODO
+    # При типах операции папа, мама user_from, user_to - необязательно пользователь,
+    # который вносит данные. Значит нужно еще поле, миграция в это поле, правки в методе
+    # api_get_user_operations. Пока этим методом не пользуемся, можно подожать.
+    # Еще правка в api_addoperation
+    # Из телеграма SET_FATHER, SET_MOTHER передается owner_id.
+    #
     user_from = models.ForeignKey('auth.User',
                     verbose_name=_("От кого"), on_delete=models.CASCADE,
                     related_name='journal_user_from_set')

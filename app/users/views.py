@@ -1125,6 +1125,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
     @transaction.atomic
     def post(self, request):
         try:
+            got_tg_token = False
             status_code = status.HTTP_200_OK
             if request.data.get('tg_token') and request.data.get('tg_uid'):
                 data = self.post_tg_data(request)
@@ -1137,6 +1138,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 try:
                     owner = User.objects.select_related('profile').get(pk=request.data['owner_id'])
                     owner_profile = owner.profile
+                    got_tg_token = True
                 except User.DoesNotExist:
                     raise ServiceException('Неверный ид пользователя владельца, для создания owned profile, из телеграм- бота')
             elif not request.user.is_authenticated:
@@ -1223,10 +1225,14 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                     link_user_from = user
                     link_user_to = link_user
 
+                if got_tg_token:
+                    operationtype_id = OperationType.SET_FATHER if is_father else OperationType.SET_MOTHER
+                else:
+                    operationtype_id = OperationType.FATHER if is_father else OperationType.MOTHER
                 self.add_operation(
                     link_user_from,
                     link_user_to.profile,
-                    operationtype_id = OperationType.FATHER if is_father else OperationType.MOTHER,
+                    operationtype_id = operationtype_id,
                     comment = None,
                     insert_timestamp = int(time.time()),
                 )
@@ -1236,6 +1242,15 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             data = profile.data_dict(request)
             data.update(user_id=user.pk)
             data.update(profile.data_WAK())
+            if got_tg_token and link_uuid and relation in ('new_is_father', 'new_is_mother',):
+                user_from = link_user_from
+                profile_from = user_from.profile
+                profile_from_data=profile_from.data_dict(request)
+                profile_from_data.update(user_id=user_from.pk)
+                profile_from_data.update(profile_from.data_WAK())
+                data.update(
+                    profile_from=profile_from_data,
+                )
         except SkipException:
             pass
         except ServiceException as excpt:
