@@ -60,7 +60,7 @@ async def on_shutdown(dp):
     content_types=ContentType.all(),
     state=FSMpapaMama.ask,
 )
-async def put_papa_mama(message, state):
+async def put_papa_mama(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         await message.reply(
             Misc.MSG_ERROR_TEXT_ONLY,
@@ -138,9 +138,10 @@ async def put_papa_mama(message, state):
         KeyboardType.SEP,
         # uuid папы или мамы           # 1
         # KeyboardType.SEP,
-    ), c.data
-    ))
-async def process_callback_papa_mama(callback_query: types.CallbackQuery):
+    ), c.data),
+    state = None,
+    )
+async def process_callback_papa_mama(callback_query: types.CallbackQuery, state: FSMContext):
     """
     Действия по заданию папы, мамы
     """
@@ -182,9 +183,10 @@ async def process_callback_papa_mama(callback_query: types.CallbackQuery):
         KeyboardType.SEP,
         # uuid папы или мамы           # 1
         # KeyboardType.SEP,
-    ), c.data
-    ))
-async def process_callback_change_owner(callback_query: types.CallbackQuery):
+    ), c.data,
+    ), state=None,
+    )
+async def process_callback_change_owner(callback_query: types.CallbackQuery, state: FSMContext):
     """
     Действия по смене владельца
     """
@@ -245,8 +247,9 @@ async def process_command_ability(message):
         # uuid, кому                # 1
         # KeyboardType.SEP,
     ), c.data
-    ))
-async def process_callback_ability(callback_query: types.CallbackQuery):
+    ), state=None,
+    )
+async def process_callback_ability(callback_query: types.CallbackQuery, state: FSMContext):
     code = callback_query.data.split(KeyboardType.SEP)
     tg_user_sender = callback_query.from_user
     try:
@@ -274,8 +277,9 @@ async def process_command_wish(message):
         # uuid, кому                # 1
         # KeyboardType.SEP,
     ), c.data
-    ))
-async def process_callback_wish(callback_query: types.CallbackQuery):
+    ), state=None,
+    )
+async def process_callback_wish(callback_query: types.CallbackQuery, state: FSMContext):
     code = callback_query.data.split(KeyboardType.SEP)
     tg_user_sender = callback_query.from_user
     try:
@@ -307,7 +311,7 @@ async def process_callback_cancel_any(callback_query: types.CallbackQuery, state
     content_types=ContentType.all(),
     state=FSMability.ask,
 )
-async def put_ability(message, state):
+async def put_ability(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         reply_markup = Misc.reply_markup_cancel_row()
         await message.reply(
@@ -372,7 +376,7 @@ async def put_ability(message, state):
     content_types=ContentType.all(),
     state=FSMwish.ask,
 )
-async def put_wish(message, state):
+async def put_wish(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         reply_markup = Misc.reply_markup_cancel_row()
         await message.reply(
@@ -437,7 +441,7 @@ async def put_wish(message, state):
     content_types=ContentType.all(),
     state=FSMphoto.ask,
 )
-async def put_photo(message, state):
+async def put_photo(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.PHOTO:
         reply_markup = Misc.reply_markup_cancel_row()
         await message.reply(
@@ -507,8 +511,9 @@ async def put_photo(message, state):
         # uuid, кому              # 1
         # KeyboardType.SEP,
     ), c.data
-    ))
-async def process_callback_photo(callback_query: types.CallbackQuery):
+    ), state=None,
+    )
+async def process_callback_photo(callback_query: types.CallbackQuery, state: FSMContext):
     code = callback_query.data.split(KeyboardType.SEP)
     tg_user_sender = callback_query.from_user
     try:
@@ -662,7 +667,7 @@ async def process_callback_photo_remove_confirmed(callback_query: types.Callback
     content_types=ContentType.all(),
     state=FSMnewIOF.ask,
 )
-async def put_new_iof(message, state):
+async def put_new_iof(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         reply_markup = Misc.reply_markup_cancel_row()
         await message.reply(
@@ -730,8 +735,9 @@ async def process_command_new(message):
         KeyboardType.TRUST_THANK_VER_2,
         KeyboardType.SEP,
     ), c.data
-    ))
-async def process_callback_tn(callback_query: types.CallbackQuery):
+    ), state=None,
+    )
+async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMContext):
     """
     Действия по (не)доверию, благодарностям
 
@@ -998,9 +1004,10 @@ async def geo(message: types.Message, uuid=None):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=["setplace", "место"]
+    commands=["setplace", "место"],
+    state=None,
 )
-async def geo_command_handler(message: types.Message):
+async def geo_command_handler(message: types.Message, state: FSMContext):
     await geo(message)
 
 
@@ -1011,8 +1018,9 @@ async def geo_command_handler(message: types.Message):
         # uuid, кому                # 1
         # KeyboardType.SEP,
     ), c.data
-    ))
-async def process_callback_location(callback_query: types.CallbackQuery):
+    ), state=None,
+    )
+async def process_callback_location(callback_query: types.CallbackQuery, state: FSMContext):
     """
     Действия по местоположению
 
@@ -1037,6 +1045,7 @@ async def process_callback_location(callback_query: types.CallbackQuery):
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     content_types=["location",],
+    state=None,
 )
 async def location(message: types.Message, state: FSMContext):
     """
@@ -1095,8 +1104,9 @@ async def location(message: types.Message, state: FSMContext):
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     commands=['getowned', 'listown'],
+    state=None,
 )
-async def echo_getowned_to_bot(message: types.Message):
+async def echo_getowned_to_bot(message: types.Message, state: FSMContext):
     tg_user_sender = message.from_user
     payload_from = dict(
         tg_token=settings.TOKEN,
@@ -1151,16 +1161,18 @@ async def echo_getowned_to_bot(message: types.Message):
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     commands=['help',],
+    state=None,
 )
-async def echo_help_to_bot(message: types.Message):
+async def echo_help_to_bot(message: types.Message, state: FSMContext):
     await message.reply(Misc.help_text())
 
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     commands=['stat',],
+    state=None,
 )
-async def echo_stat_to_bot(message: types.Message):
+async def echo_stat_to_bot(message: types.Message, state: FSMContext):
     status, response = await Misc.api_request(
         path='/api/bot/stat',
         method='get',
@@ -1459,8 +1471,9 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 @dp.message_handler(
     ChatTypeFilter(chat_type=(types.ChatType.GROUP, types.ChatType.SUPERGROUP)),
     content_types=ContentType.all(),
+    state=None,
 )
-async def echo_send_to_group(message: types.Message):
+async def echo_send_to_group(message: types.Message, state: FSMContext):
     """
     Обработка сообщений в группу
 
