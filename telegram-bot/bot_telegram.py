@@ -304,9 +304,9 @@ async def process_callback_papa_mama(callback_query: types.CallbackQuery, state:
                 'Новый' if is_father else 'Новая',
                 callback_data=callback_data,
             )
-            inline_btn_cancel = Misc.inline_button_cancel()
+            inline_button_cancel = Misc.inline_button_cancel()
             reply_markup = InlineKeyboardMarkup()
-            reply_markup.row(inline_btn_new_papa_mama, inline_btn_cancel)
+            reply_markup.row(inline_btn_new_papa_mama, inline_button_cancel)
             await FSMpapaMama.ask.set()
             await callback_query.message.reply(
                 prompt_papa_mama,
@@ -423,14 +423,6 @@ async def process_callback_other(callback_query: types.CallbackQuery, state: FSM
             return
         if not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
             return
-        try:
-            await bot.answer_callback_query(
-                    callback_query.id,
-                    text='Пока не реализовано: другие данные человека (пол, дата рождения, ...)',
-                    show_alert=True,
-                )
-        except (ChatNotFound, CantInitiateConversation):
-            pass
 
 
 @dp.callback_query_handler(
@@ -779,14 +771,7 @@ async def process_callback_photo(callback_query: types.CallbackQuery, state: FSM
     except IndexError:
         uuid = None
     if uuid:
-        callback_data_cancel = '%(keyboard_type)s%(sep)s' % dict(
-            keyboard_type=KeyboardType.CANCEL_ANY,
-            sep=KeyboardType.SEP,
-        )
-        inline_btn_cancel = InlineKeyboardButton(
-            'Отмена',
-            callback_data=callback_data_cancel,
-        )
+        inline_button_cancel = Misc.inline_button_cancel()
         reply_markup = InlineKeyboardMarkup()
         await FSMphoto.ask.set()
         state = dp.current_state()
@@ -805,9 +790,9 @@ async def process_callback_photo(callback_query: types.CallbackQuery, state: FSM
                 'Удалить',
                 callback_data=callback_data_remove,
             )
-            reply_markup.row(inline_btn_cancel, inline_btn_remove)
+            reply_markup.row(inline_button_cancel, inline_btn_remove)
         else:
-            reply_markup.row(inline_btn_cancel)
+            reply_markup.row(inline_button_cancel)
         await callback_query.message.reply(prompt_photo, reply_markup=reply_markup)
 
 
@@ -830,14 +815,7 @@ async def process_callback_photo_remove(callback_query: types.CallbackQuery, sta
         status, response = await Misc.get_user_by_uuid(uuid)
         if status == 200 and response:
             await FSMphoto.next()
-            callback_data_cancel = '%(keyboard_type)s%(sep)s' % dict(
-                keyboard_type=KeyboardType.CANCEL_ANY,
-                sep=KeyboardType.SEP,
-            )
-            inline_btn_cancel = InlineKeyboardButton(
-                'Отмена',
-                callback_data=callback_data_cancel,
-            )
+            inline_button_cancel = Misc.inline_button_cancel()
             callback_data_remove = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s' % dict(
                 keyboard_type=KeyboardType.PHOTO_REMOVE_CONFIRMED,
                 sep=KeyboardType.SEP,
@@ -848,7 +826,7 @@ async def process_callback_photo_remove(callback_query: types.CallbackQuery, sta
                 callback_data=callback_data_remove,
             )
             reply_markup = InlineKeyboardMarkup()
-            reply_markup.row(inline_btn_cancel, inline_btn_remove)
+            reply_markup.row(inline_button_cancel, inline_btn_remove)
             full_name = Misc.get_iof(response)
             prompt_photo_confirm = (
                 'Подтвердите <b>удаление фото</b> у:\n'
