@@ -83,6 +83,9 @@ class KeyboardType(object):
     NEW_FATHER = 13
     NEW_MOTHER = 14
 
+    IOF = 15
+    OTHER = 16
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -103,6 +106,7 @@ class Misc(object):
     PROMPT_PHOTO_REMOVE = "Нажмите 'Удалить' для удаления имеющегося фото."
 
     PROMPT_NEW_IOF = "Укажите имя отчество и фамилию - в одной строке, например: 'Иван Иванович Иванов'"
+    PROMPT_EXISTING_IOF = "Укажите для\n\n%(name)s\n\nдругие имя отчество и фамилию - в одной строке, например: 'Иван Иванович Иванов'"
 
     PROMPT_PAPA_MAMA = (
         '%(name)s.\n'
@@ -589,32 +593,45 @@ class Misc(object):
                         '%(keyboard_type)s%(sep)s'
                         '%(uuid)s%(sep)s'
                     )
-                dict_location = dict(
+
+                inline_btn_other = InlineKeyboardButton(
+                    'Другое',
+                    callback_data=callback_data_template % dict(
+                    keyboard_type=KeyboardType.OTHER,
+                    uuid=response_to['uuid'],
+                    sep=KeyboardType.SEP,
+                ))
+                inline_btn_location = InlineKeyboardButton(
+                    'Местоположение' if is_own_account else 'Место',
+                    callback_data=callback_data_template % dict(
                     keyboard_type=KeyboardType.LOCATION,
                     uuid=uuid,
                     sep=KeyboardType.SEP,
-                )
-                inline_btn_location = InlineKeyboardButton(
-                    'Местоположение',
-                    callback_data=callback_data_template % dict_location,
-                )
+                ))
 
                 if is_owned_account:
-                    dict_photo = dict(
+                    inline_btn_iof = InlineKeyboardButton(
+                        'ИОФ',
+                        callback_data=callback_data_template % dict(
+                        keyboard_type=KeyboardType.IOF,
+                        uuid=response_to['uuid'],
+                        sep=KeyboardType.SEP,
+                    ))
+                    inline_btn_photo = InlineKeyboardButton(
+                        'Фото',
+                        callback_data=callback_data_template % dict(
                         keyboard_type=KeyboardType.PHOTO,
                         uuid=uuid,
                         sep=KeyboardType.SEP,
-                    )
-                    inline_btn_photo = InlineKeyboardButton(
-                        'Фото',
-                        callback_data=callback_data_template % dict_photo,
-                    )
+                    ))
                     reply_markup.row(
+                        inline_btn_iof,
+                        inline_btn_other,
                         inline_btn_photo,
                         inline_btn_location
                     )
                 else:
-                    reply_markup.row(inline_btn_location)
+                    reply_markup.row(inline_btn_other, inline_btn_location)
 
                 dict_papa_mama = dict(
                     keyboard_type=KeyboardType.FATHER,
@@ -731,6 +748,17 @@ class Misc(object):
             'Отмена',
             callback_data=callback_data,
         )
+
+
+    @classmethod
+    def strip_text(cls, s):
+        """
+        Убрать из текста лишние пробелы
+        """
+        s = s.strip().strip("'").strip()
+        s = re.sub(r'\s{2,}', ' ', s)
+        s = re.sub(r'\s', ' ', s)
+        return s
 
 
     @classmethod

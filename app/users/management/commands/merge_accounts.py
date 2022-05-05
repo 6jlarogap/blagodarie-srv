@@ -16,7 +16,7 @@ class Command(BaseCommand):
     
     def add_arguments(self, parser):
         parser.add_argument('uuid_to', type=str, help='uuid_to, destination account')
-        parser.add_argument('uuid_from', type=str, help='uuid_to, account to merge')
+        parser.add_argument('uuid_from', type=str, help='uuid_from, account to merge')
 
     def handle(self, *args, **kwargs):
         uuid_to = kwargs['uuid_to']

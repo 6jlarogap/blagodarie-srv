@@ -29,6 +29,9 @@ class FSMwish(StatesGroup):
 class FSMnewIOF(StatesGroup):
     ask = State()
 
+class FSMexistingIOF(StatesGroup):
+    ask = State()
+
 class FSMphoto(StatesGroup):
     ask = State()
     remove = State()
@@ -310,6 +313,124 @@ async def process_callback_papa_mama(callback_query: types.CallbackQuery, state:
                 reply_markup=reply_markup,
                 disable_web_page_preview=True,
             )
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.IOF,
+        KeyboardType.SEP,
+        # uuid своё ил родственника           # 1
+        # KeyboardType.SEP,
+    ), c.data,
+    ), state=None,
+    )
+async def process_callback_iof(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Заменить имя, фамилию, отчество
+    """
+    if callback_query.message:
+        tg_user_sender = callback_query.from_user
+        code = callback_query.data.split(KeyboardType.SEP)
+        uuid = None
+        try:
+            uuid = code[1]
+        except IndexError:
+            pass
+        if not uuid:
+            return
+        if not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+            return
+        status_uuid, response_uuid = await Misc.get_user_by_uuid(uuid)
+        if status_uuid == 200 and response_uuid:
+            bot_data = await bot.get_me()
+            state = dp.current_state()
+            async with state.proxy() as data:
+                data['uuid'] = uuid
+            prompt_iof = Misc.PROMPT_EXISTING_IOF % dict(
+                name=response_uuid['first_name'],
+            )
+            await FSMexistingIOF.ask.set()
+            await callback_query.message.reply(prompt_iof, reply_markup=Misc.reply_markup_cancel_row())
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMexistingIOF.ask,
+)
+async def put_change_existing_iof(message: types.Message, state: FSMContext):
+    if message.content_type != ContentType.TEXT:
+        await message.reply(Misc.MSG_ERROR_TEXT_ONLY, reply_markup=Misc.reply_markup_cancel_row())
+        return
+    tg_user_sender = message.from_user
+    async with state.proxy() as data:
+        uuid = data.get('uuid')
+    if uuid:
+        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
+        if response_sender:
+            payload_iof = dict(
+                tg_token=settings.TOKEN,
+                uuid=uuid,
+                first_name=Misc.strip_text(message.text),
+            )
+            logging.debug('put change iof, payload: %s' % payload_iof)
+            status, response = await Misc.api_request(
+                path='/api/profile',
+                method='put',
+                data=payload_iof,
+            )
+            logging.debug('put change iof, status: %s' % status)
+            logging.debug('put change iof, response: %s' % response)
+            if status == 200:
+                await message.reply('Изменено')
+                try:
+                    status, response = await Misc.get_user_by_uuid(uuid)
+                    if status == 200:
+                        bot_data = await bot.get_me()
+                        await Misc.show_cards(
+                            [response],
+                            message,
+                            bot_data,
+                            response_from=response_sender,
+                        )
+                except:
+                    pass
+    await Misc.state_finish(state)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.OTHER,
+        KeyboardType.SEP,
+        # uuid своё ил родственника           # 1
+        # KeyboardType.SEP,
+    ), c.data,
+    ), state=None,
+    )
+async def process_callback_other(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Ввести другие данные человека: пол, дата рождения, дата смерти, если это родственник
+    """
+    if callback_query.message:
+        tg_user_sender = callback_query.from_user
+        code = callback_query.data.split(KeyboardType.SEP)
+        uuid = None
+        try:
+            uuid = code[1]
+        except IndexError:
+            pass
+        if not uuid:
+            return
+        if not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+            return
+        try:
+            await bot.answer_callback_query(
+                    callback_query.id,
+                    text='Пока не реализовано: другие данные человека (пол, дата рождения, ...)',
+                    show_alert=True,
+                )
+        except (ChatNotFound, CantInitiateConversation):
+            pass
 
 
 @dp.callback_query_handler(
@@ -816,13 +937,10 @@ async def put_new_iof(message: types.Message, state: FSMContext):
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
     if status_sender == 200 and response_sender and response_sender.get('user_id'):
-        message_text = message.text.strip().strip("'").strip()
-        message_text = re.sub(r'\s{2,}', ' ', message_text)
-        message_text = re.sub(r'\s', ' ', message_text)
         payload_iof = dict(
             tg_token=settings.TOKEN,
             owner_id=response_sender['user_id'],
-            first_name=message_text,
+            first_name=Misc.strip_text(message.text),
         )
         logging.debug('post iof, payload: %s' % payload_iof)
         status, response = await Misc.api_request(
