@@ -878,7 +878,7 @@ async def process_callback_photo_remove_confirmed(callback_query: types.Callback
     if uuid:
         bot_data = await bot.get_me()
         logging.debug('put (remove) photo: post tg_user data')
-        tg_user_sender = callback_query.message.from_user
+        tg_user_sender = callback_query.from_user
         status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
         if status_sender == 200 and response_sender:
             payload_photo = dict(
