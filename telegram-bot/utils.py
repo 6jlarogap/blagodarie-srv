@@ -126,7 +126,10 @@ class Misc(object):
         '%(name)s.\n'
     )
 
-    PROMPT_GENDER = 'Укажите %(his_her)s пол'
+    PROMPT_GENDER = (
+        'Будет предложено их изменить\n\n'
+        'Сначала укажите %(his_her)s пол:'
+    )
     PROMPT_DATE_FORMAT = 'в формате ДД.ММ.ГГГГ или ММ.ГГГГ или ГГГГ'
     PROMPT_DOB =    '%(name)s.\n\n' + \
                     'Укажите %(his_her)s день рождения ' + PROMPT_DATE_FORMAT
@@ -606,7 +609,7 @@ class Misc(object):
                     )
 
                 inline_btn_other = InlineKeyboardButton(
-                    'Сведения',
+                    'Пол и даты',
                     callback_data=callback_data_template % dict(
                     keyboard_type=KeyboardType.OTHER,
                     uuid=response_to['uuid'],
@@ -800,10 +803,10 @@ class Misc(object):
                 gender = 'муж.'
             elif data['gender'] == 'f':
                 gender = 'жен.'
-        dob='Дата рождения: %s' % (data.get('dob') or 'не задана')
+        dob='Дата рождения: %s' % (data.get('dob') or 'не указана')
         dod = ''
         if is_owned:
-            dod='\nДата смерти: %s' % (data.get('dod') or 'не задана')
+            dod='\nДата смерти: %s' % (data.get('dod') or 'не указана')
         d = dict(
             name=data.get('name', '') or data.get('first_name', '') or 'Без имени',
             gender=gender,
@@ -812,7 +815,7 @@ class Misc(object):
         )
         s = (
             '<b>%(name)s</b>\n'
-            'Текущие сведения:\n'
+            '<u>Текущие сведения:</u>\n'
             'Пол: %(gender)s\n'
             '%(dob)s'
             '%(dod)s'
