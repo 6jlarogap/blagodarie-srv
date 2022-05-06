@@ -609,7 +609,7 @@ class Misc(object):
                     )
 
                 inline_btn_other = InlineKeyboardButton(
-                    'Пол и даты',
+                    'Пол и даты' if is_owned_account else 'Пол и дата р.',
                     callback_data=callback_data_template % dict(
                     keyboard_type=KeyboardType.OTHER,
                     uuid=response_to['uuid'],
