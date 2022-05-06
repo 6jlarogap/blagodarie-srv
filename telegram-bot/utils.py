@@ -84,7 +84,12 @@ class KeyboardType(object):
     NEW_MOTHER = 14
 
     IOF = 15
+
     OTHER = 16
+    OTHER_MALE = 17
+    OTHER_FEMALE = 18
+    OTHER_DOB_UNKNOWN = 19
+    OTHER_DOD_UNKNOWN = 20
 
     # Разделитель данных в call back data
     #
@@ -115,12 +120,18 @@ class Misc(object):
         'Или нажмите <u>%(novy_novaya)s</u> для ввода нового родственника, '
         'который станет его (её) %(papoy_or_mamoy)s'
     )
-
     PROMPT_NEW_PAPA_MAMA = (
         "Укажите имя отчество и фамилию человека - в одной строке, например: '%(fio_pama_mama)s'. "
         '%(on_a)s <u>добавится</u> к вашим родственникам и станет %(papoy_or_mamoy)s для:\n'
         '%(name)s.\n'
     )
+
+    PROMPT_GENDER = 'Укажите %(his_her)s пол'
+    PROMPT_DATE_FORMAT = 'в формате ДД.ММ.ГГГГ или ММ.ГГГГ или ГГГГ'
+    PROMPT_DOB =    '%(name)s.\n\n' + \
+                    'Укажите %(his_her)s день рождения ' + PROMPT_DATE_FORMAT
+    PROMPT_DOD =    '%(name)s.\n\n' + \
+                    'Укажите %(his_her)s день смерти ' + PROMPT_DATE_FORMAT
 
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE
 
@@ -595,7 +606,7 @@ class Misc(object):
                     )
 
                 inline_btn_other = InlineKeyboardButton(
-                    'Другое',
+                    'Сведения',
                     callback_data=callback_data_template % dict(
                     keyboard_type=KeyboardType.OTHER,
                     uuid=response_to['uuid'],
@@ -731,8 +742,9 @@ class Misc(object):
         if state:
             await state.finish()
             async with state.proxy() as data:
-                for key in ('uuid', 'is_father', ):
-                    data[key] = ''
+                for key in ('uuid', ):
+                    if data.get(key):
+                        data[key] = ''
 
 
     @classmethod
@@ -770,6 +782,42 @@ class Misc(object):
         reply_markup = InlineKeyboardMarkup()
         reply_markup.row(inline_btn_cancel)
         return reply_markup
+
+
+    @classmethod
+    def show_other_data(cls, data):
+        """
+        Показать текущие другие данные
+
+        data: может быть ответ о пользователе из апи, или данные, сохраняемые в состоянии бота
+        """
+        is_owned = bool(data.get('is_owned') or data.get('owner_id'))
+        gender = 'не задан'
+        if 'is_male' in data:
+            gender = 'муж.' if data['is_male'] else 'жен.'
+        elif 'gender' in data:
+            if data['gender'] == 'm':
+                gender = 'муж.'
+            elif data['gender'] == 'f':
+                gender = 'жен.'
+        dob='Дата рождения: %s' % (data.get('dob') or 'не задана')
+        dod = ''
+        if is_owned:
+            dod='\nДата смерти: %s' % (data.get('dod') or 'не задана')
+        d = dict(
+            name=data.get('name', '') or data.get('first_name', '') or 'Без имени',
+            gender=gender,
+            dob=dob,
+            dod=dod,
+        )
+        s = (
+            '<b>%(name)s</b>\n'
+            'Текущие сведения:\n'
+            'Пол: %(gender)s\n'
+            '%(dob)s'
+            '%(dod)s'
+        ) % d + '\n'
+        return s
 
 
     @classmethod

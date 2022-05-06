@@ -1299,10 +1299,9 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 user.last_name = ''
                 user.first_name = first_name
 
-            profile.gender = request.data.get('gender', '').lower() or None
-            for f in ('latitude', 'longitude', 'comment',):
+            for f in ('latitude', 'longitude', 'comment', 'gender', ):
                 if f in  request.data:
-                    setattr(profile, f, request.data.get(f) or None)
+                    setattr(profile, f, request.data[f] or None)
             if 'is_notified' in request.data and user == request.user:
                 profile.is_notified = bool(request.data.get('is_notified'))
             if 'photo' in request.data:
