@@ -189,13 +189,13 @@ class UnclearDate:
 
     @classmethod
     def from_str_dmy(cls, s):
-        m = re.search(r'^(\d{1,2})[\.\/\-]?(\d{1,2})[\.\/\-]?(\d{4})$', s)
+        m = re.search(r'^(\d{2})[\.\/\-]?(\d{2})[\.\/\-]?(\d{4})$', s)
         if m:
             year = int(m.group(3))
             month = int(m.group(2))
             day = int(m.group(1))
         else:
-            m = re.search(r'^(\d{1,2})[\.\/\-]?(\d{4})$', s)
+            m = re.search(r'^(\d{2})[\.\/\-]?(\d{4})$', s)
             if m:
                 year = int(m.group(2))
                 month = int(m.group(1))
