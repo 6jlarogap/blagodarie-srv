@@ -1399,7 +1399,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         elif post_op['operation_type_id'] == OperationType.MISTRUST:
             reply = '%(deeplink_sender)s не доверяет %(deeplink_receiver)s'
         elif post_op['operation_type_id'] == OperationType.NULLIFY_TRUST:
-            reply = '%(deeplink_sender)s заявляет, что не знаком(а) с %(deeplink_receiver)s'
+            reply = '%(deeplink_sender)s не знаком(а) с %(deeplink_receiver)s'
         elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
             reply = '%(deeplink_sender)s поблагодарил(а) %(deeplink_receiver)s'
         if reply:
