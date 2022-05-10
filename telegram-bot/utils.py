@@ -454,10 +454,6 @@ class Misc(object):
         Если принадлежит и им является, то возвращает данные из апи по owner_tg_user,
         а внутри словарь response_uuid, данные из апи по uuid:
         """
-
-        # TODO
-        # оптимизировать там где это вызывается, чтоб не плодить лишние вызовы get_user_by_uuid(uuid)
-
         result = False
         status_sender, response_sender = await cls.post_tg_user(owner_tg_user, activate=True)
         if status_sender == 200 and response_sender.get('user_id'):
