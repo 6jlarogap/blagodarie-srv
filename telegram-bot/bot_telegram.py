@@ -490,7 +490,7 @@ async def process_callback_other_gender(callback_query: types.CallbackQuery, sta
                     await Misc.state_finish(state)
                     return
                 data['is_male'] = code[0] == str(KeyboardType.OTHER_MALE)
-                status_uuid, response_uuid = await Misc.get_user_by_uuid(uuid)
+                response_uuid = response_sender['response_uuid']
                 dict_dob_unknown = dict(
                     keyboard_type=KeyboardType.OTHER_DOB_UNKNOWN,
                     sep=KeyboardType.SEP,
