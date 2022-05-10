@@ -238,26 +238,26 @@ async def process_callback_new_papa_mama(callback_query: types.CallbackQuery, st
             pass
         if not uuid:
             return
-        if not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
+        if not response_sender:
             return
         is_father = code[0] == str(KeyboardType.NEW_FATHER)
-        status_uuid, response_uuid = await Misc.get_user_by_uuid(uuid)
-        if status_uuid == 200 and response_uuid:
-            prompt_new_papa_mama = Misc.PROMPT_NEW_PAPA_MAMA % dict(
-                name=response_uuid['first_name'],
-                papoy_or_mamoy='папой' if is_father else 'мамой',
-                fio_pama_mama='Иван Иванович Иванов'if is_father else 'Марья Ивановна Иванова',
-                on_a='Он' if is_father else 'Она',
-            )
-            await FSMpapaMama.next()
-            state = dp.current_state()
-            async with state.proxy() as data:
-                data['uuid'] = uuid
-                data['is_father'] = is_father
-            await callback_query.message.reply(
-                prompt_new_papa_mama,
-                reply_markup=Misc.reply_markup_cancel_row(),
-            )
+        response_uuid = response_sender['response_uuid']
+        prompt_new_papa_mama = Misc.PROMPT_NEW_PAPA_MAMA % dict(
+            name=response_uuid['first_name'],
+            papoy_or_mamoy='папой' if is_father else 'мамой',
+            fio_pama_mama='Иван Иванович Иванов'if is_father else 'Марья Ивановна Иванова',
+            on_a='Он' if is_father else 'Она',
+        )
+        await FSMpapaMama.next()
+        state = dp.current_state()
+        async with state.proxy() as data:
+            data['uuid'] = uuid
+            data['is_father'] = is_father
+        await callback_query.message.reply(
+            prompt_new_papa_mama,
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
 
 
 @dp.callback_query_handler(
@@ -343,19 +343,19 @@ async def process_callback_iof(callback_query: types.CallbackQuery, state: FSMCo
             pass
         if not uuid:
             return
-        if not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
+        if not response_sender:
             return
-        status_uuid, response_uuid = await Misc.get_user_by_uuid(uuid)
-        if status_uuid == 200 and response_uuid:
-            bot_data = await bot.get_me()
-            state = dp.current_state()
-            async with state.proxy() as data:
-                data['uuid'] = uuid
-            prompt_iof = Misc.PROMPT_EXISTING_IOF % dict(
-                name=response_uuid['first_name'],
-            )
-            await FSMexistingIOF.ask.set()
-            await callback_query.message.reply(prompt_iof, reply_markup=Misc.reply_markup_cancel_row())
+        response_uuid = response_sender['response_uuid']
+        bot_data = await bot.get_me()
+        state = dp.current_state()
+        async with state.proxy() as data:
+            data['uuid'] = uuid
+        prompt_iof = Misc.PROMPT_EXISTING_IOF % dict(
+            name=response_uuid['first_name'],
+        )
+        await FSMexistingIOF.ask.set()
+        await callback_query.message.reply(prompt_iof, reply_markup=Misc.reply_markup_cancel_row())
 
 
 @dp.message_handler(
@@ -429,30 +429,29 @@ async def process_callback_other(callback_query: types.CallbackQuery, state: FSM
         response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
         if not response_sender:
             return
-        status_uuid, response_uuid = await Misc.get_user_by_uuid(uuid)
-        if status_uuid == 200 and response_uuid:
-            dict_gender = dict(
-                keyboard_type=KeyboardType.OTHER_MALE,
-                sep=KeyboardType.SEP,
-            )
-            callback_data_template = '%(keyboard_type)s%(sep)s'
-            inline_button_male = InlineKeyboardButton('Муж', callback_data=callback_data_template % dict_gender)
-            dict_gender.update(keyboard_type=KeyboardType.OTHER_FEMALE)
-            inline_button_female = InlineKeyboardButton('Жен', callback_data=callback_data_template % dict_gender)
-            reply_markup = InlineKeyboardMarkup()
-            reply_markup.row(inline_button_male, inline_button_female, Misc.inline_button_cancel())
-            await FSMother.gender.set()
-            state = dp.current_state()
-            async with state.proxy() as data:
-                data['uuid'] = uuid
-                data['is_owned'] = bool(response_uuid['owner_id'])
-                data['name'] = response_uuid['first_name']
-            his_her = 'Ваш' if response_sender['uuid'] == response_uuid['uuid'] else 'его (её)'
-            await callback_query.message.reply(
-                Misc.show_other_data(response_uuid) + '\n' + \
-                Misc.PROMPT_GENDER % dict(his_her=his_her),
-                reply_markup=reply_markup,
-            )
+        response_uuid = response_sender['response_uuid']
+        dict_gender = dict(
+            keyboard_type=KeyboardType.OTHER_MALE,
+            sep=KeyboardType.SEP,
+        )
+        callback_data_template = '%(keyboard_type)s%(sep)s'
+        inline_button_male = InlineKeyboardButton('Муж', callback_data=callback_data_template % dict_gender)
+        dict_gender.update(keyboard_type=KeyboardType.OTHER_FEMALE)
+        inline_button_female = InlineKeyboardButton('Жен', callback_data=callback_data_template % dict_gender)
+        reply_markup = InlineKeyboardMarkup()
+        reply_markup.row(inline_button_male, inline_button_female, Misc.inline_button_cancel())
+        await FSMother.gender.set()
+        state = dp.current_state()
+        async with state.proxy() as data:
+            data['uuid'] = uuid
+            data['is_owned'] = bool(response_uuid['owner_id'])
+            data['name'] = response_uuid['first_name']
+        his_her = 'Ваш' if response_sender['uuid'] == response_uuid['uuid'] else 'его (её)'
+        await callback_query.message.reply(
+            Misc.show_other_data(response_uuid) + '\n' + \
+            Misc.PROMPT_GENDER % dict(his_her=his_her),
+            reply_markup=reply_markup,
+        )
 
 
 @dp.message_handler(

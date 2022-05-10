@@ -450,27 +450,26 @@ class Misc(object):
     async def check_owner(cls, owner_tg_user, uuid):
         """
         Проверить, принадлежит ли uuid к owner_tg_user или им является
+
+        Если принадлежит и им является, то возвращает данные из апи по owner_tg_user,
+        а внутри словарь response_uuid, данные из апи по uuid:
         """
+
+        # TODO
+        # оптимизировать там где это вызывается, чтоб не плодить лишние вызовы get_user_by_uuid(uuid)
+
         result = False
         status_sender, response_sender = await cls.post_tg_user(owner_tg_user, activate=True)
         if status_sender == 200 and response_sender.get('user_id'):
-            payload_uuid = dict(uuid=uuid, )
-            try:
-                status, response_uuid = await Misc.api_request(
-                    path='/api/profile',
-                    method='get',
-                    params=payload_uuid,
-                )
-                logging.debug('get tg_user_by_uuid in api, response_to: %s' % response_uuid)
-                if status == 200:
-                    if response_uuid.get('owner_id'):
-                        result = response_uuid['owner_id'] == response_sender['user_id']
-                    else:
-                        result = response_uuid['user_id'] == response_sender['user_id']
-                    if result:
-                        result = response_sender
-            except:
-                pass
+            status_uuid, response_uuid = await cls.get_user_by_uuid(uuid)
+            if status_uuid == 200 and response_uuid:
+                if response_uuid.get('owner_id'):
+                    result = response_uuid['owner_id'] == response_sender['user_id']
+                else:
+                    result = response_uuid['user_id'] == response_sender['user_id']
+                if result:
+                    result = response_sender
+                    result.update(response_uuid=response_uuid)
         return result
 
     @classmethod
