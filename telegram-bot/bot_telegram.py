@@ -40,6 +40,10 @@ class FSMpapaMama(StatesGroup):
     ask = State()
     new = State()
 
+class FSMchild(StatesGroup):
+    parent_gender = State()
+    new = State()
+
 class FSMother(StatesGroup):
     gender = State()
     dob = State()
@@ -264,7 +268,7 @@ async def process_callback_new_papa_mama(callback_query: types.CallbackQuery, st
     lambda c: c.data and re.search(r'^(%s|%s)%s' % (
         KeyboardType.FATHER, KeyboardType.MOTHER,
         KeyboardType.SEP,
-        # uuid папы или мамы           # 1
+        # uuid потомка папы или мамы           # 1
         # KeyboardType.SEP,
     ), c.data),
     state = None,
@@ -283,41 +287,79 @@ async def process_callback_papa_mama(callback_query: types.CallbackQuery, state:
             pass
         if not uuid:
             return
-        if not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
+        if not response_sender:
             return
+        response_uuid = response_sender['response_uuid']
         is_father = code[0] == str(KeyboardType.FATHER)
-        status_uuid, response_uuid = await Misc.get_user_by_uuid(uuid)
-        if status_uuid == 200 and response_uuid:
-            bot_data = await bot.get_me()
-            state = dp.current_state()
-            async with state.proxy() as data:
-                data['uuid'] = uuid
-                data['is_father'] = is_father
-            prompt_papa_mama = Misc.PROMPT_PAPA_MAMA % dict(
-                bot_data_username=bot_data['username'],
-                name=response_uuid['first_name'],
-                papy_or_mamy='папы' if is_father else 'мамы',
-                novy_novaya='Новый' if is_father else 'Новая',
-                papoy_or_mamoy='папой' if is_father else 'мамой',
-            )
-            callback_data = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s' % dict(
-                keyboard_type=KeyboardType.NEW_FATHER if is_father else KeyboardType.NEW_MOTHER,
-                uuid=uuid,
-                sep=KeyboardType.SEP,
-            )
-            inline_btn_new_papa_mama = InlineKeyboardButton(
-                'Новый' if is_father else 'Новая',
-                callback_data=callback_data,
-            )
-            inline_button_cancel = Misc.inline_button_cancel()
-            reply_markup = InlineKeyboardMarkup()
-            reply_markup.row(inline_btn_new_papa_mama, inline_button_cancel)
-            await FSMpapaMama.ask.set()
-            await callback_query.message.reply(
-                prompt_papa_mama,
-                reply_markup=reply_markup,
-                disable_web_page_preview=True,
-            )
+        bot_data = await bot.get_me()
+        state = dp.current_state()
+        async with state.proxy() as data:
+            data['uuid'] = uuid
+            data['is_father'] = is_father
+        prompt_papa_mama = Misc.PROMPT_PAPA_MAMA % dict(
+            bot_data_username=bot_data['username'],
+            name=response_uuid['first_name'],
+            papy_or_mamy='папы' if is_father else 'мамы',
+            novy_novaya='Новый' if is_father else 'Новая',
+            papoy_or_mamoy='папой' if is_father else 'мамой',
+        )
+        callback_data = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s' % dict(
+            keyboard_type=KeyboardType.NEW_FATHER if is_father else KeyboardType.NEW_MOTHER,
+            uuid=uuid,
+            sep=KeyboardType.SEP,
+        )
+        inline_btn_new_papa_mama = InlineKeyboardButton(
+            'Новый' if is_father else 'Новая',
+            callback_data=callback_data,
+        )
+        inline_button_cancel = Misc.inline_button_cancel()
+        reply_markup = InlineKeyboardMarkup()
+        reply_markup.row(inline_btn_new_papa_mama, inline_button_cancel)
+        await FSMpapaMama.ask.set()
+        await callback_query.message.reply(
+            prompt_papa_mama,
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
+        )
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.CHILD,
+        KeyboardType.SEP,
+        # uuid родителя           # 1
+        # KeyboardType.SEP,
+    ), c.data),
+    state = None,
+    )
+async def process_callback_child(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Действия по заданию папы, мамы
+    """
+    if callback_query.message:
+        tg_user_sender = callback_query.from_user
+        code = callback_query.data.split(KeyboardType.SEP)
+        uuid = None
+        try:
+            uuid = code[1]
+        except IndexError:
+            pass
+        if not uuid:
+            return
+        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
+        if not response_sender:
+            return
+        response_uuid = response_sender['response_uuid']
+        bot_data = await bot.get_me()
+        state = dp.current_state()
+        async with state.proxy() as data:
+            data['uuid'] = uuid
+        await callback_query.message.reply(
+            'Пока не реализовано: задать ребенка',
+            reply_markup=None,
+            disable_web_page_preview=True,
+        )
 
 
 @dp.callback_query_handler(

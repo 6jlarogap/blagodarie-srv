@@ -91,6 +91,19 @@ class KeyboardType(object):
     OTHER_DOB_UNKNOWN = 19
     OTHER_DOD_UNKNOWN = 20
 
+    # Внести ребенка
+    #
+    CHILD = 21
+
+    # Ребенок вносится как новый
+    #
+    NEW_CHILD = 22
+
+    # У ребенка родитель папа или мама?
+    #
+    FATHER_OF_CHILD = 23
+    MOTHER_OF_CHILD = 24
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -656,7 +669,16 @@ class Misc(object):
                     'Мама',
                     callback_data=callback_data_template % dict_papa_mama,
                 )
-                args_papa_mama_owner = [inline_btn_papa, inline_btn_mama,]
+                dict_child = dict(
+                    keyboard_type=KeyboardType.CHILD,
+                    uuid=response_to['uuid'],
+                    sep=KeyboardType.SEP,
+                )
+                inline_btn_child = InlineKeyboardButton(
+                    'Ребенок',
+                    callback_data=callback_data_template % dict_child,
+                )
+                args_papa_mama_owner = [inline_btn_papa, inline_btn_mama, inline_btn_child, ]
                 if is_owned_account:
                     dict_change_owner = dict(
                         keyboard_type=KeyboardType.CHANGE_OWNER,
