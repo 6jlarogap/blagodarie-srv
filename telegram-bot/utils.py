@@ -91,18 +91,18 @@ class KeyboardType(object):
     OTHER_DOB_UNKNOWN = 19
     OTHER_DOD_UNKNOWN = 20
 
-    # Внести ребенка
+    # Внести ребёнка
     #
     CHILD = 21
 
-    # Ребенок вносится как новый
+    # Ребёнок вносится как новый
     #
     NEW_CHILD = 22
 
-    # У ребенка родитель папа или мама?
+    # У ребёнка родитель папа или мама?
     #
-    FATHER_OF_CHILD = 23
-    MOTHER_OF_CHILD = 24
+    FATHER_OF_CHILD = 24
+    MOTHER_OF_CHILD = 25
 
     # Разделитель данных в call back data
     #
@@ -127,11 +127,11 @@ class Misc(object):
     PROMPT_EXISTING_IOF = "Укажите для\n\n%(name)s\n\nдругие имя отчество и фамилию - в одной строке, например: 'Иван Иванович Иванов'"
 
     PROMPT_PAPA_MAMA = (
-        '%(name)s.\n'
+        '<b>%(name)s</b>.\n'
         'Отправьте мне ссылку на профиль его (ее) %(papy_or_mamy)s '
         'вида t.me/%(bot_data_username)s?start=...\n\n'
         'Или нажмите <u>%(novy_novaya)s</u> для ввода нового родственника, '
-        'который станет его (её) %(papoy_or_mamoy)s'
+        'который станет %(his_her)s %(papoy_or_mamoy)s'
     )
     PROMPT_NEW_PAPA_MAMA = (
         "Укажите имя отчество и фамилию человека - в одной строке, например: '%(fio_pama_mama)s'. "
@@ -148,6 +148,36 @@ class Misc(object):
                     'Укажите %(his_her)s день рождения ' + PROMPT_DATE_FORMAT
     PROMPT_DOD =    '%(name)s.\n\n' + \
                     'Укажите %(his_her)s день смерти ' + PROMPT_DATE_FORMAT
+
+    PROMPT_CHILD = (
+        '<b>%(name)s</b>.\n'
+        'Отправьте мне ссылку на профиль %(his_her)s сына (дочери) '
+        'вида t.me/%(bot_data_username)s?start=...\n\n'
+        'Или нажмите <u>Новый ребёнок</u> для ввода нового родственника, '
+        'который станет %(his_her)s сыном (дочерью)'
+    )
+
+    PROMPT_PAPA_MAMA_OF_CHILD = (
+        '<b>%(name)s</b>.\n'
+        'Не известен его (ее) пол!\n'
+        'Посему не могу знать, папой или мамой он (она) является для ребёнка, '
+        'которого Вы хотите для него (неё) указать\n'
+        '\n'
+        '<b>%(name)s</b>.\n'
+        'Укажите его (её) пол'
+    )
+    PROMPT_NEW_CHILD = (
+        'Укажите имя отчество и фамилию человека - в одной строке, '
+        "например: 'Иван Иванович Иванов'. "
+        'Он (она) <u>добавится</u> к вашим родственникам и станет сыном (дочерью) для:\n'
+        '%(name)s.\n'
+    )
+
+    PROMPT_PAPA_MAMA_SET = (
+                '%(iof_to)s\n'
+                'отмечен%(_a_)s как %(papa_or_mama)s для:\n'
+                '%(iof_from)s\n'
+    )
 
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE
 
@@ -415,6 +445,7 @@ class Misc(object):
             first_name=tg_user_sender.first_name or '',
             username=tg_user_sender.username or '',
             activate='1' if activate else '',
+            did_bot_start='1',
         )
         try:
             status_sender, response_sender = await cls.api_request(
@@ -675,7 +706,7 @@ class Misc(object):
                     sep=KeyboardType.SEP,
                 )
                 inline_btn_child = InlineKeyboardButton(
-                    'Ребенок',
+                    'Ребёнок',
                     callback_data=callback_data_template % dict_child,
                 )
                 args_papa_mama_owner = [inline_btn_papa, inline_btn_mama, inline_btn_child, ]
@@ -841,18 +872,26 @@ class Misc(object):
 
 
     @classmethod
+    async def put_user_properties(cls, data):
+        status, response = None, None
+        logging.debug('put tg_user_data...')
+        payload = dict(tg_token=settings.TOKEN,)
+        payload.update(data)
+        status, response = await Misc.api_request(
+            path='/api/profile',
+            method='put',
+            data=payload,
+        )
+        logging.debug('put user_data, status: %s' % status)
+        logging.debug('put user_data, response: %s' % response)
+        return status, response
+
+    @classmethod
     async def put_tg_user_photo(cls, photo, response):
+        status_photo, response_photo = None, None
         if photo and response and response.get('uuid'):
-            logging.debug('put tg_user_photo...')
-            payload_photo = dict(
-                tg_token=settings.TOKEN,
+            status_photo, response_photo = await cls.put_user_properties(dict(
                 photo=photo,
                 uuid=response['uuid'],
-            )
-            status, response = await Misc.api_request(
-                path='/api/profile',
-                method='put',
-                data=payload_photo,
-            )
-            logging.debug('put tg_user_photo, status: %s' % status)
-            logging.debug('put tg_user_photo, response: %s' % response)
+            ))
+        return status_photo, response_photo
