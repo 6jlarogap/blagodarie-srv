@@ -554,22 +554,36 @@ class Misc(object):
         tg_uids = set(exclude_tg_uids)
         user_from_id = response_from.get('user_id')
         for response_to in a_response_to:
+            is_own_account = user_from_id and user_from_id == response_to['user_id']
+            is_owned_account = user_from_id and response_to.get('owner_id') and response_to['owner_id'] == user_from_id
+
             if response_to.get('tg_uid'):
                 if str(response_to['tg_uid']) in tg_uids:
                     continue
                 else:
                     tg_uids.add(str(response_to['tg_uid']))
             reply_markup = InlineKeyboardMarkup()
+
             path = "/profile/?id=%s" % response_to['uuid']
             url = settings.FRONTEND_HOST + path
-            login_url = cls.make_login_url(path)
-            login_url = LoginUrl(url=login_url)
-            inline_btn_go = InlineKeyboardButton(
-                'Перейти',
+            # login_url = LoginUrl(url=cls.make_login_url(path))
+            inline_btn_friends = InlineKeyboardButton(
+                'Друзья',
                 url=url,
                 # login_url=login_url,
             )
-            reply_markup.row(inline_btn_go)
+            goto_buttons = [inline_btn_friends, ]
+            if not group_id and (is_own_account or is_owned_account):
+                path = "/gen/?id=%s" % response_to['uuid']
+                url = settings.FRONTEND_HOST + path
+                # login_url = LoginUrl(url=cls.make_login_url(path))
+                inline_btn_genesis = InlineKeyboardButton(
+                    'Род',
+                    url=url,
+                    # login_url=login_url,
+                )
+                goto_buttons.append(inline_btn_genesis)
+            reply_markup.row(*goto_buttons)
             reply = cls.reply_user_card(response_to, bot_data=bot_data)
 
             response_relations = None
@@ -635,8 +649,6 @@ class Misc(object):
                         inline_btn_thank,
                         inline_btn_mistrust,
                     )
-            is_own_account = user_from_id and user_from_id == response_to['user_id']
-            is_owned_account = user_from_id and response_to.get('owner_id') and response_to['owner_id'] == user_from_id
             if is_own_account or is_owned_account:
 
                 # Карточка самому пользователю или его родственнику

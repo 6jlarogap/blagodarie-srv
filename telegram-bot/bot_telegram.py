@@ -2368,7 +2368,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             login_url = Misc.make_login_url(path)
             login_url = LoginUrl(url=login_url)
             inline_btn_go = InlineKeyboardButton(
-                'Перейти',
+                'Друзья',
                 url=url,
                 # login_url=login_url,
             )
