@@ -601,18 +601,21 @@ class Profile(PhotoModel, GeoPointModel):
         """
         return Profile.choose_photo_of(request, self.photo and self.photo.name, self.photo_url, google_photo_size)
 
-    def parents_dict(self, request, google_photo_size=None):
+    def parents_dict(self, request):
         """
-        Вернуть папу и маму из CurrentState
+        Вернуть папу, маму и детей из CurrentState
         """
-        result = dict(father=None, mother=None)
-        q = Q(is_reverse=False, user_to__isnull=False) & (Q(is_father=True) | Q(is_mother=True))
+        result = dict(father=None, mother=None, children=[])
+        q = Q(user_to__isnull=False) & (Q(is_father=True) | Q(is_mother=True))
         for parent_link in self.user.currentstate_user_from_set.filter(q). \
-            select_related('user_to__profile', 'user_to__profile__ability').distinct():
+                           select_related('user_to', 'user_to__profile', 'user_to__profile__ability'). \
+                           order_by('user_to__first_name').distinct():
             human = parent_link.user_to.profile.data_dict(request)
-            if parent_link.is_father:
+            if parent_link.is_child:
+                result['children'].append(human)
+            elif parent_link.is_father:
                 result['father'] = human
-            else:
+            elif parent_link.is_mother:
                 result['mother'] = human
         return result
 
