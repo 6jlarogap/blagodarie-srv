@@ -1852,13 +1852,7 @@ async def echo_getowned_to_bot(message: types.Message, state: FSMContext):
     bot_data = await bot.get_me()
     reply = ''
     for response in a_response_to:
-        deeplink=Misc.get_deeplink(response, bot_data)
-        iof = Misc.get_iof(response)
-        lifetime_years_str = Misc.get_lifetime_years_str(response)
-        if lifetime_years_str:
-            lifetime_years_str = ', ' + lifetime_years_str
-        reply += '<a href="%(deeplink)s">%(iof)s%(lifetime_years_str)s</a>\n'
-        reply %= dict(deeplink=deeplink, iof=iof, lifetime_years_str=lifetime_years_str)
+        reply += Misc.get_iof_deeplink(response, bot_data, with_lifetime_years=True) +'\n'
     parts = safe_split_text(reply, split_separator='\n')
     for part in parts:
         await message.reply(part, disable_web_page_preview=True)

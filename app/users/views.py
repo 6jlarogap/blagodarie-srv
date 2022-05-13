@@ -984,6 +984,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                         data_item = profile.data_dict(request)
                         data_item.update(user_id=user.pk, tg_uid=oauth.uid, tg_username=oauth.username)
                         data_item.update(profile.data_WAK())
+                        data_item.update(profile.parents_dict(request))
                         data.append(data_item)
                     except IndexError:
                         pass
@@ -1005,6 +1006,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                     data_item = profile.data_dict(request)
                     data_item.update(user_id=user.pk, tg_uid=oauth.uid, tg_username=oauth.username)
                     data_item.update(profile.data_WAK())
+                    data_item.update(profile.parents_dict(request))
                     data.append(data_item)
             elif request.GET.get('uuid_owner'):
                 data = []
@@ -1118,6 +1120,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             user.save()
 
         data.update(profile.data_dict(request))
+        data.update(profile.parents_dict(request))
         data.update(user_id=user.pk, tg_uid=oauth.uid, tg_username=oauth.username)
         data.update(profile.data_WAK())
         return data

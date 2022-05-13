@@ -323,13 +323,13 @@ class Misc(object):
 
 
     @classmethod
-    def reply_user_card(cls, response, bot_data, username=None):
+    def reply_user_card(cls, response, bot_data, show_parents=False):
         """
         Карточка пользователя, каким он на сайте
 
         На входе:
         response: ответ от сервера
-        username: от телеграма. Если не задано, ищется в response.get('tg_username')
+        bot_data
 
         На выходе:
         Имя Фамилия
@@ -351,7 +351,7 @@ class Misc(object):
         if not response:
             return ''
         iof = cls.get_iof(response)
-        lifetime_str = cls.get_lifetime_str(response)
+        lifetime_str = response.get('owner_id') and cls.get_lifetime_str(response) or ''
         if lifetime_str:
             lifetime_str += '\n'
         reply = (
@@ -387,9 +387,28 @@ class Misc(object):
             else  'не задано'
         reply += ('Местоположение: %s' % map_text) + '\n\n'
 
+        if show_parents:
+            papa = response.get('father') and \
+                   cls.get_iof_deeplink(response['father'], bot_data, with_lifetime_years=True) or \
+                   'не задан'
+            mama = response.get('mother') and \
+                   cls.get_iof_deeplink(response['mother'], bot_data, with_lifetime_years=True) or \
+                   'не задана'
+            if response.get('children'):
+                children = '\n'
+                for child in response['children']:
+                    children += ' ' + cls.get_iof_deeplink(child, bot_data, with_lifetime_years=True) + '\n'
+            else:
+                children = 'не заданы'
+            parents = (
+                'Папа: %(papa)s\n'
+                'Мама: %(mama)s\n'
+                'Дети: %(children)s\n'
+            ) % dict(papa=papa, mama=mama, children=children)
+            reply += parents
+
         keys = []
-        if not username:
-            username = response.get('tg_username')
+        username = response.get('tg_username', '')
         if username:
             keys.append("@%s" % username)
         keys += [key['value'] for key in response['keys']]
@@ -397,7 +416,6 @@ class Misc(object):
         keys_text = '\n' + '\n'.join(
             key for key in keys
         ) if keys else 'не задано'
-
         reply += ('Контакты: %s' % keys_text) + '\n\n'
 
         return reply
@@ -584,7 +602,11 @@ class Misc(object):
                 )
                 goto_buttons.append(inline_btn_genesis)
             reply_markup.row(*goto_buttons)
-            reply = cls.reply_user_card(response_to, bot_data=bot_data)
+            reply = cls.reply_user_card(
+                response_to,
+                bot_data=bot_data,
+                show_parents=is_own_account or is_owned_account,
+            )
 
             response_relations = None
             if user_from_id and user_from_id != response_to['user_id']:
@@ -762,7 +784,31 @@ class Misc(object):
 
 
     @classmethod
-    def get_iof(cls, response):
+    def get_lifetime_str(cls, response):
+        lifetime = ''
+        if response.get('dob'):
+            lifetime += response['dob']
+        elif response.get('dod'):
+            lifetime += '...'
+        if response.get('dod'):
+            lifetime += " – %s" % response['dod']
+        return lifetime
+
+
+    @classmethod
+    def get_lifetime_years_str(cls, response):
+        lifetime = ''
+        if response.get('dob'):
+            lifetime += response['dob'][-4:]
+        elif response.get('dod'):
+            lifetime += '...'
+        if response.get('dod'):
+            lifetime += " – %s" % response['dod'][-4:]
+        return lifetime
+
+
+    @classmethod
+    def get_iof(cls, response, with_lifetime_years=False):
         last_name = response.get('last_name', '') or ''
         first_name = response.get('first_name', '') or ''
         middle_name = response.get('middle_name', '') or ''
@@ -770,34 +816,19 @@ class Misc(object):
             result = (last_name or '').strip()
         else:
             result = " ".join(((first_name or ''), (middle_name or ''), (last_name or ''),)).strip()
-        result = re.sub(r'\s{2,}', ' ', result)
-        return result or 'Без имени'
+        result = re.sub(r'\s{2,}', ' ', result) or 'Без имени'
+        if with_lifetime_years:
+            lifetime_years_str = cls.get_lifetime_years_str(response)
+            if lifetime_years_str:
+                result += ', ' + lifetime_years_str
+        return result
 
 
     @classmethod
-    def get_lifetime_str(cls, response):
-        lifetime = ''
-        if response.get('owner_id'):
-            if response.get('dob'):
-                lifetime += response['dob']
-            elif response.get('dod'):
-                lifetime += '...'
-            if response.get('dod'):
-                lifetime += " – %s" % response['dod']
-        return lifetime
-
-
-    @classmethod
-    def get_lifetime_years_str(cls, response):
-        lifetime = ''
-        if response.get('owner_id'):
-            if response.get('dob'):
-                lifetime += response['dob'][-4:]
-            elif response.get('dod'):
-                lifetime += '...'
-            if response.get('dod'):
-                lifetime += " – %s" % response['dod'][-4:]
-        return lifetime
+    def get_iof_deeplink(cls, response, bot_data, with_lifetime_years=False):
+        deeplink = cls.get_deeplink(response, bot_data)
+        iof = cls.get_iof(response, with_lifetime_years=with_lifetime_years)
+        return '<a href="%(deeplink)s">%(iof)s</a>' % dict(deeplink=deeplink, iof=iof,)
 
 
     @classmethod
