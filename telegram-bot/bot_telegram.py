@@ -381,10 +381,10 @@ async def put_child_by_uuid(message: types.Message, state: FSMContext):
             response_sender = await Misc.check_owner(owner_tg_user=message.from_user, uuid=data['uuid'])
             if response_sender:
                 if not response_sender['response_uuid']['gender']:
-                    await Misc.put_user_properties(dict(
+                    await Misc.put_user_properties(
                       uuid=data['uuid'],
                       gender=data['parent_gender'],
-                    ))
+                    )
                 is_father = data['parent_gender'] == 'm'
                 post_op = dict(
                     tg_token=settings.TOKEN,
@@ -441,10 +441,10 @@ async def put_new_child(message: types.Message, state: FSMContext):
             if response_sender:
                 response_parent = response_sender['response_uuid']
                 if not response_parent['gender']:
-                    await Misc.put_user_properties(dict(
+                    await Misc.put_user_properties(
                       uuid=data['uuid'],
                       gender=data['parent_gender'],
-                    ))
+                    )
                 first_name = Misc.strip_text(message.text)
                 post_new_link = dict(
                     tg_token=settings.TOKEN,
@@ -670,24 +670,19 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
     if uuid:
         response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
         if response_sender:
-            status, response = await Misc.put_user_properties(dict(
+            status, response = await Misc.put_user_properties(
                 uuid=uuid,
                 first_name=Misc.strip_text(message.text),
-            ))
+            )
             if status == 200:
                 await message.reply('Изменено')
-                try:
-                    status, response = await Misc.get_user_by_uuid(uuid)
-                    if status == 200:
-                        bot_data = await bot.get_me()
-                        await Misc.show_cards(
-                            [response],
-                            message,
-                            bot_data,
-                            response_from=response_sender,
-                        )
-                except:
-                    pass
+                bot_data = await bot.get_me()
+                await Misc.show_cards(
+                    [response],
+                    message,
+                    bot_data,
+                    response_from=response_sender,
+                )
     await Misc.state_finish(state)
 
 
@@ -812,26 +807,21 @@ async def put_other_data(message, tg_user_sender, state, data):
             dob = data.get('dob', '')
             dod = data.get('dod', '')
             is_male = data['is_male']
-            status, response = Misc.put_user_properties(dict(
+            status, response = await Misc.put_user_properties(
                 uuid=data['uuid'],
                 gender='m' if is_male else 'f',
                 dob=dob,
                 dod=dod,
-            ))
-            if status == 200:
-                try:
-                    status, response = await Misc.get_user_by_uuid(data['uuid'])
-                    if status == 200 and response:
-                        await message.reply('Данные внесены:\n' + Misc.show_other_data(response))
-                        bot_data = await bot.get_me()
-                        await Misc.show_cards(
-                            [response],
-                            message,
-                            bot_data,
-                            response_from=response_sender,
-                        )
-                except:
-                    pass
+            )
+            if status == 200 and response:
+                await message.reply('Данные внесены:\n' + Misc.show_other_data(response))
+                bot_data = await bot.get_me()
+                await Misc.show_cards(
+                    [response],
+                    message,
+                    bot_data,
+                    response_from=response_sender,
+                )
             elif status == 400 and response and response.get('message'):
                 await message.reply('Ошибка!\n%s\n\nНазначайте сведения по новой' % response['message'])
             else:
@@ -1250,26 +1240,21 @@ async def put_photo(message: types.Message, state: FSMContext):
             image = BytesIO()
             await message.photo[-1].download(destination_file=image)
             image = base64.b64encode(image.read()).decode('UTF-8')
-            status_photo, response_photo = await Misc.put_user_properties(dict(
+            status, response = await Misc.put_user_properties(
                 uuid=user_uuid,
                 photo=image,
-            ))
-            if status_photo == 200:
+            )
+            if status == 200:
                 await message.reply('Фото внесено')
-                try:
-                    status, response = await Misc.get_user_by_uuid(user_uuid)
-                    if status == 200:
-                        await Misc.show_cards(
-                            [response],
-                            message,
-                            bot_data,
-                            response_from=response_sender,
-                        )
-                except:
-                    pass
-            elif status_photo == 400:
-                if response_photo.get('message'):
-                    await message.reply(response_photo['message'])
+                await Misc.show_cards(
+                    [response],
+                    message,
+                    bot_data,
+                    response_from=response_sender,
+                )
+            elif status == 400:
+                if response.get('message'):
+                    await message.reply(response['message'])
                 else:
                     await message.reply(Misc.MSG_ERROR_API)
             else:
@@ -1386,26 +1371,21 @@ async def process_callback_photo_remove_confirmed(callback_query: types.Callback
         tg_user_sender = callback_query.from_user
         status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
         if status_sender == 200 and response_sender:
-            status_photo, response_photo = await Misc.put_user_properties(dict(
+            status, response = await Misc.put_user_properties(
                 photo='',
                 uuid=uuid,
-            ))
-            if status_photo == 200:
+            )
+            if status == 200:
                 await callback_query.message.reply('Фото удалено')
-                try:
-                    status, response = await Misc.get_user_by_uuid(uuid)
-                    if status == 200:
-                        await Misc.show_cards(
-                            [response],
-                            callback_query.message,
-                            bot_data,
-                            response_from=response_sender,
-                        )
-                except:
-                    pass
-            elif status_photo == 400:
-                if response_photo.get('message'):
-                    await message.reply(response_photo['message'])
+                await Misc.show_cards(
+                    [response],
+                    callback_query.message,
+                    bot_data,
+                    response_from=response_sender,
+                )
+            elif status == 400:
+                if response.get('message'):
+                    await message.reply(response['message'])
                 else:
                     await message.reply(Misc.MSG_ERROR_API)
             else:
@@ -1719,10 +1699,10 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
                 # TODO здесь временно сделано, что юзер стартанул бот ----------------
                 # Потом удалить
                 #
-                await Misc.put_user_properties(dict(
+                await Misc.put_user_properties(
                     uuid=profile_to['uuid'],
                     did_bot_start='1',
-                ))
+                )
                 # --------------------------------------------------------------------
             except (ChatNotFound, CantInitiateConversation):
                 pass
@@ -1786,7 +1766,7 @@ async def process_callback_location(callback_query: types.CallbackQuery, state: 
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    content_types=["location",],
+    content_types=['location',],
     state=None,
 )
 async def location(message: types.Message, state: FSMContext):
@@ -1798,7 +1778,6 @@ async def location(message: types.Message, state: FSMContext):
         user_uuid = None
         async with state.proxy() as data:
             user_uuid = data.get('uuid')
-
         latitude = longitude = None
         try:
             latitude = getattr(message.location, 'latitude')
@@ -1810,24 +1789,17 @@ async def location(message: types.Message, state: FSMContext):
             tg_user_sender = message.from_user
             status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
             if status_sender == 200:
-                if user_uuid:
-                    status_this, response_this = await Misc.get_user_by_uuid(user_uuid)
-                else:
-                    status_this, response_this = status_sender, response_sender
-                    user_uuid = response_this.get('uuid')
+                if not user_uuid:
+                    user_uuid = response_sender.get('uuid')
             if user_uuid:
-                status, response = await Misc.put_user_properties(dict(
+                status, response = await Misc.put_user_properties(
                     uuid=user_uuid,
                     latitude = latitude,
                     longitude = longitude,
-                ))
+                )
                 if status == 200:
-                    response_this.update(
-                        latitude=latitude,
-                        longitude=longitude,
-                    )
                     await Misc.show_cards(
-                        [response_this],
+                        [response],
                         message,
                         bot_data,
                         response_from=response_sender,

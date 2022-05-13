@@ -884,11 +884,11 @@ class Misc(object):
 
 
     @classmethod
-    async def put_user_properties(cls, data):
+    async def put_user_properties(cls, **kwargs):
         status, response = None, None
         logging.debug('put tg_user_data...')
         payload = dict(tg_token=settings.TOKEN,)
-        payload.update(data)
+        payload.update(**kwargs)
         status, response = await Misc.api_request(
             path='/api/profile',
             method='put',
@@ -902,8 +902,8 @@ class Misc(object):
     async def put_tg_user_photo(cls, photo, response):
         status_photo, response_photo = None, None
         if photo and response and response.get('uuid'):
-            status_photo, response_photo = await cls.put_user_properties(dict(
+            status_photo, response_photo = await cls.put_user_properties(
                 photo=photo,
                 uuid=response['uuid'],
-            ))
+            )
         return status_photo, response_photo

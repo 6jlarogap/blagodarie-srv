@@ -1263,9 +1263,11 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
     def put(self, request):
         status_code = 200
         try:
+            got_tg_token = False
             if request.data.get('tg_token'):
                 if request.data['tg_token'] != settings.TELEGRAM_BOT_TOKEN:
                     raise ServiceException('Неверный токен телеграм бота')
+                got_tg_token = True
                 user, profile = self.check_user_uuid(request.data.get('uuid'))
             elif not request.user.is_authenticated:
                 raise NotAuthenticated
@@ -1315,6 +1317,22 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             profile.save()
             data = profile.data_dict(request)
             data.update(profile.parents_dict(request))
+            data.update(profile.data_WAK())
+            data.update(
+                user_id=user.pk,
+                owner_id=profile.owner and profile.owner.pk or None,
+            )
+            if got_tg_token:
+                try:
+                    oauth = Oauth.objects.select_related(
+                        'user', 'user__profile'
+                    ).filter(
+                        provider=Oauth.PROVIDER_TELEGRAM,
+                        user=user,
+                    )[0]
+                    data.update(tg_uid=oauth.uid, tg_username=oauth.username)
+                except IndexError:
+                    pass
         except SkipException:
             pass
         except ServiceException as excpt:
