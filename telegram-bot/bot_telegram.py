@@ -143,6 +143,7 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
                     iof_to = Misc.get_deeplink_with_name(response['profile_to'], bot_data),
                     papa_or_mama='папа' if is_father else 'мама',
                     _a_='' if is_father else 'а',
+                    disable_web_page_preview=True,
             ))
         else:
             await message.reply('Родитель внесен в данные')
@@ -208,6 +209,7 @@ async def put_new_papa_mama(message: types.Message, state: FSMContext):
                     iof_to = Misc.get_deeplink_with_name(response, bot_data),
                     papa_or_mama='папа' if is_father else 'мама',
                     _a_='' if is_father else 'а',
+                    disable_web_page_preview=True,
             ))
         else:
             await message.reply('Родитель внесен в данные')
@@ -417,6 +419,7 @@ async def put_child_by_uuid(message: types.Message, state: FSMContext):
                                 iof_to = Misc.get_deeplink_with_name(response['profile_to'], bot_data),
                                 papa_or_mama='папа' if is_father else 'мама',
                                 _a_='' if is_father else 'а',
+                                disable_web_page_preview=True,
                         ))
                     else:
                         await message.reply('Родитель внесен в данные')
@@ -477,6 +480,7 @@ async def put_new_child(message: types.Message, state: FSMContext):
                                 iof_to = Misc.get_deeplink_with_name(response_parent, bot_data),
                                 papa_or_mama='папа' if is_father else 'мама',
                                 _a_='' if is_father else 'а',
+                                disable_web_page_preview=True,
                         ))
                     else:
                         await message.reply('Ребёнок внесен в данные')
