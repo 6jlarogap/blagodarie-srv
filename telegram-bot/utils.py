@@ -3,6 +3,7 @@ from urllib.parse import urlencode
 
 from aiogram.types.login_url import LoginUrl
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.utils.parts import safe_split_text
 import aiohttp
 
 import settings
@@ -399,7 +400,7 @@ class Misc(object):
                 for child in response['children']:
                     children += ' ' + cls.get_iof_deeplink(child, bot_data, with_lifetime_years=True) + '\n'
             else:
-                children = 'не заданы'
+                children = 'не заданы\n'
             parents = (
                 'Папа: %(papa)s\n'
                 'Мама: %(mama)s\n'
@@ -411,7 +412,7 @@ class Misc(object):
         username = response.get('tg_username', '')
         if username:
             keys.append("@%s" % username)
-        keys += [key['value'] for key in response['keys']]
+        keys += [key['value'] for key in response.get('keys', [])]
         keys.append(cls.get_deeplink(response, bot_data))
         keys_text = '\n' + '\n'.join(
             key for key in keys
@@ -549,6 +550,30 @@ class Misc(object):
             usernames[i] = usernames[i][1:]
         return usernames, text
 
+
+    @classmethod
+    async def show_deeplinks(cls,
+        # Список данных пользователей
+        a_found,
+        # в ответ на какое сообщение
+        message,
+        bot_data,
+    ):
+        """
+        Показать строки deeplinks по массиву a_found
+        """
+        reply = ''
+        uuids = []
+        for response in a_found:
+            if response['uuid'] in uuids:
+                continue
+            else:
+                uuids.append(response['uuid'])
+                reply += Misc.get_iof_deeplink(response, bot_data, with_lifetime_years=True) +'\n'
+        if reply:
+            parts = safe_split_text(reply, split_separator='\n')
+            for part in parts:
+                await message.reply(part, disable_web_page_preview=True)
 
     @classmethod
     async def show_cards(cls,

@@ -983,31 +983,30 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                         profile = user.profile
                         data_item = profile.data_dict(request)
                         data_item.update(user_id=user.pk, tg_uid=oauth.uid, tg_username=oauth.username)
-                        data_item.update(profile.data_WAK())
-                        data_item.update(profile.parents_dict(request))
+                        if request.GET.get('verbose'):
+                            data_item.update(profile.data_WAK())
+                            data_item.update(profile.parents_dict(request))
                         data.append(data_item)
                     except IndexError:
                         pass
             elif request.GET.get('query'):
                 data = []
                 query = request.GET['query']
-                q_oauth = Q(provider=Oauth.PROVIDER_TELEGRAM)
-                q_oauth &= \
-                    Q(user__first_name__icontains=query) | \
-                    Q(user__wish__text__icontains=query) | \
-                    Q(user__ability__text__icontains=query)
-                for oauth in Oauth.objects.filter(q_oauth).distinct().select_related(
-                    'user',
-                    'user__profile',
-                    'user__profile__ability',
-                    ):
-                    user = oauth.user
-                    profile = user.profile
-                    data_item = profile.data_dict(request)
-                    data_item.update(user_id=user.pk, tg_uid=oauth.uid, tg_username=oauth.username)
-                    data_item.update(profile.data_WAK())
-                    data_item.update(profile.parents_dict(request))
-                    data.append(data_item)
+                if query:
+                    q_users = Q(is_superuser=False)
+                    q_users &= \
+                        Q(first_name__icontains=query) | \
+                        Q(wish__text__icontains=query) | \
+                        Q(ability__text__icontains=query) | \
+                        Q(key__value__icontains=query)
+                    users = User.objects.filter(q_users). \
+                            select_related('profile').distinct(). \
+                            order_by('first_name')
+                    for user in users:
+                        profile = user.profile
+                        item = profile.data_dict(request)
+                        item.update(user_id=user.pk)
+                        data.append(item)
             elif request.GET.get('uuid_owner'):
                 data = []
                 users_selected = Profile.objects.filter(owner__profile__uuid=request.GET['uuid_owner']). \

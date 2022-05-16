@@ -1264,7 +1264,7 @@ class ApiGetStats(SQL_Mixin, APIView):
             #   с параметром count:
             #       число пользователей, всех или найденных по фильтру query
 
-            q_users = Q(is_superuser=False, profile__owner__isnull=True)
+            q_users = Q(is_superuser=False)
             query = request.GET.get('query')
             if query:
                 q_users &= \

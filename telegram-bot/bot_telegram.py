@@ -13,7 +13,6 @@ from aiogram.dispatcher import Dispatcher, FSMContext
 from aiogram.dispatcher.filters import ChatTypeFilter, Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_polling, start_webhook
-from aiogram.utils.parts import safe_split_text
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation
@@ -1854,12 +1853,7 @@ async def echo_getowned_to_bot(message: types.Message, state: FSMContext):
         return
 
     bot_data = await bot.get_me()
-    reply = ''
-    for response in a_response_to:
-        reply += Misc.get_iof_deeplink(response, bot_data, with_lifetime_years=True) +'\n'
-    parts = safe_split_text(reply, split_separator='\n')
-    for part in parts:
-        await message.reply(part, disable_web_page_preview=True)
+    await Misc.show_deeplinks(a_response_to, message, bot_data)
 
 
 @dp.message_handler(
@@ -1978,9 +1972,10 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
     # Кого будут благодарить
     # или свой профиль в массиве
-    # или массив найденных профилей
-    #
     a_response_to = []
+
+    # массив найденных профилей. По ним только deeplinks
+    a_found = []
 
     message_text = getattr(message, 'text', '') and message.text.strip() or ''
     bot_data = await bot.get_me()
@@ -2025,6 +2020,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                             logging.debug('@usernames found in message text\n') 
                             payload_username = dict(
                                 tg_username=','.join(usernames),
+                                verbose='',
                             )
                             status, response = await Misc.api_request(
                                 path='/api/profile',
@@ -2034,7 +2030,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                             logging.debug('get by username, status: %s' % status)
                             logging.debug('get by username, response: %s' % response)
                             if status == 200 and response:
-                                a_response_to += response
+                                a_found += response
                                 state_ = 'found_username'
                             else:
                                 state_ = 'not_found'
@@ -2051,7 +2047,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                             logging.debug('get by query, status: %s' % status)
                             logging.debug('get by query, response: %s' % response)
                             if status == 200 and response:
-                                a_response_to += response
+                                a_found += response
                                 state_ = 'found_in_search'
                             elif state_ != 'found_username':
                                 state_ = 'not_found'
@@ -2134,6 +2130,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             logging.debug('@usernames found in message text\n')
             payload_username = dict(
                 tg_username=','.join(usernames),
+                verbose='',
             )
             status, response = await Misc.api_request(
                 path='/api/profile',
@@ -2143,12 +2140,11 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             logging.debug('get by username, status: %s' % status)
             logging.debug('get by username, response: %s' % response)
             if status == 200 and response:
-                a_response_to += response
+                a_found += response
 
 
     if state_ and state_ not in ('not_found', 'invalid_message_text',) and user_from_id and a_response_to:
         message_to_forward_id = state_ == 'forwarded_from_other' and message.message_id or ''
-
         await Misc.show_cards(
             a_response_to,
             message,
@@ -2161,6 +2157,8 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
     elif reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
+    await Misc.show_deeplinks(a_found, message, bot_data)
+
     if user_from_id and response_from.get('created'):
         tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
         if tg_user_sender_photo:
@@ -2170,7 +2168,6 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         tg_user_forwarded_photo = await Misc.get_user_photo(bot, tg_user_forwarded)
         if tg_user_forwarded_photo:
             await Misc.put_tg_user_photo(tg_user_forwarded_photo, response_to)
-
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=(types.ChatType.GROUP, types.ChatType.SUPERGROUP)),
@@ -2386,6 +2383,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 logging.debug('@usernames found in message text\n')
                 payload_username = dict(
                     tg_username=','.join(usernames),
+                    verbose='1',
                 )
                 status, a_response_to = await Misc.api_request(
                     path='/api/profile',
