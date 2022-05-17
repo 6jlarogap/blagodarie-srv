@@ -963,3 +963,41 @@ class Misc(object):
                 uuid=response['uuid'],
             )
         return status_photo, response_photo
+
+    @classmethod
+    def text_search_phrase(
+            cls,
+            phrase,
+            morph_analyzer,
+            # Исключаемые граммемы
+            # https://pymorphy2.readthedocs.io/en/latest/user/grammemes.html#grammeme-docs
+            functors_pos={'INTJ', 'PRCL', 'CONJ', 'PREP'},
+            # or, and or nothing
+            operation='and',
+        ):
+        """
+        Возвращает фразу для полнотекстового поиска
+        """
+        def what_pos(word):
+            "Return a likely part of speech for the *word*."""
+            return morph_analyzer.parse(word)[0].tag.POS
+
+        result = []
+        words = re.split(r'\s+', phrase)
+        for word in words:
+            if len(word) < settings.MIN_LEN_SEARCHED_TEXT:
+                continue
+            if what_pos(word) not in functors_pos:
+                word = re.sub(r'[\?\!\&\|\+\,\.\:\;\'\)\(\{\}\*\"\<\>\`\~]', '', word)
+                if len(word) >= settings.MIN_LEN_SEARCHED_TEXT:
+                    result.append(word)
+        if result:
+            sep = ' '
+            if operation == 'and':
+                sep = ' & '
+            elif operation == 'or':
+                sep = ' | '
+            result = sep.join(result)
+        else:
+            result = ''
+        return result

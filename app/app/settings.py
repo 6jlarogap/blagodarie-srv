@@ -363,6 +363,10 @@ THUMBNAILS_PROXY_BASE_URL = '/thumb/'
 # возможные длины и высоты:
 THUMBNAILS_ALLOWED_SIZE_RANGE = dict(min=20, max=2000)
 
+# Минимальный размер сообщения для полнотекстового поиска из бота:
+#
+MIN_LEN_SEARCHED_TEXT = 3
+
 DATA_UPLOAD_MAX_MEMORY_SIZE = 14 * 1024 * 1024
 
 # Log errors. Установить следующее в прод версии в local_settings.py:

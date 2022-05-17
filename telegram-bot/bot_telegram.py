@@ -14,8 +14,10 @@ from aiogram.dispatcher.filters import ChatTypeFilter, Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_polling, start_webhook
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
-
 from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation
+
+import pymorphy2
+MorphAnalyzer = pymorphy2.MorphAnalyzer()
 
 storage = MemoryStorage()
 
@@ -2015,7 +2017,17 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                         state_ = 'invalid_message_text'
                         reply = Misc.help_text()
                     else:
+                        search_phrase = ''
                         usernames, text_stripped = Misc.get_text_usernames(message_text)
+                        if text_stripped:
+                            search_phrase = Misc.text_search_phrase(
+                                text_stripped,
+                                MorphAnalyzer,
+                            )
+                            if not search_phrase and not usernames:
+                                state_ = 'invalid_message_text'
+                                reply = 'Недостаточно для поиска: короткие слова или текст вообще без слов и т.п.'
+
                         if usernames:
                             logging.debug('@usernames found in message text\n') 
                             payload_username = dict(
@@ -2035,9 +2047,9 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                             else:
                                 state_ = 'not_found'
 
-                        if text_stripped and len(text_stripped) >= settings.MIN_LEN_SEARCHED_TEXT:
+                        if search_phrase:
                             payload_query = dict(
-                                query=text_stripped,
+                                query=search_phrase,
                             )
                             status, response = await Misc.api_request(
                                 path='/api/profile',
@@ -2046,14 +2058,22 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                             )
                             logging.debug('get by query, status: %s' % status)
                             logging.debug('get by query, response: %s' % response)
-                            if status == 200 and response:
-                                a_found += response
-                                state_ = 'found_in_search'
-                            elif state_ != 'found_username':
+                            if status == 400 and response.get('code') and response['code'] == 'programming_error':
+                                if state_ != 'found_username':
+                                    state_ = 'not_found'
+                                    reply = 'Ошибка доступа к данных. Получили отказ по такой строке в поиске'
+                            elif status == 200:
+                                if response:
+                                    a_found += response
+                                    state_ = 'found_in_search'
+                                elif state_ != 'found_username':
+                                    state_ = 'not_found'
+                            else:
                                 state_ = 'not_found'
+                                reply = Misc.MSG_ERROR_API
 
-    if state_ == 'not_found':
-        reply = 'Профиль не найден'
+    if state_ == 'not_found' and not reply:
+        reply = 'Ничего не найдено - попробуйте другие слова'
 
     if state_:
         logging.debug('get_or_create tg_user_sender data in api...')

@@ -7,6 +7,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
 from django.http import Http404
+from django.contrib.postgres.search import SearchQuery
+from django.db.utils import ProgrammingError
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -992,21 +994,28 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             elif request.GET.get('query'):
                 data = []
                 query = request.GET['query']
-                if query:
-                    q_users = Q(is_superuser=False)
-                    q_users &= \
-                        Q(first_name__icontains=query) | \
-                        Q(wish__text__icontains=query) | \
-                        Q(ability__text__icontains=query) | \
-                        Q(key__value__icontains=query)
-                    users = User.objects.filter(q_users). \
-                            select_related('profile').distinct(). \
-                            order_by('first_name')
-                    for user in users:
-                        profile = user.profile
-                        item = profile.data_dict(request)
-                        item.update(user_id=user.pk)
-                        data.append(item)
+                if len(query) >= settings.MIN_LEN_SEARCHED_TEXT:
+                    try:
+                        q_users = Q(is_superuser=False)
+                        sq = SearchQuery(query, search_type="raw", config='russian')
+                        q_users &= \
+                            Q(first_name__search=sq) | \
+                            Q(wish__text__search=sq) | \
+                            Q(ability__text__search=sq) | \
+                            Q(key__value__search=sq)
+                        users = User.objects.filter(q_users). \
+                                select_related('profile').distinct(). \
+                                order_by('first_name')
+                        for user in users:
+                            profile = user.profile
+                            item = profile.data_dict(request)
+                            item.update(user_id=user.pk)
+                            data.append(item)
+                    except ProgrammingError:
+                        raise ServiceException(
+                            'Неверная строка поиска',
+                            'programming_error'
+                        )
             elif request.GET.get('uuid_owner'):
                 data = []
                 users_selected = Profile.objects.filter(owner__profile__uuid=request.GET['uuid_owner']). \
@@ -1038,6 +1047,11 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
+            try:
+                code=excpt.args[1]
+            except IndexError:
+                code=''
+            data.update(code=code)
             status_code = 400
         return Response(data=data, status=status_code)
 
