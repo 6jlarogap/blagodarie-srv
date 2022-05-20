@@ -950,7 +950,14 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
         try:
             data = dict()
             if request.GET.get('uuid'):
-                user, profile = self.check_user_uuid(request.GET['uuid'])
+                if request.GET.get('with_owner'):
+                    related = ('user', 'ability','owner','owner__profile')
+                else:
+                    related = ('user', 'ability',)
+                user, profile = self.check_user_uuid(
+                    request.GET['uuid'],
+                    related=related,
+                )
                 data = profile.data_dict(request)
                 data.update(profile.parents_dict(request))
                 data.update(profile.data_WAK())
@@ -958,18 +965,9 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                     user_id=user.pk,
                     owner_id=profile.owner and profile.owner.pk or None,
                 )
-                try:
-                    oauth = Oauth.objects.select_related(
-                        'user', 'user__profile'
-                    ).filter(
-                        provider=Oauth.PROVIDER_TELEGRAM,
-                        user=user,
-                    )[0]
-                    user = oauth.user
-                    profile = user.profile
-                    data.update(tg_uid=oauth.uid, tg_username=oauth.username)
-                except IndexError:
-                    pass
+                data.update(profile.tg_data())
+                if request.GET.get('with_owner'):
+                    data.update(profile.owner_dict())
             elif request.GET.get('tg_username'):
                 data = []
                 usernames = request.GET['tg_username'].split(',')

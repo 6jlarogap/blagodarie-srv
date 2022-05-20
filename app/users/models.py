@@ -355,14 +355,14 @@ class Profile(PhotoModel, GeoPointModel):
     def __str__(self):
         return self.user.first_name or str(self.pk)
 
-    def data_dict(self, request, google_photo_size=None):
+    def data_dict(self, request=None, google_photo_size=None):
         user = self.user
         return dict(
             uuid=str(self.uuid),
             last_name=user.last_name,
             first_name=user.first_name,
             middle_name=self.middle_name,
-            photo=self.choose_photo(request, google_photo_size),
+            photo=self.choose_photo(request, google_photo_size) if request else '',
             is_notified=self.is_notified,
             sum_thanks_count=self.sum_thanks_count,
             fame=self.fame,
@@ -378,6 +378,15 @@ class Profile(PhotoModel, GeoPointModel):
             comment=self.comment or '',
         )
 
+    def owner_dict(self, request=None, google_photo_size=None):
+        if self.owner:
+            owner_profile = self.owner.profile
+            owner = owner_profile.data_dict(request, google_photo_size)
+            owner.update(owner_profile.tg_data())
+        else:
+            owner = None
+        return dict(owner=owner)
+
     def tg_data(self):
         """
         Найти профиль среди telegtam ouath's, вернуть данные
@@ -386,8 +395,8 @@ class Profile(PhotoModel, GeoPointModel):
         try:
             oauth = Oauth.objects.filter(user=self.user, provider=Oauth.PROVIDER_TELEGRAM)[0]
             result = dict(
-                uid=oauth.uid,
-                username=oauth.username,
+                tg_uid=oauth.uid,
+                tg_username=oauth.username,
                 # пока больше не надо
             )
         except IndexError:

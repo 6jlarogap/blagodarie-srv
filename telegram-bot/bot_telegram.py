@@ -960,10 +960,42 @@ async def get_dod(message: types.Message, state: FSMContext):
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.SEND_MESSAGE,
+        KeyboardType.SEP,
+    ), c.data,
+    ), state=None,
+    )
+async def process_callback_send_message(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Действия по смене владельца
+    """
+    if callback_query.message:
+        tg_user_sender = callback_query.from_user
+        code = callback_query.data.split(KeyboardType.SEP)
+        uuid = None
+        try:
+            uuid = code[1]
+        except IndexError:
+            pass
+        if not uuid:
+            return
+        status_to, profile_to = await Misc.get_user_by_uuid(uuid, with_owner=True)
+        if not profile_to:
+            return
+        try:
+            await bot.answer_callback_query(
+                    callback_query.id,
+                    text='Пока не реализовано: отправка сообщения',
+                    show_alert=True,
+                )
+        except (ChatNotFound, CantInitiateConversation):
+            pass
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
         KeyboardType.CHANGE_OWNER,
         KeyboardType.SEP,
-        # uuid папы или мамы           # 1
-        # KeyboardType.SEP,
     ), c.data,
     ), state=None,
     )
@@ -1575,15 +1607,15 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         profile_to = response['profile_to']
         profile_from = response['profile_from']
         try:
-            tg_user_to_uid = profile_to['tg_data']['uid']
+            tg_user_to_uid = profile_to['tg_data']['tg_uid']
         except KeyError:
             tg_user_to_uid = None
         try:
-            tg_user_to_username = profile_to['tg_data']['username']
+            tg_user_to_username = profile_to['tg_data']['tg_username']
         except KeyError:
             tg_user_to_username = ''
         try:
-            tg_user_from_username = profile_from['tg_data']['username']
+            tg_user_from_username = profile_from['tg_data']['tg_username']
         except KeyError:
             tg_user_from_username = None
         full_name_to = Misc.get_iof(profile_to)

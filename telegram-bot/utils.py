@@ -105,6 +105,8 @@ class KeyboardType(object):
     FATHER_OF_CHILD = 24
     MOTHER_OF_CHILD = 25
 
+    SEND_MESSAGE = 26
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -480,15 +482,18 @@ class Misc(object):
 
 
     @classmethod
-    async def get_user_by_uuid(cls, uuid):
+    async def get_user_by_uuid(cls, uuid, with_owner=False):
         """
         Получить данные пользователя по uuid
         """
+        params = dict(uuid=uuid)
+        if with_owner:
+            params.update(with_owner='1')
         try:
             status, response = await Misc.api_request(
                 path='/api/profile',
                 method='get',
-                params=dict(uuid=uuid),
+                params=params,
             )
             logging.debug('get_user_profile, status: %s' % status)
             logging.debug('get_user_profile, response: %s' % response)
@@ -696,15 +701,16 @@ class Misc(object):
                         inline_btn_thank,
                         inline_btn_mistrust,
                     )
-            if is_own_account or is_owned_account:
 
+            callback_data_template = (
+                '%(keyboard_type)s%(sep)s'
+                '%(uuid)s%(sep)s'
+            )
+
+            if is_own_account or is_owned_account:
                 # Карточка самому пользователю или его родственнику
                 #
                 uuid = response_to['uuid'] if is_owned_account else ''
-                callback_data_template = (
-                        '%(keyboard_type)s%(sep)s'
-                        '%(uuid)s%(sep)s'
-                    )
 
                 inline_btn_other = InlineKeyboardButton(
                     'Пол и даты' if is_owned_account else 'Пол и дата рождения',
@@ -797,6 +803,17 @@ class Misc(object):
                     callback_data=callback_data_template % dict_abwish,
                 )
                 reply_markup.row(inline_btn_ability, inline_btn_wish)
+
+            dict_send_message = dict(
+                keyboard_type=KeyboardType.SEND_MESSAGE,
+                uuid=response_to['uuid'],
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_send_message = InlineKeyboardButton(
+                'Сообщение',
+                callback_data=callback_data_template % dict_send_message,
+            )
+            reply_markup.row(inline_btn_send_message)
 
             if user_from_id:
                 # в бот
