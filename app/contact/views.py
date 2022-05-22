@@ -3038,7 +3038,7 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
 
         connections = []
         q_connections = Q(
-            is_reverse=False,
+            is_child=False,
             user_to__isnull=False,
         )
         q_connections &= Q(is_father=True) | Q(is_mother=True)
