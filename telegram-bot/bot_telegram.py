@@ -51,6 +51,9 @@ class FSMother(StatesGroup):
     dob = State()
     dod = State()
 
+class FSMsendMessage(StatesGroup):
+    ask = State()
+
 last_user_in_group = None
 
 bot = Bot(
@@ -979,18 +982,101 @@ async def process_callback_send_message(callback_query: types.CallbackQuery, sta
             pass
         if not uuid:
             return
-        status_to, profile_to = await Misc.get_user_by_uuid(uuid, with_owner=True)
-        if not profile_to:
+        status_to, profile_to = await Misc.get_user_by_uuid(uuid)
+        if not (status_to == 200 and profile_to):
             return
-        try:
-            await bot.answer_callback_query(
-                    callback_query.id,
-                    text='Пока не реализовано: отправка сообщения',
-                    show_alert=True,
-                )
-        except (ChatNotFound, CantInitiateConversation):
-            pass
 
+        await FSMsendMessage.ask.set()
+        state = dp.current_state()
+        async with state.proxy() as data:
+            data['uuid'] = uuid
+        bot_data = await bot.get_me()
+        iof_link = Misc.get_deeplink_with_name(profile_to, bot_data)
+        await callback_query.message.reply(
+            'Напишите или перешлите мне сообщение для отправки <b>%s</b>' % iof_link,
+            reply_markup=Misc.reply_markup_cancel_row(),
+            disable_web_page_preview=True,
+        )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMsendMessage.ask,
+)
+async def got_message_to_send(message: types.Message, state: FSMContext):
+    msg_saved = 'Сообщение сохранено'
+    async with state.proxy() as data:
+        if data.get('uuid'):
+            status_to, profile_to = await Misc.get_user_by_uuid(data['uuid'], with_owner=True)
+            if status_to == 200 and profile_to:
+                status_from, profile_from = await Misc.post_tg_user(message.from_user)
+                if status_from == 200 and profile_from:
+
+                    # Возможны варианты с получателем:
+                    #   - самому себе                               нет смысла отправлять
+                    #   - своему овнеду                             нет смысла отправлять
+                    #   - чужому овнеду с владельцем с телеграмом
+                    #   - чужому овнеду с владельцем без телеграма  нет смысла отправлять
+                    #   - юзеру с телеграмом
+                    #   - юзеру без телеграма                       нет смысла отправлять
+
+                    # Есть ли смысл отправлять и если есть то кому?
+                    #
+                    tg_uid_to = None
+                    user_to_delivered_uuid = None
+                    if profile_from['uuid'] == profile_to['uuid']:
+                        # самому себе
+                        pass
+                    elif profile_to['owner'] and profile_to['owner']['uuid'] == profile_from['uuid']:
+                        # своему овнеду
+                        pass
+                    elif profile_to['owner'] and profile_to['owner']['uuid'] != profile_from['uuid']:
+                        # чужому овнеду: телеграм у него есть?
+                        if profile_to['owner'].get('tg_uid'):
+                            tg_uid_to = profile_to['owner']['tg_uid']
+                            user_to_delivered_uuid = profile_to['owner']['uuid']
+                    elif profile_to.get('tg_uid'):
+                        tg_uid_to = profile_to['tg_uid']
+                        user_to_delivered_uuid = profile_to['uuid']
+                    if tg_uid_to:
+                        try:
+                            bot_data = await bot.get_me()
+                            await bot.send_message(
+                                tg_uid_to,
+                                text='Вам сообщение от <b>%s</b>' % Misc.get_deeplink_with_name(profile_from, bot_data),
+                                disable_web_page_preview=True,
+                            )
+                            await bot.forward_message(
+                                tg_uid_to,
+                                from_chat_id=message.chat.id,
+                                message_id=message.message_id,
+                            )
+                            await message.reply('Сообщение доставлено')
+                        except (ChatNotFound, CantInitiateConversation):
+                            user_to_delivered_uuid = None
+                            await message.reply(msg_saved)
+                    else:
+                        await message.reply(msg_saved)
+
+                payload_log_message = dict(
+                    tg_token=settings.TOKEN,
+                    from_chat_id=message.chat.id,
+                    message_id=message.message_id,
+                    user_from_uuid=profile_from['uuid'],
+                    user_to_uuid=profile_to['uuid'],
+                    user_to_delivered_uuid=user_to_delivered_uuid,
+                )
+                try:
+                    status_log, response_log = await Misc.api_request(
+                        path='/api/post_tg_message_data',
+                        method='post',
+                        json=payload_log_message,
+                    )
+                except:
+                    pass
+
+    await Misc.state_finish(state)
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(r'^(%s)%s' % (

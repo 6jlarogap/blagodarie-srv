@@ -27,7 +27,7 @@ from app.models import UnclearDate
 from contact.models import KeyType, Key, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
                            Journal, CurrentState, OperationType, Wish, \
-                           AnyText, Ability, TgJournal
+                           AnyText, Ability, TgJournal, TgMessageJournal
 from users.models import CreateUserMixin, IncognitoUser, Profile, TempToken, Oauth, UuidMixin
 
 MSG_NO_PARM = 'Не задан или не верен какой-то из параметров в связке номер %s (начиная с 0)'
@@ -3213,3 +3213,45 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
         return dict(users=users, connections=connections, trust_connections=trust_connections)
 
 api_profile_genesis = ApiProfileGenesis.as_view()
+
+class ApiPostTgMessageData(UuidMixin, APIView):
+    def post(self, request):
+        """
+        Записать в журнал данные об отправленном пользователем телеграма сообщения другому пользователю
+        """
+        try:
+            data = request.data
+            if data.get('tg_token'):
+                if data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                    raise ServiceException('Неверный токен телеграм бота')
+            else:
+                raise NotAuthenticated
+            user_from, p = self.check_user_uuid(data.get('user_from_uuid'), related=[], comment='user_from_uuid: ')
+            user_to, p = self.check_user_uuid(data.get('user_to_uuid'), related=[], comment='user_to_uuid: ')
+            if data.get('user_to_delivered_uuid'):
+                user_to_delivered, p = self.check_user_uuid(data.get('user_to_delivered_uuid'), related=[], comment='user_to_delivered_uuid: ')
+            else:
+                user_to_delivered = None
+            try:
+                from_chat_id = int(data.get('from_chat_id'))
+            except (TypeError, ValueError,):
+                raise ServiceException('Не задан или не число: from_chat_id')
+            try:
+                message_id = int(data.get('message_id'))
+            except (TypeError, ValueError,):
+                raise ServiceException('Не задан или не число: message_id')
+            TgMessageJournal.objects.create(
+                from_chat_id=from_chat_id,
+                message_id=message_id,
+                user_from=user_from,
+                user_to=user_to,
+                user_to_delivered=user_to_delivered,
+            )
+            status_code = status.HTTP_200_OK
+            data = {}
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_post_tg_message_data = ApiPostTgMessageData.as_view()

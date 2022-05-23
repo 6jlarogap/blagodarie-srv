@@ -80,6 +80,24 @@ class TgJournal(models.Model):
     from_chat_id = models.BigIntegerField(_("Chat Id"),)
     message_id = models.BigIntegerField(_("Message Id"),)
 
+class TgMessageJournal(BaseModelInsertTimestamp):
+    """
+    Ссылки на сообщения телеграма при обмене пользователями сообщений
+    """
+    user_from = models.ForeignKey('auth.User',
+                    verbose_name=_("От кого"), on_delete=models.CASCADE,
+                    related_name='tg_message_journal_user_from_set')
+    user_to = models.ForeignKey('auth.User',
+                    verbose_name=_("Кому"), on_delete=models.CASCADE,
+                    related_name='tg_message_journal_user_to_set')
+    # Сообщение может быть отправлено к owned профилю,
+    # тогда кто получил сообщение, если получил
+    user_to_delivered = models.ForeignKey('auth.User',
+                    verbose_name=_("Кому доставлено"), on_delete=models.CASCADE, null=True,
+                    related_name='tg_message_journal_user_to_delivered_set')
+    from_chat_id = models.BigIntegerField(_("Chat Id"),)
+    message_id = models.BigIntegerField(_("Message Id"),)
+
 class CurrentState(BaseModelInsertUpdateTimestamp):
 
     user_from = models.ForeignKey('auth.User',

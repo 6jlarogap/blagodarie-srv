@@ -804,16 +804,17 @@ class Misc(object):
                 )
                 reply_markup.row(inline_btn_ability, inline_btn_wish)
 
-            dict_send_message = dict(
-                keyboard_type=KeyboardType.SEND_MESSAGE,
-                uuid=response_to['uuid'],
-                sep=KeyboardType.SEP,
-            )
-            inline_btn_send_message = InlineKeyboardButton(
-                'Сообщение',
-                callback_data=callback_data_template % dict_send_message,
-            )
-            reply_markup.row(inline_btn_send_message)
+            if not group_id:
+                dict_send_message = dict(
+                    keyboard_type=KeyboardType.SEND_MESSAGE,
+                    uuid=response_to['uuid'],
+                    sep=KeyboardType.SEP,
+                )
+                inline_btn_send_message = InlineKeyboardButton(
+                    'Сообщение',
+                    callback_data=callback_data_template % dict_send_message,
+                )
+                reply_markup.row(inline_btn_send_message)
 
             if user_from_id:
                 # в бот

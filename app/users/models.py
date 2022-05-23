@@ -437,12 +437,18 @@ class Profile(PhotoModel, GeoPointModel):
         Wish = get_model('contact', 'Wish')
         Ability = get_model('contact', 'Ability')
         Key = get_model('contact', 'Key')
+        TgMessageJournal = get_model('contact', 'TgMessageJournal')
 
         user = self.user
         user_from = profile_from.user
         Oauth.objects.filter(user=user_from).update(user=user)
+
         Journal.objects.filter(user_to=user_from).update(user_to=user)
         Journal.objects.filter(user_from=user, user_to=user).delete()
+
+        TgMessageJournal.objects.filter(user_from=user_from).update(user_from=user)
+        TgMessageJournal.objects.filter(user_to=user_from).update(user_to=user)
+        TgMessageJournal.objects.filter(user_to_delivered=user_from).update(user_to_delivered=user)
 
         q = Q(user_from=user_from) | Q(user_from=user) | Q(user_to=user_from) | Q(user_to=user)
         q &= Q(user_to__isnull=False) & Q(is_reverse=True)
