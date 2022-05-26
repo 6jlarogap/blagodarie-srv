@@ -1982,7 +1982,7 @@ async def echo_getowned_to_bot(message: types.Message, state: FSMContext):
     state=None,
 )
 async def echo_help_to_bot(message: types.Message, state: FSMContext):
-    await message.reply(Misc.help_text())
+    await message.reply(Misc.help_text(), disable_web_page_preview=True)
 
 
 @dp.message_handler(
@@ -2020,54 +2020,6 @@ async def echo_stat_to_bot(message: types.Message, state: FSMContext):
 async def echo_send_to_bot(message: types.Message, state: FSMContext):
     """
     Обработка остальных сообщений в бот
-    
-    кнопка /start 
-        возвращаем карточку юзера с данными обратившегося пользователя
-        и кнопкой перейти и без других кнопок.
-
-    просто сообщение в бот
-        смотрим текст если там @username - проверяем -
-        если он у нас зарегистрирован - выводим карточку этого @username
-        - если не зарегистрирован - или нет в тексте @username
-        - отвечаем "Профиль не найден"
-        Если передал свой @username в сообщении, показать свою карточку
-
-    пересланное сообщение от самого себя
-        показываем карточку профиля автора пересланного сообщения - себя
-        - с кнопкой перейти и без других кнопок
-
-    пересланное сообщение от бота
-        "Сообщения от ботов пока не обрабатываются"
-
-    пересланное сообщение от того, кто не дает себя аутентифицировать
-        "пользователь скрыл..."
-
-    пересланное сообщение от того, кто дал себя аутентифицировать
-        карточку профиля Автора пересланного сообщения - со всеми кнопками
-
-    Карточка профиля:
-        Имя Фамилия
-        Доверий:
-        Благодарностей:
-        Недоверий:
-
-        Возможности: водитель Камаз шашлык виноград курага изюм
-
-        Потребности: не задано
-
-        Местоположение: не задано/ссылка на карту
-
-        Контакты:
-        @username
-        +3752975422568
-        https://username.com
-
-        От Вас: доверие
-        К Вам: не знакомы
-
-    Кнопки:
-        Перейти
-        Благодарность   Недоверие   Не знакомы
     """
 
     if not message.is_forward() and message.content_type != ContentType.TEXT:
@@ -2117,8 +2069,10 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             else:
                 state_ = 'forwarded_from_other'
         else:
-            if message_text in ('/start', '/ya', '/я'):
+            if message_text == '/start':
                 state_ = 'start'
+            elif message_text in ('/start', '/ya', '/я'):
+                state_ = 'ya'
             else:
                 m = re.search(
                     r'^\/start\s+([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
@@ -2133,7 +2087,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 else:
                     if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
                         state_ = 'invalid_message_text'
-                        reply = Misc.help_text()
+                        reply = Misc.invalid_search_text()
                     else:
                         search_phrase = ''
                         usernames, text_stripped = Misc.get_text_usernames(message_text)
@@ -2215,7 +2169,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             if status == 200:
                 response_from.update(tg_username=tg_user_sender.username)
                 user_from_id = response_from.get('user_id')
-                if state_ in ('start', 'forwarded_from_me', ) or \
+                if state_ in ('ya', 'forwarded_from_me', 'start', ) or \
                    state_ == 'start_uuid' and response_from.get('created'):
                     a_response_to += [response_from, ]
         except:
@@ -2281,7 +2235,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 a_found += response
 
 
-    if state_ and state_ not in ('not_found', 'invalid_message_text',) and user_from_id and a_response_to:
+    if state_ and state_ not in ('not_found', 'invalid_message_text', ) and user_from_id and a_response_to:
         message_to_forward_id = state_ == 'forwarded_from_other' and message.message_id or ''
         await Misc.show_cards(
             a_response_to,
@@ -2291,6 +2245,8 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             response_from=response_from,
             message_to_forward_id=message_to_forward_id,
         )
+        if state_ == 'start':
+             await message.reply(Misc.help_text(), disable_web_page_preview=True)
 
     elif reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
