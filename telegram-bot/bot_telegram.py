@@ -2148,32 +2148,13 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         reply = 'Ничего не найдено - попробуйте другие слова'
 
     if state_:
-        logging.debug('get_or_create tg_user_sender data in api...')
-        payload_from = dict(
-            tg_token=settings.TOKEN,
-            tg_uid=tg_user_sender.id,
-            last_name=tg_user_sender.last_name or '',
-            first_name=tg_user_sender.first_name or '',
-            username=tg_user_sender.username or '',
-            activate='1',
-            did_bot_start='1',
-        )
-        try:
-            status, response_from = await Misc.api_request(
-                path='/api/profile',
-                method='post',
-                data=payload_from,
-            )
-            logging.debug('get_or_create tg_user_sender data in api, status: %s' % status)
-            logging.debug('get_or_create tg_user_sender data in api, response_from: %s' % response_from)
-            if status == 200:
-                response_from.update(tg_username=tg_user_sender.username)
-                user_from_id = response_from.get('user_id')
-                if state_ in ('ya', 'forwarded_from_me', 'start', ) or \
-                   state_ == 'start_uuid' and response_from.get('created'):
-                    a_response_to += [response_from, ]
-        except:
-            pass
+        status, response_from = await Misc.post_tg_user(tg_user_sender)
+        if status == 200:
+            response_from.update(tg_username=tg_user_sender.username)
+            user_from_id = response_from.get('user_id')
+            if state_ in ('ya', 'forwarded_from_me', 'start', ) or \
+                state_ == 'start_uuid' and response_from.get('created'):
+                a_response_to += [response_from, ]
 
     if user_from_id and state_ == 'start_uuid':
         logging.debug('get tg_user_by_start_uuid data in api...')
