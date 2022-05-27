@@ -1,6 +1,5 @@
 import base64, re
 from io import BytesIO
-from uuid import UUID
 
 import settings
 from settings import logging
@@ -54,6 +53,10 @@ class FSMother(StatesGroup):
 class FSMsendMessage(StatesGroup):
     ask = State()
 
+class FSMchangeOwner(StatesGroup):
+    ask = State()
+    confirm = State()
+
 last_user_in_group = None
 
 bot = Bot(
@@ -85,15 +88,7 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
             reply_markup=Misc.reply_markup_cancel_row()
         )
         return
-    user_uuid_to = None
-    m = re.search(Misc.UUID_PATTERN, message.text)
-    if m:
-        s = m.group(0)
-        try:
-            UUID(s)
-            user_uuid_to = s
-        except (TypeError, ValueError,):
-            pass
+    user_uuid_to = Misc.uuid_from_text(message.text)
     if not user_uuid_to:
         await message.reply(
             Misc.MSG_ERROR_UUID_NOT_VALID + '\nПовторите, пожалуйста' ,
@@ -298,20 +293,16 @@ async def process_callback_papa_mama(callback_query: types.CallbackQuery, state:
         async with state.proxy() as data:
             data['uuid'] = uuid
             data['is_father'] = is_father
-        his_her = 'его (её)'
-        if response_uuid['gender'] == 'm':
-            his_her = 'его'
-        elif response_uuid['gender'] == 'f':
-            his_her = 'её'
+        his_her = Misc.his_her(response_uuid)
         prompt_papa_mama = Misc.PROMPT_PAPA_MAMA % dict(
             bot_data_username=bot_data['username'],
             name=response_uuid['first_name'],
+            his_her=his_her,
             papy_or_mamy='папы' if is_father else 'мамы',
             novy_novaya='Новый' if is_father else 'Новая',
             papoy_or_mamoy='папой' if is_father else 'мамой',
-            his_her=his_her,
         )
-        callback_data = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s' % dict(
+        callback_data = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
             keyboard_type=KeyboardType.NEW_FATHER if is_father else KeyboardType.NEW_MOTHER,
             uuid=uuid,
             sep=KeyboardType.SEP,
@@ -337,7 +328,7 @@ async def ask_child(message, state, data):
         name=data['name'],
         his_her='его' if data['parent_gender'] == 'm' else 'её'
     )
-    callback_data = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s' % dict(
+    callback_data = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
         keyboard_type=KeyboardType.NEW_CHILD,
         uuid=data['uuid'],
         sep=KeyboardType.SEP,
@@ -367,15 +358,7 @@ async def put_child_by_uuid(message: types.Message, state: FSMContext):
             reply_markup=Misc.reply_markup_cancel_row()
         )
         return
-    user_uuid_from = None
-    m = re.search(Misc.UUID_PATTERN, message.text)
-    if m:
-        s = m.group(0)
-        try:
-            UUID(s)
-            user_uuid_from = s
-        except (TypeError, ValueError,):
-            pass
+    user_uuid_from = Misc.uuid_from_text(message.text)
     if not user_uuid_from:
         await message.reply(
             Misc.MSG_ERROR_UUID_NOT_VALID + '\nПовторите, пожалуйста' ,
@@ -529,8 +512,7 @@ async def process_callback_child(callback_query: types.CallbackQuery, state: FSM
                 await ask_child(callback_query.message, state, data)
             else:
                 data['parent_gender'] = None
-                callback_data_template = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s'
-                callback_data = callback_data_template % dict(
+                callback_data = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
                     keyboard_type=KeyboardType.FATHER_OF_CHILD,
                     uuid=uuid,
                     sep=KeyboardType.SEP,
@@ -539,7 +521,7 @@ async def process_callback_child(callback_query: types.CallbackQuery, state: FSM
                     'Муж',
                     callback_data=callback_data,
                 )
-                callback_data = callback_data_template % dict(
+                callback_data = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
                     keyboard_type=KeyboardType.MOTHER_OF_CHILD,
                     uuid=uuid,
                     sep=KeyboardType.SEP,
@@ -627,6 +609,186 @@ async def process_callback_new_child(callback_query: types.CallbackQuery, state:
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.CHANGE_OWNER,
+        KeyboardType.SEP,
+        # uuid родственника           # 1
+        # KeyboardType.SEP,
+    ), c.data,
+    ), state=None,
+    )
+async def process_callback_change_owner(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Заменить имя, фамилию, отчество
+    """
+    if callback_query.message:
+        code = callback_query.data.split(KeyboardType.SEP)
+        uuid = None
+        try:
+            uuid = code[1]
+        except IndexError:
+            pass
+        if not uuid:
+            return
+        response_sender = await Misc.check_owner(
+            owner_tg_user=callback_query.from_user,
+            uuid=uuid,
+            check_owned_only=True
+        )
+        if not response_sender:
+            return
+        bot_data = await bot.get_me()
+        state = dp.current_state()
+        async with state.proxy() as data:
+            data['uuid'] = uuid
+        await FSMchangeOwner.ask.set()
+        await callback_query.message.reply(
+            Misc.PROMPT_CHANGE_OWNER % dict(
+                iof=response_sender['response_uuid']['first_name'],
+                bot_data_username=bot_data['username'],
+                his_her=Misc.his_her(response_sender['response_uuid']),
+            ),
+            reply_markup=Misc.reply_markup_cancel_row()
+        )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMchangeOwner.ask,
+)
+async def get_new_owner(message: types.Message, state: FSMContext):
+    if message.content_type != ContentType.TEXT:
+        await message.reply(Misc.MSG_ERROR_TEXT_ONLY, reply_markup=Misc.reply_markup_cancel_row())
+        return
+    async with state.proxy() as data:
+        uuid = data.get('uuid')
+        if uuid:
+            response_sender = await Misc.check_owner(
+                owner_tg_user=message.from_user,
+                uuid=uuid,
+                check_owned_only=True
+            )
+            if response_sender:
+                user_uuid_to = Misc.uuid_from_text(message.text)
+                if not user_uuid_to:
+                    await message.reply(
+                        Misc.MSG_ERROR_UUID_NOT_VALID + '\nПовторите, пожалуйста' ,
+                        reply_markup=Misc.reply_markup_cancel_row()
+                    )
+                    return
+                response_from = response_sender['response_uuid']
+                status_to, response_to = await Misc.get_user_by_uuid(user_uuid_to)
+                if status_to == 400:
+                    if response_to.get('message'):
+                        reply = response_to['message']
+                    else:
+                        reply = 'Пользователь не найден'
+                    await message.reply(reply)
+                elif status_to == 200 and response_to:
+                    bot_data = await bot.get_me()
+                    iof_from = Misc.get_deeplink_with_name(response_from, bot_data)
+                    iof_to = Misc.get_deeplink_with_name(response_to, bot_data)
+                    if response_from['owner_id'] == response_to['user_id']:
+                        # Сам себя назначил
+                        await message.reply(
+                            Misc.PROMPT_CHANGE_OWNER_SUCCESS % dict(
+                                iof_from=iof_from, iof_to=iof_to
+                        ))
+                        # state_finish, return
+                    elif response_to['owner_id']:
+                        await message.reply('Нельзя назначить владельцем - неактивного пользователя')
+                        # state_finish, return
+                    else:
+                        data['uuid_owner'] = response_to['uuid']
+                        callback_data = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+                            keyboard_type=KeyboardType.CHANGE_OWNER_CONFIRM,
+                            uuid=uuid,
+                            sep=KeyboardType.SEP,
+                        )
+                        inline_btn_change_owner_confirm = InlineKeyboardButton(
+                            'Согласна' if response_sender.get('gender') == 'f' else 'Согласен',
+                            callback_data=callback_data,
+                        )
+                        reply_markup = InlineKeyboardMarkup()
+                        reply_markup.row(inline_btn_change_owner_confirm, Misc.inline_button_cancel())
+                        await FSMchangeOwner.confirm.set()
+                        await message.reply(
+                            Misc.PROMPT_CHANGE_OWNER_CONFIRM % dict(
+                                iof_from=iof_from, iof_to=iof_to
+                            ), reply_markup=reply_markup,
+                        )
+                        return
+    await Misc.state_finish(state)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.CHANGE_OWNER_CONFIRM,
+        KeyboardType.SEP,
+        # uuid родственника           # 1
+        # KeyboardType.SEP,
+    ), c.data,
+    ), state=FSMchangeOwner.confirm,
+    )
+async def process_callback_change_owner_confirmed(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Заменить имя, фамилию, отчество
+    """
+    if callback_query.message:
+        code = callback_query.data.split(KeyboardType.SEP)
+        uuid = None
+        try:
+            uuid = code[1]
+        except IndexError:
+            pass
+        if not uuid:
+            return
+        response_sender = await Misc.check_owner(
+            owner_tg_user=callback_query.from_user,
+            uuid=uuid,
+            check_owned_only=True
+        )
+        if not response_sender:
+            await callback_query.message.reply('Пока Вы здесь думали, Вы же изменили владение с другого устройства')
+        else:
+            bot_data = await bot.get_me()
+            state = dp.current_state()
+            async with state.proxy() as data:
+                if data.get('uuid') != response_sender['response_uuid']['uuid'] or \
+                   not data.get('uuid_owner'):
+                    # fool proof
+                    pass
+                else:
+                    status_to, response_to = await Misc.get_user_by_uuid(data['uuid_owner'])
+                    if status_to == 400:
+                        if response_to.get('message'):
+                            reply = response_to['message']
+                        else:
+                            reply = Misc.MSG_ERROR_API
+                    elif status_to != 200 or not response_to:
+                        reply = Misc.MSG_ERROR_API
+                    else:
+                        status, response = await Misc.put_user_properties(
+                            uuid=uuid,
+                            owner_uuid=data['uuid_owner'],
+                        )
+                        if status == 200:
+                            bot_data = await bot.get_me()
+                            iof_from = Misc.get_deeplink_with_name(response_sender['response_uuid'], bot_data)
+                            iof_to = Misc.get_deeplink_with_name(response_to, bot_data)
+                            reply = Misc.PROMPT_CHANGE_OWNER_SUCCESS % dict(
+                                    iof_from=iof_from, iof_to=iof_to
+                            )
+                        elif status == 400 and response.get('message'):
+                            reply = response['message']
+                        else:
+                            reply = Misc.MSG_ERROR_API
+                    await callback_query.message.reply(reply)
+    await Misc.state_finish(state)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
         KeyboardType.IOF,
         KeyboardType.SEP,
         # uuid своё или родственника           # 1
@@ -639,7 +801,6 @@ async def process_callback_iof(callback_query: types.CallbackQuery, state: FSMCo
     Заменить имя, фамилию, отчество
     """
     if callback_query.message:
-        tg_user_sender = callback_query.from_user
         code = callback_query.data.split(KeyboardType.SEP)
         uuid = None
         try:
@@ -648,7 +809,11 @@ async def process_callback_iof(callback_query: types.CallbackQuery, state: FSMCo
             pass
         if not uuid:
             return
-        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
+        response_sender = await Misc.check_owner(
+            owner_tg_user=callback_query.from_user,
+            uuid=uuid,
+            check_owned_only=True
+        )
         if not response_sender:
             return
         response_uuid = response_sender['response_uuid']
@@ -672,11 +837,14 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         await message.reply(Misc.MSG_ERROR_TEXT_ONLY, reply_markup=Misc.reply_markup_cancel_row())
         return
-    tg_user_sender = message.from_user
     async with state.proxy() as data:
         uuid = data.get('uuid')
     if uuid:
-        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
+        response_sender = await Misc.check_owner(
+            owner_tg_user=message.from_user,
+            uuid=uuid,
+            check_owned_only=True
+        )
         if response_sender:
             status, response = await Misc.put_user_properties(
                 uuid=uuid,
@@ -1078,37 +1246,6 @@ async def got_message_to_send(message: types.Message, state: FSMContext):
 
     await Misc.state_finish(state)
 
-@dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
-        KeyboardType.CHANGE_OWNER,
-        KeyboardType.SEP,
-    ), c.data,
-    ), state=None,
-    )
-async def process_callback_change_owner(callback_query: types.CallbackQuery, state: FSMContext):
-    """
-    Действия по смене владельца
-    """
-    if callback_query.message:
-        tg_user_sender = callback_query.from_user
-        code = callback_query.data.split(KeyboardType.SEP)
-        uuid = None
-        try:
-            uuid = code[1]
-        except IndexError:
-            pass
-        if not uuid:
-            return
-        if not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
-            return
-        try:
-            await bot.answer_callback_query(
-                    callback_query.id,
-                    text='Пока не реализовано: смена владельца',
-                    show_alert=True,
-                )
-        except (ChatNotFound, CantInitiateConversation):
-            pass
 
 async def do_process_ability(message: types.Message, uuid=None):
     reply_markup = Misc.reply_markup_cancel_row()
@@ -1416,7 +1553,7 @@ async def process_callback_photo(callback_query: types.CallbackQuery, state: FSM
         status, response = await Misc.get_user_by_uuid(uuid)
         if status == 200 and response and Misc.is_photo_downloaded(response):
             prompt_photo += '\n' + Misc.PROMPT_PHOTO_REMOVE
-            callback_data_remove = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s' % dict(
+            callback_data_remove = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
                 keyboard_type=KeyboardType.PHOTO_REMOVE,
                 sep=KeyboardType.SEP,
                 uuid=uuid,
@@ -1451,7 +1588,7 @@ async def process_callback_photo_remove(callback_query: types.CallbackQuery, sta
         if status == 200 and response:
             await FSMphoto.next()
             inline_button_cancel = Misc.inline_button_cancel()
-            callback_data_remove = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s' % dict(
+            callback_data_remove = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
                 keyboard_type=KeyboardType.PHOTO_REMOVE_CONFIRMED,
                 sep=KeyboardType.SEP,
                 uuid=uuid,

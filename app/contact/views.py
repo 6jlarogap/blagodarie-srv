@@ -606,7 +606,7 @@ class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
                     except ValidationError:
                         raise ServiceException('Неверный uuid = "%s"' % user_uuid_to)
                     except Profile.DoesNotExist:
-                        raise ServiceException('Не найден ничего с uuid = "%s"' % user_uuid_to)
+                        raise ServiceException('Не найдено ничего с uuid = "%s"' % user_uuid_to)
 
                 tg_from_chat_id = request.data.get('tg_from_chat_id')
                 tg_message_id = request.data.get('tg_message_id')

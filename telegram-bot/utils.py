@@ -1,5 +1,6 @@
 import base64, re
 from urllib.parse import urlencode
+from uuid import UUID
 
 from aiogram.types.login_url import LoginUrl
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -107,6 +108,8 @@ class KeyboardType(object):
 
     SEND_MESSAGE = 26
 
+    CHANGE_OWNER_CONFIRM = 27
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -131,7 +134,7 @@ class Misc(object):
 
     PROMPT_PAPA_MAMA = (
         '<b>%(name)s</b>.\n'
-        'Отправьте мне ссылку на профиль его (ее) %(papy_or_mamy)s '
+        'Отправьте мне ссылку на профиль %(his_her)s %(papy_or_mamy)s '
         'вида t.me/%(bot_data_username)s?start=...\n\n'
         'Или нажмите <u>%(novy_novaya)s</u> для ввода нового родственника, '
         'который станет %(his_her)s %(papoy_or_mamoy)s'
@@ -182,9 +185,32 @@ class Misc(object):
                 '%(iof_from)s\n'
     )
 
+    PROMPT_CHANGE_OWNER_WARN = (
+        '<b>Важно!</b> После смены  владельца Вы не сможете вернуть себе владение. '
+        'Это может сделать для Вас только новый владелец\n'
+    )
+
+    PROMPT_CHANGE_OWNER = (
+        '<b>%(iof)s</b>\n'
+        'Отправьте мне ссылку на профиль нового %(his_her)s  владельца вида '
+        't.me/%(bot_data_username)s?start=... или откажитесь, нажав "Отмена"\n'
+        '\n'
+    ) + PROMPT_CHANGE_OWNER_WARN
+
+    PROMPT_CHANGE_OWNER_SUCCESS = (
+        '%(iof_to)s установлен владельцем для профиля %(iof_from)s'
+    )
+
+    PROMPT_CHANGE_OWNER_CONFIRM = (
+        '%(iof_to)s станет владельцем профиля %(iof_from)s. Продолжить?'
+    )
+
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE
 
     UUID_PATTERN = re.compile(r'[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}', re.IGNORECASE)
+
+    CALLBACK_DATA_UUID_TEMPLATE = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s'
+
     MSG_ERROR_UUID_NOT_VALID = 'Не найден или негодный ид в сообщении'
 
     @classmethod
@@ -529,10 +555,11 @@ class Misc(object):
 
 
     @classmethod
-    async def check_owner(cls, owner_tg_user, uuid):
+    async def check_owner(cls, owner_tg_user, uuid, check_owned_only=False):
         """
         Проверить, принадлежит ли uuid к owner_tg_user или им является
 
+        При check_relative проверяет исключительно, принадлежит ли.
         Если принадлежит и им является, то возвращает данные из апи по owner_tg_user,
         а внутри словарь response_uuid, данные из апи по uuid:
         """
@@ -543,7 +570,7 @@ class Misc(object):
             if status_uuid == 200 and response_uuid:
                 if response_uuid.get('owner_id'):
                     result = response_uuid['owner_id'] == response_sender['user_id']
-                else:
+                elif not check_owned_only:
                     result = response_uuid['user_id'] == response_sender['user_id']
                 if result:
                     result = response_sender
@@ -716,11 +743,7 @@ class Misc(object):
                         inline_btn_mistrust,
                     )
 
-            callback_data_template = (
-                '%(keyboard_type)s%(sep)s'
-                '%(uuid)s%(sep)s'
-            )
-
+            callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE
             if is_own_account or is_owned_account:
                 # Карточка самому пользователю или его родственнику
                 #
@@ -889,6 +912,20 @@ class Misc(object):
 
 
     @classmethod
+    def his_her(cls, profile):
+        if not profile.get('owner_id'):
+            his_her = 'Ваш'
+        else:
+            his_her = 'его (её)'
+            if profile.get('gender'):
+                if profile['gender'] == 'm':
+                    his_her = 'его'
+                else:
+                    his_her = 'её'
+        return his_her
+
+
+    @classmethod
     async def state_finish(cls, state):
         if state:
             await state.finish()
@@ -1033,3 +1070,16 @@ class Misc(object):
         else:
             result = ''
         return result
+
+    @classmethod
+    def uuid_from_text(cls, text):
+        user_uuid_to = None
+        m = re.search(cls.UUID_PATTERN, text)
+        if m:
+            s = m.group(0)
+            try:
+                UUID(s)
+                user_uuid_to = s
+            except (TypeError, ValueError,):
+                pass
+        return user_uuid_to
