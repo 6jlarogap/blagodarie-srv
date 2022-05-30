@@ -187,7 +187,7 @@ class Misc(object):
 
     PROMPT_CHANGE_OWNER_WARN = (
         '<b>Важно!</b> После смены  владельца Вы не сможете вернуть себе владение. '
-        'Это может сделать для Вас только новый владелец\n'
+        'Это может сделать для Вас только новый владелец'
     )
 
     PROMPT_CHANGE_OWNER = (
@@ -202,7 +202,12 @@ class Misc(object):
     )
 
     PROMPT_CHANGE_OWNER_CONFIRM = (
-        '%(iof_to)s станет владельцем профиля %(iof_from)s. Продолжить?'
+        '%(iof_to)s станет владельцем профиля %(iof_from)s. Продолжить?\n'
+        '\n'
+    ) + PROMPT_CHANGE_OWNER_WARN + ': %(iof_to)s'
+
+    PROMPT_MESSAGE_TO_CHANGED_OWNER = (
+        '%(iof_to)s передал Вам владение профилем %(iof_from)s'
     )
 
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE

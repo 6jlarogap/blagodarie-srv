@@ -27,6 +27,13 @@
       "title": "Link"
     }
   },
+  {
+    "model": "contact.keytype",
+    "pk": 6,
+    "fields": {
+      "title": "Other"
+    }
+  },
 
   {
     "model": "contact.operationtype",

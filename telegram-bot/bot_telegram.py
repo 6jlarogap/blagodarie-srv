@@ -779,6 +779,16 @@ async def process_callback_change_owner_confirmed(callback_query: types.Callback
                             reply = Misc.PROMPT_CHANGE_OWNER_SUCCESS % dict(
                                     iof_from=iof_from, iof_to=iof_to
                             )
+                            if response_to.get('tg_uid'):
+                                try:
+                                    await bot.send_message(
+                                        response_to['tg_uid'],
+                                        Misc.PROMPT_MESSAGE_TO_CHANGED_OWNER % dict(
+                                            iof_from=iof_from, iof_to=iof_to
+                                        ))
+                                except (ChatNotFound, CantInitiateConversation):
+                                    pass
+
                         elif status == 400 and response.get('message'):
                             reply = response['message']
                         else:
