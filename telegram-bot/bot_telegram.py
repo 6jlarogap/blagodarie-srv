@@ -57,6 +57,9 @@ class FSMchangeOwner(StatesGroup):
     ask = State()
     confirm = State()
 
+class FSMkey(StatesGroup):
+    ask = State()
+
 last_user_in_group = None
 
 bot = Bot(
@@ -609,6 +612,46 @@ async def process_callback_new_child(callback_query: types.CallbackQuery, state:
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.KEYS,
+        KeyboardType.SEP,
+        # uuid себя или родственника           # 1
+        # KeyboardType.SEP,
+    ), c.data,
+    ), state=None,
+    )
+async def process_callback_keys(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Заменить контакты
+
+    (В апи контакты - это keys)
+    """
+    if callback_query.message:
+        code = callback_query.data.split(KeyboardType.SEP)
+        uuid = None
+        try:
+            uuid = code[1]
+        except IndexError:
+            pass
+        if not uuid:
+            return
+        response_sender = await Misc.check_owner(
+            owner_tg_user=callback_query.from_user,
+            uuid=uuid,
+            check_owned_only=False
+        )
+        if not response_sender:
+            return
+        bot_data = await bot.get_me()
+        state = dp.current_state()
+        async with state.proxy() as data:
+            data['uuid'] = uuid
+        await callback_query.message.reply(
+            'Пока не реализовано'
+        )
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
         KeyboardType.CHANGE_OWNER,
         KeyboardType.SEP,
         # uuid родственника           # 1
@@ -618,7 +661,7 @@ async def process_callback_new_child(callback_query: types.CallbackQuery, state:
     )
 async def process_callback_change_owner(callback_query: types.CallbackQuery, state: FSMContext):
     """
-    Заменить имя, фамилию, отчество
+    Заменить владельца
     """
     if callback_query.message:
         code = callback_query.data.split(KeyboardType.SEP)

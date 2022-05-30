@@ -419,7 +419,7 @@ class Profile(PhotoModel, GeoPointModel):
         ]
         keys = [
             key.data_dict(
-            )  for key in Key.objects.filter(owner=user).order_by('type__pk')
+            )  for key in Key.objects.filter(owner=user).order_by('type__pk', 'pk')
         ]
         return dict(wishes=wishes, abilities=abilities, keys=keys)
 

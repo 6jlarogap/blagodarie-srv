@@ -24,6 +24,7 @@ from app.models import BaseModelInsertTimestamp, BaseModelInsertUpdateTimestamp,
 class KeyType(models.Model):
 
     LINK_ID = 5
+    OTHER_ID = 6
 
     title = models.CharField(_("Код ключа"), max_length=255, unique=True)
 

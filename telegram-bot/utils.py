@@ -110,6 +110,8 @@ class KeyboardType(object):
 
     CHANGE_OWNER_CONFIRM = 27
 
+    KEYS = 28
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -830,21 +832,26 @@ class Misc(object):
                     args_papa_mama_owner.append(inline_btn_change_owner)
                 reply_markup.row(*args_papa_mama_owner)
 
-                dict_abwish = dict(
+                dict_abwishkey = dict(
                     keyboard_type=KeyboardType.ABILITY,
                     uuid=uuid,
                     sep=KeyboardType.SEP,
                 )
                 inline_btn_ability = InlineKeyboardButton(
                     'Возможности',
-                    callback_data=callback_data_template % dict_abwish,
+                    callback_data=callback_data_template % dict_abwishkey,
                 )
-                dict_abwish.update(keyboard_type=KeyboardType.WISH)
+                dict_abwishkey.update(keyboard_type=KeyboardType.WISH)
                 inline_btn_wish = InlineKeyboardButton(
                     'Потребности',
-                    callback_data=callback_data_template % dict_abwish,
+                    callback_data=callback_data_template % dict_abwishkey,
                 )
-                reply_markup.row(inline_btn_ability, inline_btn_wish)
+                dict_abwishkey.update(keyboard_type=KeyboardType.KEYS, uuid=response_to['uuid'])
+                inline_btn_keys = InlineKeyboardButton(
+                    'Контакты',
+                    callback_data=callback_data_template % dict_abwishkey,
+                )
+                reply_markup.row(inline_btn_ability, inline_btn_wish, inline_btn_keys)
 
             if not group_id:
                 dict_send_message = dict(

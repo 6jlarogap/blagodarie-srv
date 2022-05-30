@@ -2143,46 +2143,106 @@ class ApiGetUserKeys(UuidMixin, APIView):
 api_get_user_keys = ApiGetUserKeys.as_view()
 
 class ApiAddKeyView(UuidMixin, APIView):
-    permission_classes = (IsAuthenticated, )
 
+    @transaction.atomic
     def post(self, request):
         """
-        Добавление ключа
+        Добавление ключа (ключей)
 
-        Добавить ключ в таблицу Key, свой ключ или родственника.
-        Если такой ключ уже существует (пара значение-тип ключа),
-        то вернуть ошибку.
+        Если запрос идет от телеграм бота:
+            Исходные данные:
+                {
+                    "owner_uuid": ".....",
+                    "user_uuid": "....",
+                    keys: [
+                        "ключ 1",
+                        "ключ 2"
+                        ...
+                    ]
+                }
+            owner_uuid и user_uuid не совпадают, когда производится замена
+            ключей родственника user_uuid, владельцем которого является
+            owner_uuid.
+            Все прежние ключи пользователя user_uuid с типом KeyType.OTHER_ID удаляются.
+            Все переданные ключи записываются с типом KeyType.OTHER_ID
 
-        Пример исходных данных:
-        {
-            "user_uuid": “....” :
-            // свой или родственника. Если отсутствует user_uuid, значит свой ключ
-            "value": "56648",
-            "type_id": 1
-        }
+        Если запрос идет не от телеграм бота:
+            Добавить ключ в таблицу Key, свой ключ или родственника.
+            Если такой ключ уже существует (пара значение-тип ключа),
+            то вернуть ошибку.
+
+            Пример исходных данных:
+            {
+                "user_uuid": "...."
+                // свой или родственника. Если отсутствует user_uuid, значит свой ключ
+                "value": "56648",
+                "type_id": 1
+            }
         """
         try:
-            owner, profile = self.check_user_or_owned_uuid(request, uuid_field='user_uuid',)
-            value = request.data.get("value")
-            type_id = request.data.get("type_id")
-            if not value or not type_id:
-                raise ServiceException('Не задан(ы) value и/или type_id')
-            try:
-                keytype = KeyType.objects.get(pk=int(type_id))
-            except KeyType.DoesNotExist:
-                raise ServiceException('Не найден тип ключа type_id = %s' % type_id)
-            key, created_ = Key.objects.get_or_create(
-                type=keytype,
-                value=value,
-                defaults=dict(
-                    owner=owner,
-            ))
-            if not created_:
-                raise ServiceException('Такой ключ уже существует')
-            data = key.data_dict()
+            if request.data.get('tg_token'):
+                if request.data['tg_token'] != settings.TELEGRAM_BOT_TOKEN:
+                    raise ServiceException('Неверный токен телеграм бота')
+                if not (request.data.get('owner_uuid') and request.data.get('user_uuid') and request.data.get('keys')):
+                    raise ServiceException('Не задан(ы) owner_uuid и/или user_uuid и/или keys')
+                owner, owner_profile = self.check_user_uuid(request.data['owner_uuid'], related=('owner', ))
+                if request.data['owner_uuid'] == request.data['user_uuid']:
+                    if owner_profile.owner:
+                        raise ServiceException('Пользователь (owner_uuid == user_uuid): им кто-то владеет')
+                    user, user_profile = owner, owner_profile
+                else:
+                    user, user_profile = self.check_user_uuid(request.data['user_uuid'], related=('owner', ))
+                    if owner != user_profile.owner:
+                        raise ServiceException('Профиль user_uuid не подлежит правке пользователем owner_uuid')
+                Key.objects.filter(type__pk=KeyType.OTHER_ID, owner=owner).delete()
+                for value in request.data['keys']:
+                    key, created_ = Key.objects.get_or_create(
+                        type_id=KeyType.OTHER_ID,
+                        value=value,
+                        defaults=dict(
+                            owner=owner,
+                    ))
+                    if not created_:
+                        raise ServiceException('Контакт "%s" есть уже у другого пользователя' % value,
+                            '%s' % key.owner.pk,
+                        )
+                data = user_profile.data_dict(request)
+                data.update(user_profile.parents_dict(request))
+                data.update(user_profile.data_WAK())
+                data.update(
+                    user_id=user.pk,
+                    owner_id=user_profile.owner and user_profile.owner.pk or None,
+                )
+            else:
+                if not request.user.is_authenticated:
+                    raise NotAuthenticated
+                owner, profile = self.check_user_or_owned_uuid(request, uuid_field='user_uuid',)
+                value = request.data.get("value")
+                type_id = request.data.get("type_id")
+                if not value or not type_id:
+                    raise ServiceException('Не задан(ы) value и/или type_id')
+                try:
+                    keytype = KeyType.objects.get(pk=int(type_id))
+                except KeyType.DoesNotExist:
+                    raise ServiceException('Не найден тип ключа type_id = %s' % type_id)
+                key, created_ = Key.objects.get_or_create(
+                    type=keytype,
+                    value=value,
+                    defaults=dict(
+                        owner=owner,
+                ))
+                if not created_:
+                    raise ServiceException('Такой контакт уже существует')
+                data = key.data_dict()
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
+            try:
+                pk=excpt.args[1]
+                profile = Profile.objects.select_related('user').get(user__pk=pk)
+                data.update(profile=profile.data_dict(request))
+            except IndexError:
+                pass
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
