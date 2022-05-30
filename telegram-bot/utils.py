@@ -207,7 +207,7 @@ class Misc(object):
     ) + PROMPT_CHANGE_OWNER_WARN + ': %(iof_to)s'
 
     PROMPT_MESSAGE_TO_CHANGED_OWNER = (
-        '%(iof_to)s передал Вам владение профилем %(iof_from)s'
+        '%(iof_sender)s передал Вам владение профилем %(iof_from)s'
     )
 
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE

@@ -780,11 +780,12 @@ async def process_callback_change_owner_confirmed(callback_query: types.Callback
                                     iof_from=iof_from, iof_to=iof_to
                             )
                             if response_to.get('tg_uid'):
+                                iof_sender = Misc.get_deeplink_with_name(response_sender, bot_data)
                                 try:
                                     await bot.send_message(
                                         response_to['tg_uid'],
                                         Misc.PROMPT_MESSAGE_TO_CHANGED_OWNER % dict(
-                                            iof_from=iof_from, iof_to=iof_to
+                                            iof_from=iof_from, iof_sender=iof_sender,
                                         ))
                                 except (ChatNotFound, CantInitiateConversation):
                                     pass
