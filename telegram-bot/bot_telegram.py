@@ -645,9 +645,73 @@ async def process_callback_keys(callback_query: types.CallbackQuery, state: FSMC
         state = dp.current_state()
         async with state.proxy() as data:
             data['uuid'] = uuid
+        response_uuid = response_sender['response_uuid']
+        await FSMkey.ask.set()
         await callback_query.message.reply(
-            'Пока не реализовано'
+            Misc.PROMPT_KEYS % dict(
+                name=response_uuid['first_name'],
+                his_her= 'Ваши' if response_uuid['uuid'] == response_sender['uuid'] else Misc.his_her(response_uuid),
+            ),
+            reply_markup=Misc.reply_markup_cancel_row(),
         )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMkey.ask,
+)
+async def get_keys(message: types.Message, state: FSMContext):
+    if message.content_type != ContentType.TEXT:
+        await message.reply(Misc.MSG_ERROR_TEXT_ONLY, reply_markup=Misc.reply_markup_cancel_row())
+        return
+    async with state.proxy() as data:
+        uuid = data.get('uuid')
+        if uuid:
+            response_sender = await Misc.check_owner(
+                owner_tg_user=message.from_user,
+                uuid=uuid
+            )
+            if response_sender:
+                strs = re.split('\n+', message.text)
+                keys = []
+                for s in strs:
+                    s = s.strip()
+                    if s and s not in keys:
+                        keys.append(s)
+                if keys:
+                    try:
+                        status, response = await Misc.api_request(
+                            path='/api/addkey',
+                            method='post',
+                            json=dict(
+                                tg_token=settings.TOKEN,
+                                owner_uuid=response_sender['uuid'],
+                                user_uuid=response_sender['response_uuid']['uuid'],
+                                keys=keys,
+                        ))
+                        bot_data = await bot.get_me()
+                        if status == 400 and response.get('profile'):
+                            # 'Контакт "%s" есть уже у другого пользователя' % value
+                            await message.reply(
+                                response['message'] + \
+                                ': ' + Misc.get_deeplink_with_name(response['profile'], bot_data) + '\n\n' + \
+                                ('Контакты у %s не изменены' % \
+                                 Misc.get_deeplink_with_name(response_sender['response_uuid'], bot_data
+                            )))
+                        elif status == 400 and response.get('message'):
+                            await message.reply(response['message'])
+                        elif status == 200:
+                            await message.reply('Контакты зафиксированы')
+                            await Misc.show_cards(
+                                [response],
+                                message,
+                                bot_data,
+                                response_from=response_sender,
+                            )
+                    except:
+                        pass
+    await Misc.state_finish(state)
 
 
 @dp.callback_query_handler(
@@ -975,7 +1039,7 @@ async def process_callback_other(callback_query: types.CallbackQuery, state: FSM
 async def got_gender_text(message: types.Message, state: FSMContext):
     await message.reply(
         'Ожидается выбор пола, нажатием одной из кнопок, в сообщении выше',
-        reply_markup=Misc.inline_button_cancel(),
+        reply_markup=Misc.reply_markup_cancel_row(),
     )
 
 

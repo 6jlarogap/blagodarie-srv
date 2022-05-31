@@ -2194,16 +2194,16 @@ class ApiAddKeyView(UuidMixin, APIView):
                     user, user_profile = self.check_user_uuid(request.data['user_uuid'], related=('owner', ))
                     if owner != user_profile.owner:
                         raise ServiceException('Профиль user_uuid не подлежит правке пользователем owner_uuid')
-                Key.objects.filter(type__pk=KeyType.OTHER_ID, owner=owner).delete()
+                Key.objects.filter(type__pk=KeyType.OTHER_ID, owner=user).delete()
                 for value in request.data['keys']:
                     key, created_ = Key.objects.get_or_create(
                         type_id=KeyType.OTHER_ID,
                         value=value,
                         defaults=dict(
-                            owner=owner,
+                            owner=user,
                     ))
                     if not created_:
-                        raise ServiceException('Контакт "%s" есть уже у другого пользователя' % value,
+                        raise ServiceException('Контакт "%s" есть уже у другого человека' % value,
                             '%s' % key.owner.pk,
                         )
                 data = user_profile.data_dict(request)

@@ -212,6 +212,11 @@ class Misc(object):
         '%(iof_sender)s передал Вам владение профилем %(iof_from)s'
     )
 
+    PROMPT_KEYS = (
+        '<b>%(name)s</b>.\n'
+        'Напишите мне %(his_her)s контакты по одному в каждой строке'
+    )
+
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE
 
     UUID_PATTERN = re.compile(r'[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}', re.IGNORECASE)
@@ -925,15 +930,12 @@ class Misc(object):
 
     @classmethod
     def his_her(cls, profile):
-        if not profile.get('owner_id'):
-            his_her = 'Ваш'
-        else:
-            his_her = 'его (её)'
-            if profile.get('gender'):
-                if profile['gender'] == 'm':
-                    his_her = 'его'
-                else:
-                    his_her = 'её'
+        his_her = 'его (её)'
+        if profile.get('gender'):
+            if profile['gender'] == 'm':
+                his_her = 'его'
+            else:
+                his_her = 'её'
         return his_her
 
 
