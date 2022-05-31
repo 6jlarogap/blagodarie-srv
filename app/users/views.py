@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
 from django.http import Http404
-from django.contrib.postgres.search import SearchQuery
+from django.contrib.postgres.search import SearchQuery, SearchVector
 from django.db.utils import ProgrammingError
 
 from rest_framework.views import APIView
@@ -994,16 +994,17 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 query = request.GET['query']
                 if len(query) >= settings.MIN_LEN_SEARCHED_TEXT:
                     try:
-                        q_users = Q(is_superuser=False)
-                        sq = SearchQuery(query, search_type="raw", config='russian')
-                        q_users &= \
-                            Q(first_name__search=sq) | \
-                            Q(wish__text__search=sq) | \
-                            Q(ability__text__search=sq) | \
-                            Q(key__value__search=sq)
-                        users = User.objects.filter(q_users). \
-                                select_related('profile').distinct(). \
-                                order_by('first_name')
+                        fields = (
+                            'first_name',
+                            'wish__text',
+                            'ability__text',
+                            'key__value',
+                        )
+                        search_vector = SearchVector(*fields, config='russian')
+                        search_query = SearchQuery(query, search_type="raw", config='russian')
+                        users = User.objects.annotate(
+                            search=search_vector
+                        ).filter(is_superuser=False, search=search_query)
                         for user in users:
                             profile = user.profile
                             item = profile.data_dict(request)

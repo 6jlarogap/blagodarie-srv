@@ -1071,7 +1071,7 @@ class Misc(object):
             if len(word) < settings.MIN_LEN_SEARCHED_TEXT:
                 continue
             if what_pos(word) not in functors_pos:
-                word = re.sub(r'[\?\!\&\|\+\,\.\:\;\'\)\(\{\}\*\"\<\>\`\~]', '', word)
+                word = re.sub(r'[\?\!\&\|\,\.\:\;\'\)\(\{\}\*\"\<\>\`\~]', '', word)
                 if len(word) >= settings.MIN_LEN_SEARCHED_TEXT:
                     result.append(word)
         if result:
