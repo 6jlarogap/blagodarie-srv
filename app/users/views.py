@@ -1004,6 +1004,8 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                         search_query = SearchQuery(query, search_type="raw", config='russian')
                         users = User.objects.annotate(
                             search=search_vector
+                        ).select_related(
+                            'profile'
                         ).filter(is_superuser=False, search=search_query)
                         for user in users:
                             profile = user.profile
