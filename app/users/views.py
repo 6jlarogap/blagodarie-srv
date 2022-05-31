@@ -821,6 +821,12 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
             если запрос авторизован.
         с параметром uuid=...
             получить данные по одному пользователю, необязательно родственнику,
+        с одним из параметров query, query_ability, query_wish, query_person:
+            получить список профилей пользователей,
+                - найденных по фио, ключам, возможностям, потребностям (query),
+                - возможностям (query_ability),
+                - потребностям (query_wish)
+                - или по фио и ключам (query)
         с параметром tg_username:
             Это строка telegram @usernames (без @ вначале), разделенных запятой
             например, username1,username2 ...
@@ -989,24 +995,37 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                         data.append(data_item)
                     except IndexError:
                         pass
-            elif request.GET.get('query'):
+            elif request.GET.get('query_ability') or \
+                 request.GET.get('query_wish') or \
+                 request.GET.get('query_person') or \
+                 request.GET.get('query'):
                 data = []
-                query = request.GET['query']
+                if request.GET.get('query_ability'):
+                    query = request.GET['query_ability']
+                    fields = ('ability__text',)
+                elif request.GET.get('query_wish'):
+                    query = request.GET['query_wish']
+                    fields = ('wish__text',)
+                elif request.GET.get('query_person'):
+                    query = request.GET['query_person']
+                    fields = ('first_name', 'key__value',)
+                else:
+                    query = request.GET['query']
+                    fields = (
+                        'first_name',
+                        'wish__text',
+                        'ability__text',
+                        'key__value',
+                    )
                 if len(query) >= settings.MIN_LEN_SEARCHED_TEXT:
                     try:
-                        fields = (
-                            'first_name',
-                            'wish__text',
-                            'ability__text',
-                            'key__value',
-                        )
                         search_vector = SearchVector(*fields, config='russian')
                         search_query = SearchQuery(query, search_type="raw", config='russian')
                         users = User.objects.annotate(
                             search=search_vector
                         ).select_related(
                             'profile'
-                        ).filter(is_superuser=False, search=search_query)
+                        ).filter(is_superuser=False, search=search_query).distinct('id')
                         for user in users:
                             profile = user.profile
                             item = profile.data_dict(request)
