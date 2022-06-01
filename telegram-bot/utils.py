@@ -121,6 +121,10 @@ class Misc(object):
     Различные функции, сообщения, константы
     """
 
+    PROMPT_SEARCH_TEXT_TOO_SHORT = 'Минимальное число символов в тексте для поиска: %s\n' % settings.MIN_LEN_SEARCHED_TEXT
+    PROMPT_SEARCH_PHRASE_TOO_SHORT = 'Недостаточно для поиска: короткие слова или текст вообще без слов и т.п.'
+    PROMPT_NOTHING_FOUND = 'Ничего не найдено - попробуйте другие слова'
+
     MSG_ERROR_API = 'Ошибка доступа к данным'
     MSG_ERROR_TEXT_ONLY = 'Принимается только текст'
     MSG_REPEATE_PLEASE = 'Повторите, пожалуйста!'
@@ -215,6 +219,13 @@ class Misc(object):
     PROMPT_KEYS = (
         '<b>%(name)s</b>.\n'
         'Напишите мне %(his_her)s контакты по одному в каждой строке'
+    )
+
+    PROMPT_ENTER_SEARCH_STRING = 'Введите строку поиска'
+    PROMPT_QUERY = dict(
+        query_ability='<b>Поиск по возможностям</b>\n' + PROMPT_ENTER_SEARCH_STRING,
+        query_wish='<b>Поиск по потребностям</b>\n' + PROMPT_ENTER_SEARCH_STRING,
+        query_person='<b>Поиск людей</b>\n' + PROMPT_ENTER_SEARCH_STRING,
     )
 
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE

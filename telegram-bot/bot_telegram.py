@@ -60,6 +60,9 @@ class FSMchangeOwner(StatesGroup):
 class FSMkey(StatesGroup):
     ask = State()
 
+class FSMquery(StatesGroup):
+    ask = State()
+
 last_user_in_group = None
 
 bot = Bot(
@@ -1826,16 +1829,96 @@ async def put_new_iof(message: types.Message, state: FSMContext):
     commands=('new', ),
     state=None,
 )
-async def process_command_new(message):
-    reply_markup = Misc.reply_markup_cancel_row()
+async def process_command_new(message: types.Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     await FSMnewIOF.ask.set()
     state = dp.current_state()
-    await message.reply(Misc.PROMPT_NEW_IOF, reply_markup=reply_markup)
+    await message.reply(Misc.PROMPT_NEW_IOF, reply_markup=Misc.reply_markup_cancel_row())
     if status_sender == 200 and response_sender.get('created'):
         photo = await Misc.get_user_photo(bot, message.from_user)
         if photo:
             await Misc.put_tg_user_photo(photo, response_sender)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('findpotr', 'findvozm', 'findperson',  ),
+    state=None,
+)
+async def process_commands_query(message: types.Message, state: FSMContext):
+    message_text = message.text.split()[0].lstrip('/')
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    await FSMquery.ask.set()
+    state = dp.current_state()
+    async with state.proxy() as data:
+        if message_text == 'findpotr':
+            query_what = 'query_wish'
+        elif message_text == 'findvozm':
+            query_what = 'query_ability'
+        elif message_text == 'findperson':
+            query_what = 'query_person'
+        else:
+            return
+        data['what'] = query_what
+    await message.reply(Misc.PROMPT_QUERY[query_what], reply_markup=Misc.reply_markup_cancel_row())
+    if status_sender == 200 and response_sender.get('created'):
+        photo = await Misc.get_user_photo(bot, message.from_user)
+        if photo:
+            await Misc.put_tg_user_photo(photo, response_sender)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMquery.ask,
+)
+async def process_make_query(message: types.Message, state: FSMContext):
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    state = dp.current_state()
+    async with state.proxy() as data:
+        try:
+            data['what']
+            Misc.PROMPT_QUERY[data['what']]
+            valid_data = True
+        except KeyError:
+            valid_data = False
+        if valid_data:
+            a_found = None
+            if message.content_type != ContentType.TEXT:
+                reply_markup = Misc.reply_markup_cancel_row()
+                await message.reply(
+                    Misc.MSG_ERROR_TEXT_ONLY + '\n\n' +  Misc.PROMPT_QUERY[data['what']],
+                    reply_markup=Misc.reply_markup_cancel_row(),
+                )
+                return
+            if len(message.text.strip()) < settings.MIN_LEN_SEARCHED_TEXT:
+                reply = Misc.PROMPT_SEARCH_TEXT_TOO_SHORT
+            else:
+                search_phrase = Misc.text_search_phrase(
+                    message.text,
+                    MorphAnalyzer,
+                )
+                if not search_phrase:
+                    reply = Misc.PROMPT_SEARCH_PHRASE_TOO_SHORT
+                else:
+                    status, a_found = await Misc.api_request(
+                        path='/api/profile',
+                        method='get',
+                        params={
+                            data['what']: search_phrase,
+                    })
+                    logging.debug('get by %s, status: %s' % (data['what'], status, ))
+                    logging.debug('get by %s, a_found: %s' % (data['what'], a_found, ))
+                    if status != 200:
+                        a_found = None
+                    elif not a_found:
+                        reply = Misc.PROMPT_NOTHING_FOUND
+            if a_found:
+                bot_data = await bot.get_me()
+                await Misc.show_deeplinks(a_found, message, bot_data)
+            elif reply:
+                await message.reply(reply)
+    await Misc.state_finish(state)
 
 
 @dp.callback_query_handler(
@@ -2353,7 +2436,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                             )
                             if not search_phrase and not usernames:
                                 state_ = 'invalid_message_text'
-                                reply = 'Недостаточно для поиска: короткие слова или текст вообще без слов и т.п.'
+                                reply = Misc.PROMPT_SEARCH_PHRASE_TOO_SHORT
 
                         if usernames:
                             logging.debug('@usernames found in message text\n') 
@@ -2400,7 +2483,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                                 reply = Misc.MSG_ERROR_API
 
     if state_ == 'not_found' and not reply:
-        reply = 'Ничего не найдено - попробуйте другие слова'
+        reply = Misc.PROMPT_NOTHING_FOUND
 
     if state_:
         status, response_from = await Misc.post_tg_user(tg_user_sender)
