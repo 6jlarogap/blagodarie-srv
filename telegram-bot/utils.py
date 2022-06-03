@@ -680,7 +680,7 @@ class Misc(object):
             url = settings.FRONTEND_HOST + path
             # login_url = LoginUrl(url=cls.make_login_url(path))
             inline_btn_friends = InlineKeyboardButton(
-                'Друзья',
+                'Близкие',
                 url=url,
                 # login_url=login_url,
             )
