@@ -1901,14 +1901,7 @@ async def process_make_query(message: types.Message, state: FSMContext):
                 if not search_phrase:
                     reply = Misc.PROMPT_SEARCH_PHRASE_TOO_SHORT
                 else:
-                    status, a_found = await Misc.api_request(
-                        path='/api/profile',
-                        method='get',
-                        params={
-                            data['what']: search_phrase,
-                    })
-                    logging.debug('get by %s, status: %s' % (data['what'], status, ))
-                    logging.debug('get by %s, a_found: %s' % (data['what'], a_found, ))
+                    status, a_found = await Misc.search_users(data['what'], search_phrase)
                     if status != 200:
                         a_found = None
                     elif not a_found:
@@ -2458,16 +2451,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                                 state_ = 'not_found'
 
                         if search_phrase:
-                            payload_query = dict(
-                                query=search_phrase,
-                            )
-                            status, response = await Misc.api_request(
-                                path='/api/profile',
-                                method='get',
-                                params=payload_query
-                            )
-                            logging.debug('get by query, status: %s' % status)
-                            logging.debug('get by query, response: %s' % response)
+                            status, response = await Misc.search_users('query', search_phrase)
                             if status == 400 and response.get('code') and response['code'] == 'programming_error':
                                 if state_ != 'found_username':
                                     state_ = 'not_found'
@@ -2836,18 +2820,17 @@ async def inline_handler(query: types.InlineQuery):
             types.InlineQueryResultArticle(
                 id=result_id,
                 title='Евгений Супрун',
-                # description='Описание',
+                description='Описание',
                 # thumb_url='https://api.blagodarie.org/media/profile-photo/2022/06/05/1138/photo.png',
                 # thumb_url='https://t.me/i/userpic/320/wzQtNrwBU5itsTLF7Yhen-01Gr3zfBAtgnCN3MqjZvs.jpg',
                 # thumb_url='https://t.me/i/userpic/320/wzQtNrwBU5itsTLF7Yhen-01Gr3zfBAtgnCN3MqjZvs.jpg',
                 # thumb_url='https://www.bsuir.by/m/12_100229_1_149537.jpg',
-                # thumb_url='https://api.blagodarie.org/thumb/profile-photo/2022/06/05/1138/photo.png/50x50~crop~12.png',
+                thumb_url='https://api.blagodarie.org/thumb/profile-photo/2022/06/07/326/photo.png/64x64~crop~12.png',
                 url = link,
                 hide_url=True,
                 input_message_content=types.InputTextMessageContent(
                     message_text='<a href="%s">Евгений Супрун</a>' % link,
-                    # message_text=link,
-                    parse_mode="HTML",
+                    parse_mode='html',
             )),
         ]
         await query.answer(articles, cache_time=1, is_personal=False)

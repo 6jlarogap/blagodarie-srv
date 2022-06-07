@@ -1108,3 +1108,29 @@ class Misc(object):
             except (TypeError, ValueError,):
                 pass
         return user_uuid_to
+
+
+    @classmethod
+    async def search_users(cls, what, search_phrase, select_related = None):
+        """
+        Поиск пользователей
+
+        what:           query, query_ability, query_person...
+        query:          строка поиска
+        select_related: возможен вариант 'profile__ability'.
+                        Если что-то еще, то строка с ними через запятую
+        """
+        status, a_found = None, None
+        if search_phrase:
+            payload_query = { what: search_phrase, }
+            if select_related:
+                payload_query.update(select_related=select_related)
+            logging.debug('get users by %s, payload: %s' % (what, payload_query,))
+            status, a_found = await Misc.api_request(
+                path='/api/profile',
+                method='get',
+                params=payload_query,
+            )
+            logging.debug('get users by %s, status: %s' % (what, status, ))
+            logging.debug('get users by %s, a_found: %s' % (what, a_found, ))
+        return status, a_found

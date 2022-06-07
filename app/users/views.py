@@ -1018,13 +1018,20 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                         'key__value',
                     )
                 if len(query) >= settings.MIN_LEN_SEARCHED_TEXT:
+                    select_related = set(['profile'])
+                    if request.GET.get('select_related'):
+                        rs = request.GET['select_related'].split(',')
+                        for r in rs:
+                            s = r.strip()
+                            if s:
+                                select_related.add(s)
                     try:
                         search_vector = SearchVector(*fields, config='russian')
                         search_query = SearchQuery(query, search_type="raw", config='russian')
                         users = User.objects.annotate(
                             search=search_vector
                         ).select_related(
-                            'profile'
+                            *select_related
                         ).filter(is_superuser=False, search=search_query).distinct('id')
                         for user in users:
                             profile = user.profile
