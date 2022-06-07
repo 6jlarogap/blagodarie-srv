@@ -1,4 +1,4 @@
-import base64, re
+import base64, re, hashlib
 from io import BytesIO
 
 import settings
@@ -2572,7 +2572,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
     await Misc.show_deeplinks(a_found, message, bot_data)
 
-    if user_from_id and response_from.get('created'):
+    if user_from_id and (response_from.get('created') or state_ == 'start'):
         tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
         if tg_user_sender_photo:
             await Misc.put_tg_user_photo(tg_user_sender_photo, response_from)
@@ -2822,6 +2822,36 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             tg_user_photo = await Misc.get_user_photo(bot, tg_user)
             if tg_user_photo:
                 await Misc.put_tg_user_photo(tg_user_photo, response_from)
+
+
+@dp.inline_handler()
+async def inline_handler(query: types.InlineQuery):
+    return
+    text = query.query
+    if text:
+        link = 'https://t.me/DevBlagoBot?start=8f686101-c5a2-46d0-a5ee-c74386eadea3'
+        # link = 'https://blagodarie.org/profile/?id=711642f1-8fff-436f-adfa-a48506a5a173&q=25&f=0'
+        result_id: str = hashlib.md5(text.encode()).hexdigest()
+        articles = [
+            types.InlineQueryResultArticle(
+                id=result_id,
+                title='Евгений Супрун',
+                # description='Описание',
+                # thumb_url='https://api.blagodarie.org/media/profile-photo/2022/06/05/1138/photo.png',
+                # thumb_url='https://t.me/i/userpic/320/wzQtNrwBU5itsTLF7Yhen-01Gr3zfBAtgnCN3MqjZvs.jpg',
+                # thumb_url='https://t.me/i/userpic/320/wzQtNrwBU5itsTLF7Yhen-01Gr3zfBAtgnCN3MqjZvs.jpg',
+                # thumb_url='https://www.bsuir.by/m/12_100229_1_149537.jpg',
+                # thumb_url='https://api.blagodarie.org/thumb/profile-photo/2022/06/05/1138/photo.png/50x50~crop~12.png',
+                url = link,
+                hide_url=True,
+                input_message_content=types.InputTextMessageContent(
+                    message_text='<a href="%s">Евгений Супрун</a>' % link,
+                    # message_text=link,
+                    parse_mode="HTML",
+            )),
+        ]
+        await query.answer(articles, cache_time=1, is_personal=False)
+
 
 # ---------------------------------
 
