@@ -18,7 +18,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import status
 from rest_framework.exceptions import NotAuthenticated
 
-from app.utils import ServiceException, SkipException, FrontendMixin
+from app.utils import ServiceException, SkipException, FrontendMixin, ThumbnailSimpleMixin
 from app.models import UnclearDate, PhotoModel, GenderMixin
 
 from django.contrib.auth.models import User
@@ -806,7 +806,7 @@ class ApiInviteGetToken(APIView):
 
 api_invite_get_token = ApiInviteGetToken.as_view()
 
-class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiAddOperationMixin, APIView):
+class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiAddOperationMixin, APIView):
     """
     Получить своих родственников (без связей), добавить/править/обезличить родственника. Правка своего профиля.
 
@@ -827,6 +827,16 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                 - возможностям (query_ability),
                 - потребностям (query_wish)
                 - или по фио и ключам (query)
+                При этом возможны еще параметры:
+                from
+                    (default 0), начиная с какой записи
+                number.
+                    Сколько записей отдавать. По умолчанию без ограничений
+                thumb_size
+                    если не пустой, то включать еще и thumb_url, квадрат этой ширины и длины.
+                    Thumbnail можем делать только от файлов, которые лежат в апи.
+                    Если фото имеется только от других источников (телеграм, google),
+                    то берется оттуда полное фото
         с параметром tg_username:
             Это строка telegram @usernames (без @ вначале), разделенных запятой
             например, username1,username2 ...
@@ -1018,25 +1028,40 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiA
                         'key__value',
                     )
                 if len(query) >= settings.MIN_LEN_SEARCHED_TEXT:
-                    select_related = set(['profile'])
-                    if request.GET.get('select_related'):
-                        rs = request.GET['select_related'].split(',')
-                        for r in rs:
-                            s = r.strip()
-                            if s:
-                                select_related.add(s)
+                    try:
+                        from_ = int(request.GET.get('from', 0) or 0)
+                    except (ValueError, TypeError,):
+                        from_ = 0
+                    try:
+                        number = int(request.GET.get('number', 0) or 0)
+                    except (ValueError, TypeError,):
+                        number = 0
+                    try:
+                        thumb_size = int(request.GET.get('thumb_size', 0) or 0)
+                    except (ValueError, TypeError,):
+                        thumb_size = 0
                     try:
                         search_vector = SearchVector(*fields, config='russian')
                         search_query = SearchQuery(query, search_type="raw", config='russian')
                         users = User.objects.annotate(
                             search=search_vector
                         ).select_related(
-                            *select_related
+                            'profile', 'profile__ability',
                         ).filter(is_superuser=False, search=search_query).distinct('id')
+                        if number:
+                            users = users[from_:from_ + number]
                         for user in users:
                             profile = user.profile
                             item = profile.data_dict(request)
                             item.update(user_id=user.pk)
+                            if thumb_size:
+                                if profile.photo:
+                                    thumb_url = request.build_absolute_uri(
+                                        self.get_thumbnail_path(profile.photo, thumb_size, thumb_size)
+                                    )
+                                else:
+                                    thumb_url = profile.photo_url or ''
+                                item.update(thumb_url=thumb_url)
                             data.append(item)
                     except ProgrammingError:
                         raise ServiceException(

@@ -2810,30 +2810,37 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
 @dp.inline_handler()
 async def inline_handler(query: types.InlineQuery):
-    return
-    text = query.query
-    if text:
-        link = 'https://t.me/DevBlagoBot?start=8f686101-c5a2-46d0-a5ee-c74386eadea3'
-        # link = 'https://blagodarie.org/profile/?id=711642f1-8fff-436f-adfa-a48506a5a173&q=25&f=0'
-        result_id: str = hashlib.md5(text.encode()).hexdigest()
-        articles = [
-            types.InlineQueryResultArticle(
-                id=result_id,
-                title='Евгений Супрун',
-                description='Описание',
-                # thumb_url='https://api.blagodarie.org/media/profile-photo/2022/06/05/1138/photo.png',
-                # thumb_url='https://t.me/i/userpic/320/wzQtNrwBU5itsTLF7Yhen-01Gr3zfBAtgnCN3MqjZvs.jpg',
-                # thumb_url='https://t.me/i/userpic/320/wzQtNrwBU5itsTLF7Yhen-01Gr3zfBAtgnCN3MqjZvs.jpg',
-                # thumb_url='https://www.bsuir.by/m/12_100229_1_149537.jpg',
-                thumb_url='https://api.blagodarie.org/thumb/profile-photo/2022/06/07/326/photo.png/64x64~crop~12.png',
-                url = link,
-                hide_url=True,
-                input_message_content=types.InputTextMessageContent(
-                    message_text='<a href="%s">Евгений Супрун</a>' % link,
-                    parse_mode='html',
-            )),
-        ]
-        await query.answer(articles, cache_time=1, is_personal=False)
+    if query.query:
+        search_phrase = Misc.text_search_phrase(query.query, MorphAnalyzer)
+        if search_phrase:
+            status, a_found = await Misc.search_users(
+                'query', search_phrase,
+                thumb_size=64,
+                from_=0,
+                number=50,
+            )
+            if status == 200 and a_found:
+                articles = []
+                bot_data = await bot.get_me()
+                for profile in a_found:
+                    thumb_url = profile['thumb_url']
+                    # Ссылки от телеграма ведут на редирект и посему не показываются.
+                    # Чтоб вместо них блы квадрат с первой буквы имени:
+                    if thumb_url.lower().startswith('https://t.me/'):
+                        thumb_url = ''
+                    article = types.InlineQueryResultArticle(
+                        id=hashlib.md5(profile['uuid'].encode()).hexdigest(),
+                        title=profile['first_name'],
+                        description=profile['ability'],
+                        url = Misc.get_deeplink(profile, bot_data, https=True),
+                        thumb_url=thumb_url,
+                        hide_url=True,
+                        input_message_content=types.InputTextMessageContent(
+                            message_text=Misc.get_deeplink_with_name(profile, bot_data),
+                            parse_mode='html',
+                        ))
+                    articles.append(article)
+                await query.answer(articles, cache_time=1, is_personal=False)
 
 
 # ---------------------------------

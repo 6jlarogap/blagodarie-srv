@@ -129,3 +129,15 @@ class FrontendMixin(object):
         return re.sub(r'\:\d+$', '',
             re.sub(r'^https?://', '', self.get_frontend_url(request).rstrip('/'))
         )
+
+class ThumbnailSimpleMixin(object):
+
+    def get_thumbnail_path(self, file_field, width=64, height=64, method='crop'):
+        result = ''
+        if file_field:
+            try:
+                result = '%s%s/%sx%s~%s~12.jpg'  % (settings.THUMBNAILS_STORAGE_BASE_PATH, 
+                                                     file_field, width, height, method)
+            except:
+                pass
+        return result

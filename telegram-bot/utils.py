@@ -366,25 +366,25 @@ class Misc(object):
 
 
     @classmethod
-    def get_deeplink(cls, response, bot_data):
+    def get_deeplink(cls, response, bot_data, https=False):
         """
         Получить ссылку типа http://t.me/BotNameBot?start=:uuid
         """
-        return "t.me/%(bot_data_username)s?start=%(resonse_uuid)s" % dict(
+        deeplink = "t.me/%(bot_data_username)s?start=%(resonse_uuid)s" % dict(
             bot_data_username=bot_data['username'],
             resonse_uuid=response['uuid']
         )
+        if https:
+            deeplink = 'https://' + deeplink
+        return deeplink
 
 
     @classmethod
     def get_deeplink_with_name(cls, response, bot_data):
         """
-        Получить ссылку типа http://t.me/BotNameBot?start=:uuid с именем
+        Получить ссылку типа https://t.me/BotNameBot?start=:uuid с именем
         """
-        href = cls.get_deeplink(response, bot_data)
-        https = 'https://'
-        if not href.startswith(https):
-            href = https + href
+        href = cls.get_deeplink(response, bot_data, https=True)
         return '<a href="%s">%s</a>' % (href, cls.get_iof(response))
 
 
@@ -1111,7 +1111,7 @@ class Misc(object):
 
 
     @classmethod
-    async def search_users(cls, what, search_phrase, select_related = None):
+    async def search_users(cls, what, search_phrase, *args, **kwargs):
         """
         Поиск пользователей
 
@@ -1123,8 +1123,7 @@ class Misc(object):
         status, a_found = None, None
         if search_phrase:
             payload_query = { what: search_phrase, }
-            if select_related:
-                payload_query.update(select_related=select_related)
+            payload_query.update(**kwargs)
             logging.debug('get users by %s, payload: %s' % (what, payload_query,))
             status, a_found = await Misc.api_request(
                 path='/api/profile',
