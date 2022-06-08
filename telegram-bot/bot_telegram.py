@@ -2840,7 +2840,11 @@ async def inline_handler(query: types.InlineQuery):
                             parse_mode='html',
                         ))
                     articles.append(article)
-                await query.answer(articles, cache_time=1, is_personal=False)
+                await query.answer(
+                    articles,
+                    cache_time=1 if settings.DEBUG else 300,
+                    is_personal=False
+                )
 
 
 # ---------------------------------
