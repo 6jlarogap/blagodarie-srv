@@ -2843,7 +2843,7 @@ async def inline_handler(query: types.InlineQuery):
                 await query.answer(
                     articles,
                     cache_time=1 if settings.DEBUG else 300,
-                    is_personal=False
+                    is_personal=True,
                 )
 
 
