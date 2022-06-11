@@ -3009,40 +3009,8 @@ class ApiInviteUseToken(ApiAddOperationMixin, SendMessageMixin, APIView):
 
 api_invite_use_token = ApiInviteUseToken.as_view()
 
-class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
-
+class GetTrustGenesisMixin(object):
     def get(self, request):
-        """
-        Дерево родни, если задан 1 uuid, или кратчайший путь (пути, если несколько) между 2 родственниками
-
-        Если указан один uuid:
-            Возвращает информацию о пользователе, а также его родственных связях (дерево рода).
-
-        Если указаны 2 uuid через запятую:
-            Возвращает кратчайший путь (пути) между двумя родственниками
-        В любом случае возвращаются данные авторизованного пользователя и
-        его доверия (недоверия) к пользователям в цепочках связей.
-
-        Параметры
-        uuid:
-            uuid пользователя
-        depth:
-            0 или отсутствие параметра или он неверен:
-                показать без ограничения глубины рекурсии
-                (в этом случае она таки ограничена, но немыслимо большИм для глубины рекурсии числом: 100)
-            1 или более:
-                показать в рекурсии связи не дальше указанной глубины рекурсии
-        up:
-            (если указан один uuid)
-            =что-то: true; отсутствует или пусто: false
-            показать прямых предков от пользователя с uuid
-        down:
-            (если указан один uuid)
-            =что-то: true; отсутствует или пусто: false
-            показать прямых потомков от пользователя с uuid
-        Если указан один uuid и отсутствуют или пустые оба параметра up и down,
-        будет показана вся сеть родни от пользователя с uuid, включая двоюродных и т.д.
-        """
         try:
             try:
                 recursion_depth = int(request.GET.get('depth', 0) or 0)
@@ -3057,9 +3025,9 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
             uuids = re.split(r'[, ]+', uuid)
             len_uuids = len(uuids)
             if len_uuids == 1:
-                data = self.get_gen_tree(request, uuids[0], recursion_depth)
+                data = self.get_tree(request, uuids[0], recursion_depth)
             elif len_uuids == 2:
-                data = self.get_gen_shortest_path(request, uuids, recursion_depth)
+                data = self.get_shortest_path(request, uuids, recursion_depth)
             else:
                 raise ServiceException("Допускается  uuid (дерево) или 2 uuid's (найти путь между)")
             status_code = status.HTTP_200_OK
@@ -3068,7 +3036,41 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
-    def get_gen_shortest_path(self, request, uuids, recursion_depth):
+
+class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
+    """
+    Дерево родни, если задан 1 uuid, или кратчайший путь (пути, если несколько) между 2 родственниками
+
+    Если указан один uuid:
+        Возвращает информацию о пользователе, а также его родственных связях (дерево рода).
+
+    Если указаны 2 uuid через запятую:
+        Возвращает кратчайший путь (пути) между двумя родственниками
+    В любом случае возвращаются данные авторизованного пользователя и
+    его доверия (недоверия) к пользователям в цепочках связей.
+
+    Параметры
+    uuid:
+        uuid пользователя
+    depth:
+        0 или отсутствие параметра или он неверен:
+            показать без ограничения глубины рекурсии
+            (в этом случае она таки ограничена, но немыслимо большИм для глубины рекурсии числом: 100)
+        1 или более:
+            показать в рекурсии связи не дальше указанной глубины рекурсии
+    up:
+        (если указан один uuid)
+        =что-то: true; отсутствует или пусто: false
+        показать прямых предков от пользователя с uuid
+    down:
+        (если указан один uuid)
+        =что-то: true; отсутствует или пусто: false
+        показать прямых потомков от пользователя с uuid
+    Если указан один uuid и отсутствуют или пустые оба параметра up и down,
+    будет показана вся сеть родни от пользователя с uuid, включая двоюродных и т.д.
+    """
+
+    def get_shortest_path(self, request, uuids, recursion_depth):
         user_pks = []
         try:
             user_pks = [int(profile.user.pk) for profile in Profile.objects.filter(uuid__in=uuids)]
@@ -3145,7 +3147,7 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
 
         return dict(users=users, connections=connections, trust_connections=trust_connections)
 
-    def get_gen_tree(self, request, uuid, recursion_depth):
+    def get_tree(self, request, uuid, recursion_depth):
 
         related = ('user', 'owner', 'ability',)
         user_q, profile_q = self.check_user_uuid(uuid, related=related)
@@ -3274,54 +3276,28 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
 
 api_profile_genesis = ApiProfileGenesis.as_view()
 
-class ApiProfileTrust(UuidMixin, SQL_Mixin, APIView):
+class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
+    """
+    Дерево доверия, если задан 1 uuid, или кратчайший путь (пути) по доверию между 2 пользователями
 
-    def get(self, request):
-        """
-        Дерево доверия, если задан 1 uuid, или кратчайший путь (пути) по доверию между 2 пользователями
+    Если указан один uuid:
+        Возвращает информацию о пользователе, а также его довериям.
 
-        Если указан один uuid:
-            Возвращает информацию о пользователе, а также его довериям.
+    Если указаны 2 uuid через запятую:
+        Возвращает кратчайший путь (пути) между двумя пользователями
 
-        Если указаны 2 uuid через запятую:
-            Возвращает кратчайший путь (пути) между двумя пользователями
+    Параметры
+    uuid:
+        uuid пользователя
+    depth:
+        0 или отсутствие параметра или он неверен:
+            показать без ограничения глубины рекурсии
+            (в этом случае она таки ограничена, но немыслимо большИм для глубины рекурсии числом: 100)
+        1 или более:
+            показать в рекурсии связи не дальше указанной глубины рекурсии
+    """
 
-        Параметры
-        uuid:
-            uuid пользователя
-        depth:
-            0 или отсутствие параметра или он неверен:
-                показать без ограничения глубины рекурсии
-                (в этом случае она таки ограничена, но немыслимо большИм для глубины рекурсии числом: 100)
-            1 или более:
-                показать в рекурсии связи не дальше указанной глубины рекурсии
-        """
-        try:
-            try:
-                recursion_depth = int(request.GET.get('depth', 0) or 0)
-            except (TypeError, ValueError,):
-                recursion_depth = 0
-            if recursion_depth <= 0 or recursion_depth > settings.MAX_RECURSION_DEPTH:
-                recursion_depth = settings.MAX_RECURSION_DEPTH
-
-            uuid = request.GET.get('uuid', '').strip(' ,')
-            if not uuid:
-                raise ServiceException('Не задан параметр uuid: пользователя или нескольких пользователей через запятую')
-            uuids = re.split(r'[, ]+', uuid)
-            len_uuids = len(uuids)
-            if len_uuids == 1:
-                data = self.get_trust_tree(request, uuids[0], recursion_depth)
-            elif len_uuids == 2:
-                data = self.get_shortest_trust_path(request, uuids, recursion_depth)
-            else:
-                raise ServiceException("Допускается  uuid (дерево) или 2 uuid's (найти путь между)")
-            status_code = status.HTTP_200_OK
-        except ServiceException as excpt:
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
-
-    def get_shortest_trust_path(self, request, uuids, recursion_depth):
+    def get_shortest_path(self, request, uuids, recursion_depth):
         user_pks = []
         try:
             user_pks = [int(profile.user.pk) for profile in Profile.objects.filter(uuid__in=uuids)]
@@ -3411,7 +3387,7 @@ class ApiProfileTrust(UuidMixin, SQL_Mixin, APIView):
 
         return dict(users=users, connections=connections, trust_connections=[])
 
-    def get_trust_tree(self, request, uuid, recursion_depth):
+    def get_tree(self, request, uuid, recursion_depth):
 
         user_q, profile_q = self.check_user_uuid(uuid, related=[])
 
