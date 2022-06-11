@@ -114,7 +114,7 @@ $$
     print('')
     for i, op in enumerate(ops):
         sql = op.strip()
-        print('Preform Postgresql command, number: %s' % i)
+        print('Perform Postgresql command, number: %s' % i)
         with connection.cursor() as cursor:
             cursor.execute(sql)
 

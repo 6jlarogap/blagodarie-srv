@@ -3310,9 +3310,9 @@ class ApiProfileTrust(UuidMixin, SQL_Mixin, APIView):
             uuids = re.split(r'[, ]+', uuid)
             len_uuids = len(uuids)
             if len_uuids == 1:
-                data = self.get_gen_trust_tree(request, uuids[0], recursion_depth)
+                data = self.get_trust_tree(request, uuids[0], recursion_depth)
             elif len_uuids == 2:
-                data = self.get_gen_shortest_trust_path(request, uuids, recursion_depth)
+                data = self.get_shortest_trust_path(request, uuids, recursion_depth)
             else:
                 raise ServiceException("Допускается  uuid (дерево) или 2 uuid's (найти путь между)")
             status_code = status.HTTP_200_OK
@@ -3321,7 +3321,7 @@ class ApiProfileTrust(UuidMixin, SQL_Mixin, APIView):
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
-    def get_gen_shortest_trust_path(self, request, uuids, recursion_depth):
+    def get_shortest_trust_path(self, request, uuids, recursion_depth):
         user_pks = []
         try:
             user_pks = [int(profile.user.pk) for profile in Profile.objects.filter(uuid__in=uuids)]
@@ -3334,7 +3334,7 @@ class ApiProfileTrust(UuidMixin, SQL_Mixin, APIView):
         # select path from find_shortest_relation_path(416, 455, 10)
         # where path @> array [416, 455];
         #
-        sql = 'select path from find_shortest_relation_path ' \
+        sql = 'select path from find_trust_relation_path ' \
               '(%(user_from_id)s, %(user_to_id)s, %(recursion_depth)s) ' \
               'where path @> array [%(user_from_id)s, %(user_to_id)s]' % dict(
             user_from_id=user_pks[0],
@@ -3349,56 +3349,69 @@ class ApiProfileTrust(UuidMixin, SQL_Mixin, APIView):
             for user_id in path:
                 user_pks.add(user_id)
 
+        users = []
+        for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
+            users.append(profile.data_dict(request))
+
+        pairs = []
+        for path in paths:
+            for i, user_id in enumerate(path):
+                if i == len(path) - 1:
+                    break
+                pair = '%s/%s' % (path[i], path[i + 1],)
+                if pair not in pairs:
+                    pairs.append(pair)
+
         connections = []
         q_connections = Q(
-            is_child=False,
+            is_trust=True,
             user_to__isnull=False,
+            user_to__pk__in=user_pks,
+            user_from__pk__in=user_pks,
         )
-        q_connections &= Q(is_father=True) | Q(is_mother=True)
-        q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            d = cs.data_dict()
-            # TODO remove below, it is for debug
-            d.update({
-                'source_fio': cs.user_from.first_name,
-                'target_fio': cs.user_to.first_name,
-            })
-            connections.append(d)
+            if cs.is_reverse:
+                source = cs.user_to.profile.uuid
+                source_fio = cs.user_to.first_name
+                source_id = cs.user_to.pk
+                target = cs.user_from.profile.uuid
+                target_fio = cs.user_from.first_name
+                target_id = cs.user_from.pk
+            else:
+                source = cs.user_from.profile.uuid
+                source_fio = cs.user_from.first_name
+                source_id = cs.user_from.pk
+                target = cs.user_to.profile.uuid
+                target_fio = cs.user_to.first_name
+                target_id = cs.user_to.pk
+            pair = '%s/%s' % (source_id, target_id,)
+            d = dict(
+                source=source,
+                target=target,
+                thanks_count=cs.thanks_count,
+                is_father=True,
+            )
+            # TODO remove this below and upper, it is for debug.
+            d.update(
+                source_fio=source_fio,
+                source_id=source_id,
+                target_fio=target_fio,
+                target_id=target_id,
+            )
+            if pair in pairs:
+                connections.append(d)
+                continue
+            # Учтем взаимные ссылки
+            if not cs.is_reverse:
+                pair_mutual = '%s/%s' % (target_id, source_id)
+                if pair_mutual in pairs:
+                    connections.append(d)
 
-        trust_connections = []
+        return dict(users=users, connections=connections, trust_connections=[])
 
-        if request.user.is_authenticated:
-            user = request.user
-            if int(user.pk) not in user_pks:
-                user_pks.add(int(user.pk))
-
-        users = [
-            p.data_dict(request) for p in \
-            Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability')
-        ]
-
-        q_connections = Q(
-            is_reverse=False,
-            user_to__isnull=False,
-            is_trust__isnull=False,
-        )
-        q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
-        for cs in CurrentState.objects.filter(q_connections).select_related(
-                'user_from__profile', 'user_to__profile',
-            ).distinct():
-            d = cs.data_dict(show_parent=False)
-            # TODO remove below, it is for debug
-            d.update({
-                'source_fio': cs.user_from.first_name,
-                'target_fio': cs.user_to.first_name,
-            })
-            trust_connections.append(d)
-
-        return dict(users=users, connections=connections, trust_connections=trust_connections)
-
-    def get_gen_trust_tree(self, request, uuid, recursion_depth):
+    def get_trust_tree(self, request, uuid, recursion_depth):
 
         user_q, profile_q = self.check_user_uuid(uuid, related=[])
 
@@ -3446,28 +3459,22 @@ class ApiProfileTrust(UuidMixin, SQL_Mixin, APIView):
 
         # Учесть взаимные доверия
         #
-        for cs in CurrentState.objects.filter(user_from__in=user_pks, user_to__in=user_pks, is_trust=True):
+        for cs in CurrentState.objects.filter(
+                user_from__in=user_pks,
+                user_to__in=user_pks,
+                is_trust=True,
+                is_reverse=False,
+            ).distinct():
             pair = '%s/%s' % (cs.user_from.pk, cs.user_to.pk,)
-            if pair in pairs:
-                continue
-            pair_reverse = '%s/%s' % (cs.user_to.pk, cs.user_from.pk,)
-            if pair_reverse in pairs:
-                if cs.is_reverse:
-                    user_from_id = cs.user_to.pk
-                    user_to_id = cs.user_from.pk
-                else:
-                    user_from_id = cs.user_from.pk
-                    user_to_id = cs.user_to.pk
-                pair = '%s/%s' % (user_from_id, user_to_id,)
-                if pair in pairs:
-                    continue
-                pairs.append(pair)
-                connections.append(dict(
-                    source=user_from_id,
-                    target=user_to_id,
-                    thanks_count=cs.thanks_count,
-                    is_father=True,
-                ))
+            if pair not in pairs:
+                pair_mutual = '%s/%s' % (cs.user_to.pk, cs.user_from.pk,)
+                if pair_mutual in pairs:
+                    connections.append(dict(
+                        source=cs.user_from.pk,
+                        target=cs.user_to.pk,
+                        thanks_count=cs.thanks_count,
+                        is_father=True,
+                    ))
 
         for c in connections:
             # TODO: remove this debug:
