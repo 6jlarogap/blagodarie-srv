@@ -3274,6 +3274,218 @@ class ApiProfileGenesis(UuidMixin, SQL_Mixin, APIView):
 
 api_profile_genesis = ApiProfileGenesis.as_view()
 
+class ApiProfileTrust(UuidMixin, SQL_Mixin, APIView):
+
+    def get(self, request):
+        """
+        Дерево доверия, если задан 1 uuid, или кратчайший путь (пути) по доверию между 2 пользователями
+
+        Если указан один uuid:
+            Возвращает информацию о пользователе, а также его довериям.
+
+        Если указаны 2 uuid через запятую:
+            Возвращает кратчайший путь (пути) между двумя пользователями
+
+        Параметры
+        uuid:
+            uuid пользователя
+        depth:
+            0 или отсутствие параметра или он неверен:
+                показать без ограничения глубины рекурсии
+                (в этом случае она таки ограничена, но немыслимо большИм для глубины рекурсии числом: 100)
+            1 или более:
+                показать в рекурсии связи не дальше указанной глубины рекурсии
+        """
+        try:
+            try:
+                recursion_depth = int(request.GET.get('depth', 0) or 0)
+            except (TypeError, ValueError,):
+                recursion_depth = 0
+            if recursion_depth <= 0 or recursion_depth > settings.MAX_RECURSION_DEPTH:
+                recursion_depth = settings.MAX_RECURSION_DEPTH
+
+            uuid = request.GET.get('uuid', '').strip(' ,')
+            if not uuid:
+                raise ServiceException('Не задан параметр uuid: пользователя или нескольких пользователей через запятую')
+            uuids = re.split(r'[, ]+', uuid)
+            len_uuids = len(uuids)
+            if len_uuids == 1:
+                data = self.get_gen_trust_tree(request, uuids[0], recursion_depth)
+            elif len_uuids == 2:
+                data = self.get_gen_shortest_trust_path(request, uuids, recursion_depth)
+            else:
+                raise ServiceException("Допускается  uuid (дерево) или 2 uuid's (найти путь между)")
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+    def get_gen_shortest_trust_path(self, request, uuids, recursion_depth):
+        user_pks = []
+        try:
+            user_pks = [int(profile.user.pk) for profile in Profile.objects.filter(uuid__in=uuids)]
+        except ValidationError:
+            pass
+        if len(user_pks) != 2:
+            raise ServiceException('Один или несколько uuid неверны или есть повтор среди заданных uuid')
+
+        # Строка запроса типа:
+        # select path from find_shortest_relation_path(416, 455, 10)
+        # where path @> array [416, 455];
+        #
+        sql = 'select path from find_shortest_relation_path ' \
+              '(%(user_from_id)s, %(user_to_id)s, %(recursion_depth)s) ' \
+              'where path @> array [%(user_from_id)s, %(user_to_id)s]' % dict(
+            user_from_id=user_pks[0],
+            user_to_id=user_pks[1],
+            recursion_depth=recursion_depth,
+        )
+        with connection.cursor() as cursor:
+            cursor.execute(sql)
+            paths = [rec[0] for rec in cursor.fetchall()]
+        user_pks = set(user_pks)
+        for path in paths:
+            for user_id in path:
+                user_pks.add(user_id)
+
+        connections = []
+        q_connections = Q(
+            is_child=False,
+            user_to__isnull=False,
+        )
+        q_connections &= Q(is_father=True) | Q(is_mother=True)
+        q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
+        for cs in CurrentState.objects.filter(q_connections).select_related(
+                'user_from__profile', 'user_to__profile',
+            ).distinct():
+            d = cs.data_dict()
+            # TODO remove below, it is for debug
+            d.update({
+                'source_fio': cs.user_from.first_name,
+                'target_fio': cs.user_to.first_name,
+            })
+            connections.append(d)
+
+        trust_connections = []
+
+        if request.user.is_authenticated:
+            user = request.user
+            if int(user.pk) not in user_pks:
+                user_pks.add(int(user.pk))
+
+        users = [
+            p.data_dict(request) for p in \
+            Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability')
+        ]
+
+        q_connections = Q(
+            is_reverse=False,
+            user_to__isnull=False,
+            is_trust__isnull=False,
+        )
+        q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
+        for cs in CurrentState.objects.filter(q_connections).select_related(
+                'user_from__profile', 'user_to__profile',
+            ).distinct():
+            d = cs.data_dict(show_parent=False)
+            # TODO remove below, it is for debug
+            d.update({
+                'source_fio': cs.user_from.first_name,
+                'target_fio': cs.user_to.first_name,
+            })
+            trust_connections.append(d)
+
+        return dict(users=users, connections=connections, trust_connections=trust_connections)
+
+    def get_gen_trust_tree(self, request, uuid, recursion_depth):
+
+        user_q, profile_q = self.check_user_uuid(uuid, related=[])
+
+        sql_req_dict = dict(
+                user_id=user_q.pk,
+                recursion_depth=recursion_depth,
+        )
+        sql_req_str = 'select * from find_rel_trust(%(user_id)s,%(recursion_depth)s)'
+
+        recs = []
+        with connection.cursor() as cursor:
+            cursor.execute(sql_req_str % sql_req_dict)
+            recs += self.dictfetchall(cursor)
+        connections = []
+        user_pks = set()
+        pairs = []
+        for rec in recs:
+            if rec['is_reverse']:
+                user_from_id = rec['user_to_id']
+                user_to_id = rec['user_from_id']
+            else:
+                user_from_id = rec['user_from_id']
+                user_to_id = rec['user_to_id']
+            pair = '%s/%s' % (user_from_id, user_to_id,)
+            if pair not in pairs:
+                pairs.append(pair)
+                user_pks.add(user_from_id)
+                user_pks.add(user_to_id)
+                connections.append(dict(
+                    source=user_from_id,
+                    target=user_to_id,
+                    thanks_count=rec['thanks_count'],
+                    is_father=True,
+                ))
+        profiles_dict = dict()
+        users = []
+        for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
+            profiles_dict[profile.user.pk] = dict(
+                uuid=profile.uuid,
+                # TODO remove below, it is for debug
+                first_name=profile.user.first_name,
+                user_pk=profile.user.pk,
+            )
+            users.append(profile.data_dict(request))
+
+        # Учесть взаимные доверия
+        #
+        for cs in CurrentState.objects.filter(user_from__in=user_pks, user_to__in=user_pks, is_trust=True):
+            pair = '%s/%s' % (cs.user_from.pk, cs.user_to.pk,)
+            if pair in pairs:
+                continue
+            pair_reverse = '%s/%s' % (cs.user_to.pk, cs.user_from.pk,)
+            if pair_reverse in pairs:
+                if cs.is_reverse:
+                    user_from_id = cs.user_to.pk
+                    user_to_id = cs.user_from.pk
+                else:
+                    user_from_id = cs.user_from.pk
+                    user_to_id = cs.user_to.pk
+                pair = '%s/%s' % (user_from_id, user_to_id,)
+                if pair in pairs:
+                    continue
+                pairs.append(pair)
+                connections.append(dict(
+                    source=user_from_id,
+                    target=user_to_id,
+                    thanks_count=cs.thanks_count,
+                    is_father=True,
+                ))
+
+        for c in connections:
+            # TODO: remove this debug:
+            #
+            c['source_fio'] = profiles_dict[c['source']]['first_name']
+            c['source_id'] = profiles_dict[c['source']]['user_pk']
+
+            c['target_fio'] = profiles_dict[c['target']]['first_name']
+            c['target_id'] = profiles_dict[c['target']]['user_pk']
+            # ------------------------
+
+            c['source'] = profiles_dict[c['source']]['uuid']
+            c['target'] = profiles_dict[c['target']]['uuid']
+
+        return dict(users=users, connections=connections, trust_connections=[])
+
+api_profile_trust = ApiProfileTrust.as_view()
+
 class ApiPostTgMessageData(UuidMixin, APIView):
     def post(self, request):
         """

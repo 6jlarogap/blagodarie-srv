@@ -22,7 +22,7 @@ from app.utils import ServiceException, SkipException, FrontendMixin, ThumbnailS
 from app.models import UnclearDate, PhotoModel, GenderMixin
 
 from django.contrib.auth.models import User
-from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TempToken, UuidMixin
+from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TgGroup, TempToken, UuidMixin
 from contact.models import Key, KeyType, CurrentState, OperationType, Wish, Ability
 from contact.views import SendMessageMixin, ApiAddOperationMixin
 
@@ -1583,3 +1583,60 @@ class ApiBotStat(APIView):
         return Response(data=data, status=200)
 
 api_bot_stat = ApiBotStat.as_view()
+
+class ApiBotGroup(APIView):
+    """
+    Записать в таблицу TgGroup информацию о группе. Или удалить из таблицы
+    """
+
+    def check_data(self, request, method):
+        if request.data.get('tg_token', '') != settings.TELEGRAM_BOT_TOKEN:
+            raise ServiceException('Неверный токен телеграм бота')
+        try:
+            chat_id = int(request.data.get('chat_id') or 0)
+        except (ValueError, TypeError,):
+            chat_id = 0
+        if not chat_id:
+            raise ServiceException('Не верный chat_id')
+        if method == 'post':
+            if not request.data.get('title') or not request.data.get('type'):
+                raise ServiceException('Не хватает данных: title и/или type')
+
+    def post(self, request):
+        try:
+            self.check_data(request, method='post')
+            title = request.data['title']
+            type_ = request.data['type']
+            tg_group, created_ = TgGroup.objects.get_or_create(
+                chat_id = request.data['chat_id'],
+                defaults={
+                    'title': title,
+                    'type': type_,
+            })
+            if not created_ and (tg_group.title != title or tg_group.type != type_):
+               tg_group.title = title
+               tg_group.type = type_
+               tg_group.save()
+            status_code = status.HTTP_200_OK
+            data = {}
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+    def delete(self, request):
+        try:
+            self.check_data(request, method='delete')
+            chat_id = request.data['chat_id']
+            try:
+                TgGroup.objects.get(chat_id=chat_id).delete()
+            except TgGroup.DoesNotExist:
+                raise ServiceException('Группа с chat_id = %s не найдена среди назначенных боту' % chat_id)
+            status_code = status.HTTP_200_OK
+            data = {}
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+api_bot_group = ApiBotGroup.as_view()

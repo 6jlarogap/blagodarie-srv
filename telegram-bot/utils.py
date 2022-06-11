@@ -358,9 +358,12 @@ class Misc(object):
                 params=params,
             ) as resp:
                 status = resp.status
-                if response_type == 'json':
-                    response = await resp.json()
-                elif response_type == 'text':
+                if status < 500:
+                    if response_type == 'json':
+                        response = await resp.json()
+                    elif response_type == 'text':
+                        response = await resp.text('UTF-8')
+                else:
                     response = await resp.text('UTF-8')
                 return status, response
 
@@ -1133,3 +1136,34 @@ class Misc(object):
             logging.debug('get users by %s, status: %s' % (what, status, ))
             logging.debug('get users by %s, a_found: %s' % (what, a_found, ))
         return status, a_found
+
+class TgGroup(object):
+    """
+    Список групп, где бот: внесение, удаление
+    """
+
+    @classmethod
+    async def post(cls, chat_id, title, type_):
+        payload = {'tg_token': settings.TOKEN, 'chat_id': chat_id, 'title': title, 'type': type_,}
+        logging.debug('post group id, payload: %s' % payload)
+        status, response = await Misc.api_request(
+            path='/api/bot/group',
+            method='post',
+            json=payload,
+        )
+        logging.debug('post group id, status: %s' % status)
+        logging.debug('post group id, response: %s' % response)
+        return status, response
+
+    @classmethod
+    async def delete(cls, chat_id):
+        payload = {'tg_token': settings.TOKEN, 'chat_id': chat_id,}
+        logging.debug('delete group id, payload: %s' % payload)
+        status, response = await Misc.api_request(
+            path='/api/bot/group',
+            method='delete',
+            json=payload,
+        )
+        logging.debug('delete group id, status: %s' % status)
+        logging.debug('delete group id, response: %s' % response)
+        return status, response

@@ -22,6 +22,15 @@ from app.models import UnclearDateModelField, GenderMixin
 from app.models import BaseModelInsertUpdateTimestamp, BaseModelInsertTimestamp, PhotoModel, GeoPointModel
 from app.utils import ServiceException
 
+class TgGroup(BaseModelInsertTimestamp):
+    """
+    В каких группах присутствует бот
+    """
+
+    chat_id = models.BigIntegerField(_("Chat Id"), unique=True, db_index=True)
+    title = models.CharField(_("Имя"), max_length=256)
+    type = models.CharField(_("Тип"), max_length=50)
+
 class Oauth(BaseModelInsertUpdateTimestamp):
 
     PROVIDER_GOOGLE = 'google'
@@ -182,6 +191,7 @@ class Oauth(BaseModelInsertUpdateTimestamp):
     display_name = models.CharField(_("Отображаемое имя у провайдера"), max_length=255, default='')
     email = models.EmailField(_("Email у провайдера"), max_length=255, default='')
     photo = models.URLField(_("Фото у провайдера"), max_length=255, default='')
+    groups = models.ManyToManyField(TgGroup, verbose_name=_("Группы telegram пользователя"))
 
     class Meta:
         unique_together = ('provider', 'uid')

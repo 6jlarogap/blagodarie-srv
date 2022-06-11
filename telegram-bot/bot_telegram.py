@@ -3,7 +3,7 @@ from io import BytesIO
 
 import settings
 from settings import logging
-from utils import Misc, OperationType, KeyboardType
+from utils import Misc, OperationType, KeyboardType, TgGroup
 
 from aiogram import Bot, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ContentType
@@ -2565,6 +2565,30 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         tg_user_forwarded_photo = await Misc.get_user_photo(bot, tg_user_forwarded)
         if tg_user_forwarded_photo:
             await Misc.put_tg_user_photo(tg_user_forwarded_photo, response_to)
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=(types.ChatType.GROUP, types.ChatType.SUPERGROUP)),
+    commands=('get_group_id',),
+    state=None,
+)
+async def get_group_id(message: types.Message, state: FSMContext):
+    chat = message.chat
+    status, response = await TgGroup.post(chat.id, chat.title, chat.type)
+    try:
+        await message.delete()
+    except:
+        pass
+    try:
+        await bot.send_message(
+            message.from_user.id, (
+            'Вы запросили ИД группы <b>%s</b>\n\n'
+            'Отвечаю\n'
+            'ИД: %s\n'
+            'Тип: %s\n'
+            ) % (chat.title, chat.id, chat.type))
+    except (ChatNotFound, CantInitiateConversation):
+        pass
+
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=(types.ChatType.GROUP, types.ChatType.SUPERGROUP)),
