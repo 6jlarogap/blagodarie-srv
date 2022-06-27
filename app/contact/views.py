@@ -1202,39 +1202,6 @@ class ApiGetStats(SQL_Mixin, APIView):
 
     def get_stats(self, request, *args, **kwargs):
 
-        if kwargs.get('only') == 'user_connections':
-
-            # Вернуть:
-            #
-            # {
-            #   "users": [...],     # список пользователей с профилями (и uuid)
-            #   "connections": [
-            #       [3, 4],         # user_id=3 сделал thank user_id=4 или наоборот
-            #       [5, 6],
-            #       ...
-            #   [
-            # }
-
-            users = dict()
-            for user in User.objects.filter(is_superuser=False, profile__owner__isnull=True):
-                names = user.first_name.split()
-                for i, name in enumerate(names):
-                    if i < len(names) - 1:
-                        names[i] = names[i][0].upper() + '.'
-                users[user.pk] = dict(initials=''.join(names) or 'Без имени')
-            connections = []
-            for cs in CurrentState.objects.filter(
-                        user_to__isnull=False,
-                        thanks_count__gt=0,
-                        is_reverse=False,
-                    ).select_related('user_from', 'user_to'):
-                connection_fvd = [cs.user_from.pk, cs.user_to.pk]
-                connection_rev = [cs.user_to.pk, cs.user_from.pk]
-                if not (connection_fvd in connections or connection_rev in connections):
-                    connections.append(connection_fvd)
-
-            return dict(users=users, connections=connections)
-
         if kwargs.get('only') == 'user_connections_graph':
 
             # Возвращает:
