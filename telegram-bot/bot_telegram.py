@@ -2733,18 +2733,15 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             except:
                 continue
 
-        if tg_user_left or tg_users_new:
-            reply = Misc.reply_user_card(response_from, bot_data=bot_data)
-        else:
-            reply_template = '<b><a href="%(deeplink)s">%(full_name)s</a></b>'
-            username = response_from.get('tg_username', '')
-            if username:
-                reply_template += ' ( @%(username)s )'
-            reply = reply_template % dict(
-                full_name=tg_user_sender.full_name,
-                username=username,
-                deeplink=Misc.get_deeplink(response_from, bot_data),
-            )
+        reply_template = '<b><a href="%(deeplink)s">%(full_name)s</a></b>'
+        username = response_from.get('tg_username', '')
+        if username:
+            reply_template += ' ( @%(username)s )'
+        reply = reply_template % dict(
+            full_name=tg_user_sender.full_name,
+            username=username,
+            deeplink=Misc.get_deeplink(response_from, bot_data),
+        )
 
         if not is_previous_his:
             reply_markup = InlineKeyboardMarkup()
