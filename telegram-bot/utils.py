@@ -428,7 +428,6 @@ class Misc(object):
                 '%(lifetime_str)s'
                 'Доверий: %(trust_count)s\n'
                 'Благодарностей: %(sum_thanks_count)s\n'
-                'Недоверий: %(mistrust_count)s\n'
                 '\n'
             ) % dict(
             iof=iof,
@@ -491,11 +490,16 @@ class Misc(object):
 
     @classmethod
     def reply_relations(cls, response):
-        return '\n'.join((
-                'От Вас: %s' % OperationType.relation_text(response['from_to']['is_trust']),
-                'К Вам: %s' % OperationType.relation_text(response['to_from']['is_trust']),
-                '\n',
-            ))
+        result = ''
+        arr = []
+        if response['from_to']['is_trust'] != False:
+            arr.append('От Вас: %s' % OperationType.relation_text(response['from_to']['is_trust']))
+        if response['to_from']['is_trust'] != False:
+            arr.append('К Вам: %s' % OperationType.relation_text(response['to_from']['is_trust']))
+        if arr:
+            arr.append('\n')
+            result = '\n'.join(arr)
+        return result
 
     @classmethod
     def make_login_url(cls, redirect_path):
@@ -748,35 +752,33 @@ class Misc(object):
                         '%(message_to_forward_id)s%(sep)s'
                         '%(group_id)s%(sep)s'
                     )
-                dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-                inline_btn_thank = InlineKeyboardButton(
-                    'Благодарю',
-                    callback_data=callback_data_template % dict_reply,
-                )
-                dict_reply.update(operation=OperationType.MISTRUST)
-                inline_btn_mistrust = InlineKeyboardButton(
-                    'Не доверяю',
-                    callback_data=callback_data_template % dict_reply,
-                )
                 show_inline_btn_nullify_trust = True
-                dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-                inline_btn_nullify_trust = InlineKeyboardButton(
-                    'Не знакомы',
-                    callback_data=callback_data_template % dict_reply,
-                )
+                title_thank = 'Доверие'
                 if group_id or \
                    (response_relations and response_relations['from_to']['is_trust'] is None):
                     show_inline_btn_nullify_trust = False
+                if not group_id and \
+                    response_relations and response_relations['from_to']['is_trust']:
+                    title_thank = 'Благодарить'
+
+                dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+                inline_btn_trust = InlineKeyboardButton(
+                    title_thank,
+                    callback_data=callback_data_template % dict_reply,
+                )
+                dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+                inline_btn_nullify_trust = InlineKeyboardButton(
+                    'Забыть',
+                    callback_data=callback_data_template % dict_reply,
+                )
                 if show_inline_btn_nullify_trust:
                     reply_markup.row(
-                        inline_btn_thank,
-                        inline_btn_mistrust,
+                        inline_btn_trust,
                         inline_btn_nullify_trust
                     )
                 else:
                     reply_markup.row(
-                        inline_btn_thank,
-                        inline_btn_mistrust,
+                        inline_btn_trust,
                     )
 
             callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE

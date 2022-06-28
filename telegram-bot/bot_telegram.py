@@ -2001,16 +2001,12 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
             text_link = 'Установлено доверие с %(full_name_to_link)s'
             operation_done = True
         elif post_op['operation_type_id'] == OperationType.MISTRUST:
-            text = 'Установлено недоверие с %(full_name_to)s'
-            text_link = 'Установлено недоверие с %(full_name_to_link)s'
             operation_done = True
         elif post_op['operation_type_id'] == OperationType.NULLIFY_TRUST:
-            text = 'Установлено, что не знакомы с %(full_name_to)s'
-            text_link = 'Установлено, что не знакомы с %(full_name_to_link)s'
             operation_done = True
         elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
-            text = 'Отправлена благодарность к %(full_name_to)s'
-            text_link = 'Отправлена благодарность к %(full_name_to_link)s'
+            text = 'Установлено доверие к %(full_name_to)s'
+            text_link = 'Установлено доверие к %(full_name_to_link)s'
             operation_done = True
     elif status == 400 and response.get('code', '') == 'already':
         if post_op['operation_type_id'] == OperationType.TRUST:
@@ -2035,24 +2031,25 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
             tg_user_from_username = profile_from['tg_data']['tg_username']
         except KeyError:
             tg_user_from_username = None
-        full_name_to = Misc.get_iof(profile_to)
-        full_name_to_link = (
-                '<a href="%(frontend_host)s/profile/?id=%(uuid)s">%(full_name)s</a>'
-            ) % dict(
-            frontend_host=settings.FRONTEND_HOST,
-            uuid=profile_to['uuid'],
-            full_name=full_name_to,
-        )
-        d = dict(
-            full_name_to=full_name_to,
-            full_name_to_link=full_name_to_link,
-        )
-        text = text % d
-        text_link = text_link % d
-        if tg_user_to_username:
-            text_link += ' ( @%s )' % tg_user_to_username
+        if text and text_link:
+            full_name_to = Misc.get_iof(profile_to)
+            full_name_to_link = (
+                    '<a href="%(frontend_host)s/profile/?id=%(uuid)s">%(full_name)s</a>'
+                ) % dict(
+                frontend_host=settings.FRONTEND_HOST,
+                uuid=profile_to['uuid'],
+                full_name=full_name_to,
+            )
+            d = dict(
+                full_name_to=full_name_to,
+                full_name_to_link=full_name_to_link,
+            )
+            text = text % d
+            text_link = text_link % d
+            if tg_user_to_username:
+                text_link += ' ( @%s )' % tg_user_to_username
 
-    if not text:
+    if not text and not operation_done:
         if status == 200:
             text = 'Операция выполнена'
         elif status == 400 and response.get('message'):
@@ -2060,7 +2057,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         else:
             text = 'Простите, произошла ошибка'
 
-    if not text_link:
+    if not text_link and text:
         text_link = text
 
     # Это отправителю благодарности и т.п.
@@ -2073,7 +2070,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
             )
     except (ChatNotFound, CantInitiateConversation):
         pass
-    if operation_done and not group_id:
+    if operation_done and not group_id and text_link:
         # Не отправляем в личку, если сообщение в группу
         try:
             await bot.send_message(
@@ -2089,13 +2086,13 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
     if group_id and operation_done:
         reply = ''
         if post_op['operation_type_id'] == OperationType.TRUST:
-            reply = '%(deeplink_sender)s доверяет %(deeplink_receiver)s'
+            reply = '%(deeplink_sender)s установил(а) доверие с %(deeplink_receiver)s'
         elif post_op['operation_type_id'] == OperationType.MISTRUST:
-            reply = '%(deeplink_sender)s не доверяет %(deeplink_receiver)s'
+            pass
         elif post_op['operation_type_id'] == OperationType.NULLIFY_TRUST:
-            reply = '%(deeplink_sender)s не знаком(а) с %(deeplink_receiver)s'
+            pass
         elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
-            reply = '%(deeplink_sender)s поблагодарил(а) %(deeplink_receiver)s'
+            reply = '%(deeplink_sender)s установил(а) доверие с %(deeplink_receiver)s'
         if reply:
             deeplink_template = '<a href="%(deeplink)s">%(full_name)s</a>'
             deeplink_sender = deeplink_template % dict(
@@ -2121,13 +2118,13 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
     if operation_done and tg_user_to_uid:
         reply = ''
         if post_op['operation_type_id'] == OperationType.TRUST:
-            reply = 'Установлено доверие с'
+            reply = 'Получено доверие от'
         elif post_op['operation_type_id'] == OperationType.MISTRUST:
-            reply = 'Установлено недоверие с'
+            pass
         elif post_op['operation_type_id'] == OperationType.NULLIFY_TRUST:
-            reply = 'Установлено, что не знакомы с'
+            pass
         elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
-            reply = 'Получена благодарность от'
+            reply = 'Получено доверие от'
 
         if reply:
             reply += ' <a href="%(deeplink_sender)s">%(full_name_sender)s</a>' % dict(
@@ -2739,13 +2736,14 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
         if tg_user_left or tg_users_new:
             reply = Misc.reply_user_card(response_from, bot_data=bot_data)
         else:
-            reply_template = '<b>%(full_name)s</b>'
+            reply_template = '<b><a href="%(deeplink)s">%(full_name)s</a></b>'
             username = response_from.get('tg_username', '')
             if username:
                 reply_template += ' ( @%(username)s )'
             reply = reply_template % dict(
                 full_name=tg_user_sender.full_name,
                 username=username,
+                deeplink=Misc.get_deeplink(response_from, bot_data),
             )
 
         if not is_previous_his:
@@ -2760,7 +2758,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 url=url,
                 # login_url=login_url,
             )
-            reply_markup.row(inline_btn_go)
+            buttons = [inline_btn_go]
 
             if response_from.get('tg_uid') and str(bot_data.id) != str(response_from['tg_uid']):
                 dict_reply = dict(
@@ -2779,18 +2777,11 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                     )
                 dict_reply.update(operation=OperationType.TRUST_AND_THANK)
                 inline_btn_thank = InlineKeyboardButton(
-                    'Благодарю',
+                    'Доверие',
                     callback_data=callback_data_template % dict_reply,
                 )
-                dict_reply.update(operation=OperationType.MISTRUST)
-                inline_btn_mistrust = InlineKeyboardButton(
-                    'Не доверяю',
-                    callback_data=callback_data_template % dict_reply,
-                )
-                reply_markup.row(
-                    inline_btn_thank,
-                    inline_btn_mistrust,
-                )
+                buttons.append(inline_btn_thank)
+            reply_markup.row(*buttons)
 
             await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 

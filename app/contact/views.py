@@ -1210,7 +1210,7 @@ class ApiGetStats(SQL_Mixin, APIView):
             #
             #   без параметров:
             #       список тех пользователей, и связи,
-            #       где не обнулено доверие (currenstate.is_trust is not null).
+            #       где есть доверие (currenstate.is_trust == True).
             #   с параметром query:
             #       у которых в
             #               имени или
@@ -1219,7 +1219,7 @@ class ApiGetStats(SQL_Mixin, APIView):
             #               ключах или
             #               желаниях
             #       есть query, и их связи,
-            #       где не обнулено доверие (currenstate.is_trust is not null).
+            #       где есть доверие (currenstate.is_trust == True).
             #   В любом случае возвращаются в массиве users еще
             #   данные пользователя, если он авторизовался, а также
             #   связи с попавшими в выборку по query и/или в страницу from...
@@ -1273,7 +1273,7 @@ class ApiGetStats(SQL_Mixin, APIView):
             connections = []
             q_connections = Q(
                 is_reverse=False,
-                is_trust__isnull=False,
+                is_trust=True,
                 user_to__isnull=False,
             )
             q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
@@ -2400,7 +2400,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, APIView):
                     contact_currentstate
                 WHERE
                     is_reverse = false AND
-                    is_trust IS NOT NULL AND
+                    is_trust = true AND
                     user_to_id IS NOT NULL AND
                     user_from_id = %(user_q_pk)s
                 UNION
@@ -2410,7 +2410,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, APIView):
                     contact_currentstate
                 WHERE
                     is_reverse = false AND
-                    is_trust IS NOT NULL AND
+                    is_trust = true AND
                     user_to_id = %(user_q_pk)s
             """ % dict(
                 user_q_pk=user_q.pk
@@ -2555,7 +2555,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, APIView):
                 users.append(user_a.profile.data_dict(request))
                 user_pks.append(user_a.pk)
             q = Q(user_from__in=user_pks) & Q(user_to__in=user_pks)
-            q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust__isnull=False)
+            q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust=True)
             for cs in CurrentState.objects.filter(q).select_related(
                 'user_to__profile', 'user_from__profile',
                 ).distinct():
@@ -3098,7 +3098,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         q_connections = Q(
             is_reverse=False,
             user_to__isnull=False,
-            is_trust__isnull=False,
+            is_trust=True,
         )
         q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
         for cs in CurrentState.objects.filter(q_connections).select_related(
@@ -3219,7 +3219,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         trust_connections = []
         q_connections = Q(
             is_reverse=False,
-            is_trust__isnull=False,
+            is_trust=True,
             user_to__isnull=False,
         )
         if request.user.is_authenticated:
