@@ -1989,6 +1989,15 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
     except:
         return
 
+    chat = callback_query.message.chat
+    if callback_query.message.chat.type in ('group', 'supergroup',):
+        await TgGroupMember.add(
+            group_chat_id=chat.id,
+            group_title=chat.title,
+            group_type=chat.type,
+            user_tg_uid=tg_user_sender.id
+        )
+
     logging.debug('post operation, payload: %s' % post_op)
     status, response = await Misc.api_request(
         path='/api/addoperation',
