@@ -32,10 +32,14 @@ HTTP_TIMEOUT = 60
 
 # URL апи, без завершающей/, :
 #
-API_HOST = 'https://api.dev.blagodarie.org'
+API_HOST = 'https://api.blagodarie.org'
 
-FRONTEND_HOST = 'https://dev.blagodarie.org'
-FRONTEND_HOST_TITLE = 'БлагоДари.РФ (dev)'
+FRONTEND_HOST = 'https://blagodarie.org'
+FRONTEND_HOST_TITLE = 'БлагоРода'
+
+# Ссылка на отношения в группе
+#
+GROUP_HOST = 'https://group.blagodarie.org'
 
 # Ссылка на фронте, которая будет открываться там под авторизованным
 # пользователем:

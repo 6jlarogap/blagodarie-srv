@@ -702,16 +702,16 @@ class Misc(object):
                     # login_url=login_url,
                 )
                 goto_buttons.append(inline_btn_genesis)
-            #if not group_id and response_from.get('uuid') and not is_own_account:
-                #path = "/trust/?id=%s,%s&d=10" % (response_from['uuid'], response_to['uuid'],)
-                #url = settings.FRONTEND_HOST + path
-                ## login_url = LoginUrl(url=cls.make_login_url(path))
-                #inline_btn_path = InlineKeyboardButton(
-                    #'Путь (доверия)',
-                    #url=url,
-                    ## login_url=login_url,
-                #)
-                #goto_buttons.append(inline_btn_path)
+            if not group_id and response_from.get('uuid') and not is_own_account:
+                path = "/trust/?id=%s,%s&d=10" % (response_from['uuid'], response_to['uuid'],)
+                url = settings.FRONTEND_HOST + path
+                # login_url = LoginUrl(url=cls.make_login_url(path))
+                inline_btn_path = InlineKeyboardButton(
+                    'Путь (доверия)',
+                    url=url,
+                    # login_url=login_url,
+                )
+                goto_buttons.append(inline_btn_path)
             reply_markup.row(*goto_buttons)
             reply = cls.reply_user_card(
                 response_to,

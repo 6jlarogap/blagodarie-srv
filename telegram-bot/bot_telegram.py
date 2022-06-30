@@ -13,7 +13,7 @@ from aiogram.dispatcher.filters import ChatTypeFilter, Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_polling, start_webhook
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation
+from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation, CantTalkWithBots
 from aiogram.utils.parts import safe_split_text
 
 import pymorphy2
@@ -1332,17 +1332,20 @@ async def got_message_to_send(message: types.Message, state: FSMContext):
                     if tg_uid_to:
                         try:
                             bot_data = await bot.get_me()
-                            await bot.send_message(
-                                tg_uid_to,
-                                text='Вам сообщение от <b>%s</b>' % Misc.get_deeplink_with_name(profile_from, bot_data),
-                                disable_web_page_preview=True,
-                            )
-                            await bot.forward_message(
-                                tg_uid_to,
-                                from_chat_id=message.chat.id,
-                                message_id=message.message_id,
-                            )
-                            await message.reply('Сообщение доставлено')
+                            try:
+                                await bot.send_message(
+                                    tg_uid_to,
+                                    text='Вам сообщение от <b>%s</b>' % Misc.get_deeplink_with_name(profile_from, bot_data),
+                                    disable_web_page_preview=True,
+                                )
+                                await bot.forward_message(
+                                    tg_uid_to,
+                                    from_chat_id=message.chat.id,
+                                    message_id=message.message_id,
+                                )
+                                await message.reply('Сообщение доставлено')
+                            except CantTalkWithBots:
+                                await message.reply('Сообщения к боту запрещены')
                         except (ChatNotFound, CantInitiateConversation):
                             user_to_delivered_uuid = None
                             await message.reply(msg_saved)
@@ -2836,7 +2839,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
         if username:
             reply_template += ' ( @%(username)s )'
         reply = reply_template % dict(
-            full_name=tg_user_sender.full_name,
+            full_name=Misc.get_iof(response_from),
             username=username,
             deeplink=Misc.get_deeplink(response_from, bot_data),
         )
@@ -2855,30 +2858,47 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             )
             buttons = [inline_btn_go]
 
-            if response_from.get('tg_uid') and str(bot_data.id) != str(response_from['tg_uid']):
-                dict_reply = dict(
-                    keyboard_type=KeyboardType.TRUST_THANK_VER_2,
-                    sep=KeyboardType.SEP,
-                    user_to_id=response_from['user_id'],
-                    message_to_forward_id='',
-                    group_id=message.chat.id,
-                )
-                callback_data_template = (
-                        '%(keyboard_type)s%(sep)s'
-                        '%(operation)s%(sep)s'
-                        '%(user_to_id)s%(sep)s'
-                        '%(message_to_forward_id)s%(sep)s'
-                        '%(group_id)s%(sep)s'
+            if response_from.get('tg_uid'):
+                if str(bot_data.id) == str(response_from['tg_uid']):
+                    if tg_user_left:
+                        # ЭТОТ Бот ушел, не может послать ответ без аварии
+                        reply = ''
+                    elif tg_users_new:
+                        # ЭТОТ Бот подключился
+                        reply += (
+                            '\n'
+                            '\n'
+                            '<a href="%(group_host)s/?tg_group_chat_id=%(chat_id)s">Доверия в группе</a>\n'
+                        ) % dict(
+                            group_host=settings.GROUP_HOST,
+                            chat_id=message.chat.id,
+                        )
+                else:
+                    # не делать кнопку Доверия для бота, глючит!
+                    dict_reply = dict(
+                        keyboard_type=KeyboardType.TRUST_THANK_VER_2,
+                        sep=KeyboardType.SEP,
+                        user_to_id=response_from['user_id'],
+                        message_to_forward_id='',
+                        group_id=message.chat.id,
                     )
-                dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-                inline_btn_thank = InlineKeyboardButton(
-                    'Доверие',
-                    callback_data=callback_data_template % dict_reply,
-                )
-                buttons.append(inline_btn_thank)
+                    callback_data_template = (
+                            '%(keyboard_type)s%(sep)s'
+                            '%(operation)s%(sep)s'
+                            '%(user_to_id)s%(sep)s'
+                            '%(message_to_forward_id)s%(sep)s'
+                            '%(group_id)s%(sep)s'
+                        )
+                    dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+                    inline_btn_thank = InlineKeyboardButton(
+                        'Доверие',
+                        callback_data=callback_data_template % dict_reply,
+                    )
+                    buttons.append(inline_btn_thank)
             reply_markup.row(*buttons)
 
-            await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+            if reply:
+                await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
     if not (tg_user_left or tg_users_new):
         # Найдем @usernames в сообщении
