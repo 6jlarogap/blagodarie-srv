@@ -1584,7 +1584,28 @@ class ApiBotStat(APIView):
 
 api_bot_stat = ApiBotStat.as_view()
 
-class ApiBotGroup(APIView):
+class ApiBotGroupMixin(APIView):
+
+    def group_post(self, data):
+        """
+        Создать, если необходимо группу из ее данных, data
+        """
+        title = data['title']
+        type_ = data['type']
+        tg_group, created_ = TgGroup.objects.get_or_create(
+            chat_id = data['chat_id'],
+            defaults={
+                'title': title,
+                'type': type_,
+        })
+        if not created_ and (tg_group.title != title or tg_group.type != type_):
+            tg_group.title = title
+            tg_group.type = type_
+            tg_group.save()
+        status_code = status.HTTP_200_OK
+        return tg_group, created_
+
+class ApiBotGroup(ApiBotGroupMixin, APIView):
     """
     Записать в таблицу TgGroup информацию о группе. Или удалить из таблицы
     """
@@ -1605,20 +1626,10 @@ class ApiBotGroup(APIView):
     def post(self, request):
         try:
             self.check_data(request, method='post')
-            title = request.data['title']
-            type_ = request.data['type']
-            tg_group, created_ = TgGroup.objects.get_or_create(
-                chat_id = request.data['chat_id'],
-                defaults={
-                    'title': title,
-                    'type': type_,
-            })
-            if not created_ and (tg_group.title != title or tg_group.type != type_):
-               tg_group.title = title
-               tg_group.type = type_
-               tg_group.save()
-            status_code = status.HTTP_200_OK
-            data = {}
+            tg_group, created_ = self.group_post(request.data)
+            data = tg_group.data_dict()
+            data.update(created=created_)
+            status_code = 200
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
             status_code = 400
@@ -1640,3 +1651,98 @@ class ApiBotGroup(APIView):
         return Response(data=data, status=status_code)
 
 api_bot_group = ApiBotGroup.as_view()
+
+class ApiBotGroupMember(ApiBotGroupMixin, APIView):
+    """
+    Добавить/удалить пользователя телеграм в группу
+    """
+
+    def check_data(self, request):
+        """
+        Проверка данных при добавлении/удаления пользователя из группы
+
+        Данные на входе:
+            tg_token
+            group
+                chat_id
+                title
+                type
+            user
+                tg_uid
+        На выходе:  (объекты из б.д)
+            oauth
+            tggroup
+
+        """
+        if request.data.get('tg_token', '') != settings.TELEGRAM_BOT_TOKEN:
+            raise ServiceException('Неверный токен телеграм бота')
+        try:
+            group = request.data['group']
+            user = request.data['user']
+        except KeyError:
+            raise ServiceException('Не хватает данных: group и/или user')
+        try:
+            chat_id = int(group.get('chat_id') or 0)
+        except (ValueError, TypeError, AttributeError):
+            chat_id = 0
+        if not chat_id:
+            raise ServiceException('Не верный или отсутствует chat_id для группы')
+        if not group.get('title') or not group.get('type'):
+            raise ServiceException('Не хватает данных группы: title и/или type')
+        tg_group, created = self.group_post(group)
+        try:
+            tg_uid = user.get('tg_uid') or None
+        except (AttributeError):
+            tg_uid = None
+        if not tg_uid:
+            raise ServiceException('Не верный или отсутствует user.tg_uid')
+        try:
+            oauth = Oauth.objects.get(provider=Oauth.PROVIDER_TELEGRAM, uid=str(tg_uid))
+        except Oauth.DoesNotExist:
+            raise ServiceException('Нет такого tg_uid среди зарегистрированных пользователей телеграма в апи')
+        return oauth, tg_group
+
+    def post(self, request):
+        try:
+            oauth, tg_group = self.check_data(request)
+            oauth.groups.add(tg_group)
+            data = dict()
+            status_code = 200
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+    def delete(self, request):
+        try:
+            oauth, tg_group = self.check_data(request)
+            oauth.groups.remove(tg_group)
+            status_code = 200
+            data = {}
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = 400
+        return Response(data=data, status=status_code)
+
+api_bot_groupmember = ApiBotGroupMember.as_view()
+
+class ApiTelegramUsers(APIView):
+    """
+    Получить список телеграм пользователй
+    """
+    def get(self, request):
+        oauths = Oauth.objects.select_related('user', 'user__profile').filter(
+            provider=Oauth.PROVIDER_TELEGRAM,
+        ).distinct('user')
+        data = [
+            dict(
+                user_id=o.user.pk,
+                first_name=o.user.first_name,
+                username=o.username,
+                uuid=o.user.profile.uuid,
+                tg_uid=o.uid,
+            ) for o in oauths
+        ]
+        return Response(data=data, status=200)
+
+api_telegram_users = ApiTelegramUsers.as_view()

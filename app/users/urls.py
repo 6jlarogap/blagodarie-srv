@@ -30,6 +30,9 @@ urlpatterns = [
 
     re_path(r'^api/bot/stat/?$', views.api_bot_stat),
     re_path(r'^api/bot/group/?$', views.api_bot_group),
+    re_path(r'^api/bot/groupmember/?$', views.api_bot_groupmember),
+
+    re_path(r'^api/telegram/users/?$', views.api_telegram_users),
 
     re_path(r'^test/goto/(?P<temp_token>[a-f0-9]{40})/link/?$', views.test_goto_auth_link),
 

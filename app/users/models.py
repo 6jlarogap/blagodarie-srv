@@ -31,6 +31,18 @@ class TgGroup(BaseModelInsertTimestamp):
     title = models.CharField(_("Имя"), max_length=256)
     type = models.CharField(_("Тип"), max_length=50)
 
+    def data_dict(self):
+        return {
+            'id': self.pk,
+            'type': self.type,
+            'title': self.title,
+            'chat_id': self.chat_id,
+            'insert_timestamp': self.insert_timestamp,
+        }
+
+    def __str__(self):
+        return '%s (%s)' % (self.title, self.chat_id)
+
 class Oauth(BaseModelInsertUpdateTimestamp):
 
     PROVIDER_GOOGLE = 'google'

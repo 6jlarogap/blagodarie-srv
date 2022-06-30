@@ -1179,3 +1179,61 @@ class TgGroup(object):
         logging.debug('delete group id, status: %s' % status)
         logging.debug('delete group id, response: %s' % response)
         return status, response
+
+class TgGroupMember(object):
+    """
+    Список групп, где бот: внесение, удаление
+    """
+
+    @classmethod
+    def payload(cls, group_chat_id, group_title, group_type, user_tg_uid):
+        return {
+            'tg_token': settings.TOKEN,
+            'group': {
+                'chat_id': group_chat_id,
+                'title': group_title,
+                'type': group_type,
+            },
+            'user': {
+                'tg_uid': user_tg_uid,
+            }
+        }
+
+    @classmethod
+    async def add(cls, group_chat_id, group_title, group_type, user_tg_uid):
+        payload = cls.payload(group_chat_id, group_title, group_type, user_tg_uid)
+        logging.debug('post group member, payload: %s' % payload)
+        status, response = await Misc.api_request(
+            path='/api/bot/groupmember',
+            method='post',
+            json=payload,
+        )
+        logging.debug('post group member, status: %s' % status)
+        logging.debug('post group member, response: %s' % response)
+        return status, response
+
+    @classmethod
+    async def remove(cls, group_chat_id, group_title, group_type, user_tg_uid):
+        payload = cls.payload(group_chat_id, group_title, group_type, user_tg_uid)
+        logging.debug('delete group member, payload: %s' % payload)
+        status, response = await Misc.api_request(
+            path='/api/bot/groupmember',
+            method='delete',
+            json=payload,
+        )
+        logging.debug('delete group member, status: %s' % status)
+        logging.debug('delete group member, response: %s' % response)
+        return status, response
+
+    @classmethod
+    async def list_all_telegram_users(cls):
+        """
+        Функция вызывается из служебной команды заполнения списка группы
+        """
+        status, response = await Misc.api_request(
+            path='/api/telegram/users',
+            method='get',
+        )
+        logging.debug('telegram users, status: %s' % status)
+        logging.debug('telegram users, response: %s' % response)
+        return status, response

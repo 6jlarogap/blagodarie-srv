@@ -3,7 +3,7 @@ from io import BytesIO
 
 import settings
 from settings import logging
-from utils import Misc, OperationType, KeyboardType, TgGroup
+from utils import Misc, OperationType, KeyboardType, TgGroup, TgGroupMember
 
 from aiogram import Bot, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ContentType
@@ -14,6 +14,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_polling, start_webhook
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation
+from aiogram.utils.parts import safe_split_text
 
 import pymorphy2
 MorphAnalyzer = pymorphy2.MorphAnalyzer()
@@ -2576,15 +2577,92 @@ async def get_group_id(message: types.Message, state: FSMContext):
     except:
         pass
     try:
-        await bot.send_message(
-            message.from_user.id, (
-            'Вы запросили ИД группы <b>%s</b>\n\n'
-            'Отвечаю\n'
+        reply =  (
+            'Вы запросили ИД группы <b>%s</b>\n'
+            'Отвечаю:\n\n'
             'ИД: %s\n'
             'Тип: %s\n'
-            ) % (chat.title, chat.id, chat.type))
+        ) % (chat.title, chat.id, chat.type)
+        if status == 200:
+            await bot.send_message(
+                message.from_user.id, reply + (
+                    'Группа только что создана Вами в данных\n' if response['created'] else 'Группа существовала в данных до Вашего запроса\n'
+            ))
+        else:
+            await bot.send_message(
+                message.from_user.id, reply + 'ОШИБКА создания, если не существует, группы в данных\n'
+            )
     except (ChatNotFound, CantInitiateConversation):
         pass
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=(types.ChatType.GROUP, types.ChatType.SUPERGROUP)),
+    commands=('fill_group_users',),
+    state=None,
+)
+async def fill_group(message: types.Message, state: FSMContext):
+    chat = message.chat
+    try:
+        await message.delete()
+    except:
+        pass
+
+    try:
+        await bot.send_message(
+            message.from_user.id,
+            (
+                'Пошел процесс добавления в апи пользователей этой группы\n'
+                '(если их там не было)\n'
+                'Ждите сюда сообщение по завершении процесса\n'
+            ),
+        )
+    except:
+        pass
+
+    success = False
+    a_added = []
+    # Сначала создаем группу, если не создана
+    status, response = await TgGroup.post(chat.id, chat.title, chat.type)
+    if status == 200:
+        status, user_list = await TgGroupMember.list_all_telegram_users()
+        if status == 200:
+            for user in user_list:
+                success = True
+                try:
+                    tg_uid = int(user['tg_uid'])
+                    chat_member = await chat.get_member(tg_uid)
+                    if not chat_member.is_chat_member():
+                        chat_member = None
+                except:
+                    chat_member = None
+                if chat_member:
+                    try:
+                        await TgGroupMember.add(
+                            group_chat_id=chat.id,
+                            group_title=chat.title,
+                            group_type=chat.type,
+                            user_tg_uid=user['tg_uid']
+                        )
+                        a_added.append(user)
+                    except:
+                        pass
+    if success:
+        bot_data = await bot.get_me()
+        if a_added:
+            reply = 'Добавлены (если их там не было) в апи в эту группу\n-----------\n'
+            for user in a_added:
+                reply += Misc.get_deeplink_with_name(user, bot_data) + '\n'
+        else:
+            reply = 'Не найдены участники группы в апи\n'
+    else:
+        reply = 'Произошла какая-то ошибка\n'
+    parts = safe_split_text(reply, split_separator='\n')
+    for part in parts:
+        try:
+            await bot.send_message(message.from_user.id, part)
+        except:
+            pass
 
 
 @dp.message_handler(
@@ -2703,35 +2781,55 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             a_users_out.append({})
             continue
 
-        if tg_users_new and response_from.get('tg_uid') and str(tg_user_sender.id) != str(response_from['tg_uid']):
-            # Сразу доверие добавляемому пользователю
-            post_op = dict(
-                tg_token=settings.TOKEN,
-                operation_type_id=OperationType.TRUST,
-                tg_user_id_from=tg_user_sender.id,
-                user_id_to=response_from['user_id'],
+        if tg_user_left and response_from.get('tg_uid'):
+            # Ушел пользователь, убираем его из группы
+            await TgGroupMember.remove(
+                group_chat_id=message.chat.id,
+                group_title=message.chat.title,
+                group_type=message.chat.type,
+                user_tg_uid=response_from['tg_uid']
             )
-            logging.debug('post operation, payload: %s' % post_op)
-            status, response = await Misc.api_request(
-                path='/api/addoperation',
-                method='post',
-                data=post_op,
+
+        if tg_users_new and response_from.get('tg_uid'):
+
+            # Добавить в группу в апи, если его там нет
+            await TgGroupMember.add(
+                group_chat_id=message.chat.id,
+                group_title=message.chat.title,
+                group_type=message.chat.type,
+                user_tg_uid=response_from['tg_uid']
             )
-            logging.debug('post operation, status: %s' % status)
-            logging.debug('post operation, response: %s' % response)
-            # Обновить, ибо уже на доверие больше у него может быть
-            try:
-                status, response_from = await Misc.api_request(
-                    path='/api/profile',
-                    method='post',
-                    data=payload_from,
+
+            if str(tg_user_sender.id) != str(response_from['tg_uid']):
+                # Сразу доверие добавляемому пользователю
+                post_op = dict(
+                    tg_token=settings.TOKEN,
+                    operation_type_id=OperationType.TRUST,
+                    tg_user_id_from=tg_user_sender.id,
+                    user_id_to=response_from['user_id'],
                 )
-                logging.debug('get_or_create tg_user_to data in api, status: %s' % status)
-                logging.debug('get_or_create tg_user_to data in api, response_from: %s' % response_from)
-                if status != 200:
+                logging.debug('post operation, payload: %s' % post_op)
+                status, response = await Misc.api_request(
+                    path='/api/addoperation',
+                    method='post',
+                    data=post_op,
+                )
+                # может быть статус 400, если уже доверяет
+                logging.debug('post operation, status: %s' % status)
+                logging.debug('post operation, response: %s' % response)
+                # Обновить, ибо уже на доверие больше у него может быть
+                try:
+                    status, response_from = await Misc.api_request(
+                        path='/api/profile',
+                        method='post',
+                        data=payload_from,
+                    )
+                    logging.debug('get_or_create tg_user_to data in api, status: %s' % status)
+                    logging.debug('get_or_create tg_user_to data in api, response_from: %s' % response_from)
+                    if status != 200:
+                        continue
+                except:
                     continue
-            except:
-                continue
 
         reply_template = '<b><a href="%(deeplink)s">%(full_name)s</a></b>'
         username = response_from.get('tg_username', '')
