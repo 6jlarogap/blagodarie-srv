@@ -1238,8 +1238,6 @@ class ApiGetStats(SQL_Mixin, APIView):
             tg_group_chat_id = None
             try:
                 tg_group_chat_id = int(request.GET.get('tg_group_chat_id'))
-            except ValueError:
-                tg_group_chat_id = 0
             except:
                 tg_group_chat_id = None
             if tg_group_chat_id is not None:
