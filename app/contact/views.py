@@ -1186,7 +1186,29 @@ class ApiGetUserOperationsView(APIView):
 
 api_get_user_operations = ApiGetUserOperationsView.as_view()
 
-class ApiGetStats(SQL_Mixin, APIView):
+class ApiTgGroupConnectionsMixin(object):
+
+    def get_tg_group_id(self, request):
+        tg_group_chat_id = request.GET.get('tg_group_chat_id') or None
+        if tg_group_chat_id is not None:
+            if tg_group_chat_id:
+                try:
+                    tg_group_chat_id = int(tg_group_chat_id)
+                except ValueError:
+                    tg_group_chat_id = 0
+        if tg_group_chat_id is not None:
+            tg_group_id = tg_group_chat_id
+            if tg_group_id:
+                try:
+                    tg_group_id = TgGroup.objects.get(chat_id=tg_group_chat_id).pk
+                except TgGroup.DoesNotExist:
+                    tg_group_id = 0
+        else:
+            tg_group_id = None
+        return tg_group_id
+
+
+class ApiGetStats(SQL_Mixin, ApiTgGroupConnectionsMixin, APIView):
 
     # За сколько часов берем статистику
     #
@@ -1231,20 +1253,18 @@ class ApiGetStats(SQL_Mixin, APIView):
             #   с параметром count:
             #       число пользователей, всех или найденных по фильтру query
             #
-            #   При наличии параметра tg_group_chat_id ищет только тех, кто
-            #   в этой телеграм группе
+            #   При наличии непустого параметра tg_group_chat_id ищет
+            #   только тех, кто в этой телеграм группе
 
             q_users = Q(is_superuser=False)
-            tg_group_chat_id = None
-            try:
-                tg_group_chat_id = int(request.GET.get('tg_group_chat_id'))
-            except:
-                tg_group_chat_id = None
-            if tg_group_chat_id is not None:
+
+            tg_group_id = self.get_tg_group_id(request)
+            if tg_group_id is not None:
                 q_users &= Q(
                     oauth__provider=Oauth.PROVIDER_TELEGRAM,
-                    oauth__groups__chat_id=tg_group_chat_id
+                    oauth__groups__pk=tg_group_id,
                 )
+
             query = request.GET.get('query')
             if query:
                 q_users &= \
