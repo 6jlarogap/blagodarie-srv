@@ -1189,7 +1189,7 @@ api_get_user_operations = ApiGetUserOperationsView.as_view()
 class ApiTgGroupConnectionsMixin(object):
 
     def get_tg_group_id(self, request):
-        tg_group_chat_id = request.GET.get('tg_group_chat_id') or None
+        tg_group_chat_id = request.GET.get('tg_group_chat_id', '').strip() or None
         if tg_group_chat_id is not None:
             if tg_group_chat_id:
                 try:
@@ -2332,7 +2332,7 @@ class ApiDeleteKeyView(APIView):
 
 api_delete_key = ApiDeleteKeyView.as_view()
 
-class ApiProfileGraph(UuidMixin, SQL_Mixin, APIView):
+class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, APIView):
 
     def get(self, request, *args, **kwargs):
         """
@@ -2424,6 +2424,19 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, APIView):
             user_q, profile_q = self.check_user_uuid(uuid)
             status_code = status.HTTP_200_OK
 
+            tg_group_id = self.get_tg_group_id(request)
+            if tg_group_id is not None:
+                inner_joins = """
+                    INNER JOIN
+                        users_oauth ON (auth_user.id = users_oauth.user_id)
+                    INNER JOIN
+                        users_oauth_groups ON (users_oauth.id = users_oauth_groups.oauth_id)
+                """
+                and_tg_group_id = ' AND users_oauth_groups.tggroup_id = %s ' % tg_group_id
+            else:
+                inner_joins = ''
+                and_tg_group_id = ''
+
             query = request.GET.get('query', '')
 
             req_union = """
@@ -2449,7 +2462,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, APIView):
                 user_q_pk=user_q.pk
             )
 
-            sql_joins = """
+            outer_joins = """
                 LEFT OUTER JOIN
                     contact_wish ON (auth_user.id = contact_wish.owner_id)
                 LEFT OUTER JOIN
@@ -2478,24 +2491,44 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, APIView):
                             Count(distinct auth_user.id) as count
                         FROM
                             auth_user
-                        %(sql_joins)s
+                        %(outer_joins)s
+                        %(inner_joins)s
                         WHERE
                             auth_user.id IN (%(req_union)s) AND
-                            (%(query_where)s)
+                            (%(query_where)s) %(and_tg_group_id)s
                     """ % dict(
-                        sql_joins=sql_joins,
+                        outer_joins=outer_joins,
                         query_where=query_where,
                         req_union=req_union,
+                        inner_joins=inner_joins,
+                        and_tg_group_id=and_tg_group_id,
                     )
                 else:
-                    req = """
-                        SELECT
-                            Count(distinct id) as count
-                        FROM
-                            (%(req_union)s) as foo
-                    """ % dict(
-                        req_union=req_union
-                    )
+                    if tg_group_id is not None:
+                        req = """
+                            SELECT
+                                Count(distinct auth_user.id) as count
+                            FROM
+                                auth_user
+                            %(inner_joins)s
+                            WHERE
+                                auth_user.id IN (%(req_union)s) %(and_tg_group_id)s
+                        """ % dict(
+                            outer_joins=outer_joins,
+                            req_union=req_union,
+                            inner_joins=inner_joins,
+                            and_tg_group_id=and_tg_group_id,
+                        )
+                    else:
+                        req = """
+                            SELECT
+                                Count(distinct id) as count
+                            FROM
+                                (%(req_union)s) as foo
+                        """ % dict(
+                            req_union=req_union
+                        )
+
                 with connection.cursor() as cursor:
                     cursor.execute(req)
                     recs = self.dictfetchall(cursor)
@@ -2538,12 +2571,15 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, APIView):
                     users_profile.comment
                 FROM
                     auth_user
-                %(sql_joins)s
+                %(outer_joins)s
+                %(inner_joins)s
                 WHERE 
-                    auth_user.id IN (%(req_union)s)
+                    auth_user.id IN (%(req_union)s) %(and_tg_group_id)s
             """ % dict(
-                sql_joins=sql_joins,
+                outer_joins=outer_joins,
                 req_union=req_union,
+                inner_joins=inner_joins,
+                and_tg_group_id=and_tg_group_id,
             )
             if query:
                 req += "AND (%(query_where)s)" % dict(query_where=query_where)
