@@ -2793,7 +2793,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             a_users_out.append({})
             continue
 
-        if tg_user_left and response_from.get('tg_uid'):
+        if tg_user_left:
             # Ушел пользователь, убираем его из группы
             await TgGroupMember.remove(
                 group_chat_id=message.chat.id,
@@ -2801,9 +2801,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 group_type=message.chat.type,
                 user_tg_uid=response_from['tg_uid']
             )
-
-        if tg_users_new and response_from.get('tg_uid'):
-
+        else:
             # Добавить в группу в апи, если его там нет
             await TgGroupMember.add(
                 group_chat_id=message.chat.id,
@@ -2812,36 +2810,37 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 user_tg_uid=response_from['tg_uid']
             )
 
-            if str(tg_user_sender.id) != str(response_from['tg_uid']):
-                # Сразу доверие добавляемому пользователю
-                post_op = dict(
-                    tg_token=settings.TOKEN,
-                    operation_type_id=OperationType.TRUST,
-                    tg_user_id_from=tg_user_sender.id,
-                    user_id_to=response_from['user_id'],
-                )
-                logging.debug('post operation, payload: %s' % post_op)
-                status, response = await Misc.api_request(
-                    path='/api/addoperation',
+        if tg_users_new and \
+           str(tg_user_sender.id) != str(response_from['tg_uid']):
+            # Сразу доверие добавляемому пользователю
+            post_op = dict(
+                tg_token=settings.TOKEN,
+                operation_type_id=OperationType.TRUST,
+                tg_user_id_from=tg_user_sender.id,
+                user_id_to=response_from['user_id'],
+            )
+            logging.debug('post operation, payload: %s' % post_op)
+            status, response = await Misc.api_request(
+                path='/api/addoperation',
+                method='post',
+                data=post_op,
+            )
+            # может быть статус 400, если уже доверяет
+            logging.debug('post operation, status: %s' % status)
+            logging.debug('post operation, response: %s' % response)
+            # Обновить, ибо уже на доверие больше у него может быть
+            try:
+                status, response_from = await Misc.api_request(
+                    path='/api/profile',
                     method='post',
-                    data=post_op,
+                    data=payload_from,
                 )
-                # может быть статус 400, если уже доверяет
-                logging.debug('post operation, status: %s' % status)
-                logging.debug('post operation, response: %s' % response)
-                # Обновить, ибо уже на доверие больше у него может быть
-                try:
-                    status, response_from = await Misc.api_request(
-                        path='/api/profile',
-                        method='post',
-                        data=payload_from,
-                    )
-                    logging.debug('get_or_create tg_user_to data in api, status: %s' % status)
-                    logging.debug('get_or_create tg_user_to data in api, response_from: %s' % response_from)
-                    if status != 200:
-                        continue
-                except:
+                logging.debug('get_or_create tg_user_to data in api, status: %s' % status)
+                logging.debug('get_or_create tg_user_to data in api, response_from: %s' % response_from)
+                if status != 200:
                     continue
+            except:
+                continue
 
         reply_template = '<b><a href="%(deeplink)s">%(full_name)s</a></b>'
         username = response_from.get('tg_username', '')
