@@ -28,7 +28,7 @@ from contact.models import KeyType, Key, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
                            Journal, CurrentState, OperationType, Wish, \
                            AnyText, Ability, TgJournal, TgMessageJournal
-from users.models import CreateUserMixin, IncognitoUser, Profile, TempToken, Oauth, UuidMixin
+from users.models import CreateUserMixin, IncognitoUser, Profile, TempToken, Oauth, UuidMixin, TgGroup
 
 MSG_NO_PARM = 'Не задан или не верен какой-то из параметров в связке номер %s (начиная с 0)'
 
@@ -1230,8 +1230,23 @@ class ApiGetStats(SQL_Mixin, APIView):
             #   сколько на странице -- параметр number, по умолчанию 50
             #   с параметром count:
             #       число пользователей, всех или найденных по фильтру query
+            #
+            #   При наличии параметра tg_group_chat_id ищет только тех, кто
+            #   в этой телеграм группе
 
             q_users = Q(is_superuser=False)
+            tg_group_chat_id = None
+            try:
+                tg_group_chat_id = int(request.GET.get('tg_group_chat_id'))
+            except ValueError:
+                tg_group_chat_id = 0
+            except:
+                tg_group_chat_id = None
+            if tg_group_chat_id is not None:
+                q_users &= Q(
+                    oauth__provider=Oauth.PROVIDER_TELEGRAM,
+                    oauth__groups__chat_id=tg_group_chat_id
+                )
             query = request.GET.get('query')
             if query:
                 q_users &= \
