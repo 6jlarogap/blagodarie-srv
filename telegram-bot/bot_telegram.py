@@ -1990,7 +1990,8 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         return
 
     chat = callback_query.message.chat
-    if callback_query.message.chat.type in ('group', 'supergroup',):
+    is_this_bot = bot_data.id == tg_user_sender.id
+    if callback_query.message.chat.type in ('group', 'supergroup',) and not is_this_bot:
         await TgGroupMember.add(
             group_chat_id=chat.id,
             group_title=chat.title,
@@ -2730,8 +2731,8 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 group_type=message.chat.type,
                 user_tg_uid=response_from['tg_uid']
             )
-        else:
-            # Добавить в группу в апи, если его там нет
+        elif str(bot_data.id) != str(response_from['tg_uid']):
+            # Добавить в группу в апи, если его там нет и если это не бот-обработчик
             await TgGroupMember.add(
                 group_chat_id=message.chat.id,
                 group_title=message.chat.title,
