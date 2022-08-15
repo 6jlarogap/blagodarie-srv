@@ -2742,10 +2742,10 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
         if tg_users_new and \
            str(tg_user_sender.id) != str(response_from['tg_uid']):
-            # Сразу доверие добавляемому пользователю
+            # Сразу доверие c благодарностью добавляемому пользователю
             post_op = dict(
                 tg_token=settings.TOKEN,
-                operation_type_id=OperationType.TRUST,
+                operation_type_id=OperationType.TRUST_AND_THANK,
                 tg_user_id_from=tg_user_sender.id,
                 user_id_to=response_from['user_id'],
             )
