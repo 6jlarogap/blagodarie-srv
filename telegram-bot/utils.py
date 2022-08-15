@@ -1225,15 +1225,3 @@ class TgGroupMember(object):
         logging.debug('delete group member, response: %s' % response)
         return status, response
 
-    @classmethod
-    async def list_all_telegram_users(cls):
-        """
-        Функция вызывается из служебной команды заполнения списка группы
-        """
-        status, response = await Misc.api_request(
-            path='/api/telegram/users',
-            method='get',
-        )
-        logging.debug('telegram users, status: %s' % status)
-        logging.debug('telegram users, response: %s' % response)
-        return status, response
