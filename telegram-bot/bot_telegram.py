@@ -2839,36 +2839,6 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             if reply:
                 await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
-    if not (tg_user_left or tg_users_new):
-        # Найдем @usernames в сообщении
-        #
-        message_text = getattr(message, 'text', '') and message.text.strip() or ''
-        if message_text:
-            usernames, text_stripped = Misc.get_text_usernames(message.text)
-            if usernames:
-                logging.debug('@usernames found in message text\n')
-                payload_username = dict(
-                    tg_username=','.join(usernames),
-                    verbose='1',
-                )
-                status, a_response_to = await Misc.api_request(
-                    path='/api/profile',
-                    method='get',
-                    params=payload_username,
-                )
-                logging.debug('get by username, status: %s' % status)
-                logging.debug('get by username, response: %s' % a_response_to)
-                if status == 200 and a_response_to:
-                    await Misc.show_cards(
-                        a_response_to,
-                        message,
-                        bot_data,
-                        exclude_tg_uids=exclude_tg_uids,
-                        response_from={},
-                        message_to_forward_id='',
-                        group_id=message.chat.id,
-                    )
-
     for i, response_from in enumerate(a_users_out):
         if response_from.get('created'):
             tg_user = a_users_in[i]
