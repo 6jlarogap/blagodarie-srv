@@ -2681,11 +2681,9 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
     bot_data = await bot.get_me()
     if tg_user_left or tg_users_new:
-        exclude_tg_uids = []
         is_previous_his = False
         last_user_in_group = None
     else:
-        exclude_tg_uids = [str(tg_user_sender.id)]
         # Было ли предыдущее сообщение в группу отправлено этом пользователем?
         # Полезно, т.к. в сообщении из 10 фоток, а это 10 сообщений в бот,
         # надо бы только одну реакцию
