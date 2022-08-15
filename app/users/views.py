@@ -1725,24 +1725,3 @@ class ApiBotGroupMember(ApiBotGroupMixin, APIView):
         return Response(data=data, status=status_code)
 
 api_bot_groupmember = ApiBotGroupMember.as_view()
-
-class ApiTelegramUsers(APIView):
-    """
-    Получить список телеграм пользователй
-    """
-    def get(self, request):
-        oauths = Oauth.objects.select_related('user', 'user__profile').filter(
-            provider=Oauth.PROVIDER_TELEGRAM,
-        ).distinct('user')
-        data = [
-            dict(
-                user_id=o.user.pk,
-                first_name=o.user.first_name,
-                username=o.username,
-                uuid=o.user.profile.uuid,
-                tg_uid=o.uid,
-            ) for o in oauths
-        ]
-        return Response(data=data, status=200)
-
-api_telegram_users = ApiTelegramUsers.as_view()
