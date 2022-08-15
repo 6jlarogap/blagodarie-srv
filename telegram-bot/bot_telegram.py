@@ -2774,11 +2774,12 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 continue
 
         reply_template = '<b><a href="%(deeplink)s">%(full_name)s</a></b>'
+        is_this_bot = str(bot_data.id) == str(response_from['tg_uid'])
         username = response_from.get('tg_username', '')
-        if username:
+        if username and not (is_this_bot and tg_users_new):
             reply_template += ' ( @%(username)s )'
         reply = reply_template % dict(
-            full_name=Misc.get_iof(response_from),
+            full_name=response_from['first_name'],
             username=username,
             deeplink=Misc.get_deeplink(response_from, bot_data),
         )
@@ -2797,43 +2798,42 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             )
             buttons = [inline_btn_go]
 
-            if response_from.get('tg_uid'):
-                if str(bot_data.id) == str(response_from['tg_uid']):
-                    if tg_user_left:
-                        # ЭТОТ Бот ушел, не может послать ответ без аварии
-                        reply = ''
-                    elif tg_users_new:
-                        # ЭТОТ Бот подключился
-                        reply += (
-                            '\n'
-                            '\n'
-                            '<a href="%(group_host)s/?tg_group_chat_id=%(chat_id)s">Доверия в группе</a>\n'
-                        ) % dict(
+            if is_this_bot:
+                if tg_user_left:
+                    # ЭТОТ Бот ушел, не может послать ответ без аварии
+                    reply = ''
+                elif tg_users_new:
+                    # ЭТОТ бот подключился. Достаточно его full name и ссылку на доверия в группе
+                    #
+                    inline_btn_trusts = InlineKeyboardButton(
+                        'Доверие',
+                        url='%(group_host)s/?tg_group_chat_id=%(chat_id)s' % dict(
                             group_host=settings.GROUP_HOST,
                             chat_id=message.chat.id,
-                        )
-                else:
-                    # не делать кнопку Доверия для бота, глючит!
-                    dict_reply = dict(
-                        keyboard_type=KeyboardType.TRUST_THANK_VER_2,
-                        sep=KeyboardType.SEP,
-                        user_to_id=response_from['user_id'],
-                        message_to_forward_id='',
-                        group_id=message.chat.id,
+                    ))
+                    buttons = [inline_btn_trusts]
+            else:
+                # не делать кнопку Доверия для бота, глючит!
+                dict_reply = dict(
+                    keyboard_type=KeyboardType.TRUST_THANK_VER_2,
+                    sep=KeyboardType.SEP,
+                    user_to_id=response_from['user_id'],
+                    message_to_forward_id='',
+                    group_id=message.chat.id,
+                )
+                callback_data_template = (
+                        '%(keyboard_type)s%(sep)s'
+                        '%(operation)s%(sep)s'
+                        '%(user_to_id)s%(sep)s'
+                        '%(message_to_forward_id)s%(sep)s'
+                        '%(group_id)s%(sep)s'
                     )
-                    callback_data_template = (
-                            '%(keyboard_type)s%(sep)s'
-                            '%(operation)s%(sep)s'
-                            '%(user_to_id)s%(sep)s'
-                            '%(message_to_forward_id)s%(sep)s'
-                            '%(group_id)s%(sep)s'
-                        )
-                    dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-                    inline_btn_thank = InlineKeyboardButton(
-                        'Доверие',
-                        callback_data=callback_data_template % dict_reply,
-                    )
-                    buttons.append(inline_btn_thank)
+                dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+                inline_btn_thank = InlineKeyboardButton(
+                    'Доверие',
+                    callback_data=callback_data_template % dict_reply,
+                )
+                buttons.append(inline_btn_thank)
             reply_markup.row(*buttons)
 
             if reply:
