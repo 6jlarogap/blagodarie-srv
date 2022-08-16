@@ -128,6 +128,9 @@ class ApiAddOperationMixin(object):
 
             profile_to.sum_thanks_count += 1
             profile_to.save()
+            data.update(currentstate=dict(
+                thanks_count=currentstate.thanks_count,
+            ))
 
         elif operationtype_id == OperationType.MISTRUST:
             currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
@@ -252,6 +255,9 @@ class ApiAddOperationMixin(object):
             profile_to.sum_thanks_count += 1
             profile_to.save()
             profile_to.recount_trust_fame()
+            data.update(currentstate=dict(
+                thanks_count=currentstate.thanks_count,
+            ))
 
         elif operationtype_id == OperationType.NULLIFY_TRUST:
             err_message = 'У вас не было ни доверия, ни недоверия к пользователю'
