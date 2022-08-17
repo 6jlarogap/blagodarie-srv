@@ -1322,7 +1322,9 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
         if response:
             await bot.send_message(
                 tg_user_sender.id,
-                text='Ниже последние сообщения к %s ...' % Misc.get_deeplink_with_name(response[0]['user_to'], bot_data)
+                text='Ниже последние сообщения к %s ...' % \
+                    Misc.get_deeplink_with_name(response[0]['user_to'], bot_data),
+                disable_web_page_preview=True,
             )
             n = 0
             for i in range(len(response)-1, -1, -1):
@@ -1348,7 +1350,7 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
                     user_to=Misc.get_deeplink_with_name(m['user_to'], bot_data),
                     user_to_delivered=user_to_delivered,
                 )
-                await bot.send_message(tg_user_sender.id, text=msg)
+                await bot.send_message(tg_user_sender.id, text=msg, disable_web_page_preview=True,)
                 try:
                     await bot.forward_message(
                         tg_user_sender.id,
@@ -1356,7 +1358,11 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
                         message_id=m['message_id'],
                     )
                 except:
-                    await bot.send_message(tg_user_sender.id, text='Не удалось отобразить сообщение!')
+                    await bot.send_message(
+                        tg_user_sender.id,
+                        text='Не удалось отобразить сообщение!',
+                        disable_web_page_preview=True,
+                    )
         else:
             status_to, profile_to = await Misc.get_user_by_uuid(uuid)
             if status_to == 200 and profile_to:
@@ -1366,7 +1372,7 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
                 )
             else:
                 msg = 'Сообщения не найдены'
-            await bot.send_message(tg_user_sender.id, text=msg)
+            await bot.send_message(tg_user_sender.id, text=msg, disable_web_page_preview=True,)
 
 
 @dp.message_handler(
