@@ -3511,7 +3511,30 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
 
 api_profile_trust = ApiProfileTrust.as_view()
 
-class ApiPostTgMessageData(UuidMixin, APIView):
+class ApiTgMessage(UuidMixin, APIView):
+
+    MESSAGE_COUNT = 10
+
+    def get(self, request):
+        """
+        Получить self.MESSAGE_COUNT последниех сообщений к uuid
+        """
+        try:
+            user_to, p = self.check_user_uuid(request.GET.get('uuid'), related=[], comment='uuid: ')
+            data = [
+                tm.data_dict() for tm in TgMessageJournal.objects.filter(
+                    user_to__pk=user_to.pk,
+                    ).select_related(
+                        'user_from', 'user_to', 'user_to_delivered',
+                        'user_from__profile', 'user_to__profile',
+                    ).order_by('-insert_timestamp')[:self.MESSAGE_COUNT]
+            ]
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
     def post(self, request):
         """
         Записать в журнал данные об отправленном пользователем телеграма сообщения другому пользователю
@@ -3551,4 +3574,4 @@ class ApiPostTgMessageData(UuidMixin, APIView):
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
-api_post_tg_message_data = ApiPostTgMessageData.as_view()
+api_tg_message = ApiTgMessage.as_view()

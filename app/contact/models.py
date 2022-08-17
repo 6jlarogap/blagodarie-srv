@@ -99,6 +99,16 @@ class TgMessageJournal(BaseModelInsertTimestamp):
     from_chat_id = models.BigIntegerField(_("Chat Id"),)
     message_id = models.BigIntegerField(_("Message Id"),)
 
+    def data_dict(self):
+        return dict(
+            insert_timestamp=self.insert_timestamp,
+            user_from_id=self.user_from.pk,
+            user_from_uuid=str(self.user_from.profile.uuid),
+            user_to_id=self.user_from.pk,
+            user_to_uuid=str(self.user_to.profile.uuid),
+            is_delivered = bool(self.user_to_delivered),
+        )
+
 class CurrentState(BaseModelInsertUpdateTimestamp):
 
     user_from = models.ForeignKey('auth.User',

@@ -1362,7 +1362,7 @@ async def got_message_to_send(message: types.Message, state: FSMContext):
                 )
                 try:
                     status_log, response_log = await Misc.api_request(
-                        path='/api/post_tg_message_data',
+                        path='/api/tg_message',
                         method='post',
                         json=payload_log_message,
                     )

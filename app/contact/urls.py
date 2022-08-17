@@ -55,7 +55,7 @@ urlpatterns = [
 
     re_path(r'^api/invite/usetoken/?$', views.api_invite_use_token),
 
-    re_path(r'^api/post_tg_message_data/?$', views.api_post_tg_message_data),
+    re_path(r'^api/tg_message/?$', views.api_tg_message),
 
     re_path(r'^admin/merge_symptoms/?$', views.merge_symptoms),
 ]
