@@ -3526,7 +3526,7 @@ class ApiTgMessage(UuidMixin, APIView):
                     user_to__pk=user_to.pk,
                     ).select_related(
                         'user_from', 'user_to', 'user_to_delivered',
-                        'user_from__profile', 'user_to__profile',
+                        'user_from__profile', 'user_to__profile', 'user_to_delivered__profile',
                     ).order_by('-insert_timestamp')[:self.MESSAGE_COUNT]
             ]
             status_code = status.HTTP_200_OK

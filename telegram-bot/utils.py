@@ -1,4 +1,4 @@
-import base64, re
+import base64, re, datetime
 from urllib.parse import urlencode
 from uuid import UUID
 
@@ -111,6 +111,8 @@ class KeyboardType(object):
     CHANGE_OWNER_CONFIRM = 27
 
     KEYS = 28
+
+    SHOW_MESSAGES = 29
 
     # Разделитель данных в call back data
     #
@@ -235,6 +237,20 @@ class Misc(object):
     CALLBACK_DATA_UUID_TEMPLATE = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s'
 
     MSG_ERROR_UUID_NOT_VALID = 'Не найден или негодный ид в сообщении'
+
+    FORMAT_DATE = '%d.%m.%Y'
+    FORMAT_TIME = '%H:%M:%S'
+
+    @classmethod
+    def datetime_string(cls, timestamp, with_timezone=True):
+        dt = datetime.datetime.fromtimestamp(timestamp)
+        result = dt.strftime(cls.FORMAT_DATE + ' ' + cls.FORMAT_TIME)
+        if with_timezone:
+            str_tz = dt.strftime('%Z')
+            if not str_tz:
+                str_tz = dt.astimezone().tzname()
+            result += ' ' + str_tz
+        return result
 
     @classmethod
     def invalid_search_text(cls):
@@ -373,9 +389,9 @@ class Misc(object):
         """
         Получить ссылку типа http://t.me/BotNameBot?start=:uuid
         """
-        deeplink = "t.me/%(bot_data_username)s?start=%(resonse_uuid)s" % dict(
+        deeplink = "t.me/%(bot_data_username)s?start=%(response_uuid)s" % dict(
             bot_data_username=bot_data['username'],
-            resonse_uuid=response['uuid']
+            response_uuid=response['uuid']
         )
         if https:
             deeplink = 'https://' + deeplink
@@ -885,16 +901,23 @@ class Misc(object):
                 reply_markup.row(inline_btn_ability, inline_btn_wish, inline_btn_keys)
 
             if not group_id:
-                dict_send_message = dict(
+                dict_message = dict(
                     keyboard_type=KeyboardType.SEND_MESSAGE,
                     uuid=response_to['uuid'],
                     sep=KeyboardType.SEP,
                 )
                 inline_btn_send_message = InlineKeyboardButton(
-                    'Сообщение',
-                    callback_data=callback_data_template % dict_send_message,
+                    'Написать',
+                    callback_data=callback_data_template % dict_message,
                 )
-                reply_markup.row(inline_btn_send_message)
+                dict_message.update(
+                    keyboard_type=KeyboardType.SHOW_MESSAGES,
+                )
+                inline_btn_show_messages = InlineKeyboardButton(
+                    'Сообщения',
+                    callback_data=callback_data_template % dict_message,
+                )
+                reply_markup.row(inline_btn_send_message, inline_btn_show_messages)
 
             if user_from_id:
                 # в бот

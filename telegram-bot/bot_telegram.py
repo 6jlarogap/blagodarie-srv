@@ -1260,7 +1260,7 @@ async def get_dod(message: types.Message, state: FSMContext):
     )
 async def process_callback_send_message(callback_query: types.CallbackQuery, state: FSMContext):
     """
-    Действия по смене владельца
+    Отправка сообщения
     """
     if callback_query.message:
         tg_user_sender = callback_query.from_user
@@ -1287,6 +1287,86 @@ async def process_callback_send_message(callback_query: types.CallbackQuery, sta
             reply_markup=Misc.reply_markup_cancel_row(),
             disable_web_page_preview=True,
         )
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.SHOW_MESSAGES,
+        KeyboardType.SEP,
+    ), c.data,
+    ), state=None,
+    )
+async def process_callback_show_messages(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Показ сообщений
+    """
+    if callback_query.message:
+        tg_user_sender = callback_query.from_user
+        code = callback_query.data.split(KeyboardType.SEP)
+        uuid = None
+        try:
+            uuid = code[1]
+        except IndexError:
+            pass
+        if not uuid:
+            return
+        status, response = await Misc.api_request(
+            path='/api/tg_message',
+            method='get',
+            params=dict(uuid=uuid),
+        )
+        logging.debug('get_user_messages, uuid=%s, status: %s' % (uuid, status))
+        logging.debug('get_user_messages, uuid=%s, response: %s' % (uuid, response))
+        if status != 200:
+            return
+        bot_data = await bot.get_me()
+        if response:
+            await bot.send_message(
+                tg_user_sender.id,
+                text='Ниже последние сообщения к %s ...' % Misc.get_deeplink_with_name(response[0]['user_to'], bot_data)
+            )
+            n = 0
+            for i in range(len(response)-1, -1, -1):
+                m = response[i]
+                n += 1
+                msg = (
+                    '(%(n)s) %(datetime_string)s\n'
+                    'От %(user_from)s к %(user_to)s\n'
+                )
+                user_to_delivered = None
+                if m['user_to_delivered']:
+                    msg += 'Доставлено'
+                    if m['user_to_delivered']['id'] != m['user_to']['id']:
+                        msg += ' к %(user_to_delivered)s !!!'
+                        user_to_delivered = Misc.get_deeplink_with_name(m['user_to_delivered'], bot_data)
+                else:
+                    msg += 'Не доставлено, лишь сохранено'
+                msg += '\nНиже само сообщение:'
+                msg %= dict(
+                    n=n,
+                    datetime_string=Misc.datetime_string(m['timestamp']),
+                    user_from=Misc.get_deeplink_with_name(m['user_from'], bot_data),
+                    user_to=Misc.get_deeplink_with_name(m['user_to'], bot_data),
+                    user_to_delivered=user_to_delivered,
+                )
+                await bot.send_message(tg_user_sender.id, text=msg)
+                try:
+                    await bot.forward_message(
+                        tg_user_sender.id,
+                        from_chat_id=m['from_chat_id'],
+                        message_id=m['message_id'],
+                    )
+                except:
+                    await bot.send_message(tg_user_sender.id, text='Не удалось отобразить сообщение!')
+        else:
+            status_to, profile_to = await Misc.get_user_by_uuid(uuid)
+            if status_to == 200 and profile_to:
+                msg = '%(full_name)s не получал%(a)s сообщений' % dict(
+                    full_name=Misc.get_deeplink_with_name(profile_to, bot_data),
+                    a='а' if profile_to.get('gender') == 'f' else '' if profile_to.get('gender') == 'm' else '(а)',
+                )
+            else:
+                msg = 'Сообщения не найдены'
+            await bot.send_message(tg_user_sender.id, text=msg)
 
 
 @dp.message_handler(

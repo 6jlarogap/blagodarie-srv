@@ -100,13 +100,21 @@ class TgMessageJournal(BaseModelInsertTimestamp):
     message_id = models.BigIntegerField(_("Message Id"),)
 
     def data_dict(self):
+
+        def user_dict(user):
+            return {
+                'id': user.id,
+                'uuid': str(user.profile.uuid),
+                'first_name': user.first_name,
+            }
+
         return dict(
-            insert_timestamp=self.insert_timestamp,
-            user_from_id=self.user_from.pk,
-            user_from_uuid=str(self.user_from.profile.uuid),
-            user_to_id=self.user_from.pk,
-            user_to_uuid=str(self.user_to.profile.uuid),
-            is_delivered = bool(self.user_to_delivered),
+            timestamp=self.insert_timestamp,
+            user_from=user_dict(self.user_from),
+            user_to=user_dict(self.user_to),
+            user_to_delivered=user_dict(self.user_to_delivered) if self.user_to_delivered else None,
+            from_chat_id=self.from_chat_id,
+            message_id=self.message_id,
         )
 
 class CurrentState(BaseModelInsertUpdateTimestamp):
