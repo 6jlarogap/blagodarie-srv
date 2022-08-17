@@ -1403,7 +1403,7 @@ async def got_message_to_send(message: types.Message, state: FSMContext):
                     user_to_delivered_uuid = None
                     if profile_from['uuid'] == profile_to['uuid']:
                         # самому себе
-                        pass
+                        user_to_delivered_uuid = profile_to['uuid']
                     elif profile_to['owner'] and profile_to['owner']['uuid'] == profile_from['uuid']:
                         # своему овнеду
                         pass
