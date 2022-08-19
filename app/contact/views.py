@@ -32,15 +32,10 @@ from users.models import CreateUserMixin, IncognitoUser, Profile, TempToken, Oau
 
 MSG_NO_PARM = 'Не задан или не верен какой-то из параметров в связке номер %s (начиная с 0)'
 
-class SendMessageMixin(FrontendMixin):
+class TelegramApiMixin(object):
 
-    def profile_link(self, request, profile,):
-        url_profile = self.get_frontend_url(request, 'profile') + '?id=%s' % profile.uuid
-        link = '<a href="%(url_profile)s">%(first_name)s</a>' % dict(
-            url_profile=url_profile,
-            first_name=profile.user.first_name or 'Без имени',
-        )
-        return link
+    API_TELEGRAM = 'https://api.telegram.org'
+    API_TIMEOUT = 20
 
     def send_to_telegram(self, message, user=None, telegram_uid=None):
         """
@@ -60,7 +55,7 @@ class SendMessageMixin(FrontendMixin):
             uid = telegram_uid
 
         if uid:
-            url = 'https://api.telegram.org/bot%s/sendMessage?' % settings.TELEGRAM_BOT_TOKEN
+            url = '%s/bot%s/sendMessage?' % (self.API_TELEGRAM, settings.TELEGRAM_BOT_TOKEN)
             parms = dict(
                 chat_id=uid,
                 parse_mode='html',
@@ -69,9 +64,48 @@ class SendMessageMixin(FrontendMixin):
             url += urlencode(parms)
             try:
                 req = urllib.request.Request(url)
-                urllib.request.urlopen(req, timeout=20)
+                urllib.request.urlopen(req, timeout=self.API_TIMEOUT)
             except (urllib.error.URLError, ):
                 pass
+
+    def get_bot_data(self):
+        """
+        Получить данные бота
+        """
+        result = None
+        url = '%s/bot%s/getMe' % (self.API_TELEGRAM, settings.TELEGRAM_BOT_TOKEN)
+        print(url)
+        try:
+            req = urllib.request.Request(url)
+            r = urllib.request.urlopen(req, timeout=self.API_TIMEOUT)
+            raw_data = r.read().decode(r.headers.get_content_charset('utf-8'))
+            try:
+                data = json.loads(raw_data)
+                if data['ok'] and data['result']:
+                    result = data['result']
+            except (KeyError, ValueError):
+                pass
+        except (urllib.error.URLError, ):
+            pass
+        return result
+
+    def get_bot_username(self):
+        """
+        Получить имя бота
+        """
+        bot_data = self.get_bot_data()
+        if bot_data and bot_data.get('username'):
+            return bot_data['username']
+        else:
+            return None
+
+    def get_deeplink(self, profile, bot_username=None):
+        result = ''
+        if not bot_username:
+            bot_username = self.get_bot_username()
+        if bot_username:
+            result = 'https://t.me/%s?start=%s' % (bot_username, profile.uuid)
+        return result
 
 class ApiAddOperationMixin(object):
 
@@ -422,7 +456,7 @@ class ApiAddOperationMixin(object):
 
         return data
 
-class ApiAddOperationView(ApiAddOperationMixin, SendMessageMixin, APIView):
+class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin, APIView):
     parser_classes = (JSONParser, FormParser, MultiPartParser)
 
     @transaction.atomic
@@ -3009,7 +3043,7 @@ class ApiDeleteAbility(APIView):
 
 api_delete_ability = ApiDeleteAbility.as_view()
 
-class ApiInviteUseToken(ApiAddOperationMixin, SendMessageMixin, APIView):
+class ApiInviteUseToken(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin, APIView):
     permission_classes = (IsAuthenticated, )
 
     @transaction.atomic

@@ -24,7 +24,7 @@ from app.models import UnclearDate, PhotoModel, GenderMixin
 from django.contrib.auth.models import User
 from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TgGroup, TempToken, UuidMixin
 from contact.models import Key, KeyType, CurrentState, OperationType, Wish, Ability
-from contact.views import SendMessageMixin, ApiAddOperationMixin
+from contact.views import TelegramApiMixin, ApiAddOperationMixin
 
 class ApiGetProfileInfo(UuidMixin, APIView):
 
@@ -346,7 +346,7 @@ class ApiAuthSignUpIncognito(APIView):
 
 api_auth_signup_incognito = ApiAuthSignUpIncognito.as_view()
 
-class ApiAuthTelegram(CreateUserMixin, SendMessageMixin, FrontendMixin, APIView):
+class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, APIView):
     """
     Callback функция авторизации через telegram
 
@@ -806,7 +806,7 @@ class ApiInviteGetToken(APIView):
 
 api_invite_get_token = ApiInviteGetToken.as_view()
 
-class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, SendMessageMixin, ApiAddOperationMixin, APIView):
+class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, TelegramApiMixin, ApiAddOperationMixin, APIView):
     """
     Получить своих родственников (без связей), добавить/править/обезличить родственника. Правка своего профиля.
 
@@ -1726,7 +1726,7 @@ class ApiBotGroupMember(ApiBotGroupMixin, APIView):
 
 api_bot_groupmember = ApiBotGroupMember.as_view()
 
-class ApiUserPoints(FrontendMixin, APIView):
+class ApiUserPoints(FrontendMixin, TelegramApiMixin, APIView):
 
     def get(self, request):
         """
@@ -1734,27 +1734,30 @@ class ApiUserPoints(FrontendMixin, APIView):
         """
 
         # Если точек нет, то пусть будут координаты Москвы
-        # Что не показывался в этом случае Атлантический океан
+        # Чтобы не показывался в этом случае в Атлантическом океане
         #
         lat_avg = 55.7522200
         lng_avg = 37.6155600
 
+        bot_username = self.get_bot_username()
         lat_sum = lng_sum = 0
         points = []
-        for p in Profile.objects.filter(
-            latitude__isnull=False, longitude__isnull=False
+        for profile in Profile.objects.filter(
+                latitude__isnull=False,
+                longitude__isnull=False,
+                owner__isnull=True,
             ).select_related('user'):
+            if bot_username:
+                link = self.get_deeplink(profile, bot_username)
+            else:
+                link = self.profile_link(request, profile)
             points.append(dict(
-                latitude=p.latitude,
-                longitude=p.longitude,
-                title='<a href="%(link)s" target="_blank">%(full_name)s</a>' % dict(
-                    full_name=p.user.first_name,
-                    link=self.get_frontend_url(
-                        request,
-                        path='/profile/?id=%s' % p.uuid,
-            ))))
-            lat_sum += p.latitude
-            lng_sum += p.longitude
+                latitude=profile.latitude,
+                longitude=profile.longitude,
+                title='(%(trust_count)s) %(link)s' % dict(trust_count=profile.trust_count, link=link)
+            ))
+            lat_sum += profile.latitude
+            lng_sum += profile.longitude
         if (points):
             lat_avg = lat_sum / len(points)
             lng_avg = lng_sum / len(points)

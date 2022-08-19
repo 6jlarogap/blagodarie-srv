@@ -120,6 +120,14 @@ class FrontendMixin(object):
             ending_slash=ending_slash,
         )
 
+    def profile_link(self, request, profile,):
+        url_profile = self.get_frontend_url(request, 'profile') + '?id=%s' % profile.uuid
+        link = '<a href="%(url_profile)s">%(first_name)s</a>' % dict(
+            url_profile=url_profile,
+            first_name=profile.user.first_name or 'Без имени',
+        )
+        return link
+
     def get_frontend_name(self, request):
         """
         Получить имя хоста front-end, без :цифры, если они есть
