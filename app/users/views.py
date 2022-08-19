@@ -1747,7 +1747,7 @@ class ApiUserPoints(FrontendMixin, APIView):
             points.append(dict(
                 latitude=p.latitude,
                 longitude=p.longitude,
-                title='<a href="%(link)s">%(full_name)s</a>' % dict(
+                title='<a href="%(link)s" target="_blank">%(full_name)s</a>' % dict(
                     full_name=p.user.first_name,
                     link=self.get_frontend_url(
                         request,
