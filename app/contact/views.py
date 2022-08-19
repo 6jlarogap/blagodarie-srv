@@ -115,7 +115,7 @@ class TelegramApiMixin(object):
                 target = ' target="_blank"'
             else:
                 target = ''
-            result = '<a href="%(deeplink)s%(target)s">%(full_name)s</a>' % dict(
+            result = '<a href="%(deeplink)s"%(target)s>%(full_name)s</a>' % dict(
                 deeplink=deeplink,
                 target=target,
                 full_name=profile.user.first_name,
