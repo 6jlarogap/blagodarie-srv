@@ -1746,7 +1746,8 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, APIView):
                 latitude__isnull=False,
                 longitude__isnull=False,
                 owner__isnull=True,
-            ).select_related('user'):
+                dod__isnull=True,
+            ).select_related('user').distinct():
             if bot_username:
                 link = self.get_deeplink_name(profile, bot_username, target_blank=True)
             else:
