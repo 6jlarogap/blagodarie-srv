@@ -107,6 +107,21 @@ class TelegramApiMixin(object):
             result = 'https://t.me/%s?start=%s' % (bot_username, profile.uuid)
         return result
 
+    def get_deeplink_name(self, profile, bot_username=None, target_blank=False):
+        result = ''
+        deeplink = self.get_deeplink(profile, bot_username)
+        if deeplink:
+            if target_blank:
+                target = ' target="_blank"'
+            else:
+                target = ''
+            result = '<a href="%(deeplink)s%(target)s">%(full_name)s</a>' % dict(
+                deeplink=deeplink,
+                target=target,
+                full_name=profile.user.first_name,
+            )
+        return result
+
 class ApiAddOperationMixin(object):
 
     def add_operation(self,

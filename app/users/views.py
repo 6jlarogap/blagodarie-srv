@@ -1748,7 +1748,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, APIView):
                 owner__isnull=True,
             ).select_related('user'):
             if bot_username:
-                link = self.get_deeplink(profile, bot_username)
+                link = self.get_deeplink_name(profile, bot_username, target_blank=True)
             else:
                 link = self.profile_link(request, profile)
             points.append(dict(
