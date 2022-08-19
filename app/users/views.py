@@ -1752,10 +1752,16 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, APIView):
                 link = self.get_deeplink_name(profile, bot_username, target_blank=True)
             else:
                 link = self.profile_link(request, profile)
+            dict_user = dict(
+                full_name = profile.user.first_name,
+                trust_count=profile.trust_count,
+                link=link,
+            )
             points.append(dict(
                 latitude=profile.latitude,
                 longitude=profile.longitude,
-                title='(%(trust_count)s) %(link)s' % dict(trust_count=profile.trust_count, link=link)
+                title='(%(trust_count)s) %(full_name)s' % dict_user,
+                popup='(%(trust_count)s) %(link)s' % dict_user,
             ))
             lat_sum += profile.latitude
             lng_sum += profile.longitude
