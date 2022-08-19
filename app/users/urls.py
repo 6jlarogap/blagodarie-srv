@@ -27,6 +27,7 @@ urlpatterns = [
     re_path(r'^api/profile/?$', views.api_profile),
 
     re_path(r'^api/user/relations/?$', views.api_user_relations),
+    re_path(r'^api/user/points/?$', views.api_user_points),
 
     re_path(r'^api/bot/stat/?$', views.api_bot_stat),
     re_path(r'^api/bot/group/?$', views.api_bot_group),

@@ -1725,3 +1725,40 @@ class ApiBotGroupMember(ApiBotGroupMixin, APIView):
         return Response(data=data, status=status_code)
 
 api_bot_groupmember = ApiBotGroupMember.as_view()
+
+class ApiUserPoints(FrontendMixin, APIView):
+
+    def get(self, request):
+        """
+        Вернуть пользователй с координатами
+        """
+
+        # Если точек нет, то пусть будут координаты Москвы
+        # Что не показывался в этом случае Атлантический океан
+        #
+        lat_avg = 55.7522200
+        lng_avg = 37.6155600
+
+        lat_sum = lng_sum = 0
+        points = []
+        for p in Profile.objects.filter(
+            latitude__isnull=False, longitude__isnull=False
+            ).select_related('user'):
+            points.append(dict(
+                latitude=p.latitude,
+                longitude=p.longitude,
+                title='<a href="%(link)s">%(full_name)s</a>' % dict(
+                    full_name=p.user.first_name,
+                    link=self.get_frontend_url(
+                        request,
+                        path='/profile/?id=%s' % p.uuid,
+            ))))
+            lat_sum += p.latitude
+            lng_sum += p.longitude
+        if (points):
+            lat_avg = lat_sum / len(points)
+            lng_avg = lng_sum / len(points)
+        data = dict(lat_avg=lat_avg, lng_avg=lng_avg, points=points)
+        return Response(data=data, status=200)
+
+api_user_points = ApiUserPoints.as_view()
