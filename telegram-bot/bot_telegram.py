@@ -64,7 +64,14 @@ class FSMkey(StatesGroup):
 class FSMquery(StatesGroup):
     ask = State()
 
-last_user_in_group = None
+# Отслеживаем по каждой группе (ключ этого словаря),
+# кто был автором последнего сообщения в группу.
+# Если юзер отправит два сообщения подряд, то
+# реакция бота будет только по первому сообщению.
+# Несколько сообщений подряд от одного и того же юзера
+# могут быть и в сообщении, включающем множество картинок.
+#
+last_user_in_group = dict()
 
 bot = Bot(
     token=settings.TOKEN,
@@ -2720,6 +2727,16 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
     """
     Обработка сообщений в группу
     """
+
+    tg_user_sender = message.from_user
+    # tg_user_sender.is_bot:
+    #   анонимное послание в группу или от имени канала
+    # tg_user_sender.id == 777000:
+    #   Если к группе привязан канал, то сообщения идут от этого пользователя
+    if tg_user_sender.is_bot or \
+       tg_user_sender.id == 777000:
+        return
+
     if message.content_type in(
             ContentType.NEW_CHAT_PHOTO,
             ContentType.NEW_CHAT_TITLE,
@@ -2727,6 +2744,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             ContentType.PINNED_MESSAGE,
        ):
         return
+
 
     global last_user_in_group
 
@@ -2740,7 +2758,6 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
     #
     a_users_out = []
 
-    tg_user_sender = message.from_user
     a_users_in = [ message.from_user ]
     try:
         tg_user_left = message.left_chat_member
@@ -2757,19 +2774,15 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
     bot_data = await bot.get_me()
     if tg_user_left or tg_users_new:
-        is_previous_his = False
-        last_user_in_group = None
-    else:
-        # Было ли предыдущее сообщение в группу отправлено этом пользователем?
-        # Полезно, т.к. в сообщении из 10 фоток, а это 10 сообщений в бот,
-        # надо бы только одну реакцию
         # Если сообщение о новом, убывшем пользователе, то любое следующее
         # сообщение будет как бы от нового пользователя
-        #
-        previous_user_in_group = last_user_in_group
+        is_previous_his = False
+        last_user_in_group[message.chat.id] = None
+    else:
+        previous_user_in_group = last_user_in_group.get(message.chat.id)
         is_previous_his = True
         if previous_user_in_group != message.from_user.id:
-            last_user_in_group = message.from_user.id
+            last_user_in_group[message.chat.id] = message.from_user.id
             is_previous_his = False
 
     for user_in in a_users_in:
