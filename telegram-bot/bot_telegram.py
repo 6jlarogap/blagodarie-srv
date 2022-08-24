@@ -2719,13 +2719,13 @@ async def get_group_id(message: types.Message, state: FSMContext):
             pass
 
 
-@dp.channel_post_handler(
-    content_types=ContentType.all(),
-)
-async def echo_send_to_channel(message: types.Message, state: FSMContext):
-    logging.debug('Got message to channel')
-    logging.debug(message.from_user)
-    return
+#@dp.channel_post_handler(
+    #content_types=ContentType.all(),
+#)
+#async def echo_send_to_channel(message: types.Message, state: FSMContext):
+    #logging.info('Got message to channel')
+    #logging.info(message.from_user)
+    #return
 
 
 @dp.message_handler(
