@@ -2723,7 +2723,7 @@ async def get_group_id(message: types.Message, state: FSMContext):
     content_types=ContentType.all(),
 )
 async def echo_send_to_channel(message: types.Message, state: FSMContext):
-    logging.debug('Go message to channed')
+    logging.debug('Got message to channel')
     logging.debug(message.from_user)
     return
 
@@ -2739,12 +2739,11 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
     """
 
     tg_user_sender = message.from_user
-    # tg_user_sender.is_bot:
-    #   анонимное послание в группу или от имени канала
+
     # tg_user_sender.id == 777000:
     #   Если к группе привязан канал, то сообщения идут от этого пользователя
-    if tg_user_sender.is_bot or \
-       tg_user_sender.id == 777000:
+    #
+    if tg_user_sender.id == 777000:
         return
 
     if message.content_type in(
@@ -2754,7 +2753,6 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             ContentType.PINNED_MESSAGE,
        ):
         return
-
 
     global last_user_in_group
 
@@ -2768,7 +2766,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
     #
     a_users_out = []
 
-    a_users_in = [ message.from_user ]
+    a_users_in = [ tg_user_sender ]
     try:
         tg_user_left = message.left_chat_member
     except  (TypeError, ):
@@ -2781,6 +2779,12 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
         tg_users_new = []
     if tg_users_new:
         a_users_in = tg_users_new
+
+    if not tg_users_new and not tg_user_left and tg_user_sender.is_bot:
+        # tg_user_sender.is_bot:
+        #   анонимное послание в группу или от имени канала
+        # Но делаем исключение, когда анонимный владелей
+        return
 
     bot_data = await bot.get_me()
     if tg_user_left or tg_users_new:
