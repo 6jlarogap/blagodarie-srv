@@ -2692,30 +2692,40 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
     state=None,
 )
 async def get_group_id(message: types.Message, state: FSMContext):
-    chat = message.chat
-    status, response = await TgGroup.post(chat.id, chat.title, chat.type)
-    try:
-        await message.delete()
-    except:
-        pass
-    try:
+    if not message.from_user.is_bot:
+        chat = message.chat
+        status, response = await TgGroup.post(chat.id, chat.title, chat.type)
+        try:
+            await message.delete()
+        except:
+            pass
         reply =  (
             'Вы запросили ИД группы <b>%s</b>\n'
             'Отвечаю:\n\n'
             'ИД: %s\n'
             'Тип: %s\n'
         ) % (chat.title, chat.id, chat.type)
-        if status == 200:
-            await bot.send_message(
-                message.from_user.id, reply + (
-                    'Группа только что создана Вами в данных\n' if response['created'] else 'Группа существовала в данных до Вашего запроса\n'
-            ))
-        else:
-            await bot.send_message(
-                message.from_user.id, reply + 'ОШИБКА создания, если не существует, группы в данных\n'
-            )
-    except (ChatNotFound, CantInitiateConversation):
-        pass
+        try:
+            if status == 200:
+                await bot.send_message(
+                    message.from_user.id, reply + (
+                        'Группа только что создана Вами в данных\n' if response['created'] else 'Группа существовала в данных до Вашего запроса\n'
+                ))
+            else:
+                await bot.send_message(
+                    message.from_user.id, reply + 'ОШИБКА создания, если не существует, группы в данных\n'
+                )
+        except (ChatNotFound, CantInitiateConversation):
+            pass
+
+
+@dp.channel_post_handler(
+    content_types=ContentType.all(),
+)
+async def echo_send_to_channel(message: types.Message, state: FSMContext):
+    logging.debug('Go message to channed')
+    logging.debug(message.from_user)
+    return
 
 
 @dp.message_handler(
