@@ -457,14 +457,14 @@ async def put_new_child(message: types.Message, state: FSMContext):
                     link_relation='link_is_father' if data['parent_gender'] == 'm' else 'link_is_mother',
                     owner_id=response_sender['user_id'],
                 )
-                logging.debug('post new link, payload: %s' % post_new_link)
+                logging.debug('post new child, payload: %s' % post_new_link)
                 status_child, response_child = await Misc.api_request(
                     path='/api/profile',
                     method='post',
                     data=post_new_link,
                 )
-                logging.debug('post  new link, status: %s' % status_child)
-                logging.debug('post  new link, response: %s' % response_child)
+                logging.debug('post new child, status: %s' % status_child)
+                logging.debug('post new child, response: %s' % response_child)
                 if status_child != 200:
                     if status_child == 400  and response_child.get('message'):
                         await message.reply(
@@ -2062,25 +2062,10 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         return
 
     bot_data = await bot.get_me()
-    payload_sender = dict(
-        tg_token=settings.TOKEN,
-        tg_uid=tg_user_sender.id,
-        last_name=tg_user_sender.last_name or '',
-        first_name=tg_user_sender.first_name or '',
-        username=tg_user_sender.username or '',
-        activate='1',
-    )
-    try:
-        status_sender, response_sender = await Misc.api_request(
-            path='/api/profile',
-            method='post',
-            data=payload_sender,
-        )
-        logging.debug('get_or_create tg_user_sender data in api, status_sender: %s' % status_sender)
-        logging.debug('get_or_create tg_user_sender data in api, response_sender: %s' % response_sender)
-        user_from_id = response_sender.get('user_id')
-    except:
+    status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+    if response_sender is None:
         return
+    user_from_id = response_sender.get('user_id')
 
     chat = callback_query.message.chat
     is_this_bot = bot_data.id == tg_user_sender.id
@@ -2388,43 +2373,30 @@ async def location(message: types.Message, state: FSMContext):
 )
 async def echo_getowned_to_bot(message: types.Message, state: FSMContext):
     tg_user_sender = message.from_user
-    payload_from = dict(
-        tg_token=settings.TOKEN,
-        tg_uid=tg_user_sender.id,
-        last_name=tg_user_sender.last_name or '',
-        first_name=tg_user_sender.first_name or '',
-        username=tg_user_sender.username or '',
-        activate='1',
-    )
-    try:
-        status, response_from = await Misc.api_request(
-            path='/api/profile',
-            method='post',
-            data=payload_from,
-        )
-        logging.debug('get_or_create tg_user_sender data in api, status: %s' % status)
-        logging.debug('get_or_create tg_user_sender data in api, response_from: %s' % response_from)
-        user_from_uuid = response_from['uuid']
-    except:
+    status, response_from = await Misc.post_tg_user(tg_user_sender)
+    if status !=200:
         return
-
     try:
         status, a_response_to = await Misc.api_request(
             path='/api/profile',
             method='get',
-            params=dict(uuid_owner=user_from_uuid),
+            params=dict(uuid_owner=response_from['uuid']),
         )
         logging.debug('get_tg_user_sender_owned data in api, status: %s' % status)
         logging.debug('get_tg_user_sender_owned data in api, response: %s' % a_response_to)
     except:
         return
 
-    if not a_response_to:
+    if a_response_to:
+        bot_data = await bot.get_me()
+        await Misc.show_deeplinks(a_response_to, message, bot_data)
+    else:
         await message.reply('У вас нет запрошенных данных')
-        return
 
-    bot_data = await bot.get_me()
-    await Misc.show_deeplinks(a_response_to, message, bot_data)
+    if response_from.get('created'):
+        tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
+        if tg_user_sender_photo:
+            await Misc.put_tg_user_photo(tg_user_sender_photo, response_from)
 
 
 @dp.message_handler(
@@ -2616,28 +2588,10 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             pass
 
     if user_from_id and state_ == 'forwarded_from_other':
-        logging.debug('get_or_create tg_user_forwarded data in api...')
-        payload_to = dict(
-            tg_token=settings.TOKEN,
-            tg_uid=tg_user_forwarded.id,
-            last_name=tg_user_forwarded.last_name or '',
-            first_name=tg_user_forwarded.first_name or '',
-            username=tg_user_forwarded.username or '',
-            activate='',
-        )
-        try:
-            status, response_to = await Misc.api_request(
-                path='/api/profile',
-                method='post',
-                data=payload_to,
-            )
-            logging.debug('get_or_create tg_user_forwarded data in api, status: %s' % status)
-            logging.debug('get_or_create get tg_user_forwarded data in api, response_to: %s' % response_to)
-            if status == 200:
-                response_to.update(tg_username=tg_user_forwarded.username)
-                a_response_to = [response_to, ]
-        except:
-            pass
+        status, response_to = await Misc.post_tg_user(tg_user_forwarded)
+        if status == 200:
+            response_to.update(tg_username=tg_user_forwarded.username)
+            a_response_to = [response_to, ]
 
     if user_from_id and state_ in ('forwarded_from_other', 'forwarded_from_me'):
         usernames, text_stripped = Misc.get_text_usernames(message_text)
@@ -2719,15 +2673,6 @@ async def get_group_id(message: types.Message, state: FSMContext):
             pass
 
 
-#@dp.channel_post_handler(
-    #content_types=ContentType.all(),
-#)
-#async def echo_send_to_channel(message: types.Message, state: FSMContext):
-    #logging.info('Got message to channel')
-    #logging.info(message.from_user)
-    #return
-
-
 @dp.message_handler(
     ChatTypeFilter(chat_type=(types.ChatType.GROUP, types.ChatType.SUPERGROUP)),
     content_types=ContentType.all(),
@@ -2801,29 +2746,11 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
     for user_in in a_users_in:
         reply_markup = None
-        payload_from = dict(
-            tg_token=settings.TOKEN,
-            tg_uid=user_in.id,
-            last_name=user_in.last_name or '',
-            first_name=user_in.first_name or '',
-            username=user_in.username or '',
-            activate='1',
-        )
-        try:
-            status, response_from = await Misc.api_request(
-                path='/api/profile',
-                method='post',
-                data=payload_from,
-            )
-            logging.debug('get_or_create tg_user_sender data in api, status: %s' % status)
-            logging.debug('get_or_create tg_user_sender data in api, response_from: %s' % response_from)
-            if status != 200:
-                a_users_out.append({})
-                continue
-            a_users_out.append(response_from)
-        except:
+        status, response_from = await Misc.post_tg_user(user_in)
+        if status != 200:
             a_users_out.append({})
             continue
+        a_users_out.append(response_from)
 
         if tg_user_left:
             # Ушел пользователь, убираем его из группы
@@ -2861,17 +2788,8 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             logging.debug('post operation, status: %s' % status)
             logging.debug('post operation, response: %s' % response)
             # Обновить, ибо уже на доверие больше у него может быть
-            try:
-                status, response_from = await Misc.api_request(
-                    path='/api/profile',
-                    method='post',
-                    data=payload_from,
-                )
-                logging.debug('get_or_create tg_user_to data in api, status: %s' % status)
-                logging.debug('get_or_create tg_user_to data in api, response_from: %s' % response_from)
-                if status != 200:
-                    continue
-            except:
+            status, response_from = await Misc.post_tg_user(user_in)
+            if status != 200:
                 continue
 
         reply_template = '<b><a href="%(deeplink)s">%(full_name)s</a></b>'
