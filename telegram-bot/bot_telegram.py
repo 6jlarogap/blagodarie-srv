@@ -1928,13 +1928,12 @@ async def put_new_iof(message: types.Message, state: FSMContext):
 )
 async def process_command_new(message: types.Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
-    await FSMnewIOF.ask.set()
-    state = dp.current_state()
-    await message.reply(Misc.PROMPT_NEW_IOF, reply_markup=Misc.reply_markup_cancel_row())
-    if status_sender == 200 and response_sender.get('created'):
-        photo = await Misc.get_user_photo(bot, message.from_user)
-        if photo:
-            await Misc.put_tg_user_photo(photo, response_sender)
+    if status_sender == 200:
+        await FSMnewIOF.ask.set()
+        state = dp.current_state()
+        await message.reply(Misc.PROMPT_NEW_IOF, reply_markup=Misc.reply_markup_cancel_row())
+        if response_sender.get('created'):
+            await Misc.update_user_photo(bot, message.from_user, response_sender)
 
 
 @dp.message_handler(
@@ -1945,23 +1944,22 @@ async def process_command_new(message: types.Message, state: FSMContext):
 async def process_commands_query(message: types.Message, state: FSMContext):
     message_text = message.text.split()[0].lstrip('/')
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
-    await FSMquery.ask.set()
-    state = dp.current_state()
-    async with state.proxy() as data:
-        if message_text == 'findpotr':
-            query_what = 'query_wish'
-        elif message_text == 'findvozm':
-            query_what = 'query_ability'
-        elif message_text == 'findperson':
-            query_what = 'query_person'
-        else:
-            return
-        data['what'] = query_what
-    await message.reply(Misc.PROMPT_QUERY[query_what], reply_markup=Misc.reply_markup_cancel_row())
-    if status_sender == 200 and response_sender.get('created'):
-        photo = await Misc.get_user_photo(bot, message.from_user)
-        if photo:
-            await Misc.put_tg_user_photo(photo, response_sender)
+    if status_sender == 200:
+        await FSMquery.ask.set()
+        state = dp.current_state()
+        async with state.proxy() as data:
+            if message_text == 'findpotr':
+                query_what = 'query_wish'
+            elif message_text == 'findvozm':
+                query_what = 'query_ability'
+            elif message_text == 'findperson':
+                query_what = 'query_person'
+            else:
+                return
+            data['what'] = query_what
+        await message.reply(Misc.PROMPT_QUERY[query_what], reply_markup=Misc.reply_markup_cancel_row())
+        if response_sender.get('created'):
+            await Misc.update_user_photo(bot, message.from_user, response_sender)
 
 
 @dp.message_handler(
@@ -2267,9 +2265,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
                 pass
 
     if response_sender.get('created'):
-        tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
-        if tg_user_sender_photo:
-            await Misc.put_tg_user_photo(tg_user_sender_photo, response_sender)
+        await Misc.update_user_photo(bot, tg_user_sender, response_sender)
 
 
 async def geo(message: types.Message, uuid=None):
@@ -2368,35 +2364,31 @@ async def location(message: types.Message, state: FSMContext):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=['getowned', 'listown'],
+    commands=('getowned', 'listown',),
     state=None,
 )
 async def echo_getowned_to_bot(message: types.Message, state: FSMContext):
     tg_user_sender = message.from_user
     status, response_from = await Misc.post_tg_user(tg_user_sender)
-    if status !=200:
-        return
-    try:
-        status, a_response_to = await Misc.api_request(
-            path='/api/profile',
-            method='get',
-            params=dict(uuid_owner=response_from['uuid']),
-        )
-        logging.debug('get_tg_user_sender_owned data in api, status: %s' % status)
-        logging.debug('get_tg_user_sender_owned data in api, response: %s' % a_response_to)
-    except:
-        return
+    if status == 200:
+        try:
+            status, a_response_to = await Misc.api_request(
+                path='/api/profile',
+                method='get',
+                params=dict(uuid_owner=response_from['uuid']),
+            )
+            logging.debug('get_tg_user_sender_owned data in api, status: %s' % status)
+            logging.debug('get_tg_user_sender_owned data in api, response: %s' % a_response_to)
+        except:
+            return
 
-    if a_response_to:
-        bot_data = await bot.get_me()
-        await Misc.show_deeplinks(a_response_to, message, bot_data)
-    else:
-        await message.reply('У вас нет запрошенных данных')
-
-    if response_from.get('created'):
-        tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
-        if tg_user_sender_photo:
-            await Misc.put_tg_user_photo(tg_user_sender_photo, response_from)
+        if a_response_to:
+            bot_data = await bot.get_me()
+            await Misc.show_deeplinks(a_response_to, message, bot_data)
+        else:
+            await message.reply('У вас нет запрошенных данных')
+        if response_from.get('created'):
+            await Misc.update_user_photo(bot, tg_user_sender, response_from)
 
 
 @dp.message_handler(
@@ -2631,14 +2623,10 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
     await Misc.show_deeplinks(a_found, message, bot_data)
 
     if user_from_id and (response_from.get('created') or state_ == 'start'):
-        tg_user_sender_photo = await Misc.get_user_photo(bot, tg_user_sender)
-        if tg_user_sender_photo:
-            await Misc.put_tg_user_photo(tg_user_sender_photo, response_from)
-
+        await Misc.update_user_photo(bot, tg_user_sender, response_from)
     if state_ == 'forwarded_from_other' and a_response_to and a_response_to[0].get('created'):
-        tg_user_forwarded_photo = await Misc.get_user_photo(bot, tg_user_forwarded)
-        if tg_user_forwarded_photo:
-            await Misc.put_tg_user_photo(tg_user_forwarded_photo, response_to)
+        await Misc.update_user_photo(bot, tg_user_forwarded, response_to)
+
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=(types.ChatType.GROUP, types.ChatType.SUPERGROUP)),
@@ -2671,6 +2659,68 @@ async def get_group_id(message: types.Message, state: FSMContext):
                 )
         except (ChatNotFound, CantInitiateConversation):
             pass
+
+
+@dp.chat_join_request_handler()
+async def echo_join_channel_request(message: types.Message):
+    """
+    Пользователь присоединяется к каналу по ссылке- приглашению
+
+    Работает только ссылка, требующая одобрения.
+    Бот, он всегда администратор канала, одобрит.
+    Но до этого:
+        Нового участника надо завести в базе, если его там нет
+        В канал отправится мини- карточка нового участника
+    """
+    # Пока код не готов полностью:
+    return
+    tg_subscriber = message.from_user
+    tg_inviter = message.invite_link.creator
+    status, response_subscriber = await Misc.post_tg_user(tg_subscriber)
+    if status != 200:
+        return
+    status, response_inviter = await Misc.post_tg_user(tg_inviter)
+    if status != 200:
+        return
+
+    await TgGroupMember.add(
+        group_chat_id=message.chat.id,
+        group_title=message.chat.title,
+        group_type=message.chat.type,
+        user_tg_uid=tg_subscriber.id,
+    )
+    await TgGroupMember.add(
+        group_chat_id=message.chat.id,
+        group_title=message.chat.title,
+        group_type=message.chat.type,
+        user_tg_uid=tg_inviter.id,
+    )
+
+    await bot.approve_chat_join_request(
+            message.chat.id,
+            tg_subscriber.id
+    )
+
+    if response_subscriber.get('created'):
+        await Misc.update_user_photo(bot, tg_subscriber, response_subscriber)
+    if response_inviter.get('created'):
+        await Misc.update_user_photo(bot, tg_inviter, response_inviter)
+
+
+@dp.my_chat_member_handler(
+    ChatTypeFilter(chat_type=(types.ChatType.CHANNEL,)),
+)
+async def echo_my_chat_member_for_bot(my_chat_member: types.ChatMemberUpdated):
+    """
+    Для формирования ссылки на доверия среди участников канала
+    """
+    # Пока код не готов полностью:
+    return
+    await bot.send_message(
+        channel_id,
+        text='Привет',
+        disable_web_page_preview=True,
+    )
 
 
 @dp.message_handler(
@@ -2860,10 +2910,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
     for i, response_from in enumerate(a_users_out):
         if response_from.get('created'):
-            tg_user = a_users_in[i]
-            tg_user_photo = await Misc.get_user_photo(bot, tg_user)
-            if tg_user_photo:
-                await Misc.put_tg_user_photo(tg_user_photo, response_from)
+            await Misc.update_user_photo(bot, a_users_in[i], response_from)
 
 
 @dp.inline_handler()

@@ -348,6 +348,25 @@ class Misc(object):
                     pass
         return result
 
+
+    @classmethod
+    async def put_tg_user_photo(cls, photo, response):
+        status_photo, response_photo = None, None
+        if photo and response and response.get('uuid'):
+            status_photo, response_photo = await cls.put_user_properties(
+                photo=photo,
+                uuid=response['uuid'],
+            )
+        return status_photo, response_photo
+
+
+    @classmethod
+    async def update_user_photo(cls, bot, tg_user, profile):
+        return await cls.put_tg_user_photo(
+            await cls.get_user_photo(bot, tg_user), profile,
+        )
+
+
     @classmethod
     async def api_request(cls,
             path,
@@ -1085,16 +1104,6 @@ class Misc(object):
         logging.debug('put user_data, status: %s' % status)
         logging.debug('put user_data, response: %s' % response)
         return status, response
-
-    @classmethod
-    async def put_tg_user_photo(cls, photo, response):
-        status_photo, response_photo = None, None
-        if photo and response and response.get('uuid'):
-            status_photo, response_photo = await cls.put_user_properties(
-                photo=photo,
-                uuid=response['uuid'],
-            )
-        return status_photo, response_photo
 
     @classmethod
     def text_search_phrase(
