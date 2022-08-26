@@ -2099,12 +2099,8 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
             operation_done = True
         elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
             thanks_count = response['currentstate']['thanks_count']
-            if thanks_count == 1:
-                text = 'Установлено доверие к %(full_name_to)s'
-                text_link = 'Установлено доверие к %(full_name_to_link)s'
-            else:
-                text = 'Увеличено доверие к %(full_name_to)s до %(thanks_count)s'
-                text_link = 'Увеличено доверие к %(full_name_to_link)s до %(thanks_count)s'
+            text = 'Увеличено доверие к %(full_name_to)s до %(thanks_count)s'
+            text_link = 'Увеличено доверие к %(full_name_to_link)s до %(thanks_count)s'
             operation_done = True
     elif status == 400 and response.get('code', '') == 'already':
         if post_op['operation_type_id'] == OperationType.TRUST:
@@ -2191,19 +2187,17 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         elif post_op['operation_type_id'] == OperationType.NULLIFY_TRUST:
             pass
         elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
-            if thanks_count is not None and thanks_count > 1:
-                reply = '%(deeplink_sender)s увеличил(а) доверие с %(deeplink_receiver)s до %(thanks_count)s'
-            else:
-                reply = '%(deeplink_sender)s установил(а) доверие с %(deeplink_receiver)s'
+            if thanks_count is not None:
+                reply = '%(deeplink_sender)s увеличил(а) доверия к %(deeplink_receiver)s до %(thanks_count)s'
         if reply:
             deeplink_template = '<a href="%(deeplink)s">%(full_name)s</a>'
             deeplink_sender = deeplink_template % dict(
                 deeplink=Misc.get_deeplink(profile_from, bot_data),
-                full_name=tg_user_sender.full_name,
+                full_name=profile_from['first_name'],
             )
             deeplink_receiver = deeplink_template % dict(
                 deeplink=Misc.get_deeplink(profile_to, bot_data),
-                full_name=Misc.get_iof(profile_to)
+                full_name=profile_to['first_name']
             )
             reply %= dict(
                 deeplink_sender=deeplink_sender,
@@ -2672,8 +2666,6 @@ async def echo_join_channel_request(message: types.Message):
         Нового участника надо завести в базе, если его там нет
         В канал отправится мини- карточка нового участника
     """
-    # Пока код не готов полностью:
-    return
     tg_subscriber = message.from_user
     tg_inviter = message.invite_link.creator
     status, response_subscriber = await Misc.post_tg_user(tg_subscriber)
@@ -2695,6 +2687,72 @@ async def echo_join_channel_request(message: types.Message):
         group_type=message.chat.type,
         user_tg_uid=tg_inviter.id,
     )
+
+    # Сразу доверие c благодарностью от входящего в канал к владельцу канала
+    #
+    post_op = dict(
+        tg_token=settings.TOKEN,
+        operation_type_id=OperationType.TRUST_AND_THANK,
+        tg_user_id_from=tg_subscriber.id,
+        user_id_to=response_inviter['user_id'],
+    )
+    logging.debug('post operation (channel subscriber to inviter), payload: %s' % post_op)
+    status_op, response_op = await Misc.api_request(
+        path='/api/addoperation',
+        method='post',
+        data=post_op,
+    )
+    logging.debug('post operation (channel subscriber to inviter), status: %s' % status_op)
+    logging.debug('post operation (channel subscriber to inviter), response: %s' % response_op)
+
+    bot_data = await bot.get_me()
+    dl_subscriber = Misc.get_deeplink_with_name(response_subscriber, bot_data)
+
+    path = "/profile/?id=%(uuid)s" % dict(uuid=response_subscriber['uuid'],)
+    url = settings.FRONTEND_HOST + path
+    # login_url = Misc.make_login_url(path)
+    # login_url = LoginUrl(url=login_url)
+    inline_btn_go = InlineKeyboardButton(
+        'Друзья',
+        url=url,
+        # login_url=login_url,
+    )
+    dict_reply = dict(
+        operation=OperationType.TRUST_AND_THANK,
+        keyboard_type=KeyboardType.TRUST_THANK_VER_2,
+        sep=KeyboardType.SEP,
+        user_to_id=response_inviter['user_id'],
+        message_to_forward_id='',
+        group_id='',
+    )
+    callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE
+    inline_btn_thank = InlineKeyboardButton(
+        '+Доверие',
+        callback_data=callback_data_template % dict_reply,
+    )
+    reply_markup = InlineKeyboardMarkup()
+    reply_markup.row(inline_btn_go, inline_btn_thank)
+    await bot.send_message(
+        message.chat.id,
+        '%(dl_subscriber)s (%(trust_count)s) подключился к каналу' % dict(
+            dl_subscriber=dl_subscriber,
+            trust_count=response_subscriber['trust_count']
+        ),
+        reply_markup=reply_markup,
+        disable_notification=True,
+    )
+
+    if status_op == 200:
+        dl_inviter = Misc.get_deeplink_with_name(response_inviter, bot_data)
+        await bot.send_message(
+            message.chat.id,
+            '%(dl_subscriber)s увеличил  до %(thanks_count)s доверия к владельцу канала (%(dl_inviter)s)' % dict(
+                dl_subscriber=dl_subscriber,
+                dl_inviter=dl_inviter,
+                thanks_count=response_op['currentstate']['thanks_count'],
+            ),
+            disable_notification=True,
+        )
 
     await bot.approve_chat_join_request(
             message.chat.id,
@@ -2834,7 +2892,6 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 method='post',
                 data=post_op,
             )
-            # может быть статус 400, если уже доверяет
             logging.debug('post operation, status: %s' % status)
             logging.debug('post operation, response: %s' % response)
             # Обновить, ибо уже на доверие больше у него может быть
@@ -2858,8 +2915,8 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             path = "/profile/?id=%(uuid)s" % dict(uuid=response_from['uuid'],)
 
             url = settings.FRONTEND_HOST + path
-            login_url = Misc.make_login_url(path)
-            login_url = LoginUrl(url=login_url)
+            # login_url = Misc.make_login_url(path)
+            # login_url = LoginUrl(url=login_url)
             inline_btn_go = InlineKeyboardButton(
                 'Друзья',
                 url=url,
@@ -2884,20 +2941,14 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             else:
                 # не делать кнопку Доверия для бота, глючит!
                 dict_reply = dict(
+                    operation=OperationType.TRUST_AND_THANK,
                     keyboard_type=KeyboardType.TRUST_THANK_VER_2,
                     sep=KeyboardType.SEP,
                     user_to_id=response_from['user_id'],
                     message_to_forward_id='',
                     group_id=message.chat.id,
                 )
-                callback_data_template = (
-                        '%(keyboard_type)s%(sep)s'
-                        '%(operation)s%(sep)s'
-                        '%(user_to_id)s%(sep)s'
-                        '%(message_to_forward_id)s%(sep)s'
-                        '%(group_id)s%(sep)s'
-                    )
-                dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+                callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE
                 inline_btn_thank = InlineKeyboardButton(
                     '+Доверие',
                     callback_data=callback_data_template % dict_reply,

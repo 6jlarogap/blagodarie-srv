@@ -25,6 +25,14 @@ class OperationType(object):
     SET_FATHER = 9
     SET_MOTHER = 10
 
+    CALLBACK_DATA_TEMPLATE = (
+        '%(keyboard_type)s%(sep)s'
+        '%(operation)s%(sep)s'
+        '%(user_to_id)s%(sep)s'
+        '%(message_to_forward_id)s%(sep)s'
+        '%(group_id)s%(sep)s'
+    )
+
     @classmethod
     def relation_text(cls, is_trust):
         if is_trust is None:
@@ -780,13 +788,7 @@ class Misc(object):
                     message_to_forward_id=message_to_forward_id,
                     group_id=group_id,
                 )
-                callback_data_template = (
-                        '%(keyboard_type)s%(sep)s'
-                        '%(operation)s%(sep)s'
-                        '%(user_to_id)s%(sep)s'
-                        '%(message_to_forward_id)s%(sep)s'
-                        '%(group_id)s%(sep)s'
-                    )
+                callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE
                 show_inline_btn_nullify_trust = True
                 title_thank = 'Доверие'
                 if group_id or \
