@@ -2097,7 +2097,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
             operation_done = True
         elif post_op['operation_type_id'] == OperationType.NULLIFY_TRUST:
             text = 'Доверие к %(full_name_to)s отозвано'
-            text_link = 'Установлено доверие к %(full_name_to_link)s'
+            text_link = 'Доверие к %(full_name_to_link)s отозвано'
             operation_done = True
         elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.THANK):
             thanks_count = response['currentstate']['thanks_count']
