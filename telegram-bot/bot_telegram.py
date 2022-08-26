@@ -2675,6 +2675,11 @@ async def echo_join_channel_request(message: types.Message):
     if status != 200:
         return
 
+    await bot.approve_chat_join_request(
+            message.chat.id,
+            tg_subscriber.id
+    )
+
     await TgGroupMember.add(
         group_chat_id=message.chat.id,
         group_title=message.chat.title,
@@ -2753,11 +2758,6 @@ async def echo_join_channel_request(message: types.Message):
             ),
             disable_notification=True,
         )
-
-    await bot.approve_chat_join_request(
-            message.chat.id,
-            tg_subscriber.id
-    )
 
     if response_subscriber.get('created'):
         await Misc.update_user_photo(bot, tg_subscriber, response_subscriber)
