@@ -122,6 +122,11 @@ class KeyboardType(object):
 
     SHOW_MESSAGES = 29
 
+    # Согласие от входа в канал
+    #
+    CHANNEL_JOIN = 30
+    CHANNEL_REFUSE = 31
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -608,8 +613,27 @@ class Misc(object):
                 method='get',
                 params=params,
             )
-            logging.debug('get_user_profile, status: %s' % status)
-            logging.debug('get_user_profile, response: %s' % response)
+            logging.debug('get_user_profile by uuid, status: %s' % status)
+            logging.debug('get_user_profile by uuid, response: %s' % response)
+        except:
+            status = response = None
+        return status, response
+
+
+    @classmethod
+    async def get_user_by_tg_uid(cls, tg_uid):
+        """
+        Получить данные пользователя по тедеграм ид
+        """
+        params = dict(tg_uid=str(tg_uid))
+        try:
+            status, response = await Misc.api_request(
+                path='/api/profile',
+                method='get',
+                params=params,
+            )
+            logging.debug('get_user_profile by tg_uid, status: %s' % status)
+            logging.debug('get_user_profile by tg_uid, response: %s' % response)
         except:
             status = response = None
         return status, response
@@ -1225,6 +1249,8 @@ class TgGroupMember(object):
             'tg_token': settings.TOKEN,
             'group': {
                 'chat_id': group_chat_id,
+                # могут быть не заданы. Если так, то апи не меняет это, если группа (канал) существуют
+                #
                 'title': group_title,
                 'type': group_type,
             },

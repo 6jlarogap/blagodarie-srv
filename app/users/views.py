@@ -821,6 +821,8 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
             если запрос авторизован.
         с параметром uuid=...
             получить данные по одному пользователю, необязательно родственнику,
+        с параметром tg_uid=...
+            получить данные по пользователю телеграма
         с одним из параметров query, query_ability, query_wish, query_person:
             получить список профилей пользователей,
                 - найденных по фио, ключам, возможностям, потребностям (query),
@@ -965,7 +967,18 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
     def get(self, request):
         try:
             data = dict()
-            if request.GET.get('uuid'):
+            if request.GET.get('tg_uid'):
+                try:
+                    oauth = Oauth.objects.select_related(
+                            'user', 'user__profile', 'user__profile__ability'
+                        ).get(uid=request.GET['tg_uid'])
+                except Oauth.DoesNotExist:
+                    raise ServiceException('Telegram user with uid=%s not found' % request.GET['tg_uid'])
+                profile = oauth.user.profile
+                data = profile.data_dict(request)
+                data.update(profile.tg_data())
+                data.update(user_id=oauth.user.pk)
+            elif request.GET.get('uuid'):
                 if request.GET.get('with_owner'):
                     related = ('user', 'ability','owner','owner__profile')
                 else:
@@ -1590,18 +1603,24 @@ class ApiBotGroupMixin(APIView):
         """
         Создать, если необходимо группу из ее данных, data
         """
-        title = data['title']
-        type_ = data['type']
+        title = data.get('title', '')
+        type_ = data.get('type', '')
         tg_group, created_ = TgGroup.objects.get_or_create(
             chat_id = data['chat_id'],
             defaults={
                 'title': title,
                 'type': type_,
         })
-        if not created_ and (tg_group.title != title or tg_group.type != type_):
-            tg_group.title = title
-            tg_group.type = type_
-            tg_group.save()
+        if not created_:
+            do_save = False
+            if title and tg_group.title != title:
+                do_save = True
+                tg_group.title = title
+            if type_ and tg_group.type != type_:
+                do_save = True
+                tg_group.type = type_
+            if do_save:
+                tg_group.save()
         status_code = status.HTTP_200_OK
         return tg_group, created_
 
@@ -1610,7 +1629,7 @@ class ApiBotGroup(ApiBotGroupMixin, APIView):
     Записать в таблицу TgGroup информацию о группе. Или удалить из таблицы
     """
 
-    def check_data(self, request, method):
+    def check_data(self, request):
         if request.data.get('tg_token', '') != settings.TELEGRAM_BOT_TOKEN:
             raise ServiceException('Неверный токен телеграм бота')
         try:
@@ -1619,13 +1638,10 @@ class ApiBotGroup(ApiBotGroupMixin, APIView):
             chat_id = 0
         if not chat_id:
             raise ServiceException('Не верный chat_id')
-        if method == 'post':
-            if not request.data.get('title') or not request.data.get('type'):
-                raise ServiceException('Не хватает данных: title и/или type')
 
     def post(self, request):
         try:
-            self.check_data(request, method='post')
+            self.check_data(request)
             tg_group, created_ = self.group_post(request.data)
             data = tg_group.data_dict()
             data.update(created=created_)
@@ -1637,7 +1653,7 @@ class ApiBotGroup(ApiBotGroupMixin, APIView):
 
     def delete(self, request):
         try:
-            self.check_data(request, method='delete')
+            self.check_data(request)
             chat_id = request.data['chat_id']
             try:
                 TgGroup.objects.get(chat_id=chat_id).delete()
@@ -1687,8 +1703,6 @@ class ApiBotGroupMember(ApiBotGroupMixin, APIView):
             chat_id = 0
         if not chat_id:
             raise ServiceException('Не верный или отсутствует chat_id для группы')
-        if not group.get('title') or not group.get('type'):
-            raise ServiceException('Не хватает данных группы: title и/или type')
         tg_group, created = self.group_post(group)
         try:
             tg_uid = user.get('tg_uid') or None

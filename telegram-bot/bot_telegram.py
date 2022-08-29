@@ -13,7 +13,8 @@ from aiogram.dispatcher.filters import ChatTypeFilter, Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_polling, start_webhook
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation, CantTalkWithBots
+from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation, CantTalkWithBots, \
+    BadRequest
 from aiogram.utils.parts import safe_split_text
 
 import pymorphy2
@@ -2654,7 +2655,6 @@ async def get_group_id(message: types.Message, state: FSMContext):
         except (ChatNotFound, CantInitiateConversation):
             pass
 
-
 @dp.chat_join_request_handler()
 async def echo_join_channel_request(message: types.Message):
     """
@@ -2668,24 +2668,12 @@ async def echo_join_channel_request(message: types.Message):
     """
     tg_subscriber = message.from_user
     tg_inviter = message.invite_link.creator
-    status, response_subscriber = await Misc.post_tg_user(tg_subscriber)
-    if status != 200:
-        return
     status, response_inviter = await Misc.post_tg_user(tg_inviter)
     if status != 200:
         return
 
-    await bot.approve_chat_join_request(
-            message.chat.id,
-            tg_subscriber.id
-    )
-
-    await TgGroupMember.add(
-        group_chat_id=message.chat.id,
-        group_title=message.chat.title,
-        group_type=message.chat.type,
-        user_tg_uid=tg_subscriber.id,
-    )
+    # Владельца канала сразу в канал. Вдруг его там нет
+    #
     await TgGroupMember.add(
         group_chat_id=message.chat.id,
         group_title=message.chat.title,
@@ -2693,76 +2681,151 @@ async def echo_join_channel_request(message: types.Message):
         user_tg_uid=tg_inviter.id,
     )
 
-    # Сразу доверие c благодарностью от входящего в канал к владельцу канала
-    #
-    post_op = dict(
-        tg_token=settings.TOKEN,
-        operation_type_id=OperationType.TRUST_AND_THANK,
-        tg_user_id_from=tg_subscriber.id,
-        user_id_to=response_inviter['user_id'],
-    )
-    logging.debug('post operation (channel subscriber to inviter), payload: %s' % post_op)
-    status_op, response_op = await Misc.api_request(
-        path='/api/addoperation',
-        method='post',
-        data=post_op,
-    )
-    logging.debug('post operation (channel subscriber to inviter), status: %s' % status_op)
-    logging.debug('post operation (channel subscriber to inviter), response: %s' % response_op)
-
-    bot_data = await bot.get_me()
-    dl_subscriber = Misc.get_deeplink_with_name(response_subscriber, bot_data)
-
-    path = "/profile/?id=%(uuid)s" % dict(uuid=response_subscriber['uuid'],)
-    url = settings.FRONTEND_HOST + path
-    # login_url = Misc.make_login_url(path)
-    # login_url = LoginUrl(url=login_url)
-    inline_btn_go = InlineKeyboardButton(
-        'Друзья',
-        url=url,
-        # login_url=login_url,
-    )
-    dict_reply = dict(
-        operation=OperationType.TRUST_AND_THANK,
-        keyboard_type=KeyboardType.TRUST_THANK_VER_2,
+    dict_callback = dict(
+        keyboard_type=KeyboardType.CHANNEL_JOIN,
+        tg_subscriber_id=tg_subscriber.id,
+        tg_inviter_id=tg_inviter.id,
+        channel_id=message.chat.id,
         sep=KeyboardType.SEP,
-        user_to_id=response_inviter['user_id'],
-        message_to_forward_id='',
-        group_id='',
     )
-    callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE
-    inline_btn_thank = InlineKeyboardButton(
-        '+Доверие',
-        callback_data=callback_data_template % dict_reply,
+    callback_data_template = (
+        '%(keyboard_type)s%(sep)s'
+        '%(tg_subscriber_id)s%(sep)s'
+        '%(tg_inviter_id)s%(sep)s'
+        '%(channel_id)s%(sep)s'
+    )
+    inline_btn_channel_join = InlineKeyboardButton(
+        text='Согласие',
+        callback_data=callback_data_template % dict_callback,
+    )
+    dict_callback.update(keyboard_type=KeyboardType.CHANNEL_REFUSE)
+    inline_btn_channel_refuse = InlineKeyboardButton(
+        text='Отказ',
+        callback_data=callback_data_template % dict_callback,
     )
     reply_markup = InlineKeyboardMarkup()
-    reply_markup.row(inline_btn_go, inline_btn_thank)
+    reply_markup.row(inline_btn_channel_join, inline_btn_channel_refuse)
     await bot.send_message(
-        message.chat.id,
-        '%(dl_subscriber)s (%(trust_count)s) подключился к каналу' % dict(
-            dl_subscriber=dl_subscriber,
-            trust_count=response_subscriber['trust_count']
-        ),
+        chat_id=tg_subscriber.id,
+        text=Misc.help_text(),
         reply_markup=reply_markup,
-        disable_notification=True,
+        disable_web_page_preview=True
     )
 
-    if status_op == 200:
-        dl_inviter = Misc.get_deeplink_with_name(response_inviter, bot_data)
-        await bot.send_message(
-            message.chat.id,
-            '%(dl_subscriber)s увеличил  до %(thanks_count)s доверия к владельцу канала (%(dl_inviter)s)' % dict(
-                dl_subscriber=dl_subscriber,
-                dl_inviter=dl_inviter,
-                thanks_count=response_op['currentstate']['thanks_count'],
-            ),
-            disable_notification=True,
-        )
-
-    if response_subscriber.get('created'):
-        await Misc.update_user_photo(bot, tg_subscriber, response_subscriber)
     if response_inviter.get('created'):
         await Misc.update_user_photo(bot, tg_inviter, response_inviter)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.CHANNEL_JOIN,
+        KeyboardType.SEP,
+        # tg_subscriber_id          # 1
+        # tg_inviter_id             # 2
+        # channel_id                # 3
+    ), c.data
+    ), state=None,
+    )
+async def process_callback_channel_join(callback_query: types.CallbackQuery, state: FSMContext):
+    if callback_query.message:
+        tg_subscriber = callback_query.from_user
+        code = callback_query.data.split(KeyboardType.SEP)
+        try:
+            tg_subscriber_id = int(code[1])
+            if not (tg_subscriber_id and tg_subscriber.id == tg_subscriber_id):
+                return
+            tg_inviter_id = int(code[2])
+            channel_id = int(code[3])
+        except (IndexError, ValueError, TypeError,):
+            return
+        status, response_subscriber = await Misc.post_tg_user(tg_subscriber)
+        if status != 200:
+            return
+        status, response_inviter = await Misc.get_user_by_tg_uid(tg_inviter_id)
+        if status != 200:
+            return
+        await TgGroupMember.add(
+            group_chat_id=channel_id,
+            group_title='',
+            group_type='',
+            user_tg_uid=tg_subscriber_id,
+        )
+        try:
+            await bot.approve_chat_join_request(
+                    channel_id,
+                    tg_subscriber_id
+            )
+        except BadRequest as excpt:
+            msg = 'Наверное, вы уже в канале'
+            try:
+                if excpt.args[0] == 'User_already_participant':
+                    msg = 'Вы уже в канале'
+            except:
+                pass
+            await callback_query.message.reply(msg, disable_web_page_preview=True,)
+            return
+
+        # Сразу доверие c благодарностью от входящего в канал к владельцу канала
+        #
+        post_op = dict(
+            tg_token=settings.TOKEN,
+            operation_type_id=OperationType.TRUST_AND_THANK,
+            tg_user_id_from=tg_subscriber_id,
+            user_id_to=response_inviter['user_id'],
+        )
+        logging.debug('post operation (channel subscriber thanks inviter), payload: %s' % post_op)
+        status_op, response_op = await Misc.api_request(
+            path='/api/addoperation',
+            method='post',
+            data=post_op,
+        )
+        logging.debug('post operation (channel subscriber thanks inviter), status: %s' % status_op)
+        logging.debug('post operation (channel subscriber thanks inviter), response: %s' % response_op)
+
+        bot_data = await bot.get_me()
+        dl_subscriber = Misc.get_deeplink_with_name(response_subscriber, bot_data)
+
+        dl_inviter = Misc.get_deeplink_with_name(response_inviter, bot_data)
+        if status_op == 200:
+            dl_inviter = Misc.get_deeplink_with_name(response_inviter, bot_data)
+            reply = '%(dl_subscriber)s подключен(а) к каналу и увеличил(а)  до %(thanks_count)s доверия к владельцу канала' % dict(
+                dl_subscriber=dl_subscriber,
+                thanks_count=response_op['currentstate']['thanks_count'],
+            )
+        else:
+            reply = '%(dl_subscriber)s подключился к каналу' % dict(
+                dl_subscriber=dl_subscriber,
+            )
+        await bot.send_message(
+            channel_id,
+            reply,
+            disable_notification=True,
+            disable_web_page_preview=True,
+        )
+        await callback_query.message.reply(
+            'Добро пожаловать в канал',
+            disable_web_page_preview=True,
+        )
+        await Misc.put_user_properties(
+            uuid=response_subscriber['uuid'],
+            did_bot_start='1',
+        )
+        if response_subscriber.get('created'):
+            await Misc.update_user_photo(bot, tg_subscriber, response_subscriber)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s)%s' % (
+        KeyboardType.CHANNEL_REFUSE,
+        KeyboardType.SEP,
+        # tg_subscriber_id          # 1
+        # tg_inviter_id             # 2
+        # channel_id                # 3
+    ), c.data
+    ), state=None,
+    )
+async def process_callback_channel_join(callback_query: types.CallbackQuery, state: FSMContext):
+    return
 
 
 @dp.my_chat_member_handler(
