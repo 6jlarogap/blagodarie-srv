@@ -2831,17 +2831,33 @@ async def process_callback_channel_join(callback_query: types.CallbackQuery, sta
 @dp.my_chat_member_handler(
     ChatTypeFilter(chat_type=(types.ChatType.CHANNEL,)),
 )
-async def echo_my_chat_member_for_bot(my_chat_member: types.ChatMemberUpdated):
+async def echo_my_chat_member_for_bot(chat_member: types.ChatMemberUpdated):
     """
     Для формирования ссылки на доверия среди участников канала
+
+    Реакция на подключение к каналу бота
     """
-    # Пока код не готов полностью:
-    return
-    await bot.send_message(
-        channel_id,
-        text='Привет',
-        disable_web_page_preview=True,
-    )
+    new_chat_member = chat_member.new_chat_member
+    bot_ = new_chat_member.user
+    if bot_.is_bot and new_chat_member.status == 'administrator' and bot_.first_name:
+        reply_markup = InlineKeyboardMarkup()
+        #inline_btn_map = InlineKeyboardButton('Карта', url=settings.MAP_HOST)
+        inline_btn_trusts = InlineKeyboardButton(
+            'Доверие',
+            url='%(group_host)s/?tg_group_chat_id=%(chat_id)s' % dict(
+                group_host=settings.GROUP_HOST,
+                chat_id=chat_member.chat.id,
+        ))
+        reply_markup.row(
+            inline_btn_trusts,
+            #inline_btn_map
+        )
+        await bot.send_message(
+            chat_id=chat_member.chat.id,
+            text=bot_.first_name,
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
+        )
 
 
 @dp.message_handler(

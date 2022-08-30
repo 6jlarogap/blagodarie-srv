@@ -37,6 +37,10 @@ API_HOST = 'https://api.blagodarie.org'
 FRONTEND_HOST = 'https://blagodarie.org'
 FRONTEND_HOST_TITLE = 'БлагоРода'
 
+# Карта всех пользователей с кластеризацией
+#
+MAP_HOST = 'https://map.blagodarie.org'
+
 # Ссылка на отношения в группе
 #
 GROUP_HOST = 'https://group.blagodarie.org'
