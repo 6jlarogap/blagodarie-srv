@@ -2373,8 +2373,19 @@ async def location(message: types.Message, state: FSMContext):
             await message.reply('Координаты записаны', reply_markup=types.reply_keyboard.ReplyKeyboardRemove())
     else:
         # text message, отмена или ввел что-то
+        reply = 'Выберите что-то из кнопок снизу'
+        try:
+            message_text = message.text
+            if message_text != Misc.PROMPT_CANCEL_LOCATION:
+                await message.reply(
+                    'Надо что-то выбрать: <u>%s</u> или <u>%s</u>, из кнопок снизу' % (
+                        Misc.PROMPT_LOCATION, Misc.PROMPT_CANCEL_LOCATION
+                ))
+                return
+        except AttributeError:
+            pass
         await message.reply(
-            'Это отказ задавать местоположение',
+            'Вы отказались задавать местоположение',
             reply_markup=types.reply_keyboard.ReplyKeyboardRemove()
         )
     await Misc.state_finish(state)
