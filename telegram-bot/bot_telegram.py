@@ -65,6 +65,12 @@ class FSMkey(StatesGroup):
 class FSMquery(StatesGroup):
     ask = State()
 
+class FSMgeo(StatesGroup):
+    geo = State()
+
+class FSMtrip(StatesGroup):
+    geo = State()
+
 # Отслеживаем по каждой группе (ключ этого словаря),
 # кто был автором последнего сообщения в группу.
 # Если юзер отправит два сообщения подряд, то
@@ -2234,15 +2240,25 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         await Misc.update_user_photo(bot, tg_user_sender, response_sender)
 
 
-async def geo(message: types.Message, uuid=None):
-    keyboard = types.ReplyKeyboardMarkup(row_width=1, resize_keyboard=True, one_time_keyboard=True)
-    button_geo = types.KeyboardButton(text="Отправить местоположение", request_location=True)
-    keyboard.add(button_geo)
+async def geo(message, state, state_to_set, uuid=None):
+    # Здесь вынужден отказаться от параметра , one_time_keyboard=True
+    # Не убирает телеграм "нижнюю" клавиатуру в мобильных клиентах!
+    # Убираю "вручную", сообщением с reply_markup=types.reply_keyboard.ReplyKeyboardRemove()
+    #
+    keyboard = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True, one_time_keyboard=False)
+    button_geo = types.KeyboardButton(text=Misc.PROMPT_LOCATION, request_location=True)
+    button_cancel = types.KeyboardButton(text=Misc.PROMPT_CANCEL_LOCATION)
+    keyboard.add(button_geo, button_cancel)
+    await state_to_set.set()
     state = dp.current_state()
     if uuid:
         async with state.proxy() as data:
             data['uuid'] = uuid
-    await bot.send_message(message.chat.id, 'Пожалуйста, нажмите на кнопку "Отправить местоположение" снизу', reply_markup=keyboard)
+    await bot.send_message(
+        message.chat.id,
+        'Пожалуйста, нажмите на кнопку "%s" снизу' % Misc.PROMPT_LOCATION,
+        reply_markup=keyboard
+    )
 
 
 @dp.message_handler(
@@ -2251,7 +2267,7 @@ async def geo(message: types.Message, uuid=None):
     state=None,
 )
 async def geo_command_handler(message: types.Message, state: FSMContext):
-    await geo(message)
+    await geo(message, state, FSMgeo.geo)
 
 
 @dp.callback_query_handler(
@@ -2282,19 +2298,48 @@ async def process_callback_location(callback_query: types.CallbackQuery, state: 
                 return
         except IndexError:
             uuid = None
-        await geo(callback_query.message, uuid)
+        await geo(callback_query.message, state, FSMgeo.geo, uuid)
 
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    content_types=['location',],
+    commands=('trip',),
     state=None,
+)
+async def trip_geo_command_handler(message: types.Message, state: FSMContext):
+    await geo(message, state, FSMtrip.geo)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=['location', ContentType.TEXT],
+    state=FSMtrip.geo,
+)
+async def location_trip(message: types.Message, state: FSMContext):
+    if message.location is not None:
+        try:
+            latitude = getattr(message.location, 'latitude')
+            longitude = getattr(message.location, 'longitude')
+        except AttributeError:
+            pass
+        if latitude and longitude:
+            pass
+    await message.reply(
+        'Ok.\nПока по команде /trip ничего не делается, даже если Вы отправили боту локацию',
+        reply_markup=types.reply_keyboard.ReplyKeyboardRemove()
+    )
+    await state.finish()
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=['location', ContentType.TEXT],
+    state=FSMgeo.geo,
 )
 async def location(message: types.Message, state: FSMContext):
     """
     Записать местоположение пользователя телеграма или uuid в состоянии
     """
-    state = dp.current_state()
     if message.location is not None:
         user_uuid = None
         async with state.proxy() as data:
@@ -2325,6 +2370,13 @@ async def location(message: types.Message, state: FSMContext):
                         bot_data,
                         response_from=response_sender,
                     )
+            await message.reply('Координаты записаны', reply_markup=types.reply_keyboard.ReplyKeyboardRemove())
+    else:
+        # text message, отмена или ввел что-то
+        await message.reply(
+            'Это отказ задавать местоположение',
+            reply_markup=types.reply_keyboard.ReplyKeyboardRemove()
+        )
     await Misc.state_finish(state)
 
 

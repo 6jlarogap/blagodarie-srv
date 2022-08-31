@@ -254,6 +254,9 @@ class Misc(object):
     FORMAT_DATE = '%d.%m.%Y'
     FORMAT_TIME = '%H:%M:%S'
 
+    PROMPT_CANCEL_LOCATION = 'Отмена'
+    PROMPT_LOCATION = 'Отправить местоположение'
+
     @classmethod
     def datetime_string(cls, timestamp, with_timezone=True):
         dt = datetime.datetime.fromtimestamp(timestamp)
