@@ -1740,7 +1740,7 @@ class ApiBotGroupMember(ApiBotGroupMixin, APIView):
 
 api_bot_groupmember = ApiBotGroupMember.as_view()
 
-class ApiUserPoints(FrontendMixin, TelegramApiMixin, APIView):
+class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
 
     def get(self, request):
         """
@@ -1752,7 +1752,18 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, APIView):
         #
         lat_avg = 55.7522200
         lng_avg = 37.6155600
-
+        found_coordinates = False
+        first_name = ''
+        if request.GET.get('uuid'):
+            try:
+                user, profile = self.check_user_uuid(request.GET['uuid'], related=('user',))
+                first_name = user.first_name
+                found_coordinates = bool(profile.latitude and profile.longitude)
+                if found_coordinates:
+                    lat_avg = profile.latitude
+                    lng_avg = profile.longitude
+            except ServiceException:
+                pass
         bot_username = self.get_bot_username()
         lat_sum = lng_sum = 0
         points = []
@@ -1777,12 +1788,19 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, APIView):
                 title='(%(trust_count)s) %(full_name)s' % dict_user,
                 popup='(%(trust_count)s) %(link)s' % dict_user,
             ))
-            lat_sum += profile.latitude
-            lng_sum += profile.longitude
-        if (points):
+            if not found_coordinates:
+                lat_sum += profile.latitude
+                lng_sum += profile.longitude
+        if points and not found_coordinates:
             lat_avg = lat_sum / len(points)
             lng_avg = lng_sum / len(points)
-        data = dict(lat_avg=lat_avg, lng_avg=lng_avg, points=points)
+        data = dict(
+            first_name=first_name,
+            found_coordinates=found_coordinates,
+            lat_avg=lat_avg,
+            lng_avg=lng_avg,
+            points=points
+        )
         return Response(data=data, status=200)
 
 api_user_points = ApiUserPoints.as_view()
