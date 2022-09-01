@@ -451,6 +451,14 @@ class Misc(object):
 
 
     @classmethod
+    def url_user_on_map(cls, response):
+        return '%(map_host)s/?uuid=%(user_uuid)s' % dict(
+            map_host=settings.MAP_HOST,
+            user_uuid=response['uuid'],
+        )
+
+
+    @classmethod
     def reply_user_card(cls, response, bot_data, show_parents=False):
         """
         Карточка пользователя, каким он на сайте
@@ -506,10 +514,7 @@ class Misc(object):
         reply += ('Потребности: %s' % wishes_text) + '\n\n'
 
         map_text = (
-            '<a href="%(frontend_host)s/profile/?id=%(user_from_uuid)s&q=0&map_visible=true">тут</a>'
-        ) % dict(
-            frontend_host=settings.FRONTEND_HOST,
-            user_from_uuid=response['uuid'],
+            '<a href="%s">тут</a>' % cls.url_user_on_map(response)
         ) if response.get('latitude') is not None and response.get('longitude') is not None \
             else  'не задано'
         reply += ('Местоположение: %s' % map_text) + '\n\n'
