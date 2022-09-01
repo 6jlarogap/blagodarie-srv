@@ -1494,6 +1494,17 @@ async def do_process_wish(message: types.Message, uuid=None):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('map', 'карта'),
+    state=None,
+)
+async def process_command_map(message):
+    await bot.send_message(
+        message.from_user.id,
+        text=Misc.get_html_a(href=settings.MAP_HOST,text='Карта участников')
+    )
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     commands=('setvozm', 'возможности'),
     state=None,
 )

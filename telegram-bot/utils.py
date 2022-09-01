@@ -293,6 +293,11 @@ class Misc(object):
 
 
     @classmethod
+    def get_html_a(cls, href, text):
+        return '<a href="%s">%s</a>' % (href, text)
+
+
+    @classmethod
     def help_text(cls):
         return (
             'Инструкция:\n'
@@ -447,7 +452,7 @@ class Misc(object):
         Получить ссылку типа https://t.me/BotNameBot?start=:uuid с именем
         """
         href = cls.get_deeplink(response, bot_data, https=True)
-        return '<a href="%s">%s</a>' % (href, cls.get_iof(response))
+        return cls.get_hml_a(href, cls.get_iof(response))
 
 
     @classmethod
