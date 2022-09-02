@@ -11,3 +11,7 @@ pytils
 skyfield==1.39
 
 Pillow
+
+piexif
+
+geopy
