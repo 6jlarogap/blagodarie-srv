@@ -12,6 +12,9 @@ from app.utils import ServiceException
 
 from restthumbnails.files import ThumbnailContentFile
 
+from geopy.extra.rate_limiter import RateLimiter
+from geopy.geocoders import Nominatim
+
 from django.conf import settings
 
 class UnclearDate:
@@ -421,6 +424,38 @@ class GeoPointModel(models.Model):
     """
     latitude = models.FloatField(_("Широта"), blank=True, null=True)
     longitude = models.FloatField(_("Долгота"), blank=True, null=True)
+
+    class Meta:
+        abstract = True
+
+class GeoPointAddressModel(GeoPointModel):
+    """
+    Базовая GEO модель, с расшифровкой координат в адрес
+    """
+    address = models.TextField(verbose_name=_("Адрес"), null=True, blank=True)
+
+    @classmethod
+    def coordinates_to_address(cls, latitude, longitude):
+        result = None
+        if latitude is not None and longitude is not None:
+            geolocator = Nominatim(user_agent='blagodarie.org.geocoder')
+            reverse = RateLimiter(geolocator.reverse, min_delay_seconds=1)
+            raw = reverse('%s,%s' % (latitude, longitude,))
+            if raw:
+                result = raw.address
+        return result
+
+    def put_geodata(self, latitude, longitude, save=True):
+        if latitude != self.latitude or longitude != self.longitude:
+            changed = True
+            self.latitude = latitude
+            self.longitude = longitude
+            self.address = GeoPointAddressModel.coordinates_to_address(self.latitude, self.longitude)
+            if save:
+                self.save(update_fields=('latitude', 'longitude', 'address',))
+        else:
+            changed = False
+        return changed
 
     class Meta:
         abstract = True

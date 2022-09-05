@@ -19,7 +19,7 @@ get_model = apps.get_model
 
 from app.models import UnclearDateModelField, GenderMixin
 
-from app.models import BaseModelInsertUpdateTimestamp, BaseModelInsertTimestamp, PhotoModel, GeoPointModel
+from app.models import BaseModelInsertUpdateTimestamp, BaseModelInsertTimestamp, PhotoModel, GeoPointAddressModel
 from app.utils import ServiceException
 
 class TgGroup(BaseModelInsertTimestamp):
@@ -351,7 +351,7 @@ class Oauth(BaseModelInsertUpdateTimestamp):
                 result['code'] = 400
         return result
 
-class Profile(PhotoModel, GeoPointModel):
+class Profile(PhotoModel, GeoPointAddressModel):
 
     user = models.OneToOneField('auth.User', on_delete=models.CASCADE)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
@@ -393,6 +393,7 @@ class Profile(PhotoModel, GeoPointModel):
             is_active=user.is_active,
             latitude=self.latitude,
             longitude=self.longitude,
+            address=self.address,
             ability=self.ability and self.ability.text or None,
             gender=self.gender,
             dob=self.dob and self.dob.str_safe() or None,
@@ -696,6 +697,11 @@ class CreateUserMixin(object):
                 except IntegrityError:
                     continue
         if user:
+            try:
+                latitude = float(latitude)
+                longitude = float(longitude)
+            except (ValueError, TypeError,):
+                latitude = longitude = None
             Profile.objects.create(
                 user=user,
                 middle_name='',
@@ -706,6 +712,7 @@ class CreateUserMixin(object):
                 gender=gender,
                 latitude=latitude,
                 longitude=longitude,
+                address=GeoPointAddressModel.coordinates_to_address(latitude, longitude),
                 comment=comment,
             )
         return user

@@ -2371,6 +2371,7 @@ async def location(message: types.Message, state: FSMContext):
                     latitude = latitude,
                     longitude = longitude,
                 )
+                reply_markup = types.reply_keyboard.ReplyKeyboardRemove()
                 if status == 200:
                     await Misc.show_cards(
                         [response],
@@ -2378,7 +2379,9 @@ async def location(message: types.Message, state: FSMContext):
                         bot_data,
                         response_from=response_sender,
                     )
-            await message.reply('Координаты записаны', reply_markup=types.reply_keyboard.ReplyKeyboardRemove())
+                    await message.reply('Координаты записаны', reply_markup=reply_markup)
+                else:
+                    await message.reply('Ошибка записи координат', reply_markup=reply_markup)
     else:
         # text message, отмена или ввел что-то
         reply = 'Выберите что-то из кнопок снизу'

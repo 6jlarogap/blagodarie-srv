@@ -1283,8 +1283,8 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                 dod=dod,
                 is_active=False,
                 gender=gender_new,
-                latitude=request.data.get('latitude') or None,
-                longitude=request.data.get('longitude') or None,
+                latitude=request.data['latitude'] if 'latitude' in request.data else None,
+                longitude=request.data['longitude'] if 'longitude' in request.data else None,
                 comment=request.data.get('comment') or None,
             )
 
@@ -1382,9 +1382,17 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                 user.last_name = ''
                 user.first_name = first_name
 
-            for f in ('latitude', 'longitude', 'comment', 'gender', ):
+            for f in ('comment', 'gender', ):
                 if f in  request.data:
                     setattr(profile, f, request.data[f] or None)
+            if 'latitude' in request.data and 'longitude' in request.data:
+                latitude = longitude = None
+                try:
+                    latitude = float(request.data['latitude'])
+                    longitude = float(request.data['longitude'])
+                except (ValueError, TypeError,):
+                    pass
+                profile.put_geodata(latitude, longitude, save=False)
             if 'is_notified' in request.data and user == request.user:
                 profile.is_notified = bool(request.data.get('is_notified'))
             if 'photo' in request.data:
@@ -1454,7 +1462,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                     pass
             for f in ('photo', 'photo_original_filename', 'photo_url', 'middle_name',):
                 setattr(profile, f, '')
-            for f in ('latitude', 'longitude', 'gender', 'ability', 'comment',):
+            for f in ('latitude', 'longitude', 'gender', 'ability', 'comment', 'address',):
                 setattr(profile, f, None)
             profile.delete_from_media()
             profile.photo = None

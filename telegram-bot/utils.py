@@ -524,7 +524,7 @@ class Misc(object):
         reply += ('Потребности: %s' % wishes_text) + '\n\n'
 
         map_text = (
-            cls.get_html_a(cls.url_user_on_map(response), 'тут')
+            cls.get_html_a(cls.url_user_on_map(response), response.get('address') or 'тут')
         ) if response.get('latitude') is not None and response.get('longitude') is not None \
             else  'не задано'
         reply += ('Местоположение: %s' % map_text) + '\n\n'
@@ -1124,6 +1124,7 @@ class Misc(object):
         logging.debug('put tg_user_data...')
         payload = dict(tg_token=settings.TOKEN,)
         payload.update(**kwargs)
+        logging.debug('put user_data, payload: %s' % payload)
         status, response = await Misc.api_request(
             path='/api/profile',
             method='put',
