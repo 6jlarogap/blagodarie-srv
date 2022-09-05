@@ -2216,10 +2216,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
             reply = 'Получено доверие от'
 
         if reply:
-            reply += ' ' + Misc.get_html_a(
-                Misc.get_deeplink(response_sender, bot_data),
-                response_sender['first_name'],
-            )
+            reply += ' ' + Misc.get_deeplink_with_name(response_sender, bot_data)
 
             if message_to_forward_id:
                 try:

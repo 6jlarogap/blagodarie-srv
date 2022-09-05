@@ -447,12 +447,17 @@ class Misc(object):
 
 
     @classmethod
-    def get_deeplink_with_name(cls, response, bot_data):
+    def get_deeplink_with_name(cls, response, bot_data, with_lifetime_years=False):
         """
-        Получить ссылку типа https://t.me/BotNameBot?start=:uuid с именем
+        Получить ссылку типа https://t.me/BotNameBot?start=:uuid с именем и возможно, с годами жизни
         """
         href = cls.get_deeplink(response, bot_data, https=True)
-        return cls.get_html_a(href, cls.get_iof(response))
+        iof = response['first_name']
+        if with_lifetime_years:
+            lifetime_years_str = cls.get_lifetime_years_str(response)
+            if lifetime_years_str:
+                iof += ', ' + lifetime_years_str
+        return cls.get_html_a(href, iof)
 
 
     @classmethod
@@ -491,7 +496,7 @@ class Misc(object):
         """
         if not response:
             return ''
-        iof = cls.get_iof(response)
+        iof = response['first_name']
         lifetime_str = response.get('owner_id') and cls.get_lifetime_str(response) or ''
         if lifetime_str:
             lifetime_str += '\n'
@@ -526,15 +531,15 @@ class Misc(object):
 
         if show_parents:
             papa = response.get('father') and \
-                   cls.get_iof_deeplink(response['father'], bot_data, with_lifetime_years=True) or \
+                   cls.get_deeplink_with_name(response['father'], bot_data, with_lifetime_years=True) or \
                    'не задан'
             mama = response.get('mother') and \
-                   cls.get_iof_deeplink(response['mother'], bot_data, with_lifetime_years=True) or \
+                   cls.get_deeplink_with_name(response['mother'], bot_data, with_lifetime_years=True) or \
                    'не задана'
             if response.get('children'):
                 children = '\n'
                 for child in response['children']:
-                    children += ' ' + cls.get_iof_deeplink(child, bot_data, with_lifetime_years=True) + '\n'
+                    children += ' ' + cls.get_deeplink_with_name(child, bot_data, with_lifetime_years=True) + '\n'
             else:
                 children = 'не заданы\n'
             parents = (
@@ -733,7 +738,7 @@ class Misc(object):
                 continue
             else:
                 uuids.append(response['uuid'])
-                reply += Misc.get_iof_deeplink(response, bot_data, with_lifetime_years=True) +'\n'
+                reply += Misc.get_deeplink_with_name(response, bot_data, with_lifetime_years=True) +'\n'
         if reply:
             parts = safe_split_text(reply, split_separator='\n')
             for part in parts:
@@ -1017,30 +1022,6 @@ class Misc(object):
         if response.get('dod'):
             lifetime += " – %s" % response['dod'][-4:]
         return lifetime
-
-
-    @classmethod
-    def get_iof(cls, response, with_lifetime_years=False):
-        last_name = response.get('last_name', '') or ''
-        first_name = response.get('first_name', '') or ''
-        middle_name = response.get('middle_name', '') or ''
-        if middle_name and not first_name:
-            result = (last_name or '').strip()
-        else:
-            result = " ".join(((first_name or ''), (middle_name or ''), (last_name or ''),)).strip()
-        result = re.sub(r'\s{2,}', ' ', result) or 'Без имени'
-        if with_lifetime_years:
-            lifetime_years_str = cls.get_lifetime_years_str(response)
-            if lifetime_years_str:
-                result += ', ' + lifetime_years_str
-        return result
-
-
-    @classmethod
-    def get_iof_deeplink(cls, response, bot_data, with_lifetime_years=False):
-        deeplink = cls.get_deeplink(response, bot_data)
-        iof = cls.get_iof(response, with_lifetime_years=with_lifetime_years)
-        return cls.get_html_a(deeplink, iof)
 
 
     @classmethod
