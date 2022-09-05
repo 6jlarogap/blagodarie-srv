@@ -452,7 +452,7 @@ class Misc(object):
         Получить ссылку типа https://t.me/BotNameBot?start=:uuid с именем
         """
         href = cls.get_deeplink(response, bot_data, https=True)
-        return cls.get_hml_a(href, cls.get_iof(response))
+        return cls.get_html_a(href, cls.get_iof(response))
 
 
     @classmethod
@@ -519,7 +519,7 @@ class Misc(object):
         reply += ('Потребности: %s' % wishes_text) + '\n\n'
 
         map_text = (
-            '<a href="%s">тут</a>' % cls.url_user_on_map(response)
+            cls.get_html_a(cls.url_user_on_map(response), 'тут')
         ) if response.get('latitude') is not None and response.get('longitude') is not None \
             else  'не задано'
         reply += ('Местоположение: %s' % map_text) + '\n\n'
@@ -1040,7 +1040,7 @@ class Misc(object):
     def get_iof_deeplink(cls, response, bot_data, with_lifetime_years=False):
         deeplink = cls.get_deeplink(response, bot_data)
         iof = cls.get_iof(response, with_lifetime_years=with_lifetime_years)
-        return '<a href="%(deeplink)s">%(iof)s</a>' % dict(deeplink=deeplink, iof=iof,)
+        return cls.get_html_a(deeplink, iof)
 
 
     @classmethod

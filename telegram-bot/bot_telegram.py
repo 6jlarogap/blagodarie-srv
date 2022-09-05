@@ -1835,7 +1835,7 @@ async def process_callback_photo_remove(callback_query: types.CallbackQuery, sta
             )
             reply_markup = InlineKeyboardMarkup()
             reply_markup.row(inline_button_cancel, inline_btn_remove)
-            full_name = Misc.get_iof(response)
+            full_name = response['first_name']
             prompt_photo_confirm = (
                 'Подтвердите <b>удаление фото</b> у:\n'
                 '<b>%s</b>\n' % full_name
@@ -2216,9 +2216,9 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
             reply = 'Получено доверие от'
 
         if reply:
-            reply += ' <a href="%(dl_sender)s">%(full_name_sender)s</a>' % dict(
-                dl_sender=Misc.get_deeplink(response_sender, bot_data),
-                full_name_sender=tg_user_sender.full_name,
+            reply += ' ' + Misc.get_html_a(
+                Misc.get_deeplink(response_sender, bot_data),
+                response_sender['first_name'],
             )
 
             if message_to_forward_id:
@@ -3023,15 +3023,14 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             if status != 200:
                 continue
 
-        reply_template = '<b><a href="%(deeplink)s">%(full_name)s</a></b>'
+        reply_template = '<b>%(deeplink_with_name)s</b>'
         is_this_bot = str(bot_data.id) == str(response_from['tg_uid'])
         trust_count = response_from.get('trust_count')
         if (trust_count is not None) and not (is_this_bot and tg_users_new):
             reply_template += ' (%(trust_count)s)'
         reply = reply_template % dict(
-            full_name=response_from['first_name'],
+            deeplink_with_name=Misc.get_deeplink_with_name(response_from, bot_data),
             trust_count=trust_count,
-            deeplink=Misc.get_deeplink(response_from, bot_data),
         )
 
         if not is_previous_his:
