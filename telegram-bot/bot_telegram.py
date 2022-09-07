@@ -2050,7 +2050,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         <group_id>                          # 4
         <KeyboardType.SEP>
         ''                                  # 5
-        например: 2~2~326~387~62525~-52626~
+        например: 2~2~326~62525~-52626~
     """
     code = callback_query.data.split(KeyboardType.SEP)
     tg_user_sender = callback_query.from_user

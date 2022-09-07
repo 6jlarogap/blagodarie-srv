@@ -559,6 +559,38 @@ class Profile(PhotoModel, GeoPointAddressModel):
             self_token = Token.objects.get(user=user)
         except Token.DoesNotExist:
             Token.objects.filter(user=user_from).update(user=user)
+
+        profile_from_deleted = False
+        active_to_owned = False
+        if self.owner and not profile_from.owner:
+            active_to_owned = True
+
+            # Мигрируем not owned user (profile_from, user_from) -> owned user (self, user)
+            # - uuid берем от активного (not-owned user)
+            # - owned user пестает быть owned
+            # -     посему делаем ему Token
+            # - у мигрируемого пользователя могут быть owned. Удаляем их
+            #       TODO: рассмотреть это как опцию
+
+            profile_from_uuid = profile_from.uuid
+            for p in Profile.objects.filter(owner=user_from):
+                p.delete()
+                p.user.delete()
+            profile_from.delete()
+            profile_from_deleted = True
+            self.uuid = profile_from_uuid
+            self.owner = None
+            self.save(update_fields=('uuid', 'owner',))
+            user.first_name = user_from.first_name
+            user.save(update_fields=('first_name',))
+            Token.objects.get_or_create(user=user)
+
+        if not profile_from_deleted:
+            # Просто user_from.delete() удаляет profile из базы,
+            # но не отрабатывект метод Profile.delete()
+            profile_from.delete()
+
+        user_from_id = user_from.id
         user_from.delete()
 
     def recount_sum_thanks_count(self, do_save=True):
