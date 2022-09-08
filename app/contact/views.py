@@ -601,7 +601,6 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin,
             "timestamp": 1593527855
         }
         """
-
         try:
             try:
                 operationtype_id = int(request.data.get("operation_type_id"))

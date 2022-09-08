@@ -2043,7 +2043,13 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         <KeyboardType.SEP>
         <operation_type_id>                 # 1
         <KeyboardType.SEP>
-        <user_to_id>                        # 2
+
+        <user_to_uuid (без знаков -)>       # 2
+            ИЛИ
+        <user_uuid_to>
+            :   так было раньше, но отказался,
+                нечего использовать user_id в вызовах апи!
+
         <KeyboardType.SEP>
         <message_to_forward_id>             # 3
         <KeyboardType.SEP>
@@ -2059,8 +2065,16 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
             tg_token=settings.TOKEN,
             operation_type_id=int(code[1]),
             tg_user_id_from=str(tg_user_sender.id),
-            user_id_to=int(code[2]),
         )
+        user_uuid_to = Misc.uuid_from_text(code[2], unstrip=True)
+        if user_uuid_to:
+            post_op.update(user_uuid_to=user_uuid_to)
+        else:
+            try:
+                user_id_to=int(code[2])
+                post_op.update(user_id_to=user_id_to)
+            except ValueError:
+                return
         try:
             message_to_forward_id = int(code[3])
         except (ValueError, IndexError,):
@@ -2816,7 +2830,7 @@ async def process_callback_channel_join(callback_query: types.CallbackQuery, sta
             tg_token=settings.TOKEN,
             operation_type_id=OperationType.TRUST_AND_THANK,
             tg_user_id_from=tg_subscriber_id,
-            user_id_to=response_inviter['user_id'],
+            user_uuid_to=response_inviter['uuid'],
         )
         logging.debug('post operation (channel subscriber thanks inviter), payload: %s' % post_op)
         status_op, response_op = await Misc.api_request(
@@ -3008,7 +3022,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 tg_token=settings.TOKEN,
                 operation_type_id=OperationType.TRUST_AND_THANK,
                 tg_user_id_from=tg_user_sender.id,
-                user_id_to=response_from['user_id'],
+                user_uuid_to=response_from['uuid'],
             )
             logging.debug('post operation, payload: %s' % post_op)
             status, response = await Misc.api_request(
@@ -3067,7 +3081,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                     operation=OperationType.TRUST_AND_THANK,
                     keyboard_type=KeyboardType.TRUST_THANK_VER_2,
                     sep=KeyboardType.SEP,
-                    user_to_id=response_from['user_id'],
+                    user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
                     message_to_forward_id='',
                     group_id=message.chat.id,
                 )

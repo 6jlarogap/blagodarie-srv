@@ -28,7 +28,7 @@ class OperationType(object):
     CALLBACK_DATA_TEMPLATE = (
         '%(keyboard_type)s%(sep)s'
         '%(operation)s%(sep)s'
-        '%(user_to_id)s%(sep)s'
+        '%(user_to_uuid_stripped)s%(sep)s'
         '%(message_to_forward_id)s%(sep)s'
         '%(group_id)s%(sep)s'
     )
@@ -834,7 +834,7 @@ class Misc(object):
                 dict_reply = dict(
                     keyboard_type=KeyboardType.TRUST_THANK_VER_2,
                     sep=KeyboardType.SEP,
-                    user_to_id=response_to['user_id'],
+                    user_to_uuid_stripped=cls.uuid_strip(response_to['uuid']),
                     message_to_forward_id=message_to_forward_id,
                     group_id=group_id,
                 )
@@ -1173,8 +1173,10 @@ class Misc(object):
         return result
 
     @classmethod
-    def uuid_from_text(cls, text):
+    def uuid_from_text(cls, text, unstrip=False):
         user_uuid_to = None
+        if unstrip:
+            text = '%s-%s-%s-%s-%s'% (text[0:8], text[8:12], text[12:16], text[16:20], text[20:])
         m = re.search(cls.UUID_PATTERN, text)
         if m:
             s = m.group(0)
@@ -1185,6 +1187,15 @@ class Misc(object):
                 pass
         return user_uuid_to
 
+
+    @classmethod
+    def uuid_strip(cls, uuid):
+        """
+        Убрать - в uuid
+
+        Экономим место для callback_data в inline кнопках
+        """
+        return uuid.replace('-', '')
 
     @classmethod
     async def search_users(cls, what, search_phrase, *args, **kwargs):
