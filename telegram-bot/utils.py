@@ -682,7 +682,7 @@ class Misc(object):
         """
         Проверить, принадлежит ли uuid к owner_tg_user или им является
 
-        При check_relative проверяет исключительно, принадлежит ли.
+        При check_onwed_only проверяет исключительно, принадлежит ли.
         Если принадлежит и им является, то возвращает данные из апи по owner_tg_user,
         а внутри словарь response_uuid, данные из апи по uuid:
         """
@@ -872,8 +872,6 @@ class Misc(object):
             if is_own_account or is_owned_account:
                 # Карточка самому пользователю или его родственнику
                 #
-                uuid = response_to['uuid'] if is_owned_account else ''
-
                 inline_btn_other = InlineKeyboardButton(
                     'Пол и даты' if is_owned_account else 'Пол и дата рождения',
                     callback_data=callback_data_template % dict(
@@ -882,10 +880,17 @@ class Misc(object):
                     sep=KeyboardType.SEP,
                 ))
                 inline_btn_location = InlineKeyboardButton(
-                    'Местоположение' if is_own_account else 'Место',
+                    'Место',
                     callback_data=callback_data_template % dict(
                     keyboard_type=KeyboardType.LOCATION,
-                    uuid=uuid,
+                    uuid=response_to['uuid'] if is_owned_account else '',
+                    sep=KeyboardType.SEP,
+                ))
+                inline_btn_photo = InlineKeyboardButton(
+                    'Фото',
+                    callback_data=callback_data_template % dict(
+                    keyboard_type=KeyboardType.PHOTO,
+                    uuid=response_to['uuid'],
                     sep=KeyboardType.SEP,
                 ))
 
@@ -897,13 +902,6 @@ class Misc(object):
                         uuid=response_to['uuid'],
                         sep=KeyboardType.SEP,
                     ))
-                    inline_btn_photo = InlineKeyboardButton(
-                        'Фото',
-                        callback_data=callback_data_template % dict(
-                        keyboard_type=KeyboardType.PHOTO,
-                        uuid=uuid,
-                        sep=KeyboardType.SEP,
-                    ))
                     reply_markup.row(
                         inline_btn_iof,
                         inline_btn_other,
@@ -911,7 +909,7 @@ class Misc(object):
                         inline_btn_location
                     )
                 else:
-                    reply_markup.row(inline_btn_other, inline_btn_location)
+                    reply_markup.row(inline_btn_other, inline_btn_location, inline_btn_photo)
 
                 dict_papa_mama = dict(
                     keyboard_type=KeyboardType.FATHER,
@@ -952,7 +950,7 @@ class Misc(object):
 
                 dict_abwishkey = dict(
                     keyboard_type=KeyboardType.ABILITY,
-                    uuid=uuid,
+                    uuid=response_to['uuid'] if is_owned_account else '',
                     sep=KeyboardType.SEP,
                 )
                 inline_btn_ability = InlineKeyboardButton(

@@ -1714,7 +1714,7 @@ async def put_wish(message: types.Message, state: FSMContext):
     state=FSMphoto.ask,
 )
 async def put_photo(message: types.Message, state: FSMContext):
-    if message.content_type != ContentType.PHOTO:
+    if message.content_type not in (ContentType.PHOTO, ContentType.DOCUMENT):
         reply_markup = Misc.reply_markup_cancel_row()
         await message.reply(
             Misc.MSG_ERROR_PHOTO_ONLY + '\n\n' + \
@@ -1734,14 +1734,20 @@ async def put_photo(message: types.Message, state: FSMContext):
             data['uuid'] = ''
         if user_uuid:
             image = BytesIO()
-            await message.photo[-1].download(destination_file=image)
+            if message.content_type == ContentType.PHOTO:
+                await message.photo[-1].download(destination_file=image)
+            else:
+                # document
+                await message.document.download(destination_file=image)
             image = base64.b64encode(image.read()).decode('UTF-8')
             status, response = await Misc.put_user_properties(
                 uuid=user_uuid,
                 photo=image,
             )
+            msg_error = '<b>Ошибка</b>. Фото не внесено.\n'
             if status == 200:
-                await message.reply('Фото внесено')
+                bot_data = await bot.get_me()
+                await message.reply('%s : фото внесено' % Misc.get_deeplink_with_name(response, bot_data))
                 await Misc.show_cards(
                     [response],
                     message,
@@ -1750,13 +1756,13 @@ async def put_photo(message: types.Message, state: FSMContext):
                 )
             elif status == 400:
                 if response.get('message'):
-                    await message.reply(response['message'])
+                    await message.reply(msg_error + response['message'])
                 else:
-                    await message.reply(Misc.MSG_ERROR_API)
+                    await message.reply(msg_error + Misc.MSG_ERROR_API)
             else:
-                await message.reply(Misc.MSG_ERROR_API)
+                await message.reply(msg_error + Misc.MSG_ERROR_API)
         else:
-            await message.reply(Misc.MSG_ERROR_API)
+            await message.reply(msg_error + Misc.MSG_ERROR_API)
     await Misc.state_finish(state)
 
 
