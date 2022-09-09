@@ -1762,14 +1762,16 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
         lng_avg = 37.6155600
         found_coordinates = False
         first_name = ''
+        address = None
         if request.GET.get('uuid'):
             try:
-                user, profile = self.check_user_uuid(request.GET['uuid'], related=('user',))
-                first_name = user.first_name
-                found_coordinates = bool(profile.latitude and profile.longitude)
+                found_user, found_profile = self.check_user_uuid(request.GET['uuid'], related=('user',))
+                first_name = found_user.first_name
+                found_coordinates = bool(found_profile.latitude and found_profile.longitude)
                 if found_coordinates:
-                    lat_avg = profile.latitude
-                    lng_avg = profile.longitude
+                    lat_avg = found_profile.latitude
+                    lng_avg = found_profile.longitude
+                    address = found_profile.address
             except ServiceException:
                 pass
         bot_username = self.get_bot_username()
@@ -1790,12 +1792,15 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 trust_count=profile.trust_count,
                 link=link,
             )
-            points.append(dict(
+            point = dict(
                 latitude=profile.latitude,
                 longitude=profile.longitude,
                 title='(%(trust_count)s) %(full_name)s' % dict_user,
                 popup='(%(trust_count)s) %(link)s' % dict_user,
-            ))
+            )
+            if found_coordinates and profile == found_profile:
+                point.update(is_of_found_user=True)
+            points.append(point)
             if not found_coordinates:
                 lat_sum += profile.latitude
                 lng_sum += profile.longitude
@@ -1805,6 +1810,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
         data = dict(
             first_name=first_name,
             found_coordinates=found_coordinates,
+            address=address,
             lat_avg=lat_avg,
             lng_avg=lng_avg,
             points=points
