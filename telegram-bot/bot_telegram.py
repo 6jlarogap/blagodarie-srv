@@ -947,8 +947,7 @@ async def process_callback_iof(callback_query: types.CallbackQuery, state: FSMCo
             return
         response_sender = await Misc.check_owner(
             owner_tg_user=callback_query.from_user,
-            uuid=uuid,
-            check_owned_only=True
+            uuid=uuid
         )
         if not response_sender:
             return
@@ -978,8 +977,7 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
     if uuid:
         response_sender = await Misc.check_owner(
             owner_tg_user=message.from_user,
-            uuid=uuid,
-            check_owned_only=True
+            uuid=uuid
         )
         if response_sender:
             status, response = await Misc.put_user_properties(

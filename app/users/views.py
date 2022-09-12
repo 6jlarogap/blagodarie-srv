@@ -1157,17 +1157,6 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                 oauth.update_timestamp = int(time.time())
                 oauth.save()
 
-            save_ = False
-            if user.last_name != '':
-                user.last_name = ''
-                save_ = True
-            user_first_name = Profile.make_first_name(last_name, first_name)
-            if user.first_name != user_first_name:
-                user.first_name = user_first_name
-                save_ = True
-            if save_:
-                user.save()
-
         except Oauth.DoesNotExist:
             user = self.create_user(
                 last_name=last_name,

@@ -894,22 +894,19 @@ class Misc(object):
                     sep=KeyboardType.SEP,
                 ))
 
-                if is_owned_account:
-                    inline_btn_iof = InlineKeyboardButton(
-                        'ИОФ',
-                        callback_data=callback_data_template % dict(
-                        keyboard_type=KeyboardType.IOF,
-                        uuid=response_to['uuid'],
-                        sep=KeyboardType.SEP,
-                    ))
-                    reply_markup.row(
-                        inline_btn_iof,
-                        inline_btn_other,
-                        inline_btn_photo,
-                        inline_btn_location
-                    )
-                else:
-                    reply_markup.row(inline_btn_other, inline_btn_location, inline_btn_photo)
+                inline_btn_iof = InlineKeyboardButton(
+                    'ФИО',
+                    callback_data=callback_data_template % dict(
+                    keyboard_type=KeyboardType.IOF,
+                    uuid=response_to['uuid'],
+                    sep=KeyboardType.SEP,
+                ))
+                reply_markup.row(
+                    inline_btn_iof,
+                    inline_btn_other,
+                    inline_btn_photo,
+                    inline_btn_location
+                )
 
                 dict_papa_mama = dict(
                     keyboard_type=KeyboardType.FATHER,
