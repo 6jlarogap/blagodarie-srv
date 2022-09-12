@@ -2906,7 +2906,7 @@ async def echo_my_chat_member_for_bot(chat_member: types.ChatMemberUpdated):
         reply_markup = InlineKeyboardMarkup()
         #inline_btn_map = InlineKeyboardButton('Карта', url=settings.MAP_HOST)
         inline_btn_trusts = InlineKeyboardButton(
-            'Доверие',
+            'Доверия',
             url='%(group_host)s/?tg_group_chat_id=%(chat_id)s' % dict(
                 group_host=settings.GROUP_HOST,
                 chat_id=chat_member.chat.id,
@@ -3073,7 +3073,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                     # ЭТОТ бот подключился. Достаточно его full name и ссылку на доверия в группе
                     #
                     inline_btn_trusts = InlineKeyboardButton(
-                        'Доверие',
+                        'Доверия',
                         url='%(group_host)s/?tg_group_chat_id=%(chat_id)s' % dict(
                             group_host=settings.GROUP_HOST,
                             chat_id=message.chat.id,
