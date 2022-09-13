@@ -1793,9 +1793,9 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                        '<img src="%(url_photo)s" width=%(thumb_size)s height=%(thumb_size)s>'
                     '</td>'
                     '<td>'
-                        ' <a href="%(url_deeplink)s">%(full_name)s</a> (%(trust_count)s)'
+                        ' <a href="%(url_deeplink)s" target="_blank">%(full_name)s</a> (%(trust_count)s)'
                         '<br /><br />'
-                        ' <a href="%(url_profile)s">Доверия</a>'
+                        ' <a href="%(url_profile)s" target="_blank">Доверия</a>'
                     '</td>'
                 '</tr></table>'
             ) % dict_user
