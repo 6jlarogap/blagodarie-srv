@@ -127,6 +127,9 @@ class KeyboardType(object):
     CHANNEL_JOIN = 30
     CHANNEL_REFUSE = 31
 
+    TRIP_NEW_LOCATION = 32
+    TRIP_OLD_LOCATION = 33
+
     # Разделитель данных в call back data
     #
     SEP = '~'

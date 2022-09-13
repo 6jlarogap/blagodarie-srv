@@ -69,6 +69,7 @@ class FSMgeo(StatesGroup):
     geo = State()
 
 class FSMtrip(StatesGroup):
+    ask_geo = State()
     geo = State()
 
 # Отслеживаем по каждой группе (ключ этого словаря),
@@ -2333,7 +2334,76 @@ async def process_callback_location(callback_query: types.CallbackQuery, state: 
     state=None,
 )
 async def trip_geo_command_handler(message: types.Message, state: FSMContext):
-    await geo(message, state, FSMtrip.geo)
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender == 200:
+        if response_sender['latitude'] is not None and response_sender['longitude'] is not None:
+            callback_data_dict = dict(
+                keyboard_type=KeyboardType.TRIP_NEW_LOCATION,
+                uuid=response_sender['uuid'],
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_new_location = InlineKeyboardButton(
+                'Задать сейчас',
+                callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % callback_data_dict,
+            )
+            callback_data_dict.update(keyboard_type=KeyboardType.TRIP_OLD_LOCATION)
+            inline_btn_use_old_location = InlineKeyboardButton(
+                'Использовать заданное',
+                callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % callback_data_dict,
+            )
+            reply_markup = InlineKeyboardMarkup()
+            reply_markup.row(inline_btn_use_old_location, inline_btn_new_location, Misc.inline_button_cancel())
+            address = response_sender.get('address') or '%s,%s' % (response_sender['latitude'], response_sender['longitude'])
+            await FSMtrip.ask_geo.set()
+            await message.reply(
+                (
+                    'Собираю данные для поездки\n\n'
+                    'У вас задано местоположение:\n\n%s\n\n'
+                    '<u>Использовать заданное</u> местоположение? Или <u>задать сейчас</u> новое местоположение? '
+                ) % address,
+                reply_markup=reply_markup
+            )
+        else:
+            await geo(message, state, FSMtrip.geo, uuid=response_sender['uuid'])
+
+async def prompt_trip_conditions(message: types.Message, state: FSMContext):
+    await message.reply('Здесь условия. Дальше пока не зделано.')
+    await state.finish()
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s|%s)%s' % (
+        KeyboardType.TRIP_NEW_LOCATION, KeyboardType.TRIP_OLD_LOCATION,
+        KeyboardType.SEP,
+        # uuid задавшего  /trip # 1
+        # KeyboardType.SEP,
+    ), c.data),
+    state = FSMtrip.ask_geo,
+    )
+async def process_callback_trip_new_location(callback_query: types.CallbackQuery, state: FSMContext):
+    status_sender, response_sender = await Misc.post_tg_user(callback_query.from_user)
+    if status_sender == 200:
+        code = callback_query.data.split(KeyboardType.SEP)
+        try:
+            uuid = code[1]
+            if response_sender.get('uuid') == uuid:
+                if int(code[0]) == KeyboardType.TRIP_NEW_LOCATION:
+                    await geo(callback_query.message, state, FSMtrip.geo, uuid)
+                else:
+                    # KeyboardType.TRIP_OLD_LOCATION
+                    if response_sender['latitude'] is not None and response_sender['longitude'] is not None:
+                        await prompt_trip_conditions(callback_query.message, state)
+                    else:
+                        state.finish()
+                        return
+            else:
+                state.finish()
+                return
+        except IndexError:
+            state.finish()
+            return
+    else:
+        state.finish()
 
 
 @dp.message_handler(
@@ -2348,10 +2418,10 @@ async def location_trip(message: types.Message, state: FSMContext):
             longitude = getattr(message.location, 'longitude')
         except AttributeError:
             pass
-        if latitude and longitude:
+        if latitude is not None and longitude is not None:
             pass
     await message.reply(
-        'Ok.\nПока по команде /trip ничего не делается, даже если Вы отправили боту локацию',
+        'Ok.\nПока по команде /trip ничего дальше не делается, даже если Вы отправили боту локацию или согласились использовать заданную',
         reply_markup=types.reply_keyboard.ReplyKeyboardRemove()
     )
     await state.finish()
