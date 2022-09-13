@@ -1739,6 +1739,8 @@ api_bot_groupmember = ApiBotGroupMember.as_view()
 
 class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
 
+    THUMB_SIZE = 64
+
     def get(self, request):
         """
         Вернуть пользователй с координатами
@@ -1772,20 +1774,36 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 owner__isnull=True,
                 dod__isnull=True,
             ).select_related('user').distinct():
+            url_profile = self.profile_url(request, profile)
             if bot_username:
-                link = self.get_deeplink_name(profile, bot_username, target_blank=True)
+                url_deeplink = self.get_deeplink(profile, bot_username)
             else:
-                link = self.profile_link(request, profile)
+                url_deeplink = url_profile
             dict_user = dict(
                 full_name = profile.user.first_name,
                 trust_count=profile.trust_count,
-                link=link,
+                url_deeplink=url_deeplink,
+                url_profile=url_profile,
+                url_photo=profile.choose_thumb(request, width=self.THUMB_SIZE, height=self.THUMB_SIZE),
+                thumb_size = self.THUMB_SIZE,
             )
+            popup = (
+                '<table><tr>'
+                    '<td>'
+                       '<img src="%(url_photo)s" width=%(thumb_size)s height=%(thumb_size)s>'
+                    '</td>'
+                    '<td>'
+                        ' <a href="%(url_deeplink)s">%(full_name)s</a> (%(trust_count)s)'
+                        '<br /><br />'
+                        ' <a href="%(url_profile)s">Доверия</a>'
+                    '</td>'
+                '</tr></table>'
+            ) % dict_user
             point = dict(
                 latitude=profile.latitude,
                 longitude=profile.longitude,
                 title='(%(trust_count)s) %(full_name)s' % dict_user,
-                popup='(%(trust_count)s) %(link)s' % dict_user,
+                popup=popup,
             )
             if found_coordinates and profile == found_profile:
                 point.update(is_of_found_user=True)

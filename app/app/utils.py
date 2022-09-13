@@ -120,8 +120,11 @@ class FrontendMixin(object):
             ending_slash=ending_slash,
         )
 
+    def profile_url(self, request, profile,):
+        return self.get_frontend_url(request, 'profile') + '?id=%s' % profile.uuid
+
     def profile_link(self, request, profile,):
-        url_profile = self.get_frontend_url(request, 'profile') + '?id=%s' % profile.uuid
+        url_profile = self.profile_url(request, profile,)
         link = '<a href="%(url_profile)s">%(first_name)s</a>' % dict(
             url_profile=url_profile,
             first_name=profile.user.first_name or 'Без имени',
@@ -140,12 +143,27 @@ class FrontendMixin(object):
 
 class ThumbnailSimpleMixin(object):
 
-    def get_thumbnail_path(self, file_field, width=64, height=64, method='crop'):
+    THUMB_WIDTH = 64
+    THUMB_HEIGHT = 64
+    THUMB_METHOD = 'crop'
+
+    @classmethod
+    def get_thumbnail_str(
+        cls, file_field,
+        width=THUMB_WIDTH, height=THUMB_HEIGHT, method=THUMB_METHOD
+    ):
+        return '%s%s/%sx%s~%s~12.jpg'  % (settings.THUMBNAILS_STORAGE_BASE_PATH,
+                                                file_field, width, height, method)
+
+
+    def get_thumbnail_path(
+        self, file_field,
+        width=THUMB_WIDTH, height=THUMB_HEIGHT, method=THUMB_METHOD,
+    ):
         result = ''
         if file_field:
             try:
-                result = '%s%s/%sx%s~%s~12.jpg'  % (settings.THUMBNAILS_STORAGE_BASE_PATH, 
-                                                     file_field, width, height, method)
+                result = ThumbnailSimpleMixin.get_thumbnail_str(file_field, width, height, method)
             except:
                 pass
         return result

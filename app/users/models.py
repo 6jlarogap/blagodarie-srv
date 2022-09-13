@@ -8,6 +8,7 @@ from django.db.models import Sum, F
 from django.db.models.query_utils import Q
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
+from django.templatetags.static import static
 
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
@@ -20,7 +21,7 @@ get_model = apps.get_model
 from app.models import UnclearDateModelField, GenderMixin
 
 from app.models import BaseModelInsertUpdateTimestamp, BaseModelInsertTimestamp, PhotoModel, GeoPointAddressModel
-from app.utils import ServiceException
+from app.utils import ServiceException, ThumbnailSimpleMixin
 
 class TgGroup(BaseModelInsertTimestamp):
     """
@@ -669,7 +670,28 @@ class Profile(PhotoModel, GeoPointAddressModel):
         Если есть выданное пользователем фото (photo), то оно,
         иначе photo_url
         """
-        return Profile.choose_photo_of(request, self.photo and self.photo.name, self.photo_url, google_photo_size)
+        return Profile.choose_photo_of(request, self.photo and self.photo.name or '', self.photo_url, google_photo_size)
+
+    @classmethod
+    def choose_thumb_of(cls, request, photo, photo_url, width=64, height=64):
+        """
+        Выбрать thumbnail.
+
+        photo: относительный путь к фото
+        Если фото только во внешней ссылке (photo_url), вернуть photo_url
+        """
+        if photo:
+            result = request.build_absolute_uri(ThumbnailSimpleMixin.get_thumbnail_str(photo, width, height))
+        elif photo_url:
+            result = cls.choose_photo_of(request, '', photo_url, google_photo_size=max(width, height))
+        else:
+            result = request.build_absolute_uri(static(
+                'images/default_avatar_%sx%s.png' % (width, height)
+            ))
+        return result
+
+    def choose_thumb(self, request, width=64, height=64):
+        return Profile.choose_thumb_of(request, self.photo and self.photo.name or '',  self.photo_url, width, height)
 
     def parents_dict(self, request):
         """
