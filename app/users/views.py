@@ -1768,12 +1768,15 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
         bot_username = self.get_bot_username()
         lat_sum = lng_sum = 0
         points = []
-        for profile in Profile.objects.filter(
-                latitude__isnull=False,
-                longitude__isnull=False,
-                owner__isnull=True,
-                dod__isnull=True,
-            ).select_related('user').distinct():
+        q = Q(
+            latitude__isnull=False,
+            longitude__isnull=False,
+            owner__isnull=True,
+            dod__isnull=True,
+        )
+        if found_coordinates and (found_profile.dod or found_profile.owner):
+            q |= Q(pk=found_profile.pk)
+        for profile in Profile.objects.filter(q).select_related('user').distinct():
             url_profile = self.profile_url(request, profile)
             if bot_username:
                 url_deeplink = self.get_deeplink(profile, bot_username)
