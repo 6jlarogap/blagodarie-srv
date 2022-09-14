@@ -472,7 +472,7 @@ class Misc(object):
 
 
     @classmethod
-    def reply_user_card(cls, response, bot_data, show_parents=False):
+    def reply_user_card(cls, response, bot_data, show_parents=True):
         """
         Карточка пользователя, каким он на сайте
 
@@ -812,7 +812,6 @@ class Misc(object):
             reply = cls.reply_user_card(
                 response_to,
                 bot_data=bot_data,
-                show_parents=is_own_account or is_owned_account,
             )
 
             response_relations = None
