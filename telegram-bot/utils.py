@@ -788,6 +788,16 @@ class Misc(object):
                 # login_url=login_url,
             )
             goto_buttons = [inline_btn_friends, ]
+            if not group_id and response_from.get('uuid') and not is_own_account:
+                path = "/trust/?id=%s,%s&d=10" % (response_from['uuid'], response_to['uuid'],)
+                url = settings.FRONTEND_HOST + path
+                # login_url = LoginUrl(url=cls.make_login_url(path))
+                inline_btn_path = InlineKeyboardButton(
+                    'Путь (доверия)',
+                    url=url,
+                    # login_url=login_url,
+                )
+                goto_buttons.append(inline_btn_path)
             if not group_id and (is_own_account or is_owned_account):
                 path = "/gen/?id=%s" % response_to['uuid']
                 url = settings.FRONTEND_HOST + path
@@ -799,15 +809,15 @@ class Misc(object):
                 )
                 goto_buttons.append(inline_btn_genesis)
             if not group_id and response_from.get('uuid') and not is_own_account:
-                path = "/trust/?id=%s,%s&d=10" % (response_from['uuid'], response_to['uuid'],)
+                path = "/gen/?id=%s,%s&d=10" % (response_from['uuid'], response_to['uuid'],)
                 url = settings.FRONTEND_HOST + path
                 # login_url = LoginUrl(url=cls.make_login_url(path))
-                inline_btn_path = InlineKeyboardButton(
-                    'Путь (доверия)',
+                inline_btn_genesis_path = InlineKeyboardButton(
+                    'Путь ( род)',
                     url=url,
                     # login_url=login_url,
                 )
-                goto_buttons.append(inline_btn_path)
+                goto_buttons.append(inline_btn_genesis_path)
             reply_markup.row(*goto_buttons)
             reply = cls.reply_user_card(
                 response_to,
