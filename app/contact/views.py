@@ -3388,13 +3388,16 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
     """
 
     def get_shortest_path(self, request, uuids, recursion_depth):
-        user_pks = []
+        #TODO   Это не будет во всех случаях корректно работать
+        #       Надо исправлять nullify_trust operation:
+        #           делать эту запись реверсивной
         try:
-            user_pks = [int(profile.user.pk) for profile in Profile.objects.filter(uuid__in=uuids)]
-        except ValidationError:
-            pass
-        if len(user_pks) != 2:
-            raise ServiceException('Один или несколько uuid неверны или есть повтор среди заданных uuid')
+            user_from_id = Profile.objects.get(uuid=uuids[0]).user_id
+            user_to_id = Profile.objects.get(uuid=uuids[1]).user_id
+        except (ValidationError, Profile.DoesNotExist, IndexError,):
+            raise ServiceException('Один или несколько uuid неверны или не существуют')
+        if user_from_id == user_to_id:
+            raise ServiceException('Есть повтор среди заданных uuid')
 
         # Строка запроса типа:
         # select path from find_shortest_relation_path(416, 455, 10)
@@ -3403,21 +3406,17 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         sql = 'select path from find_trust_relation_path ' \
               '(%(user_from_id)s, %(user_to_id)s, %(recursion_depth)s) ' \
               'where path @> array [%(user_from_id)s, %(user_to_id)s]' % dict(
-            user_from_id=user_pks[0],
-            user_to_id=user_pks[1],
+            user_from_id=user_from_id,
+            user_to_id=user_to_id,
             recursion_depth=recursion_depth,
         )
         with connection.cursor() as cursor:
             cursor.execute(sql)
             paths = [rec[0] for rec in cursor.fetchall()]
-        user_pks = set(user_pks)
+        user_pks = set()
         for path in paths:
             for user_id in path:
                 user_pks.add(user_id)
-
-        users = []
-        for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
-            users.append(profile.data_dict(request))
 
         pairs = []
         for path in paths:
@@ -3474,6 +3473,12 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
                 pair_mutual = '%s/%s' % (target_id, source_id)
                 if pair_mutual in pairs:
                     connections.append(d)
+
+        users = []
+        user_pks.add(user_from_id)
+        user_pks.add(user_to_id)
+        for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
+            users.append(profile.data_dict(request))
 
         return dict(users=users, connections=connections, trust_connections=[])
 
