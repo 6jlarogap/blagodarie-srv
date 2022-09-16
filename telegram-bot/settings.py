@@ -51,9 +51,6 @@ GROUP_HOST = 'https://group.blagodarie.org'
 #
 FRONTEND_AUTH_PATH = '/auth/telegram/'
 
-# --------------------------------------------------------------
-#
-
 # Выбираем из фото пользователей, которые шлют сообщения в бот, не меньше такого, в байтах:
 #
 PHOTO_MAX_SIZE = 320 * 320
@@ -66,6 +63,15 @@ DOWNLOAD_PHOTO_MAX_SIZE = 10
 # Минимальный размер сообщения для полнотекстового поиска:
 #
 MIN_LEN_SEARCHED_TEXT = 3
+
+# Туры
+#
+TRIP_DATA = dict(
+    #   chat_id='',
+    #   invite_link='',
+    #   text_with_invite_link='бла бла %(invite_link)s еще бла бла',
+    #   text_agreement='',
+)
 
 try:
     from local_settings import *

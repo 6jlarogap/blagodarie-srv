@@ -2290,7 +2290,7 @@ async def geo(message, state, state_to_set, uuid=None):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=["setplace", "место"],
+    commands=['setplace', 'место'],
     state=None,
 )
 async def geo_command_handler(message: types.Message, state: FSMContext):
@@ -2330,44 +2330,50 @@ async def process_callback_location(callback_query: types.CallbackQuery, state: 
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=('trip',),
+    commands=('trip', 'тур'),
     state=None,
 )
 async def trip_geo_command_handler(message: types.Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
-    if status_sender == 200:
-        if response_sender['latitude'] is not None and response_sender['longitude'] is not None:
-            callback_data_dict = dict(
-                keyboard_type=KeyboardType.TRIP_NEW_LOCATION,
-                uuid=response_sender['uuid'],
-                sep=KeyboardType.SEP,
-            )
-            inline_btn_new_location = InlineKeyboardButton(
-                'Задать сейчас',
-                callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % callback_data_dict,
-            )
-            callback_data_dict.update(keyboard_type=KeyboardType.TRIP_OLD_LOCATION)
-            inline_btn_use_old_location = InlineKeyboardButton(
-                'Использовать заданное',
-                callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % callback_data_dict,
-            )
-            reply_markup = InlineKeyboardMarkup()
-            reply_markup.row(inline_btn_use_old_location, inline_btn_new_location, Misc.inline_button_cancel())
-            address = response_sender.get('address') or '%s,%s' % (response_sender['latitude'], response_sender['longitude'])
-            await FSMtrip.ask_geo.set()
-            await message.reply(
-                (
-                    'Собираю данные для поездки\n\n'
-                    'У вас задано местоположение:\n\n%s\n\n'
-                    '<u>Использовать заданное</u> местоположение? Или <u>задать сейчас</u> новое местоположение? '
-                ) % address,
-                reply_markup=reply_markup
-            )
-        else:
-            await geo(message, state, FSMtrip.geo, uuid=response_sender['uuid'])
+    if settings.TRIP_DATA and settings.TRIP_DATA.get('chat_id') and settings.TRIP_DATA.get('invite_link'):
+        if status_sender == 200:
+            if response_sender['latitude'] is not None and response_sender['longitude'] is not None:
+                callback_data_dict = dict(
+                    keyboard_type=KeyboardType.TRIP_NEW_LOCATION,
+                    uuid=response_sender['uuid'],
+                    sep=KeyboardType.SEP,
+                )
+                inline_btn_new_location = InlineKeyboardButton(
+                    'Задать сейчас',
+                    callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % callback_data_dict,
+                )
+                callback_data_dict.update(keyboard_type=KeyboardType.TRIP_OLD_LOCATION)
+                inline_btn_use_old_location = InlineKeyboardButton(
+                    'Использовать заданное',
+                    callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % callback_data_dict,
+                )
+                reply_markup = InlineKeyboardMarkup()
+                reply_markup.row(inline_btn_use_old_location, inline_btn_new_location, Misc.inline_button_cancel())
+                address = response_sender.get('address') or '%s,%s' % (response_sender['latitude'], response_sender['longitude'])
+                await FSMtrip.ask_geo.set()
+                await message.reply(
+                    (
+                        'Собираю данные для поездки\n\n'
+                        'У вас задано местоположение:\n\n%s\n\n'
+                        '<u>Использовать заданное</u> местоположение? Или <u>задать сейчас</u> новое местоположение? '
+                    ) % address,
+                    reply_markup=reply_markup
+                )
+            else:
+                await message.reply('Собираю данные для поездки\n\nУ вас НЕ задано местоположение!')
+                await geo(message, state, FSMtrip.geo, uuid=response_sender['uuid'])
+    else:
+        await message.reply('В системе пока не предусмотрены туры')
 
-async def prompt_trip_conditions(message: types.Message, state: FSMContext):
-    await message.reply('Здесь условия. Дальше пока не зделано.')
+
+async def prompt_trip_conditions(message, state, profile):
+    reply_markup = types.reply_keyboard.ReplyKeyboardRemove()
+    await message.reply('Здесь будет приглашение. Дальше пока не сделано.', reply_markup=reply_markup)
     await state.finish()
 
 
@@ -2392,7 +2398,7 @@ async def process_callback_trip_new_location(callback_query: types.CallbackQuery
                 else:
                     # KeyboardType.TRIP_OLD_LOCATION
                     if response_sender['latitude'] is not None and response_sender['longitude'] is not None:
-                        await prompt_trip_conditions(callback_query.message, state)
+                        await prompt_trip_conditions(callback_query.message, state, response_sender)
                     else:
                         state.finish()
                         return
@@ -2406,36 +2412,17 @@ async def process_callback_trip_new_location(callback_query: types.CallbackQuery
         state.finish()
 
 
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    content_types=['location', ContentType.TEXT],
-    state=FSMtrip.geo,
-)
-async def location_trip(message: types.Message, state: FSMContext):
-    if message.location is not None:
-        try:
-            latitude = getattr(message.location, 'latitude')
-            longitude = getattr(message.location, 'longitude')
-        except AttributeError:
-            pass
-        if latitude is not None and longitude is not None:
-            pass
-    await message.reply(
-        'Ok.\nПока по команде /trip ничего дальше не делается, даже если Вы отправили боту локацию или согласились использовать заданную',
-        reply_markup=types.reply_keyboard.ReplyKeyboardRemove()
-    )
-    await state.finish()
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    content_types=['location', ContentType.TEXT],
-    state=FSMgeo.geo,
-)
-async def location(message: types.Message, state: FSMContext):
+async def put_location(message, state, show_card=False):
     """
     Записать местоположение пользователя телеграма или uuid в состоянии
+
+    В случае успеха:
+        Если show_card == True, то вернуть профиль карточки с новыми координатами
+        Вернуть профиль пользователя
+    Иначе вернуть пустой словарь
     """
+    result = {}
+    user_uuid = None
     if message.location is not None:
         user_uuid = None
         async with state.proxy() as data:
@@ -2447,7 +2434,6 @@ async def location(message: types.Message, state: FSMContext):
         except AttributeError:
             pass
         if latitude and longitude:
-            bot_data = await bot.get_me()
             tg_user_sender = message.from_user
             status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
             if status_sender == 200:
@@ -2461,13 +2447,16 @@ async def location(message: types.Message, state: FSMContext):
                 )
                 reply_markup = types.reply_keyboard.ReplyKeyboardRemove()
                 if status == 200:
-                    await Misc.show_cards(
-                        [response],
-                        message,
-                        bot_data,
-                        response_from=response_sender,
-                    )
-                    await message.reply('Координаты записаны', reply_markup=reply_markup)
+                    result = response
+                    if show_card:
+                        bot_data = await bot.get_me()
+                        await Misc.show_cards(
+                            [response],
+                            message,
+                            bot_data,
+                            response_from=response_sender,
+                        )
+                        await message.reply('Координаты записаны', reply_markup=reply_markup)
                 else:
                     await message.reply('Ошибка записи координат', reply_markup=reply_markup)
     else:
@@ -2487,7 +2476,36 @@ async def location(message: types.Message, state: FSMContext):
             'Вы отказались задавать местоположение',
             reply_markup=types.reply_keyboard.ReplyKeyboardRemove()
         )
-    await Misc.state_finish(state)
+    return result
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=['location', ContentType.TEXT],
+    state=FSMtrip.geo,
+)
+async def location_trip(message: types.Message, state: FSMContext):
+    """
+    Записать местоположение пользователя в процессе сбора данных для тура
+    """
+    profile = await put_location(message, state, show_card=False)
+    if profile:
+        await prompt_trip_conditions(message, state, profile)
+    else:
+        await state.finish()
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=['location', ContentType.TEXT],
+    state=FSMgeo.geo,
+)
+async def location(message: types.Message, state: FSMContext):
+    """
+    Записать местоположение пользователя телеграма или uuid в состоянии
+    """
+    await put_location(message, state, show_card=True)
+    await state.finish()
 
 
 @dp.message_handler(
