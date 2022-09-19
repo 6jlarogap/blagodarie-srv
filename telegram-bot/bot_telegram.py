@@ -2963,7 +2963,7 @@ async def process_callback_chat_join(callback_query: types.CallbackQuery, state:
             tc_inviter=tc_inviter,
             tc_subscriber=response_subscriber['trust_count'],
         )
-        if status_op == 200 and tg_inviter_id:
+        if tg_inviter_id and status_op == 200:
             reply = (
                 '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а) %(to_chat)s '
                 'и доверяет владельцу %(of_chat)s: %(dl_inviter)s (%(tc_inviter)s)'
