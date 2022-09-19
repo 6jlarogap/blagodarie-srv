@@ -2372,8 +2372,8 @@ async def trip_geo_command_handler(message: types.Message, state: FSMContext):
 
 
 async def prompt_trip_conditions(message, state, profile):
-    reply_markup = types.reply_keyboard.ReplyKeyboardRemove()
-    await message.reply('Здесь будет приглашение. Дальше пока не сделано.', reply_markup=reply_markup)
+    text_invite = settings.TRIP_DATA['text_with_invite_link'] % settings.TRIP_DATA
+    await message.reply(text_invite, reply_markup=types.reply_keyboard.ReplyKeyboardRemove())
     await state.finish()
 
 
@@ -2818,6 +2818,10 @@ async def echo_join_chat_request(message: types.Message):
         В канал/группу отправится мини- карточка нового участника
     """
     tg_subscriber = message.from_user
+    if settings.TRIP_DATA and settings.TRIP_DATA.get('chat_id') == message.chat.id:
+        text_agreement = settings.TRIP_DATA['text_agreement']
+    else:
+        text_agreement = Misc.help_text()
     tg_inviter = message.invite_link.creator if message.invite_link else None
     if tg_inviter:
         status, response_inviter = await Misc.post_tg_user(tg_inviter)
@@ -2858,7 +2862,7 @@ async def echo_join_chat_request(message: types.Message):
     reply_markup.row(inline_btn_chat_join, inline_btn_chat_refuse)
     await bot.send_message(
         chat_id=tg_subscriber.id,
-        text=Misc.help_text(),
+        text=text_agreement,
         reply_markup=reply_markup,
         disable_web_page_preview=True
     )
@@ -3170,7 +3174,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             # login_url = Misc.make_login_url(path)
             # login_url = LoginUrl(url=login_url)
             inline_btn_go = InlineKeyboardButton(
-                'Друзья',
+                'Доверия',
                 url=url,
                 # login_url=login_url,
             )
