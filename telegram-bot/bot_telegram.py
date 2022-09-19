@@ -2818,24 +2818,24 @@ async def echo_join_chat_request(message: types.Message):
         В канал/группу отправится мини- карточка нового участника
     """
     tg_subscriber = message.from_user
-    tg_inviter = message.invite_link.creator
-    status, response_inviter = await Misc.post_tg_user(tg_inviter)
-    if status != 200:
-        return
-
-    # Владельца канала/группы сразу в канал/группу. Вдруг его там нет
-    #
-    await TgGroupMember.add(
-        group_chat_id=message.chat.id,
-        group_title=message.chat.title,
-        group_type=message.chat.type,
-        user_tg_uid=tg_inviter.id,
-    )
+    tg_inviter = message.invite_link.creator if message.invite_link else None
+    if tg_inviter:
+        status, response_inviter = await Misc.post_tg_user(tg_inviter)
+        if status != 200:
+            return
+        # Владельца канала/группы сразу в канал/группу. Вдруг его там нет
+        #
+        await TgGroupMember.add(
+            group_chat_id=message.chat.id,
+            group_title=message.chat.title,
+            group_type=message.chat.type,
+            user_tg_uid=tg_inviter.id,
+        )
 
     dict_callback = dict(
         keyboard_type=KeyboardType.CHAT_JOIN_ACCEPT,
         tg_subscriber_id=tg_subscriber.id,
-        tg_inviter_id=tg_inviter.id,
+        tg_inviter_id=tg_inviter.id if tg_inviter else '',
         chat_id=message.chat.id,
         sep=KeyboardType.SEP,
     )
@@ -2863,7 +2863,7 @@ async def echo_join_chat_request(message: types.Message):
         disable_web_page_preview=True
     )
 
-    if response_inviter.get('created'):
+    if tg_inviter and response_inviter.get('created'):
         await Misc.update_user_photo(bot, tg_inviter, response_inviter)
 
 
@@ -2872,8 +2872,8 @@ async def echo_join_chat_request(message: types.Message):
         KeyboardType.CHAT_JOIN_ACCEPT,
         KeyboardType.SEP,
         # tg_subscriber_id          # 1
-        # tg_inviter_id             # 2
-        # chat_id                # 3
+        # tg_inviter_id             # 2, может быть ''
+        # chat_id                   # 3
     ), c.data
     ), state=None,
     )
@@ -2885,16 +2885,20 @@ async def process_callback_chat_join(callback_query: types.CallbackQuery, state:
             tg_subscriber_id = int(code[1])
             if not (tg_subscriber_id and tg_subscriber.id == tg_subscriber_id):
                 return
-            tg_inviter_id = int(code[2])
+            try:
+                tg_inviter_id = int(code[2])
+            except (IndexError, ValueError, TypeError,):
+                tg_inviter_id = None
             chat_id = int(code[3])
         except (IndexError, ValueError, TypeError,):
             return
         status, response_subscriber = await Misc.post_tg_user(tg_subscriber)
         if status != 200:
             return
-        status, response_inviter = await Misc.get_user_by_tg_uid(tg_inviter_id)
-        if status != 200:
-            return
+        if tg_inviter_id:
+            status, response_inviter = await Misc.get_user_by_tg_uid(tg_inviter_id)
+            if status != 200:
+                return
         status, response = await TgGroupMember.add(
             group_chat_id=chat_id,
             group_title='',
@@ -2926,26 +2930,27 @@ async def process_callback_chat_join(callback_query: types.CallbackQuery, state:
             await callback_query.message.reply(msg, disable_web_page_preview=True,)
             return
 
-        # Сразу доверие c благодарностью от входящего в канал/группу к владельцу канала/группы
-        #
-        post_op = dict(
-            tg_token=settings.TOKEN,
-            operation_type_id=OperationType.TRUST_AND_THANK,
-            tg_user_id_from=tg_subscriber_id,
-            user_uuid_to=response_inviter['uuid'],
-        )
-        logging.debug('post operation (chat subscriber thanks inviter), payload: %s' % post_op)
-        status_op, response_op = await Misc.api_request(
-            path='/api/addoperation',
-            method='post',
-            data=post_op,
-        )
-        logging.debug('post operation (chat subscriber thanks inviter), status: %s' % status_op)
-        logging.debug('post operation (chat subscriber thanks inviter), response: %s' % response_op)
+        if tg_inviter_id:
+            # Сразу доверие c благодарностью от входящего в канал/группу к владельцу канала/группы
+            #
+            post_op = dict(
+                tg_token=settings.TOKEN,
+                operation_type_id=OperationType.TRUST_AND_THANK,
+                tg_user_id_from=tg_subscriber_id,
+                user_uuid_to=response_inviter['uuid'],
+            )
+            logging.debug('post operation (chat subscriber thanks inviter), payload: %s' % post_op)
+            status_op, response_op = await Misc.api_request(
+                path='/api/addoperation',
+                method='post',
+                data=post_op,
+            )
+            logging.debug('post operation (chat subscriber thanks inviter), status: %s' % status_op)
+            logging.debug('post operation (chat subscriber thanks inviter), response: %s' % response_op)
 
         bot_data = await bot.get_me()
         dl_subscriber = Misc.get_deeplink_with_name(response_subscriber, bot_data)
-        dl_inviter = Misc.get_deeplink_with_name(response_inviter, bot_data)
+        dl_inviter = Misc.get_deeplink_with_name(response_inviter, bot_data) if tg_inviter_id else ''
         msg_dict = dict(
             dl_subscriber=dl_subscriber,
             dl_inviter=dl_inviter,
@@ -2954,13 +2959,13 @@ async def process_callback_chat_join(callback_query: types.CallbackQuery, state:
             tc_inviter=response_inviter['trust_count'],
             tc_subscriber=response_subscriber['trust_count'],
         )
-        if status_op == 200:
+        if status_op == 200 and tg_inviter_id:
             reply = (
                 '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а) %(to_chat)s '
                 'и доверяет владельцу %(of_chat)s: %(dl_inviter)s (%(tc_inviter)s)'
             ) % msg_dict
         else:
-            reply = '%(dl_subscriber)s подключен(а) %(to_chat)s' % msg_dict
+            reply = '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а) %(to_chat)s' % msg_dict
         await bot.send_message(
             chat_id,
             reply,
