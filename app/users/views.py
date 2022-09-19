@@ -1626,6 +1626,20 @@ class ApiBotGroup(ApiBotGroupMixin, APIView):
     Записать в таблицу TgGroup информацию о группе. Или удалить из таблицы
     """
 
+    def get(self, request):
+        """
+        Получить информацию о группе/каналу по chat_id
+        """
+        data = {}
+        status_code = 404
+        try:
+            chat_id = int(request.GET.get('chat_id', ''))
+            data = TgGroup.objects.get(chat_id=chat_id).data_dict()
+            status_code = status.HTTP_200_OK
+        except (ValueError, TypeError, TgGroup.DoesNotExist,):
+            pass
+        return Response(data=data, status=status_code)
+
     def check_data(self, request):
         if request.data.get('tg_token', '') != settings.TELEGRAM_BOT_TOKEN:
             raise ServiceException('Неверный токен телеграм бота')

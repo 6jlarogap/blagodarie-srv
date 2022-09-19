@@ -2807,15 +2807,15 @@ async def get_group_id(message: types.Message, state: FSMContext):
             pass
 
 @dp.chat_join_request_handler()
-async def echo_join_channel_request(message: types.Message):
+async def echo_join_chat_request(message: types.Message):
     """
-    Пользователь присоединяется к каналу по ссылке- приглашению
+    Пользователь присоединяется к каналу/группе по ссылке- приглашению
 
     Работает только ссылка, требующая одобрения.
-    Бот, он всегда администратор канала, одобрит.
+    Бот, он всегда администратор канала/группы, одобрит.
     Но до этого:
         Нового участника надо завести в базе, если его там нет
-        В канал отправится мини- карточка нового участника
+        В канал/группу отправится мини- карточка нового участника
     """
     tg_subscriber = message.from_user
     tg_inviter = message.invite_link.creator
@@ -2823,7 +2823,7 @@ async def echo_join_channel_request(message: types.Message):
     if status != 200:
         return
 
-    # Владельца канала сразу в канал. Вдруг его там нет
+    # Владельца канала/группы сразу в канал/группу. Вдруг его там нет
     #
     await TgGroupMember.add(
         group_chat_id=message.chat.id,
@@ -2833,29 +2833,29 @@ async def echo_join_channel_request(message: types.Message):
     )
 
     dict_callback = dict(
-        keyboard_type=KeyboardType.CHANNEL_JOIN,
+        keyboard_type=KeyboardType.CHAT_JOIN_ACCEPT,
         tg_subscriber_id=tg_subscriber.id,
         tg_inviter_id=tg_inviter.id,
-        channel_id=message.chat.id,
+        chat_id=message.chat.id,
         sep=KeyboardType.SEP,
     )
     callback_data_template = (
         '%(keyboard_type)s%(sep)s'
         '%(tg_subscriber_id)s%(sep)s'
         '%(tg_inviter_id)s%(sep)s'
-        '%(channel_id)s%(sep)s'
+        '%(chat_id)s%(sep)s'
     )
-    inline_btn_channel_join = InlineKeyboardButton(
+    inline_btn_chat_join = InlineKeyboardButton(
         text='Согласие',
         callback_data=callback_data_template % dict_callback,
     )
-    dict_callback.update(keyboard_type=KeyboardType.CHANNEL_REFUSE)
-    inline_btn_channel_refuse = InlineKeyboardButton(
+    dict_callback.update(keyboard_type=KeyboardType.CHAT_JOIN_REFUSE)
+    inline_btn_chat_refuse = InlineKeyboardButton(
         text='Отказ',
         callback_data=callback_data_template % dict_callback,
     )
     reply_markup = InlineKeyboardMarkup()
-    reply_markup.row(inline_btn_channel_join, inline_btn_channel_refuse)
+    reply_markup.row(inline_btn_chat_join, inline_btn_chat_refuse)
     await bot.send_message(
         chat_id=tg_subscriber.id,
         text=Misc.help_text(),
@@ -2869,15 +2869,15 @@ async def echo_join_channel_request(message: types.Message):
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(r'^(%s)%s' % (
-        KeyboardType.CHANNEL_JOIN,
+        KeyboardType.CHAT_JOIN_ACCEPT,
         KeyboardType.SEP,
         # tg_subscriber_id          # 1
         # tg_inviter_id             # 2
-        # channel_id                # 3
+        # chat_id                # 3
     ), c.data
     ), state=None,
     )
-async def process_callback_channel_join(callback_query: types.CallbackQuery, state: FSMContext):
+async def process_callback_chat_join(callback_query: types.CallbackQuery, state: FSMContext):
     if callback_query.message:
         tg_subscriber = callback_query.from_user
         code = callback_query.data.split(KeyboardType.SEP)
@@ -2886,7 +2886,7 @@ async def process_callback_channel_join(callback_query: types.CallbackQuery, sta
             if not (tg_subscriber_id and tg_subscriber.id == tg_subscriber_id):
                 return
             tg_inviter_id = int(code[2])
-            channel_id = int(code[3])
+            chat_id = int(code[3])
         except (IndexError, ValueError, TypeError,):
             return
         status, response_subscriber = await Misc.post_tg_user(tg_subscriber)
@@ -2895,28 +2895,38 @@ async def process_callback_channel_join(callback_query: types.CallbackQuery, sta
         status, response_inviter = await Misc.get_user_by_tg_uid(tg_inviter_id)
         if status != 200:
             return
-        await TgGroupMember.add(
-            group_chat_id=channel_id,
+        status, response = await TgGroupMember.add(
+            group_chat_id=chat_id,
             group_title='',
             group_type='',
             user_tg_uid=tg_subscriber_id,
         )
+        if status != 200:
+            return
+        status, response = await TgGroup.get(chat_id=chat_id)
+        if status != 200:
+            return
+        is_channel = response['type'] == types.ChatType.CHANNEL
+        in_chat = 'в канале' if is_channel else 'в группе'
+        to_chat = 'к каналу' if is_channel else 'к группе'
+        to_to_chat = 'в канал' if is_channel else 'в группу'
+        of_chat = 'канала' if is_channel else 'группы'
         try:
             await bot.approve_chat_join_request(
-                    channel_id,
+                    chat_id,
                     tg_subscriber_id
             )
         except BadRequest as excpt:
-            msg = 'Наверное, вы уже в канале'
+            msg = 'Наверное, вы уже ' + in_chat
             try:
                 if excpt.args[0] == 'User_already_participant':
-                    msg = 'Вы уже в канале'
+                    msg = 'Вы уже ' + in_chat
             except:
                 pass
             await callback_query.message.reply(msg, disable_web_page_preview=True,)
             return
 
-        # Сразу доверие c благодарностью от входящего в канал к владельцу канала
+        # Сразу доверие c благодарностью от входящего в канал/группу к владельцу канала/группы
         #
         post_op = dict(
             tg_token=settings.TOKEN,
@@ -2924,37 +2934,41 @@ async def process_callback_channel_join(callback_query: types.CallbackQuery, sta
             tg_user_id_from=tg_subscriber_id,
             user_uuid_to=response_inviter['uuid'],
         )
-        logging.debug('post operation (channel subscriber thanks inviter), payload: %s' % post_op)
+        logging.debug('post operation (chat subscriber thanks inviter), payload: %s' % post_op)
         status_op, response_op = await Misc.api_request(
             path='/api/addoperation',
             method='post',
             data=post_op,
         )
-        logging.debug('post operation (channel subscriber thanks inviter), status: %s' % status_op)
-        logging.debug('post operation (channel subscriber thanks inviter), response: %s' % response_op)
+        logging.debug('post operation (chat subscriber thanks inviter), status: %s' % status_op)
+        logging.debug('post operation (chat subscriber thanks inviter), response: %s' % response_op)
 
         bot_data = await bot.get_me()
         dl_subscriber = Misc.get_deeplink_with_name(response_subscriber, bot_data)
-
         dl_inviter = Misc.get_deeplink_with_name(response_inviter, bot_data)
+        msg_dict = dict(
+            dl_subscriber=dl_subscriber,
+            dl_inviter=dl_inviter,
+            to_chat=to_chat,
+            of_chat=of_chat,
+            tc_inviter=response_inviter['trust_count'],
+            tc_subscriber=response_subscriber['trust_count'],
+        )
         if status_op == 200:
-            dl_inviter = Misc.get_deeplink_with_name(response_inviter, bot_data)
-            reply = '%(dl_subscriber)s подключен(а) к каналу и увеличил(а)  до %(thanks_count)s доверия к владельцу канала' % dict(
-                dl_subscriber=dl_subscriber,
-                thanks_count=response_op['currentstate']['thanks_count'],
-            )
+            reply = (
+                '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а) %(to_chat)s '
+                'и доверяет владельцу %(of_chat)s: %(dl_inviter)s (%(tc_inviter)s)'
+            ) % msg_dict
         else:
-            reply = '%(dl_subscriber)s подключен(а) к каналу' % dict(
-                dl_subscriber=dl_subscriber,
-            )
+            reply = '%(dl_subscriber)s подключен(а) %(to_chat)s' % msg_dict
         await bot.send_message(
-            channel_id,
+            chat_id,
             reply,
             disable_notification=True,
             disable_web_page_preview=True,
         )
         await callback_query.message.reply(
-            'Добро пожаловать в канал',
+            'Добро пожаловать %s' % to_to_chat,
             disable_web_page_preview=True,
         )
         await Misc.put_user_properties(
@@ -2967,15 +2981,15 @@ async def process_callback_channel_join(callback_query: types.CallbackQuery, sta
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(r'^(%s)%s' % (
-        KeyboardType.CHANNEL_REFUSE,
+        KeyboardType.CHAT_JOIN_REFUSE,
         KeyboardType.SEP,
         # tg_subscriber_id          # 1
         # tg_inviter_id             # 2
-        # channel_id                # 3
+        # chat_id                # 3
     ), c.data
     ), state=None,
     )
-async def process_callback_channel_join(callback_query: types.CallbackQuery, state: FSMContext):
+async def process_callback_chat_join_refuse(callback_query: types.CallbackQuery, state: FSMContext):
     return
 
 

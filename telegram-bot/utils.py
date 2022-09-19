@@ -124,8 +124,8 @@ class KeyboardType(object):
 
     # Согласие от входа в канал
     #
-    CHANNEL_JOIN = 30
-    CHANNEL_REFUSE = 31
+    CHAT_JOIN_ACCEPT = 30
+    CHAT_JOIN_REFUSE = 31
 
     TRIP_NEW_LOCATION = 32
     TRIP_OLD_LOCATION = 33
@@ -1232,6 +1232,19 @@ class TgGroup(object):
     """
     Список групп, где бот: внесение, удаление
     """
+
+    @classmethod
+    async def get(cls, chat_id):
+        payload = dict(chat_id=chat_id)
+        logging.debug('get group info, payload: %s' % payload)
+        status, response = await Misc.api_request(
+            path='/api/bot/group',
+            method='GET',
+            params=payload,
+        )
+        logging.debug('get group info, status: %s' % status)
+        logging.debug('get group info, response: %s' % response)
+        return status, response
 
     @classmethod
     async def post(cls, chat_id, title, type_):
