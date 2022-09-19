@@ -2947,6 +2947,10 @@ async def process_callback_chat_join(callback_query: types.CallbackQuery, state:
             )
             logging.debug('post operation (chat subscriber thanks inviter), status: %s' % status_op)
             logging.debug('post operation (chat subscriber thanks inviter), response: %s' % response_op)
+            if status_op == 200:
+                tc_inviter = response_op['profile_to']['trust_count']
+        else:
+            tc_inviter = 0
 
         bot_data = await bot.get_me()
         dl_subscriber = Misc.get_deeplink_with_name(response_subscriber, bot_data)
@@ -2956,7 +2960,7 @@ async def process_callback_chat_join(callback_query: types.CallbackQuery, state:
             dl_inviter=dl_inviter,
             to_chat=to_chat,
             of_chat=of_chat,
-            tc_inviter=response_inviter['trust_count'],
+            tc_inviter=tc_inviter,
             tc_subscriber=response_subscriber['trust_count'],
         )
         if status_op == 200 and tg_inviter_id:
