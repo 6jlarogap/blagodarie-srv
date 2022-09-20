@@ -1768,6 +1768,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
         found_coordinates = False
         first_name = ''
         address = None
+        chat_id = chat_title = chat_type = None
         if request.GET.get('uuid'):
             try:
                 found_user, found_profile = self.check_user_uuid(request.GET['uuid'], related=('user',))
@@ -1779,6 +1780,8 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                     address = found_profile.address
             except ServiceException:
                 pass
+        elif request.GET.get('chat_id'):
+            chat_id = request.GET['chat_id']
         bot_username = self.get_bot_username()
         lat_sum = lng_sum = 0
         points = []
@@ -1790,7 +1793,19 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
         )
         if found_coordinates and (found_profile.dod or found_profile.owner):
             q |= Q(pk=found_profile.pk)
-        for profile in Profile.objects.filter(q).select_related('user').distinct():
+        elif chat_id:
+            try:
+                tggroup = TgGroup.objects.get(chat_id=chat_id)
+                chat_title = tggroup.title
+                chat_type = tggroup.type
+                q &= Q(user__oauth__groups__chat_id=chat_id)
+            except (ValueError, TgGroup.DoesNotExist,):
+                pass
+        if chat_id and not chat_title:
+            qs = Profile.objects.none()
+        else:
+            qs = Profile.objects.filter(q).select_related('user').distinct()
+        for profile in qs:
             url_profile = self.profile_url(request, profile)
             if bot_username:
                 url_deeplink = self.get_deeplink(profile, bot_username)
@@ -1837,7 +1852,10 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
             address=address,
             lat_avg=lat_avg,
             lng_avg=lng_avg,
-            points=points
+            points=points,
+            chat_id=chat_id,
+            chat_title=chat_title,
+            chat_type=chat_type,
         )
         return Response(data=data, status=200)
 
