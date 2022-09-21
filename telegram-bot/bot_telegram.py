@@ -1499,7 +1499,7 @@ async def do_process_wish(message: types.Message, uuid=None):
 async def process_command_map(message):
     await bot.send_message(
         message.from_user.id,
-        text=Misc.get_html_a(href=settings.MAP_HOST,text='Карта участников')
+        text=Misc.get_html_a(href=settings.MAP_HOST, text='Карта участников'),
     )
 
 @dp.message_handler(
@@ -2967,19 +2967,20 @@ async def process_callback_chat_join(callback_query: types.CallbackQuery, state:
             tc_inviter=tc_inviter,
             tc_subscriber=response_subscriber['trust_count'],
         )
-        if tg_inviter_id and status_op == 200:
-            reply = (
-                '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а) %(to_chat)s '
-                'и доверяет владельцу %(of_chat)s: %(dl_inviter)s (%(tc_inviter)s)'
-            ) % msg_dict
-        else:
-            reply = '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а) %(to_chat)s' % msg_dict
-        await bot.send_message(
-            chat_id,
-            reply,
-            disable_notification=True,
-            disable_web_page_preview=True,
-        )
+        if is_channel:
+            if tg_inviter_id and status_op == 200:
+                reply = (
+                    '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а) %(to_chat)s '
+                    'и доверяет владельцу %(of_chat)s: %(dl_inviter)s (%(tc_inviter)s)'
+                ) % msg_dict
+            else:
+                reply = '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а) %(to_chat)s' % msg_dict
+            await bot.send_message(
+                chat_id,
+                reply,
+                disable_notification=True,
+                disable_web_page_preview=True,
+            )
         await callback_query.message.reply(
             'Добро пожаловать %s' % to_to_chat,
             disable_web_page_preview=True,
@@ -3019,7 +3020,6 @@ async def echo_my_chat_member_for_bot(chat_member: types.ChatMemberUpdated):
     bot_ = new_chat_member.user
     if bot_.is_bot and new_chat_member.status == 'administrator' and bot_.first_name:
         reply_markup = InlineKeyboardMarkup()
-        #inline_btn_map = InlineKeyboardButton('Карта', url=settings.MAP_HOST)
         inline_btn_trusts = InlineKeyboardButton(
             'Доверия',
             url='%(group_host)s/?tg_group_chat_id=%(chat_id)s' % dict(
@@ -3028,11 +3028,13 @@ async def echo_my_chat_member_for_bot(chat_member: types.ChatMemberUpdated):
         ))
         reply_markup.row(
             inline_btn_trusts,
-            #inline_btn_map
         )
         await bot.send_message(
             chat_id=chat_member.chat.id,
-            text=bot_.first_name,
+            text=Misc.get_html_a(
+                href='%s/?chat_id=%s' % (settings.MAP_HOST, chat_member.chat.id),
+                text='Карта участников канала',
+            ),
             reply_markup=reply_markup,
             disable_web_page_preview=True,
         )
@@ -3117,6 +3119,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             continue
         a_users_out.append(response_from)
 
+        is_this_bot = str(bot_data.id) == str(response_from['tg_uid'])
         if tg_user_left:
             # Ушел пользователь, убираем его из группы
             await TgGroupMember.remove(
@@ -3125,7 +3128,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 group_type=message.chat.type,
                 user_tg_uid=response_from['tg_uid']
             )
-        elif str(bot_data.id) != str(response_from['tg_uid']):
+        elif not is_this_bot:
             # Добавить в группу в апи, если его там нет и если это не бот-обработчик
             await TgGroupMember.add(
                 group_chat_id=message.chat.id,
@@ -3151,51 +3154,43 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             )
             logging.debug('post operation, status: %s' % status)
             logging.debug('post operation, response: %s' % response)
-            # Обновить, ибо уже на доверие больше у него может быть
-            status, response_from = await Misc.post_tg_user(user_in)
             if status != 200:
+                a_users_out.append({})
                 continue
+            # Обновить, ибо уже на доверие больше у него может быть
+            response_from['trust_count'] = response['profile_to']['trust_count']
+            status, response_from = await Misc.post_tg_user(user_in)
 
-        reply_template = '<b>%(deeplink_with_name)s</b>'
-        is_this_bot = str(bot_data.id) == str(response_from['tg_uid'])
-        trust_count = response_from.get('trust_count')
-        if (trust_count is not None) and not (is_this_bot and tg_users_new):
-            reply_template += ' (%(trust_count)s)'
-        reply = reply_template % dict(
-            deeplink_with_name=Misc.get_deeplink_with_name(response_from, bot_data),
-            trust_count=trust_count,
-        )
 
-        if not is_previous_his:
-            reply_markup = InlineKeyboardMarkup()
-            path = "/profile/?id=%(uuid)s" % dict(uuid=response_from['uuid'],)
-
-            url = settings.FRONTEND_HOST + path
-            # login_url = Misc.make_login_url(path)
-            # login_url = LoginUrl(url=login_url)
-            inline_btn_go = InlineKeyboardButton(
-                'Доверия',
-                url=url,
-                # login_url=login_url,
-            )
-            buttons = [inline_btn_go]
-
+        if not is_previous_his and not tg_user_left:
             if is_this_bot:
-                if tg_user_left:
-                    # ЭТОТ Бот ушел, не может послать ответ без аварии
-                    reply = ''
-                elif tg_users_new:
-                    # ЭТОТ бот подключился. Достаточно его full name и ссылку на доверия в группе
-                    #
-                    inline_btn_trusts = InlineKeyboardButton(
-                        'Доверия',
-                        url='%(group_host)s/?tg_group_chat_id=%(chat_id)s' % dict(
-                            group_host=settings.GROUP_HOST,
-                            chat_id=message.chat.id,
-                    ))
-                    buttons = [inline_btn_trusts]
+                # ЭТОТ бот подключился. Достаточно его full name и ссылку на доверия в группе
+                #
+                reply = Misc.get_html_a(
+                    href='%s/?chat_id=%s' % (settings.MAP_HOST, message.chat.id),
+                    text='Карта',
+                )
+                inline_btn_trusts = InlineKeyboardButton(
+                    'Доверия',
+                    url='%(group_host)s/?tg_group_chat_id=%(chat_id)s' % dict(
+                        group_host=settings.GROUP_HOST,
+                        chat_id=message.chat.id,
+                ))
+                buttons = [inline_btn_trusts]
             else:
-                # не делать кнопку Доверия для бота, глючит!
+                reply = '<b>%(deeplink_with_name)s</b> (%(trust_count)s)' % dict(
+                    deeplink_with_name=Misc.get_deeplink_with_name(response_from, bot_data),
+                    trust_count=response_from['trust_count'],
+                )
+                path = "/profile/?id=%(uuid)s" % dict(uuid=response_from['uuid'],)
+                url = settings.FRONTEND_HOST + path
+                # login_url = Misc.make_login_url(path)
+                # login_url = LoginUrl(url=login_url)
+                inline_btn_go = InlineKeyboardButton(
+                    'Доверия',
+                    url=url,
+                    # login_url=login_url,
+                )
                 dict_reply = dict(
                     operation=OperationType.TRUST_AND_THANK,
                     keyboard_type=KeyboardType.TRUST_THANK_VER_2,
@@ -3209,11 +3204,11 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                     '+Доверие',
                     callback_data=callback_data_template % dict_reply,
                 )
-                buttons.append(inline_btn_thank)
-            reply_markup.row(*buttons)
+                buttons = [inline_btn_go, inline_btn_thank]
 
-            if reply:
-                await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+            reply_markup = InlineKeyboardMarkup()
+            reply_markup.row(*buttons)
+            await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
     for i, response_from in enumerate(a_users_out):
         if response_from.get('created'):
