@@ -3154,12 +3154,15 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             )
             logging.debug('post operation, status: %s' % status)
             logging.debug('post operation, response: %s' % response)
-            if status != 200:
-                a_users_out.append({})
-                continue
-            # Обновить, ибо уже на доверие больше у него может быть
-            response_from['trust_count'] = response['profile_to']['trust_count']
-            status, response_from = await Misc.post_tg_user(user_in)
+            if status == 200:
+                # Обновить, ибо уже на доверие больше у него может быть
+                response_from['trust_count'] = response['profile_to']['trust_count']
+            #else:
+                #   status == 400:
+                #   response == {'message': 'Не найден пользователь с этим ид телеграма'}
+                #       Возможно, что это не пользователь-администратор, а
+                #       некий @GroupAnonymousBot добавляет юзера. Такое возможно
+                #       с группами, подключенными к каналу
 
 
         if not is_previous_his and not tg_user_left:
@@ -3168,7 +3171,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 #
                 reply = Misc.get_html_a(
                     href='%s/?chat_id=%s' % (settings.MAP_HOST, message.chat.id),
-                    text='Карта',
+                    text='Карта участников группы',
                 )
                 inline_btn_trusts = InlineKeyboardButton(
                     'Доверия',

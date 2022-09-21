@@ -615,6 +615,7 @@ class Misc(object):
             activate='1' if activate else '',
             did_bot_start='1',
         )
+        logging.debug('get_or_create tg_user by tg_uid in api, payload: %s' % payload_sender)
         try:
             status_sender, response_sender = await cls.api_request(
                 path='/api/profile',
