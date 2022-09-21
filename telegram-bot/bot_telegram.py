@@ -507,7 +507,7 @@ async def put_new_child(message: types.Message, state: FSMContext):
     )
 async def process_callback_child(callback_query: types.CallbackQuery, state: FSMContext):
     """
-    Действия по заданию папы, мамы
+    Действия по заданию папы, мамы для ребенка
     """
     if callback_query.message:
         tg_user_sender = callback_query.from_user
@@ -523,7 +523,6 @@ async def process_callback_child(callback_query: types.CallbackQuery, state: FSM
         if not response_sender:
             return
         response_uuid = response_sender['response_uuid']
-        bot_data = await bot.get_me()
         state = dp.current_state()
         reply_markup = None
         async with state.proxy() as data:
@@ -660,7 +659,6 @@ async def process_callback_keys(callback_query: types.CallbackQuery, state: FSMC
         )
         if not response_sender:
             return
-        bot_data = await bot.get_me()
         state = dp.current_state()
         async with state.proxy() as data:
             data['uuid'] = uuid
@@ -709,9 +707,9 @@ async def get_keys(message: types.Message, state: FSMContext):
                                 user_uuid=response_sender['response_uuid']['uuid'],
                                 keys=keys,
                         ))
-                        bot_data = await bot.get_me()
                         if status == 400 and response.get('profile'):
                             # 'Контакт "%s" есть уже у другого пользователя' % value
+                            bot_data = await bot.get_me()
                             await message.reply(
                                 response['message'] + \
                                 ': ' + Misc.get_deeplink_with_name(response['profile'], bot_data) + '\n\n' + \
@@ -725,7 +723,7 @@ async def get_keys(message: types.Message, state: FSMContext):
                             await Misc.show_cards(
                                 [response],
                                 message,
-                                bot_data,
+                                bot,
                                 response_from=response_sender,
                             )
                     except:
@@ -953,7 +951,6 @@ async def process_callback_iof(callback_query: types.CallbackQuery, state: FSMCo
         if not response_sender:
             return
         response_uuid = response_sender['response_uuid']
-        bot_data = await bot.get_me()
         state = dp.current_state()
         async with state.proxy() as data:
             data['uuid'] = uuid
@@ -987,11 +984,10 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
             )
             if status == 200:
                 await message.reply('Изменено')
-                bot_data = await bot.get_me()
                 await Misc.show_cards(
                     [response],
                     message,
-                    bot_data,
+                    bot,
                     response_from=response_sender,
                 )
     await Misc.state_finish(state)
@@ -1126,11 +1122,10 @@ async def put_other_data(message, tg_user_sender, state, data):
             )
             if status == 200 and response:
                 await message.reply('Данные внесены:\n' + Misc.show_other_data(response))
-                bot_data = await bot.get_me()
                 await Misc.show_cards(
                     [response],
                     message,
-                    bot_data,
+                    bot,
                     response_from=response_sender,
                 )
             elif status == 400 and response and response.get('message'):
@@ -1592,7 +1587,6 @@ async def put_ability(message: types.Message, state: FSMContext):
         )
         return
 
-    bot_data = await bot.get_me()
     logging.debug('put_ability: post tg_user data')
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
@@ -1630,7 +1624,7 @@ async def put_ability(message: types.Message, state: FSMContext):
                 await Misc.show_cards(
                     [response],
                     message,
-                    bot_data,
+                    bot,
                     response_from=response_sender,
                 )
             else:
@@ -1657,7 +1651,6 @@ async def put_wish(message: types.Message, state: FSMContext):
         )
         return
 
-    bot_data = await bot.get_me()
     logging.debug('put_wish: post tg_user data')
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
@@ -1695,7 +1688,7 @@ async def put_wish(message: types.Message, state: FSMContext):
                 await Misc.show_cards(
                     [response],
                     message,
-                    bot_data,
+                    bot,
                     response_from=response_sender,
                 )
             else:
@@ -1722,7 +1715,6 @@ async def put_photo(message: types.Message, state: FSMContext):
         )
         return
 
-    bot_data = await bot.get_me()
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
     if status_sender == 200:
@@ -1745,12 +1737,11 @@ async def put_photo(message: types.Message, state: FSMContext):
             )
             msg_error = '<b>Ошибка</b>. Фото не внесено.\n'
             if status == 200:
-                bot_data = await bot.get_me()
-                await message.reply('%s : фото внесено' % Misc.get_deeplink_with_name(response, bot_data))
+                await message.reply('%s : фото внесено' % response['first_name'])
                 await Misc.show_cards(
                     [response],
                     message,
-                    bot_data,
+                    bot,
                     response_from=response_sender,
                 )
             elif status == 400:
@@ -1867,7 +1858,6 @@ async def process_callback_photo_remove_confirmed(callback_query: types.Callback
     except IndexError:
         uuid = None
     if uuid:
-        bot_data = await bot.get_me()
         logging.debug('put (remove) photo: post tg_user data')
         tg_user_sender = callback_query.from_user
         status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
@@ -1877,11 +1867,11 @@ async def process_callback_photo_remove_confirmed(callback_query: types.Callback
                 uuid=uuid,
             )
             if status == 200:
-                await callback_query.message.reply('Фото удалено')
+                await callback_query.message.reply('%s: фото удалено' % response['first_name'])
                 await Misc.show_cards(
                     [response],
                     callback_query.message,
-                    bot_data,
+                    bot,
                     response_from=response_sender,
                 )
             elif status == 400:
@@ -1910,7 +1900,6 @@ async def put_new_iof(message: types.Message, state: FSMContext):
             reply_markup=reply_markup
         )
         return
-    bot_data = await bot.get_me()
     logging.debug('put_new_iof: post tg_user data')
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
@@ -1936,7 +1925,7 @@ async def put_new_iof(message: types.Message, state: FSMContext):
                     await Misc.show_cards(
                         [response],
                         message,
-                        bot_data,
+                        bot,
                         response_from=response_sender,
                     )
             except:
@@ -2449,11 +2438,10 @@ async def put_location(message, state, show_card=False):
                 if status == 200:
                     result = response
                     if show_card:
-                        bot_data = await bot.get_me()
                         await Misc.show_cards(
                             [response],
                             message,
-                            bot_data,
+                            bot,
                             response_from=response_sender,
                         )
                         await message.reply('Координаты записаны', reply_markup=reply_markup)
@@ -2611,7 +2599,6 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
     a_found = []
 
     message_text = getattr(message, 'text', '') and message.text.strip() or ''
-    bot_data = await bot.get_me()
     if tg_user_sender.is_bot:
         reply = 'Сообщения от ботов пока не обрабатываются'
     else:
@@ -2755,7 +2742,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         await Misc.show_cards(
             a_response_to,
             message,
-            bot_data,
+            bot,
             exclude_tg_uids=[],
             response_from=response_from,
             message_to_forward_id=message_to_forward_id,
@@ -2766,6 +2753,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
     elif reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
+    bot_data = await bot.get_me()
     await Misc.show_deeplinks(a_found, message, bot_data)
 
     if user_from_id and (response_from.get('created') or state_ == 'start'):

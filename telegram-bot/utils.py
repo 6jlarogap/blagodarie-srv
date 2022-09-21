@@ -754,7 +754,7 @@ class Misc(object):
         a_response_to,
         # в ответ на какое сообщение
         message,
-        bot_data,
+        bot,
         # не показывать карточку, если тг ид в этом списке
         exclude_tg_uids=[],
         # данные пользователя-отправителя сообщения message
@@ -768,6 +768,7 @@ class Misc(object):
         Показать карточки пользователей
         """
         tg_uids = set(exclude_tg_uids)
+        bot_data = await bot.get_me()
         user_from_id = response_from.get('user_id')
         for response_to in a_response_to:
             is_own_account = user_from_id and user_from_id == response_to['user_id']
