@@ -4,7 +4,9 @@ from uuid import UUID
 
 from aiogram.types.login_url import LoginUrl
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types.input_file import InputFile
 from aiogram.utils.parts import safe_split_text
+from aiogram.utils.exceptions import BadRequest
 import aiohttp
 
 import settings
@@ -1001,7 +1003,33 @@ class Misc(object):
 
             if user_from_id:
                 # в бот
-                await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+                #
+                send_text_message = True
+                if response_to.get('photo') and response_from and response_from.get('tg_uid'):
+                    try:
+                        photo = InputFile.from_url(response_to['photo'], filename='1.png')
+                        await bot.send_photo(
+                            chat_id=response_from['tg_uid'],
+                            photo=photo,
+                            disable_notification=True,
+                            caption=reply,
+                            reply_markup=reply_markup,
+                        )
+                        send_text_message = False
+                    except BadRequest as excpt:
+                        if excpt.args[0] == 'Media_caption_too_long':
+                            try:
+                                await bot.send_photo(
+                                    chat_id=response_from['tg_uid'],
+                                    photo=photo,
+                                    disable_notification=True,
+                                )
+                            except:
+                                pass
+                    except:
+                        pass
+                if send_text_message:
+                    await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
             else:
                 # в группу
                 await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
