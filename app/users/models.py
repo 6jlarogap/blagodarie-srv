@@ -474,6 +474,8 @@ class Profile(PhotoModel, GeoPointAddressModel):
         TgMessageJournal.objects.filter(user_to=user_from).update(user_to=user)
         TgMessageJournal.objects.filter(user_to_delivered=user_from).update(user_to_delivered=user)
 
+        #TODO посмотреть надо ли это
+        #
         q = Q(user_from=user_from) | Q(user_from=user) | Q(user_to=user_from) | Q(user_to=user)
         q &= Q(user_to__isnull=False) & Q(is_reverse=True)
         CurrentState.objects.filter(q).delete()
@@ -527,7 +529,6 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 user_from=cs.user_to,
                 defaults=dict(
                     is_reverse=True,
-                    thanks_count=cs.thanks_count,
                     is_trust=cs.is_trust,
                     is_father=cs.is_father,
                     is_mother=cs.is_mother,
@@ -551,8 +552,6 @@ class Profile(PhotoModel, GeoPointAddressModel):
                     Key.objects.filter(pk=key.pk).update(owner=user)
             except IntegrityError:
                 Key.objects.filter(pk=key.pk).delete()
-        self.recount_sum_thanks_count()
-        self.recount_trust_fame()
         if not self.middle_name and profile_from.middle_name:
             self.middle_name = profile_from.middle_name
             self.save(update_fields=('middle_name',))
@@ -594,11 +593,24 @@ class Profile(PhotoModel, GeoPointAddressModel):
         user_from_id = user_from.id
         user_from.delete()
 
+        OperationType = get_model('contact', 'OperationType')
+        for cs in CurrentState.objects.filter(user_to=user).distinct():
+            thanks_count = Journal.objects.filter(
+                user_from=cs.user_from,
+                user_to=cs.user_to,
+                operationtype_id__in=(OperationType.THANK, OperationType.TRUST_AND_THANK,),
+            ).distinct().count()
+            if thanks_count != cs.thanks_count:
+                cs.thanks_count = thanks_count
+                cs.save(update_fields=('thanks_count',))
+
+        self.recount_sum_thanks_count()
+        self.recount_trust_fame()
+
     def recount_sum_thanks_count(self, do_save=True):
         CurrentState = get_model('contact', 'CurrentState')
         user = self.user
         self.sum_thanks_count = CurrentState.objects.filter(
-            is_reverse=False,
             user_to=user,
         ).distinct().aggregate(Sum('thanks_count'))['thanks_count__sum'] or 0
         if do_save:

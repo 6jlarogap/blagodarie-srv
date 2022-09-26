@@ -418,23 +418,27 @@ class Misc(object):
         Ответ в соответствии с response_type:
             'json' или 'text'
         """
+        status = response = None
         async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
-            async with session.request(
-                method.upper(),
-                "%s%s" % (settings.API_HOST, path,),
-                data=data,
-                json=json,
-                params=params,
-            ) as resp:
-                status = resp.status
-                if status < 500:
-                    if response_type == 'json':
-                        response = await resp.json()
-                    elif response_type == 'text':
+            try:
+                async with session.request(
+                    method.upper(),
+                    "%s%s" % (settings.API_HOST, path,),
+                    data=data,
+                    json=json,
+                    params=params,
+                ) as resp:
+                    status = resp.status
+                    if status < 500:
+                        if response_type == 'json':
+                            response = await resp.json()
+                        elif response_type == 'text':
+                            response = await resp.text('UTF-8')
+                    else:
                         response = await resp.text('UTF-8')
-                else:
-                    response = await resp.text('UTF-8')
-                return status, response
+            except:
+                pass
+        return status, response
 
 
     @classmethod
@@ -618,16 +622,13 @@ class Misc(object):
             did_bot_start='1',
         )
         logging.debug('get_or_create tg_user by tg_uid in api, payload: %s' % payload_sender)
-        try:
-            status_sender, response_sender = await cls.api_request(
-                path='/api/profile',
-                method='post',
-                data=payload_sender,
-            )
-            logging.debug('get_or_create tg_user by tg_uid in api, status: %s' % status_sender)
-            logging.debug('get_or_create tg_user by tg_uid in api, response_from: %s' % response_sender)
-        except:
-            status_sender = response_sender = None
+        status_sender, response_sender = await cls.api_request(
+            path='/api/profile',
+            method='post',
+            data=payload_sender,
+        )
+        logging.debug('get_or_create tg_user by tg_uid in api, status: %s' % status_sender)
+        logging.debug('get_or_create tg_user by tg_uid in api, response_from: %s' % response_sender)
         return status_sender, response_sender
 
 
@@ -639,16 +640,13 @@ class Misc(object):
         params = dict(uuid=uuid)
         if with_owner:
             params.update(with_owner='1')
-        try:
-            status, response = await Misc.api_request(
-                path='/api/profile',
-                method='get',
-                params=params,
-            )
-            logging.debug('get_user_profile by uuid, status: %s' % status)
-            logging.debug('get_user_profile by uuid, response: %s' % response)
-        except:
-            status = response = None
+        status, response = await Misc.api_request(
+            path='/api/profile',
+            method='get',
+            params=params,
+        )
+        logging.debug('get_user_profile by uuid, status: %s' % status)
+        logging.debug('get_user_profile by uuid, response: %s' % response)
         return status, response
 
 
@@ -658,16 +656,13 @@ class Misc(object):
         Получить данные пользователя по тедеграм ид
         """
         params = dict(tg_uid=str(tg_uid))
-        try:
-            status, response = await Misc.api_request(
-                path='/api/profile',
-                method='get',
-                params=params,
-            )
-            logging.debug('get_user_profile by tg_uid, status: %s' % status)
-            logging.debug('get_user_profile by tg_uid, response: %s' % response)
-        except:
-            status = response = None
+        status, response = await Misc.api_request(
+            path='/api/profile',
+            method='get',
+            params=params,
+        )
+        logging.debug('get_user_profile by tg_uid, status: %s' % status)
+        logging.debug('get_user_profile by tg_uid, response: %s' % response)
         return status, response
 
 

@@ -152,28 +152,8 @@ class ApiAddOperationMixin(object):
             ))
             if not created_:
                 currentstate.update_timestamp = update_timestamp
-                if currentstate.is_reverse:
-                    # то же что created
-                    currentstate.insert_timestamp = insert_timestamp
-                    currentstate.is_reverse = False
-                    currentstate.thanks_count = 1
-                    currentstate.is_trust = None
-                else:
-                    currentstate.thanks_count += 1
+                currentstate.thanks_count += 1
                 currentstate.save()
-
-            reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
-                user_to=user_from,
-                user_from=user_to,
-                defaults=dict(
-                    is_reverse=True,
-                    is_trust=currentstate.is_trust,
-                    thanks_count=currentstate.thanks_count,
-            ))
-            if not reverse_created and reverse_cs.is_reverse:
-                reverse_cs.update_timestamp = update_timestamp
-                reverse_cs.thanks_count = currentstate.thanks_count
-                reverse_cs.save()
 
             profile_to.sum_thanks_count += 1
             profile_to.save()
@@ -189,24 +169,15 @@ class ApiAddOperationMixin(object):
                     is_trust=False,
             ))
             if not created_:
+                if not currentstate.is_reverse and currentstate.is_trust == False:
+                    raise ServiceException(
+                        'Вы уже не доверяете пользователю',
+                        already_code,
+                    )
                 currentstate.update_timestamp = update_timestamp
-                if currentstate.is_reverse:
-                    # то же что created
-                    currentstate.insert_timestamp = insert_timestamp
-                    currentstate.is_reverse = False
-                    currentstate.is_trust = False
-                    currentstate.thanks_count = 0
-                    currentstate.save()
-                else:
-                    if currentstate.is_trust == False:
-                        raise ServiceException(
-                            'Вы уже не доверяете пользователю',
-                            already_code,
-                        )
-                    else:
-                        # True or None
-                        currentstate.is_trust = False
-                        currentstate.save()
+                currentstate.is_reverse = False
+                currentstate.is_trust = False
+                currentstate.save()
 
             reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
                 user_to=user_from,
@@ -214,10 +185,10 @@ class ApiAddOperationMixin(object):
                 defaults=dict(
                     is_reverse=True,
                     is_trust=False,
-                    thanks_count=currentstate.thanks_count,
             ))
-            if not reverse_created and reverse_cs.is_reverse and not (reverse_cs.is_trust == False):
+            if not reverse_created and (reverse_cs.is_reverse or reverse_cs.is_trust == None):
                 reverse_cs.update_timestamp = update_timestamp
+                reverse_cs.is_reverse = True
                 reverse_cs.is_trust = False
                 reverse_cs.save()
 
@@ -231,24 +202,15 @@ class ApiAddOperationMixin(object):
                     is_trust=True,
             ))
             if not created_:
+                if not currentstate.is_reverse and currentstate.is_trust == True:
+                    raise ServiceException(
+                        'Вы уже доверяете пользователю',
+                        already_code,
+                    )
                 currentstate.update_timestamp = update_timestamp
-                if currentstate.is_reverse:
-                    # то же что created
-                    currentstate.insert_timestamp = insert_timestamp
-                    currentstate.is_reverse = False
-                    currentstate.is_trust = True
-                    currentstate.thanks_count = 0
-                    currentstate.save()
-                else:
-                    if currentstate.is_trust == True:
-                        raise ServiceException(
-                            'Вы уже доверяете пользователю',
-                            already_code,
-                        )
-                    else:
-                        # False or None
-                        currentstate.is_trust = True
-                        currentstate.save()
+                currentstate.is_reverse = False
+                currentstate.is_trust = True
+                currentstate.save()
 
             reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
                 user_to=user_from,
@@ -256,10 +218,10 @@ class ApiAddOperationMixin(object):
                 defaults=dict(
                     is_reverse=True,
                     is_trust=True,
-                    thanks_count=currentstate.thanks_count,
             ))
-            if not reverse_created and reverse_cs.is_reverse and not (reverse_cs.is_trust == True):
+            if not reverse_created and (reverse_cs.is_reverse or reverse_cs.is_trust == None):
                 reverse_cs.update_timestamp = update_timestamp
+                reverse_cs.is_reverse = True
                 reverse_cs.is_trust = True
                 reverse_cs.save()
 
@@ -275,17 +237,10 @@ class ApiAddOperationMixin(object):
             ))
             if not created_:
                 currentstate.update_timestamp = update_timestamp
-                if currentstate.is_reverse:
-                    # то же что created
-                    currentstate.insert_timestamp = insert_timestamp
-                    currentstate.is_reverse = False
-                    currentstate.is_trust = True
-                    currentstate.thanks_count = 1
-                    currentstate.save()
-                else:
-                    currentstate.is_trust = True
-                    currentstate.thanks_count += 1
-                    currentstate.save()
+                currentstate.is_reverse = False
+                currentstate.is_trust = True
+                currentstate.thanks_count += 1
+                currentstate.save()
 
             reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
                 user_to=user_from,
@@ -293,12 +248,11 @@ class ApiAddOperationMixin(object):
                 defaults=dict(
                     is_reverse=True,
                     is_trust=True,
-                    thanks_count=currentstate.thanks_count,
             ))
-            if not reverse_created and reverse_cs.is_reverse:
+            if not reverse_created and (reverse_cs.is_reverse or reverse_cs.is_trust == None):
                 reverse_cs.update_timestamp = update_timestamp
+                reverse_cs.is_reverse = True
                 reverse_cs.is_trust = True
-                reverse_cs.thanks_count = currentstate.thanks_count
                 reverse_cs.save()
 
             profile_to.sum_thanks_count += 1
@@ -326,8 +280,23 @@ class ApiAddOperationMixin(object):
                     raise ServiceException(err_message, already_code)
                 else:
                     # False or True
+                    # Здесь если есть обратная запись, в которой is_trust not null,
+                    #   то:     переводим найденную в is_reverse
+                    #   иначе:  в текущей ставим is_trust = None
+                    #
+                    reverse_cs, reverse_created = CurrentState.objects.get_or_create(
+                        user_from=user_to,
+                        user_to=user_from,
+                        defaults = dict(
+                            is_reverse=True,
+                            is_trust=None,
+                    ))
                     currentstate.update_timestamp = update_timestamp
-                    currentstate.is_trust = None
+                    if not reverse_created and not (reverse_cs.is_trust == None) and not reverse_cs.is_reverse:
+                        currentstate.is_reverse = True
+                        currentstate.is_trust = reverse_cs.is_trust
+                    else:
+                        currentstate.is_trust = None
                     currentstate.save()
 
             CurrentState.objects.filter(
@@ -415,11 +384,9 @@ class ApiAddOperationMixin(object):
                 user_to=user_from,
                 user_from=user_to,
                 defaults=dict(
-                    is_reverse=True,
                     is_child=True,
                     is_father=is_father,
                     is_mother=is_mother,
-                    thanks_count=currentstate.thanks_count,
                     is_trust=currentstate.is_trust,
             ))
             if not reverse_created:
@@ -1286,7 +1253,7 @@ class ApiGetStats(SQL_Mixin, ApiTgGroupConnectionsMixin, APIView):
             #
             #   без параметров:
             #       список тех пользователей, и связи,
-            #       где есть доверие (currenstate.is_trust == True).
+            #       где есть доверие (currentstate.is_trust == True).
             #   с параметром query:
             #       у которых в
             #               имени или
@@ -1295,7 +1262,7 @@ class ApiGetStats(SQL_Mixin, ApiTgGroupConnectionsMixin, APIView):
             #               ключах или
             #               желаниях
             #       есть query, и их связи,
-            #       где есть доверие (currenstate.is_trust == True).
+            #       где есть доверие (currentstate.is_trust == True).
             #   В любом случае возвращаются в массиве users еще
             #   данные пользователя, если он авторизовался, а также
             #   связи с попавшими в выборку по query и/или в страницу from...
@@ -2820,7 +2787,6 @@ class ApiGetThanksUsersForAnytext(APIView):
                     'user_from__profile',
                 ).filter(
                     anytext__text=text,
-                    is_reverse=False,
                 )
             try:
                 from_ = request.GET.get("from", 0)
@@ -3202,7 +3168,9 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             # TODO remove below, it is for debug
             d.update({
                 'source_fio': cs.user_from.first_name,
+                'source_id': cs.user_from.pk,
                 'target_fio': cs.user_to.first_name,
+                'target_id': cs.user_to.pk,
             })
             connections.append(d)
 
@@ -3210,8 +3178,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
 
         if request.user.is_authenticated:
             user = request.user
-            if int(user.pk) not in user_pks:
-                user_pks.add(int(user.pk))
+            user_pks.add(int(request.user.pk))
 
         users = [
             p.data_dict(request) for p in \
@@ -3231,7 +3198,9 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             # TODO remove below, it is for debug
             d.update({
                 'source_fio': cs.user_from.first_name,
+                'source_id': cs.user_from.pk,
                 'target_fio': cs.user_to.first_name,
+                'target_id': cs.user_to.pk,
             })
             trust_connections.append(d)
 
@@ -3291,65 +3260,45 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         user_pks = set()
         pairs = []
         for rec in recs:
-            if rec['is_child']:
-                user_from_id = rec['user_to_id']
-                user_to_id = rec['user_from_id']
-            else:
-                user_from_id = rec['user_from_id']
-                user_to_id = rec['user_to_id']
-            pair = '%s/%s' % (user_from_id, user_to_id)
-            if pair not in pairs:
-                pairs.append(pair)
-                user_pks.add(user_from_id)
-                user_pks.add(user_to_id)
-                connections.append(dict(
-                    source=user_from_id,
-                    target=user_to_id,
-                    thanks_count=rec['thanks_count'],
-                    is_trust=rec['is_trust'],
-                    is_father=rec['is_father'],
-                    is_mother=rec['is_mother'],
-                ))
-        profiles_dict = dict()
-        users = []
-        for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
-            profiles_dict[profile.user.pk] = dict(
-                uuid=profile.uuid,
-                # TODO remove below, it is for debug
-                first_name=profile.user.first_name,
-                user_pk=profile.user.pk,
-            )
-            users.append(profile.data_dict(request))
+            user_pks.add(rec['user_from_id'])
+            user_pks.add(rec['user_to_id'])
 
-        if user_q.pk not in user_pks:
-            user_pks.add(user_q.pk)
-            users.append(profile_q.data_dict(request))
-
-        for c in connections:
-
-            # TODO: remove this debug:
-            #
-            c['source_fio'] = profiles_dict[c['source']]['first_name']
-            c['source_id'] = profiles_dict[c['source']]['user_pk']
-
-            c['target_fio'] = profiles_dict[c['target']]['first_name']
-            c['target_id'] = profiles_dict[c['target']]['user_pk']
-            # ------------------------
-
-            c['source'] = profiles_dict[c['source']]['uuid']
-            c['target'] = profiles_dict[c['target']]['uuid']
-
-        trust_connections = []
+        connections = []
         q_connections = Q(
-            is_reverse=False,
-            is_trust=True,
+            is_child=False,
             user_to__isnull=False,
         )
+        q_connections &= Q(is_father=True) | Q(is_mother=True)
+        q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
+        for cs in CurrentState.objects.filter(q_connections).select_related(
+                'user_from__profile', 'user_to__profile',
+            ).distinct():
+            d = cs.data_dict()
+            # TODO remove below, it is for debug
+            d.update({
+                'source_fio': cs.user_from.first_name,
+                'source_id': cs.user_from.pk,
+                'target_fio': cs.user_to.first_name,
+                'target_id': cs.user_to.pk,
+            })
+            connections.append(d)
+
+        trust_connections = []
         if request.user.is_authenticated:
             user = request.user
-            if user.pk not in user_pks:
-                users.append(user.profile.data_dict(request))
-                user_pks.add(user.pk)
+            user_pks.add(int(request.user.pk))
+
+        user_pks.add(user_q.pk)
+        users = [
+            p.data_dict(request) for p in \
+            Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability')
+        ]
+
+        q_connections = Q(
+            is_reverse=False,
+            user_to__isnull=False,
+            is_trust=True,
+        )
         q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
@@ -3358,7 +3307,9 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             # TODO remove below, it is for debug
             d.update({
                 'source_fio': cs.user_from.first_name,
+                'source_id': cs.user_from.pk,
                 'target_fio': cs.user_to.first_name,
+                'target_id': cs.user_to.pk,
             })
             trust_connections.append(d)
 
@@ -3388,9 +3339,6 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
     """
 
     def get_shortest_path(self, request, uuids, recursion_depth):
-        #TODO   Это не будет во всех случаях корректно работать
-        #       Надо исправлять nullify_trust operation:
-        #           делать эту запись реверсивной
         try:
             user_from_id = Profile.objects.get(uuid=uuids[0]).user_id
             user_to_id = Profile.objects.get(uuid=uuids[1]).user_id
@@ -3418,18 +3366,10 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             for user_id in path:
                 user_pks.add(user_id)
 
-        pairs = []
-        for path in paths:
-            for i, user_id in enumerate(path):
-                if i == len(path) - 1:
-                    break
-                pair = '%s/%s' % (path[i], path[i + 1],)
-                if pair not in pairs:
-                    pairs.append(pair)
-
         connections = []
         q_connections = Q(
             is_trust=True,
+            is_reverse=False,
             user_to__isnull=False,
             user_to__pk__in=user_pks,
             user_from__pk__in=user_pks,
@@ -3437,46 +3377,24 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            if cs.is_reverse:
-                source = cs.user_to.profile.uuid
-                source_fio = cs.user_to.first_name
-                source_id = cs.user_to.pk
-                target = cs.user_from.profile.uuid
-                target_fio = cs.user_from.first_name
-                target_id = cs.user_from.pk
-            else:
-                source = cs.user_from.profile.uuid
-                source_fio = cs.user_from.first_name
-                source_id = cs.user_from.pk
-                target = cs.user_to.profile.uuid
-                target_fio = cs.user_to.first_name
-                target_id = cs.user_to.pk
-            pair = '%s/%s' % (source_id, target_id,)
             d = dict(
-                source=source,
-                target=target,
+                source = cs.user_from.profile.uuid,
+                target = cs.user_to.profile.uuid,
                 thanks_count=cs.thanks_count,
                 is_father=True,
             )
             # TODO remove this below and upper, it is for debug.
             d.update(
-                source_fio=source_fio,
-                source_id=source_id,
-                target_fio=target_fio,
-                target_id=target_id,
+                source_fio = cs.user_from.first_name,
+                source_id = cs.user_from.pk,
+                target_fio = cs.user_to.first_name,
+                target_id = cs.user_to.pk,
             )
-            if pair in pairs:
-                connections.append(d)
-                continue
-            # Учтем взаимные ссылки
-            if not cs.is_reverse:
-                pair_mutual = '%s/%s' % (target_id, source_id)
-                if pair_mutual in pairs:
-                    connections.append(d)
+            connections.append(d)
 
-        users = []
         user_pks.add(user_from_id)
         user_pks.add(user_to_id)
+        users = []
         for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
             users.append(profile.data_dict(request))
 
@@ -3494,71 +3412,47 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
 
         recs = []
         with connection.cursor() as cursor:
-            cursor.execute(sql_req_str % sql_req_dict)
+            cursor.execute(
+                'select * from find_rel_trust(%(user_id)s,%(recursion_depth)s)' % dict(
+                    user_id=user_q.pk,
+                    recursion_depth=recursion_depth,
+            ))
             recs += self.dictfetchall(cursor)
         connections = []
         user_pks = set()
         pairs = []
         for rec in recs:
-            if rec['is_reverse']:
-                user_from_id = rec['user_to_id']
-                user_to_id = rec['user_from_id']
-            else:
-                user_from_id = rec['user_from_id']
-                user_to_id = rec['user_to_id']
-            pair = '%s/%s' % (user_from_id, user_to_id,)
-            if pair not in pairs:
-                pairs.append(pair)
-                user_pks.add(user_from_id)
-                user_pks.add(user_to_id)
-                connections.append(dict(
-                    source=user_from_id,
-                    target=user_to_id,
-                    thanks_count=rec['thanks_count'],
-                    is_father=True,
-                ))
-        profiles_dict = dict()
-        users = []
-        for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
-            profiles_dict[profile.user.pk] = dict(
-                uuid=profile.uuid,
-                # TODO remove below, it is for debug
-                first_name=profile.user.first_name,
-                user_pk=profile.user.pk,
-            )
-            users.append(profile.data_dict(request))
+            user_pks.add(rec['user_from_id'])
+            user_pks.add(rec['user_to_id'])
 
-        # Учесть взаимные доверия
-        #
         for cs in CurrentState.objects.filter(
                 user_from__in=user_pks,
                 user_to__in=user_pks,
                 is_trust=True,
                 is_reverse=False,
+            ).select_related(
+                'user_from', 'user_from__profile', 'user_from__profile__ability',
+                'user_to', 'user_to__profile', 'user_to__profile__ability',
             ).distinct():
-            pair = '%s/%s' % (cs.user_from.pk, cs.user_to.pk,)
-            if pair not in pairs:
-                pair_mutual = '%s/%s' % (cs.user_to.pk, cs.user_from.pk,)
-                if pair_mutual in pairs:
-                    connections.append(dict(
-                        source=cs.user_from.pk,
-                        target=cs.user_to.pk,
-                        thanks_count=cs.thanks_count,
-                        is_father=True,
-                    ))
+            d = dict(
+                source=cs.user_from.profile.uuid,
+                target=cs.user_to.profile.uuid,
+                thanks_count=cs.thanks_count,
+                is_father=True,
+            )
+            # TODO remove this below and upper, it is for debug.
+            d.update(
+                source_fio = cs.user_from.first_name,
+                source_id = cs.user_from.pk,
+                target_fio = cs.user_to.first_name,
+                target_id = cs.user_to.pk,
+            )
+            connections.append(d)
 
-        for c in connections:
-            # TODO: remove this debug:
-            #
-            c['source_fio'] = profiles_dict[c['source']]['first_name']
-            c['source_id'] = profiles_dict[c['source']]['user_pk']
-
-            c['target_fio'] = profiles_dict[c['target']]['first_name']
-            c['target_id'] = profiles_dict[c['target']]['user_pk']
-            # ------------------------
-
-            c['source'] = profiles_dict[c['source']]['uuid']
-            c['target'] = profiles_dict[c['target']]['uuid']
+        users = []
+        user_pks.add(user_q.pk)
+        for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
+            users.append(profile.data_dict(request))
 
         return dict(users=users, connections=connections, trust_connections=[])
 

@@ -162,16 +162,11 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
     #
     is_reverse = models.BooleanField(_("Обратное отношение"), default=False)
 
-    def data_dict(self, show_trust=True, show_parent=True):
+    def data_dict(self, show_parent=True):
         result = dict(
             source=self.user_from.profile.uuid,
             target=self.user_to.profile.uuid,
         )
-        if show_trust:
-            result.update(dict(
-                thanks_count=self.thanks_count,
-                is_trust=self.is_trust,
-            ))
         if show_parent:
             result.update(dict(
                 is_father=self.is_father,
@@ -184,36 +179,6 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
             ('user_from', 'user_to', ),
             ('user_from', 'anytext', ),
         )
-
-class TemplateTmpParent(models.Model):
-    """
-    Для поиска родственных связей пользователя рекурсивно
-    """
-    level = models.IntegerField(blank=True, null=True)
-    user_from_id = models.IntegerField(blank=True, null=True)
-    user_to_id = models.IntegerField(blank=True, null=True)
-    thanks_count = models.IntegerField(blank=True, null=True)
-    is_trust = models.BooleanField(blank=True, null=True)
-    is_father = models.BooleanField(blank=True, null=True)
-    is_mother = models.BooleanField(blank=True, null=True)
-    is_child = models.BooleanField(blank=True, null=True)
-
-    class Meta:
-        managed = False
-        db_table = 'template_tmp_parent'
-
-class TemplateTmpLinks(models.Model):
-    """
-    Для поиска любых связей между несколькими пользователями
-    """
-    level = models.IntegerField(blank=True, null=True)
-    path = ArrayField(models.PositiveIntegerField())
-    user_from_id = models.IntegerField(blank=True, null=True)
-    user_to_id = models.IntegerField(blank=True, null=True)
-
-    class Meta:
-        managed = False
-        db_table = 'template_tmp_links'
 
 class Key(BaseModelInsertTimestamp):
 
