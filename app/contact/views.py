@@ -3136,10 +3136,10 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             raise ServiceException('Один или несколько uuid неверны или есть повтор среди заданных uuid')
 
         # Строка запроса типа:
-        # select path from find_shortest_relation_path(416, 455, 10)
+        # select path from find_genesis_path_shortest(416, 455, 10)
         # where path @> array [416, 455];
         #
-        sql = 'select path from find_shortest_relation_path ' \
+        sql = 'select path from find_genesis_path_shortest ' \
               '(%(user_from_id)s, %(user_to_id)s, %(recursion_depth)s) ' \
               'where path @> array [%(user_from_id)s, %(user_to_id)s]' % dict(
             user_from_id=user_pks[0],
@@ -3236,7 +3236,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             #          v_is_child == True:     проходим только по детям.
             #          v_is_child == False:    проходим только по предкам.
 
-            'select * from find_rel_mother_father('
+            'select * from find_genesis_tree('
                 '%(user_id)s,'
                 '%(recursion_depth)s,'
                 '%(v_all)s,'
@@ -3273,7 +3273,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            d = cs.data_dict()
+            d = cs.data_dict(show_parent=True)
             # TODO remove below, it is for debug
             d.update({
                 'source_fio': cs.user_from.first_name,
@@ -3348,10 +3348,10 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             raise ServiceException('Есть повтор среди заданных uuid')
 
         # Строка запроса типа:
-        # select path from find_shortest_relation_path(416, 455, 10)
+        # select path from find_trust_path_shortest(416, 455, 10)
         # where path @> array [416, 455];
         #
-        sql = 'select path from find_trust_relation_path ' \
+        sql = 'select path from find_trust_path_shortest ' \
               '(%(user_from_id)s, %(user_to_id)s, %(recursion_depth)s) ' \
               'where path @> array [%(user_from_id)s, %(user_to_id)s]' % dict(
             user_from_id=user_from_id,
@@ -3381,6 +3381,8 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
                 source = cs.user_from.profile.uuid,
                 target = cs.user_to.profile.uuid,
                 thanks_count=cs.thanks_count,
+                # Это ради фронта, который заточен для обработки родственных
+                # деревьев
                 is_father=True,
             )
             # TODO remove this below and upper, it is for debug.
@@ -3408,22 +3410,21 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
                 user_id=user_q.pk,
                 recursion_depth=recursion_depth,
         )
-        sql_req_str = 'select * from find_rel_trust(%(user_id)s,%(recursion_depth)s)'
-
         recs = []
         with connection.cursor() as cursor:
             cursor.execute(
-                'select * from find_rel_trust(%(user_id)s,%(recursion_depth)s)' % dict(
+                'select * from find_trust_tree(%(user_id)s,%(recursion_depth)s)' % dict(
                     user_id=user_q.pk,
                     recursion_depth=recursion_depth,
             ))
             recs += self.dictfetchall(cursor)
         connections = []
         user_pks = set()
-        pairs = []
+        pairs = set()
         for rec in recs:
             user_pks.add(rec['user_from_id'])
             user_pks.add(rec['user_to_id'])
+            pairs.add('%s/%s' % (rec['user_from_id'], rec['user_to_id']))
 
         for cs in CurrentState.objects.filter(
                 user_from__in=user_pks,
@@ -3434,20 +3435,29 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
                 'user_from', 'user_from__profile', 'user_from__profile__ability',
                 'user_to', 'user_to__profile', 'user_to__profile__ability',
             ).distinct():
-            d = dict(
-                source=cs.user_from.profile.uuid,
-                target=cs.user_to.profile.uuid,
-                thanks_count=cs.thanks_count,
-                is_father=True,
-            )
-            # TODO remove this below and upper, it is for debug.
-            d.update(
-                source_fio = cs.user_from.first_name,
-                source_id = cs.user_from.pk,
-                target_fio = cs.user_to.first_name,
-                target_id = cs.user_to.pk,
-            )
-            connections.append(d)
+            # Здесь дерево.
+            # Отбросим связи МЕЖДУ узлами 2-го и последующих уровней,
+            # которые (связи) получились между разными лучами в итерациях
+            # процедуры find_trust_tree
+            pair = '%s/%s' % (cs.user_from_id, cs.user_to_id)
+            pair_reverse = '%s/%s' % (cs.user_to_id, cs.user_from_id)
+            if pair in pairs or pair_reverse in pairs:
+                d = dict(
+                    source=cs.user_from.profile.uuid,
+                    target=cs.user_to.profile.uuid,
+                    thanks_count=cs.thanks_count,
+                    # Это ради фронта, который заточен для обработки родственных
+                    # деревьев
+                    is_father=True,
+                )
+                # TODO remove this below and upper, it is for debug.
+                d.update(
+                    source_fio = cs.user_from.first_name,
+                    source_id = cs.user_from.pk,
+                    target_fio = cs.user_to.first_name,
+                    target_id = cs.user_to.pk,
+                )
+                connections.append(d)
 
         users = []
         user_pks.add(user_q.pk)
