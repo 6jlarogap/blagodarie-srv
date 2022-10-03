@@ -1334,7 +1334,7 @@ class ApiGetStats(SQL_Mixin, ApiTgGroupConnectionsMixin, APIView):
             for cs in CurrentState.objects.filter(q_connections).select_related(
                     'user_from__profile', 'user_to__profile',
                 ).distinct():
-                connections.append(cs.data_dict(show_parent=False))
+                connections.append(cs.data_dict(show_trust=True))
 
             return dict(users=users, connections=connections)
 
@@ -2649,7 +2649,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, APIView)
             for cs in CurrentState.objects.filter(q).select_related(
                 'user_to__profile', 'user_from__profile',
                 ).distinct():
-                connections.append(cs.data_dict())
+                connections.append(cs.data_dict(show_trust=True))
 
             keys = [
                 {
@@ -3075,17 +3075,21 @@ class GetTrustGenesisMixin(object):
             if recursion_depth <= 0 or recursion_depth > settings.MAX_RECURSION_DEPTH:
                 recursion_depth = settings.MAX_RECURSION_DEPTH
 
+            chat_id = request.GET.get('chat_id')
             uuid = request.GET.get('uuid', '').strip(' ,')
-            if not uuid:
-                raise ServiceException('Не задан параметр uuid: пользователя или нескольких пользователей через запятую')
-            uuids = re.split(r'[, ]+', uuid)
-            len_uuids = len(uuids)
-            if len_uuids == 1:
-                data = self.get_tree(request, uuids[0], recursion_depth)
-            elif len_uuids == 2:
-                data = self.get_shortest_path(request, uuids, recursion_depth)
+            if chat_id:
+                data = self.get_chat_tree(request, chat_id, recursion_depth)
+            elif uuid:
+                uuids = re.split(r'[, ]+', uuid)
+                len_uuids = len(uuids)
+                if len_uuids == 1:
+                    data = self.get_tree(request, uuids[0], recursion_depth)
+                elif len_uuids == 2:
+                    data = self.get_shortest_path(request, uuids, recursion_depth)
+                else:
+                    raise ServiceException("Допускается  uuid (дерево) или 2 uuid's (найти путь между)")
             else:
-                raise ServiceException("Допускается  uuid (дерево) или 2 uuid's (найти путь между)")
+                raise ServiceException('Не заданы параметры uuid или chat_id')
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
@@ -3095,36 +3099,54 @@ class GetTrustGenesisMixin(object):
 
 class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
     """
-    Дерево родни, если задан 1 uuid, или кратчайший путь (пути, если несколько) между 2 родственниками
+    Дерево родни в чате телеграма, или просто среди пользователей.
 
-    Если указан один uuid:
-        Возвращает информацию о пользователе, а также его родственных связях (дерево рода).
+    Если задан параметр chat_id, то показ родственных связей между участниками
+    телеграм группы/канала, возможно опосредованный через иных пользователей
 
-    Если указаны 2 uuid через запятую:
-        Возвращает кратчайший путь (пути) между двумя родственниками
+    Если задан параметр uuid
+        Если указан один uuid:
+            Возвращает информацию о пользователе, а также его родственных связях (дерево рода).
+
+        Если указаны 2 uuid через запятую:
+            Возвращает кратчайший путь (пути) между двумя родственниками
     В любом случае возвращаются данные авторизованного пользователя и
     его доверия (недоверия) к пользователям в цепочках связей.
 
     Параметры
-    uuid:
-        uuid пользователя
-    depth:
-        0 или отсутствие параметра или он неверен:
-            показать без ограничения глубины рекурсии
-            (в этом случае она таки ограничена, но немыслимо большИм для глубины рекурсии числом: 100)
-        1 или более:
-            показать в рекурсии связи не дальше указанной глубины рекурсии
-    up:
-        (если указан один uuid)
-        =что-то: true; отсутствует или пусто: false
-        показать прямых предков от пользователя с uuid
-    down:
-        (если указан один uuid)
-        =что-то: true; отсутствует или пусто: false
-        показать прямых потомков от пользователя с uuid
-    Если указан один uuid и отсутствуют или пустые оба параметра up и down,
-    будет показана вся сеть родни от пользователя с uuid, включая двоюродных и т.д.
+    Если задан параметр uuid:
+        uuid:
+            uuid пользователя
+        depth:
+            0 или отсутствие параметра или он неверен:
+                показать без ограничения глубины рекурсии
+                (в этом случае она таки ограничена, но немыслимо большИм для глубины рекурсии числом: 100)
+            1 или более:
+                показать в рекурсии связи не дальше указанной глубины рекурсии
+        up:
+            (если указан один uuid)
+            =что-то: true; отсутствует или пусто: false
+            показать прямых предков от пользователя с uuid
+        down:
+            (если указан один uuid)
+            =что-то: true; отсутствует или пусто: false
+            показать прямых потомков от пользователя с uuid
+        Если указан один uuid и отсутствуют или пустые оба параметра up и down,
+        будет показана вся сеть родни от пользователя с uuid, включая двоюродных и т.д.
+
+    Если задан параметр chat_id:
+        chat_id:
+            id телеграм группы или канала
+        from:
+            откуда начинать страницу показа результатов для участников группы,
+            по умолчанию 0
+        count:
+            сколько показывать участников группы в очередной странице,
+            по умолчанию settings.MAX_RECURSION_DEPTH
     """
+
+    def get_chat_tree(self, request, chat_id, recursion_depth):
+        return dict(users=[], connections=[], trust_connections=[])
 
     def get_shortest_path(self, request, uuids, recursion_depth):
         user_pks = []
@@ -3164,7 +3186,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            d = cs.data_dict()
+            d = cs.data_dict(show_parent=True)
             # TODO remove below, it is for debug
             d.update({
                 'source_fio': cs.user_from.first_name,
@@ -3194,7 +3216,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            d = cs.data_dict(show_parent=False)
+            d = cs.data_dict(show_trust=True)
             # TODO remove below, it is for debug
             d.update({
                 'source_fio': cs.user_from.first_name,
@@ -3303,7 +3325,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            d = cs.data_dict(show_parent=False)
+            d = cs.data_dict(show_trust=True)
             # TODO remove below, it is for debug
             d.update({
                 'source_fio': cs.user_from.first_name,
@@ -3319,24 +3341,46 @@ api_profile_genesis = ApiProfileGenesis.as_view()
 
 class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
     """
-    Дерево доверия, если задан 1 uuid, или кратчайший путь (пути) по доверию между 2 пользователями
+    Дерево доверия в чате телеграма, или просто среди пользователей
 
-    Если указан один uuid:
-        Возвращает информацию о пользователе, а также его довериям.
+    Если задан параметр chat_id, то показ связей доверия между участниками
+    телеграм группы/канала, возможно опосредованный через иных пользователей
+    ПОКА НЕ РЕАЛИЗОВАНО, точнее не востребовано
 
-    Если указаны 2 uuid через запятую:
-        Возвращает кратчайший путь (пути) между двумя пользователями
+    Если задан параметр uuid
+        если задан 1 uuid, или кратчайший путь (пути) по доверию между 2 пользователями
+
+        Если указан один uuid:
+            Возвращает информацию о пользователе, а также его довериям.
+
+        Если указаны 2 uuid через запятую:
+            Возвращает кратчайший путь (пути) между двумя пользователями
 
     Параметры
-    uuid:
-        uuid пользователя
-    depth:
-        0 или отсутствие параметра или он неверен:
-            показать без ограничения глубины рекурсии
-            (в этом случае она таки ограничена, но немыслимо большИм для глубины рекурсии числом: 100)
-        1 или более:
-            показать в рекурсии связи не дальше указанной глубины рекурсии
+    Если задан параметр uuid:
+        uuid:
+            uuid пользователя
+        depth:
+            0 или отсутствие параметра или он неверен:
+                показать без ограничения глубины рекурсии
+                (в этом случае она таки ограничена, но немыслимо большИм для глубины рекурсии числом: 100)
+            1 или более:
+                показать в рекурсии связи не дальше указанной глубины рекурсии
+
+    Если задан параметр chat_id:
+        chat_id:
+            id телеграм группы или канала
+        from:
+            откуда начинать страницу показа результатов для участников группы,
+            по умолчанию 0
+        count:
+            сколько показывать участников группы в очередной странице,
+            по умолчанию settings.MAX_RECURSION_DEPTH
     """
+
+    def get_chat_tree(self, request, chat_id, recursion_depth):
+        raise ServiceException('Не реализовано, ибо не востребовано')
+        #return dict(users=[], connections=[], trust_connections=[])
 
     def get_shortest_path(self, request, uuids, recursion_depth):
         try:
@@ -3377,10 +3421,8 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            d = dict(
-                source = cs.user_from.profile.uuid,
-                target = cs.user_to.profile.uuid,
-                thanks_count=cs.thanks_count,
+            d = cs.data_dict(show_trust=True)
+            d.update(
                 # Это ради фронта, который заточен для обработки родственных
                 # деревьев
                 is_father=True,
@@ -3442,10 +3484,8 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             pair = '%s/%s' % (cs.user_from_id, cs.user_to_id)
             pair_reverse = '%s/%s' % (cs.user_to_id, cs.user_from_id)
             if pair in pairs or pair_reverse in pairs:
-                d = dict(
-                    source=cs.user_from.profile.uuid,
-                    target=cs.user_to.profile.uuid,
-                    thanks_count=cs.thanks_count,
+                d = cs.data_dict(show_trust=True)
+                d.update(
                     # Это ради фронта, который заточен для обработки родственных
                     # деревьев
                     is_father=True,
