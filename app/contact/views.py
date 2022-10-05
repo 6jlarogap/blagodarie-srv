@@ -3205,8 +3205,10 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
                     cursor.execute(sql)
                     for rec in cursor.fetchall():
                         path = rec[0]
-                        for user_pk in path[1:len(path)-1]:
-                            user_pks.add(user_pk)
+                        if len(set(path)) == len(path):
+                            # исключим зацикленные пути
+                            for user_pk in path[1:len(path)-1]:
+                                user_pks.add(user_pk)
 
                 q_connections = Q(
                     is_child=False,
