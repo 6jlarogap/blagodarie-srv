@@ -162,7 +162,11 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
     #
     is_reverse = models.BooleanField(_("Обратное отношение"), default=False)
 
-    def data_dict(self, show_parent=False, show_trust=False):
+    def data_dict(self, show_parent=False, show_trust=False, show_id_fio=True):
+
+        #TODO for debug: show_id_fio=True
+        #
+
         result = dict(
             source=self.user_from.profile.uuid,
             target=self.user_to.profile.uuid,
@@ -176,6 +180,13 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
             result.update(dict(
                 is_father=self.is_father,
                 is_mother=self.is_mother,
+            ))
+        if show_id_fio:
+            result.update(dict(
+                source_fio=self.user_from.first_name,
+                source_id=self.user_from.pk,
+                target_fio=self.user_to.first_name,
+                target_id=self.user_to.pk,
             ))
         return result
 

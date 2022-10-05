@@ -3068,17 +3068,18 @@ api_invite_use_token = ApiInviteUseToken.as_view()
 class GetTrustGenesisMixin(object):
     def get(self, request):
         try:
+            chat_id = request.GET.get('chat_id')
             try:
                 recursion_depth = int(request.GET.get('depth', 0) or 0)
             except (TypeError, ValueError,):
                 recursion_depth = 0
-            if recursion_depth <= 0 or recursion_depth > settings.MAX_RECURSION_DEPTH:
-                recursion_depth = settings.MAX_RECURSION_DEPTH
+            max_recursion_depth = settings.MAX_RECURSION_DEPTH_IN_GROUP if chat_id else settings.MAX_RECURSION_DEPTH
+            if recursion_depth <= 0 or recursion_depth > max_recursion_depth:
+                recursion_depth = max_recursion_depth
 
-            chat_id = request.GET.get('chat_id')
             uuid = request.GET.get('uuid', '').strip(' ,')
             if chat_id:
-                data = self.get_chat_tree(request, chat_id, recursion_depth)
+                data = self.get_chat_mesh(request, chat_id, recursion_depth)
             elif uuid:
                 uuids = re.split(r'[, ]+', uuid)
                 len_uuids = len(uuids)
@@ -3145,8 +3146,103 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             по умолчанию settings.MAX_RECURSION_DEPTH
     """
 
-    def get_chat_tree(self, request, chat_id, recursion_depth):
-        return dict(users=[], connections=[], trust_connections=[])
+    def get_chat_mesh(self, request, chat_id, recursion_depth):
+        users = []
+        connections = []
+        trust_connections = []
+        try:
+            tggroup = TgGroup.objects.get(chat_id=chat_id)
+        except (ValueError, TgGroup.DoesNotExist,):
+            raise ServiceException('Группа/канал не существует')
+        chat_user_pks = [
+            oauth.user_id for oauth in Oauth.objects.select_related(
+                    'user',
+                ).filter(
+                    groups__pk=tggroup.pk
+                ).order_by(
+                    '-user__date_joined',
+                )
+        ]
+        if chat_user_pks:
+            try:
+                from_ = int(request.GET.get('from', 0))
+                if from_ <= 0:
+                    from_ = 0
+                count = int(request.GET.get('count', settings.MAX_RECURSION_COUNT_IN_GROUP))
+                if count <= 1 or count > settings.MAX_RECURSION_COUNT_IN_GROUP:
+                    count = settings.MAX_RECURSION_COUNT_IN_GROUP
+            except (TypeError, ValueError,):
+                raise ServiceException('Неверный параметр: from и/или count')
+            user_page_pks = chat_user_pks[from_: from_ + count]
+            if len(user_page_pks) == 0:
+                # return nothing
+                pass
+            elif len(user_page_pks) == 1:
+                # Один пользователь не может иметь связей сам с собой
+                users = [
+                    p.data_dict() for p in Profile.objects.select_related(
+                        'user'
+                    ).filter(user__pk=user_page_pks[0])
+                ]
+            else:
+                user_page_pks_string = ','.join([str(pk) for pk in user_page_pks])
+
+                # select path from find_group_genesis_tree(array[1167,1162,1089,484,429,426,395,331], 9)
+                # where path[array_length(path, 1)] = any(array[1167,1162,1089,484,429,426,395,331])
+                # and path[1] != path[array_length(path, 1)]
+                #
+                sql = (
+                    'select path from find_group_genesis_tree('
+                        'array[%(user_page_pks_string)s], %(recursion_depth)s'
+                    ') '
+                    'where '
+                        'path[array_length(path, 1)] = any(array[%(user_page_pks_string)s]) '
+                        'and path[1] != path[array_length(path, 1)]'
+                ) % dict(user_page_pks_string=user_page_pks_string, recursion_depth=recursion_depth)
+
+                user_pks = set(user_page_pks)
+                with connection.cursor() as cursor:
+                    cursor.execute(sql)
+                    for rec in cursor.fetchall():
+                        path = rec[0]
+                        for user_pk in path[1:len(path)-1]:
+                            user_pks.add(user_pk)
+
+                q_connections = Q(
+                    is_child=False,
+                    user_to__isnull=False,
+                )
+                q_connections &= Q(is_father=True) | Q(is_mother=True)
+                q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
+                for cs in CurrentState.objects.filter(q_connections).select_related(
+                        'user_from__profile', 'user_to__profile',
+                    ).distinct():
+                    connections.append(cs.data_dict(show_parent=True))
+
+                if request.user.is_authenticated:
+                    user = request.user
+                    user_pks.add(int(request.user.pk))
+
+                for p in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
+                    d = p.data_dict(request)
+                    d.update(
+                        is_in_page = p.user.pk in user_page_pks,
+                        is_in_group = p.user.pk in chat_user_pks,
+                    )
+                    users.append(d)
+
+                q_connections = Q(
+                    is_reverse=False,
+                    user_to__isnull=False,
+                    is_trust=True,
+                )
+                q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
+                for cs in CurrentState.objects.filter(q_connections).select_related(
+                        'user_from__profile', 'user_to__profile',
+                    ).distinct():
+                    trust_connections.append(cs.data_dict(show_trust=True))
+
+        return dict(users=users, connections=connections, trust_connections=trust_connections)
 
     def get_shortest_path(self, request, uuids, recursion_depth):
         user_pks = []
@@ -3186,15 +3282,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            d = cs.data_dict(show_parent=True)
-            # TODO remove below, it is for debug
-            d.update({
-                'source_fio': cs.user_from.first_name,
-                'source_id': cs.user_from.pk,
-                'target_fio': cs.user_to.first_name,
-                'target_id': cs.user_to.pk,
-            })
-            connections.append(d)
+            connections.append(cs.data_dict(show_parent=True))
 
         trust_connections = []
 
@@ -3216,20 +3304,11 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            d = cs.data_dict(show_trust=True)
-            # TODO remove below, it is for debug
-            d.update({
-                'source_fio': cs.user_from.first_name,
-                'source_id': cs.user_from.pk,
-                'target_fio': cs.user_to.first_name,
-                'target_id': cs.user_to.pk,
-            })
-            trust_connections.append(d)
+            trust_connections.append(cs.data_dict(show_trust=True))
 
         return dict(users=users, connections=connections, trust_connections=trust_connections)
 
     def get_tree(self, request, uuid, recursion_depth):
-
         related = ('user', 'owner', 'ability',)
         user_q, profile_q = self.check_user_uuid(uuid, related=related)
 
@@ -3295,15 +3374,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            d = cs.data_dict(show_parent=True)
-            # TODO remove below, it is for debug
-            d.update({
-                'source_fio': cs.user_from.first_name,
-                'source_id': cs.user_from.pk,
-                'target_fio': cs.user_to.first_name,
-                'target_id': cs.user_to.pk,
-            })
-            connections.append(d)
+            connections.append(cs.data_dict(show_parent=True))
 
         trust_connections = []
         if request.user.is_authenticated:
@@ -3325,15 +3396,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            d = cs.data_dict(show_trust=True)
-            # TODO remove below, it is for debug
-            d.update({
-                'source_fio': cs.user_from.first_name,
-                'source_id': cs.user_from.pk,
-                'target_fio': cs.user_to.first_name,
-                'target_id': cs.user_to.pk,
-            })
-            trust_connections.append(d)
+            trust_connections.append(cs.data_dict(show_trust=True))
 
         return dict(users=users, connections=connections, trust_connections=trust_connections)
 
@@ -3378,7 +3441,7 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             по умолчанию settings.MAX_RECURSION_DEPTH
     """
 
-    def get_chat_tree(self, request, chat_id, recursion_depth):
+    def get_chat_mesh(self, request, chat_id, recursion_depth):
         raise ServiceException('Не реализовано, ибо не востребовано')
         #return dict(users=[], connections=[], trust_connections=[])
 
@@ -3426,13 +3489,6 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
                 # Это ради фронта, который заточен для обработки родственных
                 # деревьев
                 is_father=True,
-            )
-            # TODO remove this below and upper, it is for debug.
-            d.update(
-                source_fio = cs.user_from.first_name,
-                source_id = cs.user_from.pk,
-                target_fio = cs.user_to.first_name,
-                target_id = cs.user_to.pk,
             )
             connections.append(d)
 
@@ -3489,13 +3545,6 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
                     # Это ради фронта, который заточен для обработки родственных
                     # деревьев
                     is_father=True,
-                )
-                # TODO remove this below and upper, it is for debug.
-                d.update(
-                    source_fio = cs.user_from.first_name,
-                    source_id = cs.user_from.pk,
-                    target_fio = cs.user_to.first_name,
-                    target_id = cs.user_to.pk,
                 )
                 connections.append(d)
 

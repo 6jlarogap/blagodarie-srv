@@ -2,7 +2,7 @@
 
 from django.db import migrations, connection
 
-# Функция postgres поиска по довериям, по родственным связям
+# Функции postgres поиска по довериям, по родственным связям
 #
 # Attribution:
 # https://www.alibabacloud.com/blog/applying-postgresql-graph-database-to-social-scenarios_595035
