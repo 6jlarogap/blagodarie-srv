@@ -3192,29 +3192,19 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
                 # and path[1] != path[array_length(path, 1)]
                 #
                 sql = (
-                    'select path, level from find_group_genesis_tree('
+                    'select path from find_group_genesis_tree('
                         'array[%(user_page_pks_string)s], %(recursion_depth)s'
                     ') '
                     'where '
                         'path[array_length(path, 1)] = any(array[%(user_page_pks_string)s]) '
                         'and path[1] != path[array_length(path, 1)] '
-                    'order by level'
                 ) % dict(user_page_pks_string=user_page_pks_string, recursion_depth=recursion_depth)
 
                 user_pks = set(user_page_pks)
-                #pairs = []
                 with connection.cursor() as cursor:
                     cursor.execute(sql)
                     for rec in cursor.fetchall():
                         path = rec[0]
-                        ## исключим зацикленные пути
-                        #if len(set(path)) != len(path):
-                            #continue
-                        #pair = '%s/%s' % (path[0], path[-1],)
-                        #pair_reverse = '%s/%s' % (path[-1], path[0],)
-                        #if pair in pairs or pair_reverse in pairs:
-                            #continue
-                        #pairs.append(pair)
                         for user_pk in path[1:len(path)-1]:
                             user_pks.add(user_pk)
 
