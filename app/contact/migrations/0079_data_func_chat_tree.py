@@ -62,25 +62,34 @@ begin
             return;
         end if; 
 
+        -- ray: текущий луч итерации
         return query
             insert into tmp
                 select
                     i,
-                    tmp.path || contact_currentstate.user_to_id,
+                    ray.path || contact_currentstate.user_to_id,
                     contact_currentstate.user_from_id,
                     contact_currentstate.user_to_id
                 from
                     contact_currentstate
                 join
                     (select user_to_id, path from tmp where level = i - 1)
-                tmp on
-                    (contact_currentstate.user_from_id = tmp.user_to_id)
+                ray on
+                    (contact_currentstate.user_from_id = ray.user_to_id)
                 where
                     contact_currentstate.user_to_id is not null and (
                         contact_currentstate.is_father or
                         contact_currentstate.is_mother
                     ) and
-                    not (contact_currentstate.user_from_id = any(user_page_pks))
+                    not (contact_currentstate.user_from_id = any(user_page_pks)) and
+                    not (contact_currentstate.user_to_id = any(ray.path)) and
+                    not exists (
+                        select 1 from tmp
+                        where
+                            tmp.path[1] = ray.path[1] and
+                            tmp.path[i - 1] = contact_currentstate.user_to_id and
+                            tmp.level < i
+                    )
         returning *; 
   end loop; 
 end;
