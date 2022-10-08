@@ -1788,7 +1788,6 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
         q = Q(
             latitude__isnull=False,
             longitude__isnull=False,
-            owner__isnull=True,
             dod__isnull=True,
         )
         if found_coordinates and (found_profile.dod or found_profile.owner):
