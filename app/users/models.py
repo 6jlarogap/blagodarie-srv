@@ -474,12 +474,6 @@ class Profile(PhotoModel, GeoPointAddressModel):
         TgMessageJournal.objects.filter(user_to=user_from).update(user_to=user)
         TgMessageJournal.objects.filter(user_to_delivered=user_from).update(user_to_delivered=user)
 
-        #TODO посмотреть надо ли это
-        #
-        q = Q(user_from=user_from) | Q(user_from=user) | Q(user_to=user_from) | Q(user_to=user)
-        q &= Q(user_to__isnull=False) & Q(is_reverse=True)
-        CurrentState.objects.filter(q).delete()
-
         for cs in CurrentState.objects.filter(user_from=user_from, user_to__isnull=False):
             try:
                 with transaction.atomic():
@@ -520,22 +514,6 @@ class Profile(PhotoModel, GeoPointAddressModel):
                     user_from=user,
                     anytext=anytext
                 ).update(thanks_count=F('thanks_count') + thanks_count)
-
-        q = Q(user_from=user) | Q(user_to=user)
-        q &= Q(user_to__isnull=False) & Q(is_reverse=False)
-        for cs in CurrentState.objects.filter(q).distinct():
-            cs_reverse, created_ = CurrentState.objects.get_or_create(
-                user_to=cs.user_from,
-                user_from=cs.user_to,
-                defaults=dict(
-                    is_reverse=True,
-                    is_trust=cs.is_trust,
-                    is_father=cs.is_father,
-                    is_mother=cs.is_mother,
-            ))
-            if created_ and (cs.is_father or cs.is_mother) and not cs.is_child:
-                cs_reverse.is_child = True
-                cs_reverse.save(update_fields=('is_child',))
 
         Wish.objects.filter(owner=user_from).update(owner=user)
 
@@ -581,9 +559,9 @@ class Profile(PhotoModel, GeoPointAddressModel):
             self.uuid = profile_from_uuid
             self.owner = None
             self.save(update_fields=('uuid', 'owner',))
-            user.first_name = user_from.first_name
-            user.save(update_fields=('first_name',))
             Token.objects.get_or_create(user=user)
+            user.is_active = True
+            user.save(update_fields=('is_active',))
 
         if not profile_from_deleted:
             # Просто user_from.delete() удаляет profile из базы,
@@ -592,17 +570,6 @@ class Profile(PhotoModel, GeoPointAddressModel):
 
         user_from_id = user_from.id
         user_from.delete()
-
-        OperationType = get_model('contact', 'OperationType')
-        for cs in CurrentState.objects.filter(user_to=user).distinct():
-            thanks_count = Journal.objects.filter(
-                user_from=cs.user_from,
-                user_to=cs.user_to,
-                operationtype_id__in=(OperationType.THANK, OperationType.TRUST_AND_THANK,),
-            ).distinct().count()
-            if thanks_count != cs.thanks_count:
-                cs.thanks_count = thanks_count
-                cs.save(update_fields=('thanks_count',))
 
         self.recount_sum_thanks_count()
         self.recount_trust_fame()
