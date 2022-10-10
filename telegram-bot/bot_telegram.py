@@ -3153,6 +3153,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 #       с группами, подключенными к каналу
 
 
+        buttons = []
         if not is_previous_his and not tg_user_left:
             if is_this_bot:
                 # ЭТОТ бот подключился. Достаточно его full name и ссылку на доверия в группе
@@ -3177,28 +3178,29 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 url = settings.FRONTEND_HOST + path
                 # login_url = Misc.make_login_url(path)
                 # login_url = LoginUrl(url=login_url)
-                inline_btn_go = InlineKeyboardButton(
-                    'Доверия',
-                    url=url,
-                    # login_url=login_url,
-                )
-                dict_reply = dict(
-                    operation=OperationType.TRUST_AND_THANK,
-                    keyboard_type=KeyboardType.TRUST_THANK_VER_2,
-                    sep=KeyboardType.SEP,
-                    user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
-                    message_to_forward_id='',
-                    group_id=message.chat.id,
-                )
-                callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE
-                inline_btn_thank = InlineKeyboardButton(
-                    '+Доверие',
-                    callback_data=callback_data_template % dict_reply,
-                )
-                buttons = [inline_btn_go, inline_btn_thank]
+                #inline_btn_go = InlineKeyboardButton(
+                    #'Доверия',
+                    #url=url,
+                    ## login_url=login_url,
+                #)
+                #dict_reply = dict(
+                    #operation=OperationType.TRUST_AND_THANK,
+                    #keyboard_type=KeyboardType.TRUST_THANK_VER_2,
+                    #sep=KeyboardType.SEP,
+                    #user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
+                    #message_to_forward_id='',
+                    #group_id=message.chat.id,
+                #)
+                #callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE
+                #inline_btn_thank = InlineKeyboardButton(
+                    #'+Доверие',
+                    #callback_data=callback_data_template % dict_reply,
+                #)
+                #buttons = [inline_btn_go, inline_btn_thank]
 
-            reply_markup = InlineKeyboardMarkup()
-            reply_markup.row(*buttons)
+            if buttons:
+                reply_markup = InlineKeyboardMarkup()
+                reply_markup.row(*buttons)
             await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
     for i, response_from in enumerate(a_users_out):
