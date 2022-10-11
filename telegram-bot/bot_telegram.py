@@ -2447,12 +2447,12 @@ async def put_location(message, state, show_card=False):
                 )
             else:
                 message_text = message_text.strip()
-                m = re.search(r'([\-\+]?\d+(?:\.\d+)?)\s*\,\s*([\-\+]?\d+(?:\.\d+)?)', message_text)
+                m = re.search(r'([\-\+]?\d+(?:\.\d*)?)\s*\,\s*([\-\+]?\d+(?:\.\d*)?)', message_text)
                 if m:
                     try:
                         latitude_ = float(m.group(1))
                         longitude_ = float(m.group(2))
-                        if -90 < latitude_ < 90 and -180 < longitude_ < 180:
+                        if -90 <= latitude_ <= 90 and -180 <= longitude_ <= 180:
                             latitude = latitude_
                             longitude = longitude_
                         else:
