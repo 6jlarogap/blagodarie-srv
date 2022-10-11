@@ -2259,7 +2259,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
 async def geo(message, state, state_to_set, uuid=None):
     # Здесь вынужден отказаться от параметра , one_time_keyboard=True
     # Не убирает телеграм "нижнюю" клавиатуру в мобильных клиентах!
-    # Убираю "вручную", сообщением с reply_markup=types.reply_keyboard.ReplyKeyboardRemove()
+    # Убираю "вручную", потом: собщением с reply_markup=types.reply_keyboard.ReplyKeyboardRemove()
     #
     keyboard = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True, one_time_keyboard=False)
     button_geo = types.KeyboardButton(text=Misc.PROMPT_LOCATION, request_location=True)
@@ -2271,8 +2271,14 @@ async def geo(message, state, state_to_set, uuid=None):
         async with state.proxy() as data:
             data['uuid'] = uuid
     await bot.send_message(
-        message.chat.id,
-        'Пожалуйста, нажмите на кнопку "%s" снизу' % Misc.PROMPT_LOCATION,
+        message.chat.id,(
+            'Пожалуйста, нажмите на кнопку "%s" снизу '
+            '(кнопки может и не быть в некоторых клиентах).\n\n'
+            'Или введите координаты <i>широта, долгота</i>, '
+            'где <i>широта</i> и <i>долгота</i> - числа, возможные для координат!\n\n'
+            'Чтобы отказаться, нажмите на кнопку "%s" снизу '
+            '(если есть кнопка) или наберите <u>%s</u>\n\n'
+        ) % (Misc.PROMPT_LOCATION, Misc.PROMPT_CANCEL_LOCATION, Misc.PROMPT_CANCEL_LOCATION,),
         reply_markup=keyboard
     )
 
@@ -2412,57 +2418,83 @@ async def put_location(message, state, show_card=False):
     """
     result = {}
     user_uuid = None
-    if message.location is not None:
-        user_uuid = None
-        async with state.proxy() as data:
-            user_uuid = data.get('uuid')
-        latitude = longitude = None
-        try:
-            latitude = getattr(message.location, 'latitude')
-            longitude = getattr(message.location, 'longitude')
-        except AttributeError:
-            pass
-        if latitude and longitude:
-            tg_user_sender = message.from_user
-            status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
-            if status_sender == 200:
-                if not user_uuid:
-                    user_uuid = response_sender.get('uuid')
-            if user_uuid:
-                status, response = await Misc.put_user_properties(
-                    uuid=user_uuid,
-                    latitude = latitude,
-                    longitude = longitude,
-                )
-                reply_markup = types.reply_keyboard.ReplyKeyboardRemove()
-                if status == 200:
-                    result = response
-                    if show_card:
-                        await Misc.show_cards(
-                            [response],
-                            message,
-                            bot,
-                            response_from=response_sender,
-                        )
-                        await message.reply('Координаты записаны', reply_markup=reply_markup)
-                else:
-                    await message.reply('Ошибка записи координат', reply_markup=reply_markup)
-    else:
-        # text message, отмена или ввел что-то
-        reply = 'Выберите что-то из кнопок снизу'
-        try:
-            message_text = message.text
-            if message_text != Misc.PROMPT_CANCEL_LOCATION:
+    async with state.proxy() as data:
+        user_uuid = data.get('uuid')
+    latitude = longitude = None
+    tg_user_sender = message.from_user
+    status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+    reply_markup = types.reply_keyboard.ReplyKeyboardRemove()
+    if status_sender == 200:
+        if not user_uuid:
+            user_uuid = response_sender.get('uuid')
+    if user_uuid:
+        if message.location is not None:
+            try:
+                latitude = getattr(message.location, 'latitude')
+                longitude = getattr(message.location, 'longitude')
+            except AttributeError:
+                pass
+        else:
+            # text message, отмена или ввел что-то
+            try:
+                message_text = message.text
+            except AttributeError:
+                message_text = ''
+            if message_text == Misc.PROMPT_CANCEL_LOCATION:
                 await message.reply(
-                    'Надо что-то выбрать: <u>%s</u> или <u>%s</u>, из кнопок снизу' % (
-                        Misc.PROMPT_LOCATION, Misc.PROMPT_CANCEL_LOCATION
-                ))
-                return
-        except AttributeError:
-            pass
+                    'Вы отказались задавать местоположение',
+                    reply_markup=reply_markup,
+                )
+            else:
+                message_text = message_text.strip()
+                m = re.search(r'([\-\+]?\d+(?:\.\d+)?)\s*\,\s*([\-\+]?\d+(?:\.\d+)?)', message_text)
+                if m:
+                    try:
+                        latitude_ = float(m.group(1))
+                        longitude_ = float(m.group(2))
+                        if -90 < latitude_ < 90 and -180 < longitude_ < 180:
+                            latitude = latitude_
+                            longitude = longitude_
+                        else:
+                            raise ValueError
+                    except ValueError:
+                        pass
+                if latitude and longitude:
+                    pass
+                else:
+                    await message.reply((
+                            'Надо было:\n'
+                            '- или что-то выбрать: <u>%s</u> или <u>%s</u>, из кнопок снизу.\n'
+                            '- или вводить координаты <u><i>широта, долгота</i></u>, '
+                            'где <i>широта</i> и <i>долгота</i> - числа, возможные для координат\n'
+                            '<b>Повторите сначала!</b>'
+                        )
+                        % (Misc.PROMPT_LOCATION, Misc.PROMPT_CANCEL_LOCATION,),
+                        reply_markup=reply_markup
+                    )
+        if latitude and longitude:
+            status, response = await Misc.put_user_properties(
+                uuid=user_uuid,
+                latitude = latitude,
+                longitude = longitude,
+            )
+            if status == 200:
+                result = response
+                if show_card:
+                    await Misc.show_cards(
+                        [response],
+                        message,
+                        bot,
+                        response_from=response_sender,
+                    )
+                    await message.reply('Координаты записаны', reply_markup=reply_markup)
+            else:
+                await message.reply('Ошибка записи координат', reply_markup=reply_markup)
+    else:
+        # ошибка получения user_uuid
         await message.reply(
-            'Вы отказались задавать местоположение',
-            reply_markup=types.reply_keyboard.ReplyKeyboardRemove()
+            Misc.MSG_ERROR_API,
+            reply_markup=reply_markup
         )
     return result
 
