@@ -1788,11 +1788,8 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
         q = Q(
             latitude__isnull=False,
             longitude__isnull=False,
-            dod__isnull=True,
         )
-        if found_coordinates and (found_profile.dod or found_profile.owner):
-            q |= Q(pk=found_profile.pk)
-        elif chat_id:
+        if chat_id:
             try:
                 tggroup = TgGroup.objects.get(chat_id=chat_id)
                 chat_title = tggroup.title
@@ -1802,8 +1799,32 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 pass
         if chat_id and not chat_title:
             qs = Profile.objects.none()
-        else:
+        elif chat_id:
             qs = Profile.objects.filter(q).select_related('user').distinct()
+        else:
+            # Или задан uuid, или ничего
+            qq_or = []
+            if request.GET.get('participants'):
+                qq_or.append(Q(owner__isnull=True))
+            if request.GET.get('owned_alive'):
+                qq_or.append(Q(owner__isnull=False) & Q(dod__isnull=True))
+            if request.GET.get('owned_dead'):
+                qq_or.append(Q(owner__isnull=False) & Q(dod__isnull=False))
+            if qq_or:
+                for i, qq in enumerate(qq_or):
+                    if i == 0:
+                        q_or = qq
+                    else:
+                        q_or |= qq
+                q &= q_or
+                if found_coordinates:
+                    q |= Q(pk=found_profile.pk)
+                qs = Profile.objects.filter(q).select_related('user').distinct()
+            else:
+                if found_coordinates:
+                    qs = Profile.objects.filter(pk=found_profile.pk).select_related('user').distinct()
+                else:
+                    qs = Profile.objects.none()
         for profile in qs:
             url_profile = self.profile_url(request, profile)
             if bot_username:
