@@ -3180,7 +3180,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             elif len(user_page_pks) == 1:
                 # Один пользователь не может иметь связей сам с собой
                 users = [
-                    p.data_dict() for p in Profile.objects.select_related(
+                    p.data_dict(request) for p in Profile.objects.select_related(
                         'user'
                     ).filter(user__pk=user_page_pks[0])
                 ]
