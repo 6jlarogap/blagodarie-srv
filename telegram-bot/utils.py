@@ -816,8 +816,7 @@ class Misc(object):
                     reply += cls.reply_relations(response)
                     response_relations = response
 
-            if (not user_from_id or user_from_id != response_to['user_id']) and \
-               (not response_to.get('tg_uid') or str(bot_data.id) != str(response_to['tg_uid'])):
+            if user_from_id != response_to['user_id'] and bot_data.id != message.from_user.id:
                 dict_reply = dict(
                     keyboard_type=KeyboardType.TRUST_THANK_VER_2,
                     sep=KeyboardType.SEP,
@@ -976,11 +975,11 @@ class Misc(object):
                 # в бот
                 #
                 send_text_message = True
-                if response_to.get('photo') and response_from and response_from.get('tg_uid'):
+                if response_to.get('photo') and response_from and response_from.get('tg_data'):
                     try:
                         photo = InputFile.from_url(response_to['photo'], filename='1.png')
                         await bot.send_photo(
-                            chat_id=response_from['tg_uid'],
+                            chat_id=message.from_user.id,
                             photo=photo,
                             disable_notification=True,
                             caption=reply,
@@ -991,7 +990,7 @@ class Misc(object):
                         if excpt.args[0] == 'Media_caption_too_long':
                             try:
                                 await bot.send_photo(
-                                    chat_id=response_from['tg_uid'],
+                                    chat_id=message.from_user.id,
                                     photo=photo,
                                     disable_notification=True,
                                 )
