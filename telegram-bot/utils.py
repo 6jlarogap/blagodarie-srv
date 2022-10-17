@@ -550,7 +550,7 @@ class Misc(object):
             ) % dict(papa=papa, mama=mama, children=children)
             reply += parents
 
-        keys = ["@%s" % tgd['tg_username'] for tgd in response.get('tg_data', [])]
+        keys = ["@%s" % tgd['tg_username'] for tgd in response.get('tg_data', []) if tgd['tg_username']]
         keys += [key['value'] for key in response.get('keys', [])]
         keys.append(cls.get_deeplink(response, bot_data))
         keys_text = '\n' + '\n'.join(
