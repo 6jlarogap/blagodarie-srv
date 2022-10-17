@@ -406,7 +406,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
         if self.owner:
             owner_profile = self.owner.profile
             owner = owner_profile.data_dict(request, google_photo_size)
-            owner.update(owner_profile.tg_data())
+            owner.update(tg_data=owner_profile.tg_data())
         else:
             owner = None
         return dict(owner=owner)
@@ -415,18 +415,12 @@ class Profile(PhotoModel, GeoPointAddressModel):
         """
         Найти профиль среди telegtam ouath's, вернуть данные
         """
-        result = dict()
-        try:
-            oauth = Oauth.objects.filter(user=self.user, provider=Oauth.PROVIDER_TELEGRAM)[0]
-            result = dict(
+        return [
+            dict(
                 tg_uid=oauth.uid,
                 tg_username=oauth.username,
-                # пока больше не надо
-            )
-        except IndexError:
-            # У пользователя нет аккаунта в телеграме
-            pass
-        return result
+            ) for oauth in Oauth.objects.filter(user=self.user, provider=Oauth.PROVIDER_TELEGRAM)
+        ]
 
     def data_WAK(self):
         Wish = get_model('contact', 'Wish')
@@ -530,30 +524,44 @@ class Profile(PhotoModel, GeoPointAddressModel):
                     Key.objects.filter(pk=key.pk).update(owner=user)
             except IntegrityError:
                 Key.objects.filter(pk=key.pk).delete()
-        if not self.middle_name and profile_from.middle_name:
-            self.middle_name = profile_from.middle_name
-            self.save(update_fields=('middle_name',))
         try:
             self_token = Token.objects.get(user=user)
         except Token.DoesNotExist:
             Token.objects.filter(user=user_from).update(user=user)
 
+        do_save = False
+        if not self.photo and profile_from.photo:
+            self.photo = profile_from.photo
+            profile_from.photo = ''
+            do_save = True
+        for f in (
+            'photo_original_filename', 'photo_url',
+            'did_bot_start',
+            'address', 'dob', 'dod', 'gender', 'comment',
+           ):
+            if not getattr(self, f) and getattr(profile_from, f):
+                setattr(self, f, getattr(profile_from, f))
+                do_save = True
+        for f in ('latitude', 'longitude'):
+            if getattr(self, f) is None and getattr(profile_from, f) is not None:
+                setattr(self, f, getattr(profile_from, f))
+                do_save = True
+        if do_save:
+            self.save()
+
+        Profile.objects.filter(owner=user_from).update(owner=user)
+
         profile_from_deleted = False
-        active_to_owned = False
         if self.owner and not profile_from.owner:
-            active_to_owned = True
 
             # Мигрируем not owned user (profile_from, user_from) -> owned user (self, user)
             # - uuid берем от активного (not-owned user)
             # - owned user пестает быть owned
             # -     посему делаем ему Token
-            # - у мигрируемого пользователя могут быть owned. Удаляем их
+            # - у мигрируемого пользователя могут быть owned. Пусть сам удаляет!
             #       TODO: рассмотреть это как опцию
 
             profile_from_uuid = profile_from.uuid
-            for p in Profile.objects.filter(owner=user_from):
-                p.delete()
-                p.user.delete()
             profile_from.delete()
             profile_from_deleted = True
             self.uuid = profile_from_uuid

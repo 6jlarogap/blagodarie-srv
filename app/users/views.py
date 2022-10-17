@@ -485,7 +485,7 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, APIView)
             if was_not_active and profile.is_notified:
                 fio = profile.user.first_name or 'Без имени'
                 message = "Cвязанный профиль '%s' восстановлен" % fio
-                self.send_to_telegram(message, telegram_uid=rd['id'])
+                self.send_to_telegram(message, user=user)
         except Oauth.DoesNotExist:
             last_name = rd.get('last_name', '')
             first_name = rd.get('first_name', '')
@@ -944,7 +944,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
             # обязательно
     """
 
-    parser_classes = (MultiPartParser, FormParser)
+    parser_classes = (MultiPartParser, FormParser, )
 
     def check_dates(self, request):
         dob = dob_got = request.data.get('dob')
@@ -976,7 +976,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                     raise ServiceException('Telegram user with uid=%s not found' % request.GET['tg_uid'])
                 profile = oauth.user.profile
                 data = profile.data_dict(request)
-                data.update(profile.tg_data())
+                data.update(tg_data=profile.tg_data())
                 data.update(user_id=oauth.user.pk)
             elif request.GET.get('uuid'):
                 if request.GET.get('with_owner'):
@@ -994,7 +994,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                     user_id=user.pk,
                     owner_id=profile.owner and profile.owner.pk or None,
                 )
-                data.update(profile.tg_data())
+                data.update(tg_data=profile.tg_data())
                 if request.GET.get('with_owner'):
                     data.update(profile.owner_dict())
             elif request.GET.get('tg_username'):
@@ -1010,12 +1010,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                         )[0]
                         user = oauth.user
                         profile = user.profile
-                        data_item = profile.data_dict(request)
-                        data_item.update(user_id=user.pk, tg_uid=oauth.uid, tg_username=oauth.username)
-                        if request.GET.get('verbose'):
-                            data_item.update(profile.data_WAK())
-                            data_item.update(profile.parents_dict(request))
-                        data.append(data_item)
+                        data.append(profile.data_dict(request))
                     except IndexError:
                         pass
             elif request.GET.get('query_ability') or \
@@ -1188,7 +1183,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
 
         data.update(profile.data_dict(request))
         data.update(profile.parents_dict(request))
-        data.update(user_id=user.pk, tg_uid=oauth.uid, tg_username=oauth.username)
+        data.update(user_id=user.pk, tg_data=profile.tg_data())
         data.update(profile.data_WAK())
         return data
 
@@ -1408,7 +1403,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                         provider=Oauth.PROVIDER_TELEGRAM,
                         user=user,
                     )[0]
-                    data.update(tg_uid=oauth.uid, tg_username=oauth.username)
+                    data.update(tg_data=profile.tg_data())
                 except IndexError:
                     pass
         except SkipException:
@@ -1440,17 +1435,18 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
             if not request.user.is_authenticated:
                 raise NotAuthenticated
             user, profile = self.check_user_or_owned_uuid(request, need_uuid=False)
-            message = telegram_uid = None
             if profile.is_notified:
-                try:
-                    telegram = Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)[0]
-                    telegram_uid = telegram.uid
-                    fio = (telegram.first_name + ' ' + telegram.last_name).strip()
-                    message = "Cвязанный профиль '%s' обезличен пользователем" % fio
-                except IndexError:
-                    pass
+                messages = [
+                    dict(
+                        tg_uid=oauth.uid,
+                        message="Cвязанный профиль '%s' обезличен пользователем" % \
+                            (oauth.first_name + ' ' + oauth.last_name).strip(),
+                    ) for oath in Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)
+                ]
+            else:
+                messages = []
             for f in ('photo', 'photo_original_filename', 'photo_url', 'middle_name',):
-                setattr(profile, f, '')
+                    setattr(profile, f, '')
             for f in ('latitude', 'longitude', 'gender', 'ability', 'comment', 'address',):
                 setattr(profile, f, None)
             profile.delete_from_media()
@@ -1473,8 +1469,8 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
             user.first_name = "Обезличен"
             user.is_active = False
             user.save()
-            if message:
-                self.send_to_telegram(message, telegram_uid=telegram_uid)
+            for message in messages:
+                self.send_to_telegram(message['message'], telegram_uid=message['tg_uid'])
             data = profile.data_dict(request)
             data.update(profile.parents_dict(request))
             status_code = status.HTTP_200_OK

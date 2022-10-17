@@ -550,10 +550,7 @@ class Misc(object):
             ) % dict(papa=papa, mama=mama, children=children)
             reply += parents
 
-        keys = []
-        username = response.get('tg_username', '')
-        if username:
-            keys.append("@%s" % username)
+        keys = ["@%s" % tgd['tg_username'] for tgd in response.get('tg_data', [])]
         keys += [key['value'] for key in response.get('keys', [])]
         keys.append(cls.get_deeplink(response, bot_data))
         keys_text = '\n' + '\n'.join(
@@ -744,8 +741,6 @@ class Misc(object):
         # в ответ на какое сообщение
         message,
         bot,
-        # не показывать карточку, если тг ид в этом списке
-        exclude_tg_uids=[],
         # данные пользователя-отправителя сообщения message
         response_from={},
         # Ид сообщения, которое включить в кнопки, чтобы его потом перенаправить
@@ -756,18 +751,11 @@ class Misc(object):
         """
         Показать карточки пользователей
         """
-        tg_uids = set(exclude_tg_uids)
         bot_data = await bot.get_me()
         user_from_id = response_from.get('user_id')
         for response_to in a_response_to:
             is_own_account = user_from_id and user_from_id == response_to['user_id']
             is_owned_account = user_from_id and response_to.get('owner_id') and response_to['owner_id'] == user_from_id
-
-            if response_to.get('tg_uid'):
-                if str(response_to['tg_uid']) in tg_uids:
-                    continue
-                else:
-                    tg_uids.add(str(response_to['tg_uid']))
             reply_markup = InlineKeyboardMarkup()
 
             path = "/profile/?id=%s" % response_to['uuid']
@@ -1016,8 +1004,6 @@ class Misc(object):
             else:
                 # в группу
                 await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
-
-        return bool(tg_uids)
 
 
     @classmethod

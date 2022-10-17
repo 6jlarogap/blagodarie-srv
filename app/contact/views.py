@@ -44,17 +44,13 @@ class TelegramApiMixin(object):
         if not settings.SEND_TO_TELEGRAM:
             return
 
-        uid = None
+        uids = []
         if user:
-            try:
-                uid = Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)[0].uid
-            except IndexError:
-                # У пользователя нет аккаунта в телеграме
-                pass
+            uids = [oauth.user_id for oauth in Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)]
         elif telegram_uid:
-            uid = telegram_uid
+            uids = [telegram_uid]
 
-        if uid:
+        for uid in uids:
             url = '%s/bot%s/sendMessage?' % (self.API_TELEGRAM, settings.TELEGRAM_BOT_TOKEN)
             parms = dict(
                 chat_id=uid,
@@ -2659,17 +2655,11 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, APIView)
                 } \
                 for key in Key.objects.filter(owner=user_q).select_related('type')
             ]
-            try:
-                tg_username = Oauth.objects.filter(
-                    user=user_q, provider=Oauth.PROVIDER_TELEGRAM,
-                )[0].username
-            except IndexError:
-                tg_username = ''
-            if tg_username:
+            for oauth in Oauth.objects.filter(user=user_q, provider=Oauth.PROVIDER_TELEGRAM, username__gt=''):
                 keys.append({
                     'id': None,
                     'type_id': KeyType.LINK_ID,
-                    'value': 'https://t.me/%s' % tg_username,
+                    'value': 'https://t.me/%s' % oauth.username,
                 })
             wishes = [
                 {
@@ -3154,15 +3144,17 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             tggroup = TgGroup.objects.get(chat_id=chat_id)
         except (ValueError, TgGroup.DoesNotExist,):
             raise ServiceException('Группа/канал не существует')
-        chat_user_pks = [
-            oauth.user_id for oauth in Oauth.objects.select_related(
+        chat_user_pks = []
+        for oauth in Oauth.objects.select_related(
                     'user',
                 ).filter(
                     groups__pk=tggroup.pk
                 ).order_by(
                     '-user__date_joined',
-                )
-        ]
+                ):
+            if oauth.user_id not in chat_user_pks:
+                # Один юзер может иметь несколь телеграм аккаунтов
+                chat_user_pks.append(oauth.user_id)
         if chat_user_pks:
             try:
                 from_ = int(request.GET.get('from', 0))

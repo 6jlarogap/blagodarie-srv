@@ -903,16 +903,17 @@ async def process_callback_change_owner_confirmed(callback_query: types.Callback
                             reply = Misc.PROMPT_CHANGE_OWNER_SUCCESS % dict(
                                     iof_from=iof_from, iof_to=iof_to
                             )
-                            if response_to.get('tg_uid'):
+                            if response_to.get('tg_data', []):
                                 iof_sender = Misc.get_deeplink_with_name(response_sender, bot_data)
-                                try:
-                                    await bot.send_message(
-                                        response_to['tg_uid'],
-                                        Misc.PROMPT_MESSAGE_TO_CHANGED_OWNER % dict(
-                                            iof_from=iof_from, iof_sender=iof_sender,
-                                        ))
-                                except (ChatNotFound, CantInitiateConversation):
-                                    pass
+                                for tgd in response_to['tg_data']:
+                                    try:
+                                        await bot.send_message(
+                                            tgd['tg_uid'],
+                                            Misc.PROMPT_MESSAGE_TO_CHANGED_OWNER % dict(
+                                                iof_from=iof_from, iof_sender=iof_sender,
+                                            ))
+                                    except (ChatNotFound, CantInitiateConversation):
+                                        pass
 
                         elif status == 400 and response.get('message'):
                             reply = response['message']
@@ -1407,7 +1408,7 @@ async def got_message_to_send(message: types.Message, state: FSMContext):
 
                     # Есть ли смысл отправлять и если есть то кому?
                     #
-                    tg_uid_to = None
+                    tg_user_to_tg_data = []
                     user_to_delivered_uuid = None
                     if profile_from['uuid'] == profile_to['uuid']:
                         # самому себе
@@ -1417,32 +1418,33 @@ async def got_message_to_send(message: types.Message, state: FSMContext):
                         pass
                     elif profile_to['owner'] and profile_to['owner']['uuid'] != profile_from['uuid']:
                         # чужому овнеду: телеграм у него есть?
-                        if profile_to['owner'].get('tg_uid'):
-                            tg_uid_to = profile_to['owner']['tg_uid']
+                        if profile_to['owner'].get('tg_data'):
+                            tg_user_to_tg_data = profile_to['owner']['tg_data']
                             user_to_delivered_uuid = profile_to['owner']['uuid']
-                    elif profile_to.get('tg_uid'):
-                        tg_uid_to = profile_to['tg_uid']
+                    elif profile_to.get('tg_data'):
+                        tg_user_to_tg_data = profile_to['tg_data']
                         user_to_delivered_uuid = profile_to['uuid']
-                    if tg_uid_to:
-                        try:
-                            bot_data = await bot.get_me()
+                    if tg_user_to_tg_data:
+                        for tgd in tg_user_to_tg_data:
                             try:
-                                await bot.send_message(
-                                    tg_uid_to,
-                                    text='Вам сообщение от <b>%s</b>' % Misc.get_deeplink_with_name(profile_from, bot_data),
-                                    disable_web_page_preview=True,
-                                )
-                                await bot.forward_message(
-                                    tg_uid_to,
-                                    from_chat_id=message.chat.id,
-                                    message_id=message.message_id,
-                                )
-                                await message.reply('Сообщение доставлено')
-                            except CantTalkWithBots:
-                                await message.reply('Сообщения к боту запрещены')
-                        except (ChatNotFound, CantInitiateConversation):
-                            user_to_delivered_uuid = None
-                            await message.reply(msg_saved)
+                                bot_data = await bot.get_me()
+                                try:
+                                    await bot.send_message(
+                                        tgd['tg_uid'],
+                                        text='Вам сообщение от <b>%s</b>' % Misc.get_deeplink_with_name(profile_from, bot_data),
+                                        disable_web_page_preview=True,
+                                    )
+                                    await bot.forward_message(
+                                        tgd['tg_uid'],
+                                        from_chat_id=message.chat.id,
+                                        message_id=message.message_id,
+                                    )
+                                    await message.reply('Сообщение доставлено')
+                                except CantTalkWithBots:
+                                    await message.reply('Сообщения к боту запрещены')
+                            except (ChatNotFound, CantInitiateConversation):
+                                user_to_delivered_uuid = None
+                                await message.reply(msg_saved)
                     else:
                         await message.reply(msg_saved)
 
@@ -2133,18 +2135,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
     if operation_done:
         profile_to = response['profile_to']
         profile_from = response['profile_from']
-        try:
-            tg_user_to_uid = profile_to['tg_data']['tg_uid']
-        except KeyError:
-            tg_user_to_uid = None
-        try:
-            tg_user_to_username = profile_to['tg_data']['tg_username']
-        except KeyError:
-            tg_user_to_username = ''
-        try:
-            tg_user_from_username = profile_from['tg_data']['tg_username']
-        except KeyError:
-            tg_user_from_username = None
+        tg_user_to_tg_data = profile_to.get('tg_data', [])
         if text and text_link:
             full_name_to = profile_to['first_name']
             full_name_to_link = Misc.get_deeplink_with_name(profile_to, bot_data)
@@ -2212,7 +2203,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
 
     # Это получателю благодарности и т.п.
     #
-    if operation_done and tg_user_to_uid:
+    if operation_done and tg_user_to_tg_data:
         reply = ''
         if post_op['operation_type_id'] == OperationType.TRUST:
             reply = 'Получено доверие от'
@@ -2226,21 +2217,27 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         if reply:
             reply += ' ' + Misc.get_deeplink_with_name(response_sender, bot_data)
 
-            if message_to_forward_id:
+            sent_ = False
+            for tgd in tg_user_to_tg_data:
+                if message_to_forward_id:
+                    try:
+                        await bot.forward_message(
+                            chat_id=tgd['tg_uid'],
+                            from_chat_id=tg_user_sender.id,
+                            message_id=message_to_forward_id,
+                        )
+                    except:
+                        pass
                 try:
-                    await bot.forward_message(
-                        chat_id=tg_user_to_uid,
-                        from_chat_id=tg_user_sender.id,
-                        message_id=message_to_forward_id,
+                    await bot.send_message(
+                        tgd['tg_uid'],
+                        text=reply,
+                        disable_web_page_preview=True,
                     )
-                except:
+                    sent_ = True
+                except (ChatNotFound, CantInitiateConversation):
                     pass
-            try:
-                await bot.send_message(
-                    tg_user_to_uid,
-                    text=reply,
-                    disable_web_page_preview=True,
-                )
+            if sent_:
                 # TODO здесь временно сделано, что юзер стартанул бот ----------------
                 # Потом удалить
                 #
@@ -2249,8 +2246,6 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
                     did_bot_start='1',
                 )
                 # --------------------------------------------------------------------
-            except (ChatNotFound, CantInitiateConversation):
-                pass
 
     if response_sender.get('created'):
         await Misc.update_user_photo(bot, tg_user_sender, response_sender)
@@ -2682,10 +2677,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
                         if usernames:
                             logging.debug('@usernames found in message text\n') 
-                            payload_username = dict(
-                                tg_username=','.join(usernames),
-                                verbose='',
-                            )
+                            payload_username = dict(tg_username=','.join(usernames),)
                             status, response = await Misc.api_request(
                                 path='/api/profile',
                                 method='get',
@@ -2754,10 +2746,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         usernames, text_stripped = Misc.get_text_usernames(message_text)
         if usernames:
             logging.debug('@usernames found in message text\n')
-            payload_username = dict(
-                tg_username=','.join(usernames),
-                verbose='',
-            )
+            payload_username = dict(tg_username=','.join(usernames),)
             status, response = await Misc.api_request(
                 path='/api/profile',
                 method='get',
@@ -2775,7 +2764,6 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             a_response_to,
             message,
             bot,
-            exclude_tg_uids=[],
             response_from=response_from,
             message_to_forward_id=message_to_forward_id,
         )
@@ -3139,14 +3127,14 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             continue
         a_users_out.append(response_from)
 
-        is_this_bot = str(bot_data.id) == str(response_from['tg_uid'])
+        is_this_bot = bot_data.id == user_in.id
         if tg_user_left:
             # Ушел пользователь, убираем его из группы
             await TgGroupMember.remove(
                 group_chat_id=message.chat.id,
                 group_title=message.chat.title,
                 group_type=message.chat.type,
-                user_tg_uid=response_from['tg_uid']
+                user_tg_uid=user_in.id
             )
         elif not is_this_bot:
             # Добавить в группу в апи, если его там нет и если это не бот-обработчик
@@ -3154,11 +3142,11 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 group_chat_id=message.chat.id,
                 group_title=message.chat.title,
                 group_type=message.chat.type,
-                user_tg_uid=response_from['tg_uid']
+                user_tg_uid=user_in.id
             )
 
         if tg_users_new and \
-           str(tg_user_sender.id) != str(response_from['tg_uid']):
+           tg_user_sender.id != user_in.id:
             # Сразу доверие c благодарностью добавляемому пользователю
             post_op = dict(
                 tg_token=settings.TOKEN,
