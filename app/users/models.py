@@ -461,6 +461,8 @@ class Profile(PhotoModel, GeoPointAddressModel):
         user_from = profile_from.user
         Oauth.objects.filter(user=user_from).update(user=user)
 
+        Journal.objects.filter(user_from=user_from).update(user_from=user)
+        Journal.objects.filter(user_from=user, user_to=user).delete()
         Journal.objects.filter(user_to=user_from).update(user_to=user)
         Journal.objects.filter(user_from=user, user_to=user).delete()
 
