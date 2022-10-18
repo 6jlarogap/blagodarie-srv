@@ -2607,6 +2607,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
     a_found = []
 
     message_text = getattr(message, 'text', '') and message.text.strip() or ''
+    bot_data = await bot.get_me()
     if tg_user_sender.is_bot:
         reply = 'Сообщения от ботов пока не обрабатываются'
     else:
@@ -2637,56 +2638,69 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 )
                 if m:
                     # /start 293d987f-4ee8-407c-a614-7110cad3552f
-                    # state_ = 'start_uuid'
                     uuid_to_search = m.group(1).lower()
                     state_ = 'start_uuid'
                 else:
-                    if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
-                        state_ = 'invalid_message_text'
-                        reply = Misc.invalid_search_text()
+                    # https://t.me/doverabot?start=70dce08c-087d-4ae0-8002-1de8dbc04ea5
+                    m = re.search(
+                        (
+                            r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\='
+                            '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
+                        ) % re.escape(bot_data['username']),
+                        message_text,
+                        flags=re.I,
+                    )
+                    if m:
+                        # https://t.me/doverabot?start=70dce08c-087d-4ae0-8002-1de8dbc04ea5
+                        uuid_to_search = m.group(1).lower()
+                        state_ = 'start_uuid'
                     else:
-                        search_phrase = ''
-                        usernames, text_stripped = Misc.get_text_usernames(message_text)
-                        if text_stripped:
-                            search_phrase = Misc.text_search_phrase(
-                                text_stripped,
-                                MorphAnalyzer,
-                            )
-                            if not search_phrase and not usernames:
-                                state_ = 'invalid_message_text'
-                                reply = Misc.PROMPT_SEARCH_PHRASE_TOO_SHORT
+                        if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
+                            state_ = 'invalid_message_text'
+                            reply = Misc.invalid_search_text()
+                        else:
+                            search_phrase = ''
+                            usernames, text_stripped = Misc.get_text_usernames(message_text)
+                            if text_stripped:
+                                search_phrase = Misc.text_search_phrase(
+                                    text_stripped,
+                                    MorphAnalyzer,
+                                )
+                                if not search_phrase and not usernames:
+                                    state_ = 'invalid_message_text'
+                                    reply = Misc.PROMPT_SEARCH_PHRASE_TOO_SHORT
 
-                        if usernames:
-                            logging.debug('@usernames found in message text\n') 
-                            payload_username = dict(tg_username=','.join(usernames),)
-                            status, response = await Misc.api_request(
-                                path='/api/profile',
-                                method='get',
-                                params=payload_username,
-                            )
-                            logging.debug('get by username, status: %s' % status)
-                            logging.debug('get by username, response: %s' % response)
-                            if status == 200 and response:
-                                a_found += response
-                                state_ = 'found_username'
-                            else:
-                                state_ = 'not_found'
-
-                        if search_phrase:
-                            status, response = await Misc.search_users('query', search_phrase)
-                            if status == 400 and response.get('code') and response['code'] == 'programming_error':
-                                if state_ != 'found_username':
-                                    state_ = 'not_found'
-                                    reply = 'Ошибка доступа к данных. Получили отказ по такой строке в поиске'
-                            elif status == 200:
-                                if response:
+                            if usernames:
+                                logging.debug('@usernames found in message text\n') 
+                                payload_username = dict(tg_username=','.join(usernames),)
+                                status, response = await Misc.api_request(
+                                    path='/api/profile',
+                                    method='get',
+                                    params=payload_username,
+                                )
+                                logging.debug('get by username, status: %s' % status)
+                                logging.debug('get by username, response: %s' % response)
+                                if status == 200 and response:
                                     a_found += response
-                                    state_ = 'found_in_search'
-                                elif state_ != 'found_username':
+                                    state_ = 'found_username'
+                                else:
                                     state_ = 'not_found'
-                            else:
-                                state_ = 'not_found'
-                                reply = Misc.MSG_ERROR_API
+
+                            if search_phrase:
+                                status, response = await Misc.search_users('query', search_phrase)
+                                if status == 400 and response.get('code') and response['code'] == 'programming_error':
+                                    if state_ != 'found_username':
+                                        state_ = 'not_found'
+                                        reply = 'Ошибка доступа к данных. Получили отказ по такой строке в поиске'
+                                elif status == 200:
+                                    if response:
+                                        a_found += response
+                                        state_ = 'found_in_search'
+                                    elif state_ != 'found_username':
+                                        state_ = 'not_found'
+                                else:
+                                    state_ = 'not_found'
+                                    reply = Misc.MSG_ERROR_API
 
     if state_ == 'not_found' and not reply:
         reply = Misc.PROMPT_NOTHING_FOUND
@@ -2754,7 +2768,6 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
     elif reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
-    bot_data = await bot.get_me()
     await Misc.show_deeplinks(a_found, message, bot_data)
 
     if user_from_id and (response_from.get('created') or state_ == 'start'):
