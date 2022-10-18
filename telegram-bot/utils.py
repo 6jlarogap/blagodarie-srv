@@ -512,7 +512,6 @@ class Misc(object):
             lifetime_str=lifetime_str,
             trust_count=response['trust_count'],
             sum_thanks_count=response['sum_thanks_count'],
-            mistrust_count=response['mistrust_count'],
         )
         abilities_text = '\n'.join(
             ability['text'] for ability in response['abilities']
@@ -563,14 +562,12 @@ class Misc(object):
     @classmethod
     def reply_relations(cls, response):
         result = ''
-        arr = []
-        if response['from_to']['is_trust'] != False:
-            arr.append('От Вас: %s' % OperationType.relation_text(response['from_to']['is_trust']))
-        if response['to_from']['is_trust'] != False:
-            arr.append('К Вам: %s' % OperationType.relation_text(response['to_from']['is_trust']))
-        if arr:
-            arr.append('\n')
-            result = '\n'.join(arr)
+        arr = [
+            'От Вас: %s' % OperationType.relation_text(response['from_to']['is_trust']),
+            'К Вам: %s' % OperationType.relation_text(response['to_from']['is_trust']),
+        ]
+        arr.append('\n')
+        result = '\n'.join(arr)
         return result
 
     @classmethod
@@ -839,6 +836,11 @@ class Misc(object):
                     title_thank,
                     callback_data=callback_data_template % dict_reply,
                 )
+                dict_reply.update(operation=OperationType.MISTRUST)
+                inline_btn_mistrust = InlineKeyboardButton(
+                    'Недоверие',
+                    callback_data=callback_data_template % dict_reply,
+                )
                 dict_reply.update(operation=OperationType.NULLIFY_TRUST)
                 inline_btn_nullify_trust = InlineKeyboardButton(
                     'Забыть',
@@ -847,11 +849,13 @@ class Misc(object):
                 if show_inline_btn_nullify_trust:
                     reply_markup.row(
                         inline_btn_trust,
+                        inline_btn_mistrust,
                         inline_btn_nullify_trust
                     )
                 else:
                     reply_markup.row(
                         inline_btn_trust,
+                        inline_btn_mistrust,
                     )
 
             callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE
