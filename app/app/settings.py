@@ -270,7 +270,7 @@ MAX_RECURSION_DEPTH = 100
 #
 #   максимальная глубина рекурсии
 #
-MAX_RECURSION_DEPTH_IN_GROUP = 9
+MAX_RECURSION_DEPTH_IN_GROUP = 10
 #
 #   максимальное число выборки из группы для очередной страницы
 #

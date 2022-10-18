@@ -3039,10 +3039,15 @@ async def echo_my_chat_member_for_bot(chat_member: types.ChatMemberUpdated):
         )
         await bot.send_message(
             chat_id=chat_member.chat.id,
-            text=Misc.get_html_a(
-                href='%s/?chat_id=%s' % (settings.MAP_HOST, chat_member.chat.id),
-                text='Карта участников канала',
-            ),
+            text= \
+                Misc.get_html_a(
+                    href='%s/?chat_id=%s' % (settings.MAP_HOST, chat_member.chat.id),
+                    text='Карта участников канала',
+                ) + ' ...\n' + \
+                Misc.get_html_a(
+                    href='https://genesis.blagodarie.org/?chat_id=%s&depth=10&q=20&f=0' % chat_member.chat.id,
+                    text='Род'
+                ),
             reply_markup=reply_markup,
             disable_web_page_preview=True,
         )
@@ -3181,6 +3186,10 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 reply = Misc.get_html_a(
                     href='%s/?chat_id=%s' % (settings.MAP_HOST, message.chat.id),
                     text='Карта участников группы',
+                ) + ' ...\n' + \
+                Misc.get_html_a(
+                    href='https://genesis.blagodarie.org/?chat_id=%s&depth=10&q=20&f=0' % message.chat.id,
+                    text='Род',
                 )
                 inline_btn_trusts = InlineKeyboardButton(
                     'Доверия',

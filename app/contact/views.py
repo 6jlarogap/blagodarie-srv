@@ -3128,12 +3128,14 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
     Если задан параметр chat_id:
         chat_id:
             id телеграм группы или канала
+        depth:
+            по умолчанию settings.MAX_RECURSION_DEPTH_IN_GROUP и не больше этого числа:
         from:
             откуда начинать страницу показа результатов для участников группы,
             по умолчанию 0
         count:
             сколько показывать участников группы в очередной странице,
-            по умолчанию settings.MAX_RECURSION_DEPTH
+            по умолчанию settings.MAX_RECURSION_COUNT_IN_GROUP
     """
 
     def get_chat_mesh(self, request, chat_id, recursion_depth):
