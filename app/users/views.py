@@ -1802,10 +1802,8 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
             qq_or = []
             if request.GET.get('participants'):
                 qq_or.append(Q(owner__isnull=True))
-            if request.GET.get('owned_alive'):
-                qq_or.append(Q(owner__isnull=False) & Q(dod__isnull=True))
-            if request.GET.get('owned_dead'):
-                qq_or.append(Q(owner__isnull=False) & Q(dod__isnull=False))
+            if request.GET.get('owned'):
+                qq_or.append(Q(owner__isnull=False))
             if qq_or:
                 for i, qq in enumerate(qq_or):
                     if i == 0:
