@@ -775,7 +775,7 @@ class Misc(object):
                 )
                 goto_buttons.append(inline_btn_path)
             if not group_id and (is_own_account or is_owned_account):
-                path = "?id=%s&depth=20" % response_to['uuid']
+                path = "?id=%s&depth=3" % response_to['uuid']
                 url = 'https://genesis.blagodarie.org' + path
                 inline_btn_genesis = InlineKeyboardButton(
                     'Род',
@@ -783,7 +783,7 @@ class Misc(object):
                 )
                 goto_buttons.append(inline_btn_genesis)
             if not group_id and response_from.get('uuid') and not is_own_account:
-                path = "/?id=%s,%s&depth=20" % (response_from['uuid'], response_to['uuid'],)
+                path = "/?id=%s,%s&depth=10" % (response_from['uuid'], response_to['uuid'],)
                 url = 'https://genesis.blagodarie.org' + path
                 inline_btn_genesis_path = InlineKeyboardButton(
                     'Путь ( род)',
