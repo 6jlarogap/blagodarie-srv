@@ -3020,6 +3020,17 @@ async def echo_my_chat_member_for_bot(chat_member: types.ChatMemberUpdated):
     """
     new_chat_member = chat_member.new_chat_member
     bot_ = new_chat_member.user
+    tg_user_from = chat_member.from_user
+    if tg_user_from and not tg_user_from.is_bot:
+        status, user_from = await Misc.post_tg_user(tg_user_from)
+        if status == 200:
+            await TgGroupMember.add(chat_member.chat.id, chat_member.chat.title, chat_member.chat.type, tg_user_from.id)
+        else:
+            return
+    else:
+        status, response = await TgGroup.post(chat_member.chat.id, chat_member.chat.title, chat_member.chat.type)
+        if status != 200:
+            return
     if bot_.is_bot and new_chat_member.status == 'administrator' and bot_.first_name:
         reply_markup = InlineKeyboardMarkup()
         inline_btn_trusts = InlineKeyboardButton(
