@@ -2936,27 +2936,27 @@ async def process_callback_chat_join(callback_query: types.CallbackQuery, state:
             await callback_query.message.reply(msg, disable_web_page_preview=True,)
             return
 
+        tc_inviter = 0
         if tg_inviter_id:
-            # Сразу доверие c благодарностью от входящего в канал/группу к владельцу канала/группы
-            #
-            post_op = dict(
-                tg_token=settings.TOKEN,
-                operation_type_id=OperationType.TRUST_AND_THANK,
-                tg_user_id_from=tg_subscriber_id,
-                user_uuid_to=response_inviter['uuid'],
-            )
-            logging.debug('post operation (chat subscriber thanks inviter), payload: %s' % post_op)
-            status_op, response_op = await Misc.api_request(
-                path='/api/addoperation',
-                method='post',
-                data=post_op,
-            )
-            logging.debug('post operation (chat subscriber thanks inviter), status: %s' % status_op)
-            logging.debug('post operation (chat subscriber thanks inviter), response: %s' % response_op)
-            if status_op == 200:
-                tc_inviter = response_op['profile_to']['trust_count']
-        else:
-            tc_inviter = 0
+            pass
+            ## Сразу доверие c благодарностью от входящего в канал/группу к владельцу канала/группы
+            ##
+            #post_op = dict(
+                #tg_token=settings.TOKEN,
+                #operation_type_id=OperationType.TRUST_AND_THANK,
+                #tg_user_id_from=tg_subscriber_id,
+                #user_uuid_to=response_inviter['uuid'],
+            #)
+            #logging.debug('post operation (chat subscriber thanks inviter), payload: %s' % post_op)
+            #status_op, response_op = await Misc.api_request(
+                #path='/api/addoperation',
+                #method='post',
+                #data=post_op,
+            #)
+            #logging.debug('post operation (chat subscriber thanks inviter), status: %s' % status_op)
+            #logging.debug('post operation (chat subscriber thanks inviter), response: %s' % response_op)
+            #if status_op == 200:
+                #tc_inviter = response_op['profile_to']['trust_count']
 
         bot_data = await bot.get_me()
         dl_subscriber = Misc.get_deeplink_with_name(response_subscriber, bot_data)
@@ -2970,13 +2970,14 @@ async def process_callback_chat_join(callback_query: types.CallbackQuery, state:
             tc_subscriber=response_subscriber['trust_count'],
         )
         if is_channel:
-            if tg_inviter_id and status_op == 200:
-                reply = (
-                    '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а) %(to_chat)s '
-                    'и доверяет владельцу %(of_chat)s: %(dl_inviter)s (%(tc_inviter)s)'
-                ) % msg_dict
-            else:
-                reply = '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а) %(to_chat)s' % msg_dict
+            #if tg_inviter_id and status_op == 200:
+                #reply = (
+                    #'%(dl_subscriber)s (%(tc_subscriber)s) подключен(а) %(to_chat)s '
+                    #'и доверяет владельцу %(of_chat)s: %(dl_inviter)s (%(tc_inviter)s)'
+                #) % msg_dict
+            #else:
+                #reply = '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а) %(to_chat)s' % msg_dict
+            reply = '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а)' % msg_dict
             await bot.send_message(
                 chat_id,
                 reply,
@@ -3047,12 +3048,13 @@ async def echo_my_chat_member_for_bot(chat_member: types.ChatMemberUpdated):
             text= \
                 Misc.get_html_a(
                     href='%s/?chat_id=%s' % (settings.MAP_HOST, chat_member.chat.id),
-                    text='Карта участников канала',
-                ) + ' ...\n' + \
+                    text='Карта',
+                ) + ' \n' + \
                 Misc.get_html_a(
                     href='https://genesis.blagodarie.org/?chat_id=%s&depth=10&q=20&f=0' % chat_member.chat.id,
                     text='Род'
-                ),
+                ) + ' \n' + \
+                'Вопросы и предложения - в обсуждении этого поста.',
             reply_markup=reply_markup,
             disable_web_page_preview=True,
         )
@@ -3190,7 +3192,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 #
                 reply = Misc.get_html_a(
                     href='%s/?chat_id=%s' % (settings.MAP_HOST, message.chat.id),
-                    text='Карта участников группы',
+                    text='Карта',
                 ) + ' ...\n' + \
                 Misc.get_html_a(
                     href='https://genesis.blagodarie.org/?chat_id=%s&depth=10&q=20&f=0' % message.chat.id,

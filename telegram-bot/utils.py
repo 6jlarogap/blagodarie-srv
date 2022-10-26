@@ -823,17 +823,13 @@ class Misc(object):
                 )
                 callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE
                 show_inline_btn_nullify_trust = True
-                title_thank = 'Доверие'
                 if group_id or \
                    (response_relations and response_relations['from_to']['is_trust'] is None):
                     show_inline_btn_nullify_trust = False
-                if not group_id and \
-                    response_relations and response_relations['from_to']['is_trust']:
-                    title_thank = 'Благодарить'
 
                 dict_reply.update(operation=OperationType.TRUST_AND_THANK)
                 inline_btn_trust = InlineKeyboardButton(
-                    title_thank,
+                    'Благодарность',
                     callback_data=callback_data_template % dict_reply,
                 )
                 dict_reply.update(operation=OperationType.MISTRUST)
@@ -970,7 +966,7 @@ class Misc(object):
                     keyboard_type=KeyboardType.SHOW_MESSAGES,
                 )
                 inline_btn_show_messages = InlineKeyboardButton(
-                    'Сообщения',
+                    'Архив',
                     callback_data=callback_data_template % dict_message,
                 )
                 reply_markup.row(inline_btn_send_message, inline_btn_show_messages)
