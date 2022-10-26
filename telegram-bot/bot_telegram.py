@@ -3053,8 +3053,7 @@ async def echo_my_chat_member_for_bot(chat_member: types.ChatMemberUpdated):
                 Misc.get_html_a(
                     href='https://genesis.blagodarie.org/?chat_id=%s&depth=10&q=20&f=0' % chat_member.chat.id,
                     text='Род'
-                ) + ' \n' + \
-                'Вопросы и предложения - в обсуждении этого поста.',
+                ),
             reply_markup=reply_markup,
             disable_web_page_preview=True,
         )
