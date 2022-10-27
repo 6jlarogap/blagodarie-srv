@@ -2763,7 +2763,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             message_to_forward_id=message_to_forward_id,
         )
         if state_ == 'start':
-             await message.reply(Misc.help_text(), disable_web_page_preview=True)
+             await message.reply(Misc.start_text(), disable_web_page_preview=True)
 
     elif reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
