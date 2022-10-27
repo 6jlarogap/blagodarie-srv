@@ -3569,6 +3569,23 @@ class ApiTgMessage(UuidMixin, APIView):
                         'user_from__profile', 'user_to__profile', 'user_to_delivered__profile',
                     ).order_by('-insert_timestamp')[:self.MESSAGE_COUNT]
             ]
+
+            data += [
+                tm.data_dict() for tm in TgJournal.objects.filter(
+                    journal__user_from__pk=user_to.pk,
+                    ).select_related(
+                        'journal__user_from', 'journal__user_to',
+                        'journal__user_from__profile', 'journal__user_to__profile',
+                    ).distinct(
+                        'journal__insert_timestamp',
+                        'message_id', 'from_chat_id',
+                    ).order_by(
+                        '-journal__insert_timestamp',
+                        'message_id', 'from_chat_id',
+                    )[:self.MESSAGE_COUNT]
+            ]
+
+            data = sorted(data, key=lambda item: item['timestamp'], reverse=True)[:self.MESSAGE_COUNT]
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])

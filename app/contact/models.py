@@ -73,7 +73,15 @@ class Journal(BaseModelInsertTimestamp):
                     verbose_name=_("Тип операции"), on_delete=models.CASCADE)
     comment = models.TextField(verbose_name=_("Комментарий"), null=True)
 
-class TgJournal(models.Model):
+class UserDictMixin(object):
+    def user_dict(self, user):
+        return {
+            'id': user.id,
+            'uuid': str(user.profile.uuid),
+            'first_name': user.first_name,
+        }
+
+class TgJournal(UserDictMixin, models.Model):
     """
     Ссылки на сообщения телеграма при благодарностях и др. действиях
     """
@@ -81,7 +89,19 @@ class TgJournal(models.Model):
     from_chat_id = models.BigIntegerField(_("Chat Id"),)
     message_id = models.BigIntegerField(_("Message Id"),)
 
-class TgMessageJournal(BaseModelInsertTimestamp):
+    def data_dict(self):
+
+
+        return dict(
+            timestamp=self.journal.insert_timestamp,
+            user_from=self.user_dict(self.journal.user_to),
+            user_to=self.user_dict(self.journal.user_from),
+            user_to_delivered=self.user_dict(self.journal.user_from),
+            from_chat_id=self.from_chat_id,
+            message_id=self.message_id,
+        )
+
+class TgMessageJournal(UserDictMixin, BaseModelInsertTimestamp):
     """
     Ссылки на сообщения телеграма при обмене пользователями сообщений
     """
@@ -100,19 +120,11 @@ class TgMessageJournal(BaseModelInsertTimestamp):
     message_id = models.BigIntegerField(_("Message Id"),)
 
     def data_dict(self):
-
-        def user_dict(user):
-            return {
-                'id': user.id,
-                'uuid': str(user.profile.uuid),
-                'first_name': user.first_name,
-            }
-
         return dict(
             timestamp=self.insert_timestamp,
-            user_from=user_dict(self.user_from),
-            user_to=user_dict(self.user_to),
-            user_to_delivered=user_dict(self.user_to_delivered) if self.user_to_delivered else None,
+            user_from=self.user_dict(self.user_from),
+            user_to=self.user_dict(self.user_to),
+            user_to_delivered=self.user_dict(self.user_to_delivered) if self.user_to_delivered else None,
             from_chat_id=self.from_chat_id,
             message_id=self.message_id,
         )
