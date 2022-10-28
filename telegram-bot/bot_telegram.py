@@ -2123,8 +2123,8 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
             text_link = '%(full_name_from_link)s (%(trust_count_from)s) забыл(а) %(full_name_to_link)s (%(trust_count_to)s)'
             operation_done = True
         elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.TRUST):
-            text = '%(full_name_from)s (%(trust_count_from)s) доверяет %(full_name_to)s (%(trust_count_to)s)'
-            text_link = '%(full_name_from_link)s (%(trust_count_from)s) доверяет %(full_name_to_link)s (%(trust_count_to)s)'
+            text = '%(full_name_from)s (%(trust_count_from)s) %(trusts_or_thanks)s %(full_name_to)s (%(trust_count_to)s)'
+            text_link = '%(full_name_from_link)s (%(trust_count_from)s) %(trusts_or_thanks)s %(full_name_to_link)s (%(trust_count_to)s)'
             operation_done = True
     elif status == 400 and response.get('code', '') == 'already':
         if post_op['operation_type_id'] == OperationType.TRUST:
@@ -2139,6 +2139,10 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         profile_from = response['profile_from']
         tg_user_to_tg_data = profile_to.get('tg_data', [])
         if text and text_link:
+            trusts_or_thanks = 'доверяет'
+            if response.get('previousstate') and response['previousstate']['is_trust']:
+                # точно доверял раньше
+                trusts_or_thanks = 'благодарит'
             d_message = dict(
                 full_name_from=profile_from['first_name'],
                 full_name_from_link=Misc.get_deeplink_with_name(profile_from, bot_data),
@@ -2146,6 +2150,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
                 full_name_to=profile_to['first_name'],
                 full_name_to_link=Misc.get_deeplink_with_name(profile_to, bot_data),
                 trust_count_to=profile_to['trust_count'],
+                trusts_or_thanks=trusts_or_thanks,
             )
             text = text % d_message
             text_link = text_link % d_message

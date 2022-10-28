@@ -70,7 +70,6 @@ class TelegramApiMixin(object):
         """
         result = None
         url = '%s/bot%s/getMe' % (self.API_TELEGRAM, settings.TELEGRAM_BOT_TOKEN)
-        print(url)
         try:
             req = urllib.request.Request(url)
             r = urllib.request.urlopen(req, timeout=self.API_TIMEOUT)
@@ -153,9 +152,6 @@ class ApiAddOperationMixin(object):
 
             profile_to.sum_thanks_count += 1
             profile_to.save()
-            data.update(currentstate=dict(
-                thanks_count=currentstate.thanks_count,
-            ))
 
         elif operationtype_id == OperationType.MISTRUST:
             currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
@@ -224,6 +220,7 @@ class ApiAddOperationMixin(object):
             profile_to.recount_trust_fame()
 
         elif operationtype_id == OperationType.TRUST_AND_THANK:
+            is_trust_previous = None
             currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
                 user_from=user_from,
                 user_to=user_to,
@@ -232,12 +229,15 @@ class ApiAddOperationMixin(object):
                     thanks_count=1,
             ))
             if not created_:
+                if not currentstate.is_reverse:
+                    is_trust_previous = currentstate.is_trust
                 currentstate.update_timestamp = update_timestamp
                 currentstate.is_reverse = False
                 currentstate.is_trust = True
                 currentstate.thanks_count += 1
                 currentstate.save()
 
+            data.update(previousstate=dict(is_trust=is_trust_previous))
             reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
                 user_to=user_from,
                 user_from=user_to,
