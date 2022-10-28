@@ -1492,9 +1492,11 @@ class ApiUserRelations(UuidMixin, APIView):
         {
         "from_to": {
             "is_trust": True,
+            "thanks_count": 2,
             },
         "to_from": {
             "is_trust": null,
+            "thanks_count": 0,
             },
         }
     """
@@ -1510,8 +1512,8 @@ class ApiUserRelations(UuidMixin, APIView):
                 comment='user_id_to. ',
             )
             data = dict(
-                from_to=dict(is_trust=None),
-                to_from=dict(is_trust=None),
+                from_to=dict(is_trust=None, thanks_count=0),
+                to_from=dict(is_trust=None, thanks_count=0),
             )
             users = (user_from, user_to,)
             for cs in CurrentState.objects.filter(
@@ -1521,8 +1523,10 @@ class ApiUserRelations(UuidMixin, APIView):
                 ):
                 if cs.user_from == user_from:
                     data['from_to']['is_trust'] = cs.is_trust
+                    data['from_to']['thanks_count'] = cs.thanks_count
                 elif cs.user_from == user_to:
                     data['to_from']['is_trust'] = cs.is_trust
+                    data['to_from']['thanks_count'] = cs.thanks_count
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
             status_code = 400

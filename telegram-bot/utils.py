@@ -843,9 +843,13 @@ class Misc(object):
                    (response_relations and response_relations['from_to']['is_trust'] is None):
                     show_inline_btn_nullify_trust = False
 
+                title_thank = 'Доверие'
+                if response_relations:
+                    if response_relations['from_to']['is_trust'] and response_relations['from_to']['thanks_count']:
+                        title_thank = 'Благодарить'
                 dict_reply.update(operation=OperationType.TRUST_AND_THANK)
                 inline_btn_trust = InlineKeyboardButton(
-                    'Благодарность',
+                    title_thank,
                     callback_data=callback_data_template % dict_reply,
                 )
                 dict_reply.update(operation=OperationType.MISTRUST)

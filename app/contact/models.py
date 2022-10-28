@@ -90,8 +90,6 @@ class TgJournal(UserDictMixin, models.Model):
     message_id = models.BigIntegerField(_("Message Id"),)
 
     def data_dict(self):
-
-
         return dict(
             timestamp=self.journal.insert_timestamp,
             user_from=self.user_dict(self.journal.user_to),
