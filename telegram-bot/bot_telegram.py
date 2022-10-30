@@ -127,7 +127,7 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
     if not user_uuid_from or not isinstance(is_father, bool):
         await Misc.state_finish(state)
         return
-    owner = await Misc.check_owner(owner_tg_user=message.from_user, uuid=user_uuid_from)
+    owner = await Misc.check_owner(owner_tg_user=message.from_user, uuid=user_uuid_to)
     if not owner or not owner.get('user_id'):
         await Misc.state_finish(state)
         return
@@ -389,7 +389,7 @@ async def put_child_by_uuid(message: types.Message, state: FSMContext):
         return
     async with state.proxy() as data:
         if data.get('uuid') and data.get('parent_gender'):
-            response_sender = await Misc.check_owner(owner_tg_user=message.from_user, uuid=data['uuid'])
+            response_sender = await Misc.check_owner(owner_tg_user=message.from_user, uuid=user_uuid_from)
             if response_sender:
                 if not response_sender['response_uuid']['gender']:
                     await Misc.put_user_properties(
