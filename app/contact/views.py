@@ -3211,7 +3211,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
                 for cs in CurrentState.objects.filter(q_connections).select_related(
                         'user_from__profile', 'user_to__profile',
                     ).distinct():
-                    connections.append(cs.data_dict(show_parent=True))
+                    connections.append(cs.data_dict(show_parent=True, reverse=True))
 
                 if request.user.is_authenticated:
                     user = request.user
@@ -3276,7 +3276,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            connections.append(cs.data_dict(show_parent=True))
+            connections.append(cs.data_dict(show_parent=True, reverse=True))
 
         trust_connections = []
 
@@ -3368,7 +3368,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            connections.append(cs.data_dict(show_parent=True))
+            connections.append(cs.data_dict(show_parent=True, reverse=True))
 
         trust_connections = []
         if request.user.is_authenticated:

@@ -172,15 +172,22 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
     #
     is_reverse = models.BooleanField(_("Обратное отношение"), default=False)
 
-    def data_dict(self, show_parent=False, show_trust=False, show_id_fio=True):
+    def data_dict(self, show_parent=False, show_trust=False, reverse=False, show_id_fio=True):
 
         #TODO for debug: show_id_fio=True
         #
 
-        result = dict(
-            source=self.user_from.profile.uuid,
-            target=self.user_to.profile.uuid,
-        )
+        if reverse:
+            result = dict(
+                target=self.user_from.profile.uuid,
+                source=self.user_to.profile.uuid,
+            )
+        else:
+            result = dict(
+                source=self.user_from.profile.uuid,
+                target=self.user_to.profile.uuid,
+            )
+
         if show_trust:
             result.update(dict(
                 thanks_count=self.thanks_count,
@@ -192,12 +199,20 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
                 is_mother=self.is_mother,
             ))
         if show_id_fio:
-            result.update(dict(
-                source_fio=self.user_from.first_name,
-                source_id=self.user_from.pk,
-                target_fio=self.user_to.first_name,
-                target_id=self.user_to.pk,
-            ))
+            if reverse:
+                result.update(dict(
+                    target_fio=self.user_from.first_name,
+                    target_id=self.user_from.pk,
+                    source_fio=self.user_to.first_name,
+                    source_id=self.user_to.pk,
+                ))
+            else:
+                result.update(dict(
+                    source_fio=self.user_from.first_name,
+                    source_id=self.user_from.pk,
+                    target_fio=self.user_to.first_name,
+                    target_id=self.user_to.pk,
+                ))
         return result
 
     class Meta:
