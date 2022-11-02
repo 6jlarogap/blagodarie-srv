@@ -18,7 +18,7 @@ START_MODE = 'webhook'
 
 # Webhook параметры
 #
-WEBHOOK_HOST = 'https://bot-dev.blagodarie.org'
+WEBHOOK_HOST = 'https://bot-dev.blagoroda.org'
 WEBHOOK_PATH = '/'
 WEBAPP_HOST = '127.0.0.1'
 WEBAPP_PORT = 3001
@@ -32,18 +32,22 @@ HTTP_TIMEOUT = 60
 
 # URL апи, без завершающей/, :
 #
-API_HOST = 'https://api.blagodarie.org'
+API_HOST = 'https://api.blagoroda.org'
 
-FRONTEND_HOST = 'https://blagodarie.org'
+FRONTEND_HOST = 'https://blagoroda.org'
 FRONTEND_HOST_TITLE = 'БлагоРода'
 
 # Карта всех пользователей с кластеризацией
 #
-MAP_HOST = 'https://map.blagodarie.org'
+MAP_HOST = 'https://map.blagoroda.org'
 
 # Ссылка на отношения в группе
 #
-GROUP_HOST = 'https://group.blagodarie.org'
+GROUP_HOST = 'https://group.blagoroda.org'
+
+# Ссылка на свзи в роду
+#
+GENESIS_HOST = 'https://genesis.blagoroda.org'
 
 # Ссылка на фронте, которая будет открываться там под авторизованным
 # пользователем:
