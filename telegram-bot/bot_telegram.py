@@ -3092,7 +3092,7 @@ async def echo_my_chat_member_for_bot(chat_member: types.ChatMemberUpdated):
                     text='Карта',
                 ) + ' \n' + \
                 Misc.get_html_a(
-                    href='%s/?chat_id=%s&depth=10&q=20&f=0' % (
+                    href='%s/?chat_id=%s&depth=10&q=50&f=0' % (
                         settings.GENESIS_HOST,
                         chat_member.chat.id,
                     ),

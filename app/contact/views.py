@@ -3217,12 +3217,15 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
                     user = request.user
                     user_pks.add(int(request.user.pk))
 
+                participants_on_page = 0
                 for p in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
                     d = p.data_dict(request)
                     d.update(
                         is_in_page = p.user.pk in user_page_pks,
                         is_in_group = p.user.pk in chat_user_pks,
                     )
+                    if d['is_in_page']:
+                        participants_on_page += 1
                     users.append(d)
 
                 q_connections = Q(
@@ -3236,7 +3239,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
                     ).distinct():
                     trust_connections.append(cs.data_dict(show_trust=True))
 
-        return dict(users=users, connections=connections, trust_connections=trust_connections)
+        return dict(users=users, connections=connections, trust_connections=trust_connections, participants_on_page=participants_on_page)
 
     def get_shortest_path(self, request, uuids, recursion_depth):
         user_pks = []

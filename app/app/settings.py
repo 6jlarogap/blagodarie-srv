@@ -274,7 +274,7 @@ MAX_RECURSION_DEPTH_IN_GROUP = 10
 #
 #   максимальное число выборки из группы для очередной страницы
 #
-MAX_RECURSION_COUNT_IN_GROUP = 20
+MAX_RECURSION_COUNT_IN_GROUP = 50
 
 
 # Сколько последних пользователей показываем на главной странице.
