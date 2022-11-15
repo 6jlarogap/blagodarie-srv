@@ -962,7 +962,11 @@ async def process_callback_iof(callback_query: types.CallbackQuery, state: FSMCo
             name=response_uuid['first_name'],
         )
         await FSMexistingIOF.ask.set()
-        await callback_query.message.reply(prompt_iof, reply_markup=Misc.reply_markup_cancel_row())
+        await bot.send_message(
+            callback_query.from_user.id,
+            prompt_iof,
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
 
 
 @dp.message_handler(
@@ -974,6 +978,15 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         await message.reply(Misc.MSG_ERROR_TEXT_ONLY, reply_markup=Misc.reply_markup_cancel_row())
         return
+
+    first_name = Misc.strip_text(message.text)
+    if re.search(Misc.UUID_PATTERN, first_name):
+        await message.reply(
+            'Вы очевидно ввели не имя отчество фамилию. ' + Misc.MSG_REPEATE_PLEASE,
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+        return
+                     
     async with state.proxy() as data:
         uuid = data.get('uuid')
     if uuid:
@@ -984,7 +997,7 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
         if response_sender:
             status, response = await Misc.put_user_properties(
                 uuid=uuid,
-                first_name=Misc.strip_text(message.text),
+                first_name=first_name,
             )
             if status == 200:
                 await message.reply('Изменено')
