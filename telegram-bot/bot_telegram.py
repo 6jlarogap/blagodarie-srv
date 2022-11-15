@@ -982,7 +982,7 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
     first_name = Misc.strip_text(message.text)
     if re.search(Misc.UUID_PATTERN, first_name):
         await message.reply(
-            'Вы очевидно ввели не имя отчество фамилию. ' + Misc.MSG_REPEATE_PLEASE,
+            'Некорректные ФИО - напишите ещё раз имя отчество и фамилию или Отмена',
             reply_markup=Misc.reply_markup_cancel_row(),
         )
         return
