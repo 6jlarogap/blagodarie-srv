@@ -158,17 +158,10 @@ class Misc(object):
     PROMPT_NEW_IOF = "Укажите имя отчество и фамилию - в одной строке, например: 'Иван Иванович Иванов'"
     PROMPT_EXISTING_IOF = "Укажите для\n\n%(name)s\n\nдругие имя отчество и фамилию - в одной строке, например: 'Иван Иванович Иванов'"
 
-    PROMPT_PAPA_MAMA = (
-        '<b>%(name)s</b>.\n'
-        'Отправьте мне ссылку на профиль %(his_her)s %(papy_or_mamy)s '
-        'вида t.me/%(bot_data_username)s?start=...\n\n'
-        'Или нажмите <u>%(novy_novaya)s</u> для ввода нового родственника, '
-        'который станет %(his_her)s %(papoy_or_mamoy)s'
-    )
     PROMPT_NEW_PAPA_MAMA = (
         "Укажите имя отчество и фамилию человека - в одной строке, например: '%(fio_pama_mama)s'. "
         '%(on_a)s <u>добавится</u> к вашим родственникам и станет %(papoy_or_mamoy)s для:\n'
-        '%(name)s.\n'
+        '%(name)s\n'
     )
 
     PROMPT_GENDER = (
@@ -458,9 +451,12 @@ class Misc(object):
 
 
     @classmethod
-    def get_deeplink_with_name(cls, response, bot_data, with_lifetime_years=False):
+    def get_deeplink_with_name(cls, response, bot_data, with_lifetime_years=False, plus_trusts=False):
         """
-        Получить ссылку типа https://t.me/BotNameBot?start=:uuid с именем и возможно, с годами жизни
+        Получить ссылку типа https://t.me/BotNameBot?start=:uuid с именем
+
+        и возможно, с годами жизни (with_lifetime_years=True)
+        и числом доверий (plus_trusts=True)
         """
         href = cls.get_deeplink(response, bot_data, https=True)
         iof = response['first_name']
@@ -468,7 +464,10 @@ class Misc(object):
             lifetime_years_str = cls.get_lifetime_years_str(response)
             if lifetime_years_str:
                 iof += ', ' + lifetime_years_str
-        return cls.get_html_a(href, iof)
+        result = cls.get_html_a(href, iof)
+        if plus_trusts:
+            result += (' (%s)' % response['trust_count']) if response.get('trust_count') is not None else ''
+        return result
 
 
     @classmethod

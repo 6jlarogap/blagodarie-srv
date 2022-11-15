@@ -159,9 +159,11 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
     else:
         if response and response.get('profile_from') and response.get('profile_to'):
             bot_data = await bot.get_me()
-            await message.reply(Misc.PROMPT_PAPA_MAMA_SET % dict(
-                    iof_from = Misc.get_deeplink_with_name(response['profile_from'], bot_data),
-                    iof_to = Misc.get_deeplink_with_name(response['profile_to'], bot_data),
+            await bot.send_message(
+                message.from_user.id,
+                Misc.PROMPT_PAPA_MAMA_SET % dict(
+                    iof_from = Misc.get_deeplink_with_name(response['profile_from'], bot_data, plus_trusts=True),
+                    iof_to = Misc.get_deeplink_with_name(response['profile_to'], bot_data, plus_trusts=True),
                     papa_or_mama='папа' if is_father else 'мама',
                     _a_='' if is_father else 'а',
                 ),
@@ -226,13 +228,22 @@ async def put_new_papa_mama(message: types.Message, state: FSMContext):
     else:
         if response and response.get('profile_from'):
             bot_data = await bot.get_me()
-            await message.reply(Misc.PROMPT_PAPA_MAMA_SET % dict(
-                    iof_from = Misc.get_deeplink_with_name(response['profile_from'], bot_data),
-                    iof_to = Misc.get_deeplink_with_name(response, bot_data),
-                    papa_or_mama='папа' if is_father else 'мама',
-                    _a_='' if is_father else 'а',
-                    disable_web_page_preview=True,
-            ))
+            await bot.send_message(
+                message.from_user.id,
+                Misc.PROMPT_PAPA_MAMA_SET % dict(
+                iof_from = Misc.get_deeplink_with_name(response['profile_from'], bot_data, plus_trusts=True),
+                iof_to = Misc.get_deeplink_with_name(response, bot_data, plus_trusts=True),
+                papa_or_mama='папа' if is_father else 'мама',
+                _a_='' if is_father else 'а',
+                ),
+                disable_web_page_preview=True,
+            )
+            await Misc.show_cards(
+                [response],
+                message,
+                bot,
+                response_from=owner,
+            )
         else:
             await message.reply('Родитель внесен в данные')
     await Misc.state_finish(state)
@@ -264,10 +275,11 @@ async def process_callback_new_papa_mama(callback_query: types.CallbackQuery, st
         response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
         if not response_sender:
             return
+        bot_data = await bot.get_me()
         is_father = code[0] == str(KeyboardType.NEW_FATHER)
         response_uuid = response_sender['response_uuid']
         prompt_new_papa_mama = Misc.PROMPT_NEW_PAPA_MAMA % dict(
-            name=response_uuid['first_name'],
+            name=Misc.get_deeplink_with_name(response_uuid, bot_data, plus_trusts=True),
             papoy_or_mamoy='папой' if is_father else 'мамой',
             fio_pama_mama='Иван Иванович Иванов'if is_father else 'Марья Ивановна Иванова',
             on_a='Он' if is_father else 'Она',
@@ -316,14 +328,15 @@ async def process_callback_papa_mama(callback_query: types.CallbackQuery, state:
         async with state.proxy() as data:
             data['uuid'] = uuid
             data['is_father'] = is_father
-        his_her = Misc.his_her(response_uuid)
-        prompt_papa_mama = Misc.PROMPT_PAPA_MAMA % dict(
-            bot_data_username=bot_data['username'],
-            name=response_uuid['first_name'],
-            his_her=his_her,
+        prompt_papa_mama = (
+            'Отправьте мне ссылку на профиль %(papy_or_mamy)s для '
+            '%(response_uuid_deeplink)s '
+            'вида t.me/%(bot_data_username)s?start=...\n'
+            'Или нажмите Новый - для нового профиля'
+        )% dict(
             papy_or_mamy='папы' if is_father else 'мамы',
-            novy_novaya='Новый' if is_father else 'Новая',
-            papoy_or_mamoy='папой' if is_father else 'мамой',
+            bot_data_username=bot_data['username'],
+            response_uuid_deeplink=Misc.get_deeplink_with_name(response_sender['response_uuid'], bot_data, plus_trusts=True),
         )
         callback_data = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
             keyboard_type=KeyboardType.NEW_FATHER if is_father else KeyboardType.NEW_MOTHER,
@@ -425,8 +438,8 @@ async def put_child_by_uuid(message: types.Message, state: FSMContext):
                     if response and response.get('profile_from') and response.get('profile_to'):
                         bot_data = await bot.get_me()
                         await message.reply(Misc.PROMPT_PAPA_MAMA_SET % dict(
-                                iof_from = Misc.get_deeplink_with_name(response['profile_from'], bot_data),
-                                iof_to = Misc.get_deeplink_with_name(response['profile_to'], bot_data),
+                                iof_from = Misc.get_deeplink_with_name(response['profile_from'], bot_data, plus_trusts=True),
+                                iof_to = Misc.get_deeplink_with_name(response['profile_to'], bot_data, plus_trusts=True),
                                 papa_or_mama='папа' if is_father else 'мама',
                                 _a_='' if is_father else 'а',
                                 disable_web_page_preview=True,
@@ -486,12 +499,18 @@ async def put_new_child(message: types.Message, state: FSMContext):
                         bot_data = await bot.get_me()
                         is_father = data['parent_gender'] == 'm'
                         await message.reply(Misc.PROMPT_PAPA_MAMA_SET % dict(
-                                iof_from = Misc.get_deeplink_with_name(response_child, bot_data),
-                                iof_to = Misc.get_deeplink_with_name(response_parent, bot_data),
+                                iof_from = Misc.get_deeplink_with_name(response_child, bot_data, plus_trusts=True),
+                                iof_to = Misc.get_deeplink_with_name(response_parent, bot_data, plus_trusts=True),
                                 papa_or_mama='папа' if is_father else 'мама',
                                 _a_='' if is_father else 'а',
                                 disable_web_page_preview=True,
                         ))
+                        await Misc.show_cards(
+                            [response_child],
+                            message,
+                            bot,
+                            response_from=response_sender,
+                        )
                     else:
                         await message.reply('Ребёнок внесен в данные')
     await Misc.state_finish(state)
