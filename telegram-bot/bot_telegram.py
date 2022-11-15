@@ -239,7 +239,7 @@ async def put_new_papa_mama(message: types.Message, state: FSMContext):
                 disable_web_page_preview=True,
             )
             await Misc.show_cards(
-                [response],
+                [owner['response_uuid']],
                 message,
                 bot,
                 response_from=owner,
@@ -278,11 +278,13 @@ async def process_callback_new_papa_mama(callback_query: types.CallbackQuery, st
         bot_data = await bot.get_me()
         is_father = code[0] == str(KeyboardType.NEW_FATHER)
         response_uuid = response_sender['response_uuid']
-        prompt_new_papa_mama = Misc.PROMPT_NEW_PAPA_MAMA % dict(
+        prompt_new_papa_mama = (
+            'Укажите Имя Фамилию и Отчество для %(papy_or_mamy)s, '
+            'пример %(fio_pama_mama)s'
+        ) % dict(
+            papy_or_mamy='папы' if is_father else 'мамы',
             name=Misc.get_deeplink_with_name(response_uuid, bot_data, plus_trusts=True),
-            papoy_or_mamoy='папой' if is_father else 'мамой',
             fio_pama_mama='Иван Иванович Иванов'if is_father else 'Марья Ивановна Иванова',
-            on_a='Он' if is_father else 'Она',
         )
         await FSMpapaMama.next()
         state = dp.current_state()
@@ -506,7 +508,7 @@ async def put_new_child(message: types.Message, state: FSMContext):
                                 disable_web_page_preview=True,
                         ))
                         await Misc.show_cards(
-                            [response_child],
+                            [response_sender['response_uuid']],
                             message,
                             bot,
                             response_from=response_sender,
@@ -793,7 +795,8 @@ async def process_callback_change_owner(callback_query: types.CallbackQuery, sta
                 bot_data_username=bot_data['username'],
                 his_her=Misc.his_her(response_sender['response_uuid']),
             ),
-            reply_markup=Misc.reply_markup_cancel_row()
+            reply_markup=Misc.reply_markup_cancel_row(),
+            disable_web_page_preview=True,
         )
 
 

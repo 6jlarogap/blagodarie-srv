@@ -1184,6 +1184,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
         data.update(profile.data_dict(request))
         data.update(profile.parents_dict(request))
         data.update(user_id=user.pk, tg_data=profile.tg_data())
+        data.update(owner_id=profile.owner and profile.owner.id or None)
         data.update(profile.data_WAK())
         return data
 
