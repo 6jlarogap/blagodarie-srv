@@ -164,8 +164,9 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
                     iof_to = Misc.get_deeplink_with_name(response['profile_to'], bot_data),
                     papa_or_mama='папа' if is_father else 'мама',
                     _a_='' if is_father else 'а',
-                    disable_web_page_preview=True,
-            ))
+                ),
+                disable_web_page_preview=True,
+            )
         else:
             await message.reply('Родитель внесен в данные')
     await Misc.state_finish(state)
@@ -715,7 +716,9 @@ async def get_keys(message: types.Message, state: FSMContext):
                                 ': ' + Misc.get_deeplink_with_name(response['profile'], bot_data) + '\n\n' + \
                                 ('Контакты у %s не изменены' % \
                                  Misc.get_deeplink_with_name(response_sender['response_uuid'], bot_data
-                            )))
+                                )),
+                                disable_web_page_preview=True,
+                             )
                         elif status == 400 and response.get('message'):
                             await message.reply(response['message'])
                         elif status == 200:
@@ -1042,6 +1045,7 @@ async def process_callback_other(callback_query: types.CallbackQuery, state: FSM
             Misc.show_other_data(response_uuid) + '\n' + \
             Misc.PROMPT_GENDER % dict(his_her=his_her),
             reply_markup=reply_markup,
+            disable_web_page_preview=True,
         )
 
 
@@ -1122,7 +1126,7 @@ async def put_other_data(message, tg_user_sender, state, data):
                 dod=dod,
             )
             if status == 200 and response:
-                await message.reply('Данные внесены:\n' + Misc.show_other_data(response))
+                await message.reply('Данные внесены:\n' + Misc.show_other_data(response), disable_web_page_preview=True,)
                 await Misc.show_cards(
                     [response],
                     message,
@@ -1497,6 +1501,7 @@ async def process_command_map(message):
     await bot.send_message(
         message.from_user.id,
         text=Misc.get_html_a(href=settings.MAP_HOST, text='Карта участников'),
+        disable_web_page_preview=True,
     )
 
 @dp.message_handler(

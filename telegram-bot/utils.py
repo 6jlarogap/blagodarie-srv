@@ -804,6 +804,7 @@ class Misc(object):
             reply = cls.reply_user_card(
                 response_to,
                 bot_data=bot_data,
+                disable_web_page_preview=True,
             )
 
             response_relations = None
