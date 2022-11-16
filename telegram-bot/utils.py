@@ -243,6 +243,8 @@ class Misc(object):
     PROMPT_CANCEL_LOCATION = 'Отмена'
     PROMPT_LOCATION = 'Отправить местоположение'
 
+    PROMPT_IOF_INCORRECT = 'Некорректные ФИО - напишите ещё раз имя отчество и фамилию или Отмена'
+
     @classmethod
     def datetime_string(cls, timestamp, with_timezone=True):
         dt = datetime.datetime.fromtimestamp(timestamp)

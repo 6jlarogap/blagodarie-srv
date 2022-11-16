@@ -186,8 +186,13 @@ async def put_new_papa_mama(message: types.Message, state: FSMContext):
             reply_markup=Misc.reply_markup_cancel_row()
         )
         return
-
     first_name_to = Misc.strip_text(message.text)
+    if re.search(Misc.UUID_PATTERN, first_name_to):
+        await message.reply(
+            Misc.PROMPT_IOF_INCORRECT,
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+        return
     user_uuid_from = is_father = ''
     async with state.proxy() as data:
         if data.get('uuid'):
@@ -463,6 +468,14 @@ async def put_new_child(message: types.Message, state: FSMContext):
             reply_markup=Misc.reply_markup_cancel_row()
         )
         return
+    first_name = Misc.strip_text(message.text)
+    if re.search(Misc.UUID_PATTERN, first_name):
+        await message.reply(
+            Misc.PROMPT_IOF_INCORRECT,
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+        return
+
     async with state.proxy() as data:
         if data.get('uuid') and data.get('parent_gender'):
             response_sender = await Misc.check_owner(owner_tg_user=message.from_user, uuid=data['uuid'])
@@ -473,7 +486,6 @@ async def put_new_child(message: types.Message, state: FSMContext):
                       uuid=data['uuid'],
                       gender=data['parent_gender'],
                     )
-                first_name = Misc.strip_text(message.text)
                 post_new_link = dict(
                     tg_token=settings.TOKEN,
                     first_name=first_name,
@@ -703,6 +715,12 @@ async def process_callback_keys(callback_query: types.CallbackQuery, state: FSMC
 async def get_keys(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         await message.reply(Misc.MSG_ERROR_TEXT_ONLY, reply_markup=Misc.reply_markup_cancel_row())
+        return
+    if re.search(Misc.UUID_PATTERN, message.text):
+        await message.reply(
+            'Не похоже, что это контакты. Напишите ещё раз или Отмена',
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
         return
     async with state.proxy() as data:
         uuid = data.get('uuid')
@@ -1000,11 +1018,10 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         await message.reply(Misc.MSG_ERROR_TEXT_ONLY, reply_markup=Misc.reply_markup_cancel_row())
         return
-
     first_name = Misc.strip_text(message.text)
     if re.search(Misc.UUID_PATTERN, first_name):
         await message.reply(
-            'Некорректные ФИО - напишите ещё раз имя отчество и фамилию или Отмена',
+            Misc.PROMPT_IOF_INCORRECT,
             reply_markup=Misc.reply_markup_cancel_row(),
         )
         return
@@ -1621,11 +1638,16 @@ async def process_callback_cancel_any(callback_query: types.CallbackQuery, state
 )
 async def put_ability(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
-        reply_markup = Misc.reply_markup_cancel_row()
         await message.reply(
             Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + \
             Misc.PROMPT_ABILITY,
-            reply_markup=reply_markup
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+        return
+    if re.search(Misc.UUID_PATTERN, message.text):
+        await message.reply(
+            'Не похоже, что это возможности. Напишите ещё раз или Отмена',
+            reply_markup=Misc.reply_markup_cancel_row(),
         )
         return
 
@@ -1689,7 +1711,13 @@ async def put_wish(message: types.Message, state: FSMContext):
         await message.reply(
             Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + \
             Misc.PROMPT_WISH,
-            reply_markup=reply_markup,
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+        return
+    if re.search(Misc.UUID_PATTERN, message.text):
+        await message.reply(
+            'Не похоже, что это потребности. Напишите ещё раз или Отмена',
+            reply_markup=Misc.reply_markup_cancel_row(),
         )
         return
 
@@ -1935,13 +1963,20 @@ async def process_callback_photo_remove_confirmed(callback_query: types.Callback
 )
 async def put_new_iof(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
-        reply_markup = Misc.reply_markup_cancel_row()
         await message.reply(
             Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + \
             Misc.PROMPT_NEW_IOF,
-            reply_markup=reply_markup
+            reply_markup=Misc.reply_markup_cancel_row(),
         )
         return
+    first_name = Misc.strip_text(message.text)
+    if re.search(Misc.UUID_PATTERN, first_name):
+        await message.reply(
+            Misc.PROMPT_IOF_INCORRECT,
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+        return
+
     logging.debug('put_new_iof: post tg_user data')
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
@@ -1949,7 +1984,7 @@ async def put_new_iof(message: types.Message, state: FSMContext):
         payload_iof = dict(
             tg_token=settings.TOKEN,
             owner_id=response_sender['user_id'],
-            first_name=Misc.strip_text(message.text),
+            first_name=first_name,
         )
         logging.debug('post iof, payload: %s' % payload_iof)
         status, response = await Misc.api_request(
@@ -2043,6 +2078,12 @@ async def process_make_query(message: types.Message, state: FSMContext):
             if len(message.text.strip()) < settings.MIN_LEN_SEARCHED_TEXT:
                 reply = Misc.PROMPT_SEARCH_TEXT_TOO_SHORT
             else:
+                if re.search(Misc.UUID_PATTERN, message.text):
+                    await message.reply(
+                        'Не похоже, что это строка поиска. Напишите ещё раз или Отмена',
+                        reply_markup=Misc.reply_markup_cancel_row(),
+                    )
+                    return
                 search_phrase = Misc.text_search_phrase(
                     message.text,
                     MorphAnalyzer,
