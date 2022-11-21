@@ -3088,6 +3088,27 @@ class GetTrustGenesisMixin(object):
         return Response(data=data, status=status_code)
 
 
+class ApiProfileGenesisAll(APIView):
+    """
+    Отдать все профили и все связи
+    """
+    def get(self, request):
+        users = [
+            profile.data_dict(request=request, short=True) \
+            for profile in Profile.objects.select_related('user').filter(user__is_superuser=False).distinct()
+        ]
+        q_connections = Q(is_child=False) & (Q(is_father = True) | Q(is_mother=True))
+        connections = [
+            cs.data_dict(show_parent=True, show_trust=False, reverse=True, show_id_fio=False) \
+            for cs in CurrentState.objects.filter(q_connections).select_related(
+                    'user_from__profile', 'user_to__profile',
+                ).distinct()        ]
+        data = dict(users=users, connections=connections, trust_connections=[])
+        return Response(data=data, status=status.HTTP_200_OK)
+
+api_profile_genesis_all = ApiProfileGenesisAll.as_view()
+
+
 class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
     """
     Дерево родни в чате телеграма, или просто среди пользователей.

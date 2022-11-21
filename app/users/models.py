@@ -378,29 +378,36 @@ class Profile(PhotoModel, GeoPointAddressModel):
     def __str__(self):
         return self.user.first_name or str(self.pk)
 
-    def data_dict(self, request=None, google_photo_size=None):
+    def data_dict(self, request=None, short=False, google_photo_size=None):
         user = self.user
-        return dict(
-            uuid=str(self.uuid),
-            last_name=user.last_name,
-            first_name=user.first_name,
-            middle_name=self.middle_name,
-            photo=self.choose_photo(request, google_photo_size) if request else '',
-            is_notified=self.is_notified,
-            sum_thanks_count=self.sum_thanks_count,
-            fame=self.fame,
-            mistrust_count=self.mistrust_count,
-            trust_count=self.trust_count,
-            is_active=user.is_active,
-            latitude=self.latitude,
-            longitude=self.longitude,
-            address=self.address,
-            ability=self.ability and self.ability.text or None,
-            gender=self.gender,
-            dob=self.dob and self.dob.str_safe() or None,
-            dod=self.dod and self.dod.str_safe() or None,
-            comment=self.comment or '',
-        )
+        if short:
+            return dict(
+                uuid=str(self.uuid),
+                first_name=user.first_name,
+                photo=self.choose_photo(request, google_photo_size) if request else '',
+            )
+        else:
+            return dict(
+                uuid=str(self.uuid),
+                last_name=user.last_name,
+                first_name=user.first_name,
+                middle_name=self.middle_name,
+                photo=self.choose_photo(request, google_photo_size) if request else '',
+                is_notified=self.is_notified,
+                sum_thanks_count=self.sum_thanks_count,
+                fame=self.fame,
+                mistrust_count=self.mistrust_count,
+                trust_count=self.trust_count,
+                is_active=user.is_active,
+                latitude=self.latitude,
+                longitude=self.longitude,
+                address=self.address,
+                ability=self.ability and self.ability.text or None,
+                gender=self.gender,
+                dob=self.dob and self.dob.str_safe() or None,
+                dod=self.dod and self.dod.str_safe() or None,
+                comment=self.comment or '',
+            )
 
     def owner_dict(self, request=None, google_photo_size=None):
         if self.owner:

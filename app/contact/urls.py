@@ -33,6 +33,7 @@ urlpatterns = [
 
     re_path(r'^api/profile_graph/?$', views.api_profile_graph),
     re_path(r'^api/profile_genesis/?$', views.api_profile_genesis),
+    re_path(r'^api/profile_genesis/all/?$', views.api_profile_genesis_all),
     re_path(r'^api/profile_trust/?$', views.api_profile_trust),
 
     re_path(r'^api/addusersymptom/?$', views.api_add_user_symptom),
