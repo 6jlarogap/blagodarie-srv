@@ -1306,14 +1306,24 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
             profile = user.profile
             self.save_photo(request, profile)
             data = profile.data_dict(request)
-            data.update(user_id=user.pk)
+            data.update(
+                user_id=user.pk,
+                owner_id=profile.owner and profile.owner.pk or None,
+                tg_data=profile.tg_data()
+            )
             data.update(profile.data_WAK())
+            data.update(profile.parents_dict(request))
             if got_tg_token and link_uuid and relation in ('new_is_father', 'new_is_mother',):
                 user_from = link_user_from
                 profile_from = user_from.profile
                 profile_from_data=profile_from.data_dict(request)
-                profile_from_data.update(user_id=user_from.pk)
+                profile_from_data.update(
+                    user_id=user_from.pk,
+                    owner_id=profile_from.owner and profile_from.owner.pk or None,
+                    tg_data=profile_from.tg_data()
+                )
                 profile_from_data.update(profile_from.data_WAK())
+                profile_from_data.update(profile_from.parents_dict(request))
                 data.update(
                     profile_from=profile_from_data,
                 )

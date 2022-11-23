@@ -244,7 +244,7 @@ async def put_new_papa_mama(message: types.Message, state: FSMContext):
                 disable_web_page_preview=True,
             )
             await Misc.show_cards(
-                [owner['response_uuid']],
+                [response],
                 message,
                 bot,
                 response_from=owner,
@@ -520,7 +520,7 @@ async def put_new_child(message: types.Message, state: FSMContext):
                                 disable_web_page_preview=True,
                         ))
                         await Misc.show_cards(
-                            [response_sender['response_uuid']],
+                            [response_child],
                             message,
                             bot,
                             response_from=response_sender,
