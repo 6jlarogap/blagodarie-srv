@@ -65,6 +65,12 @@ class FSMkey(StatesGroup):
 class FSMquery(StatesGroup):
     ask = State()
 
+class FSMdelete(StatesGroup):
+    ask = State()
+
+class FSMundelete(StatesGroup):
+    ask = State()
+
 class FSMgeo(StatesGroup):
     geo = State()
 
@@ -187,7 +193,7 @@ async def put_new_papa_mama(message: types.Message, state: FSMContext):
         )
         return
     first_name_to = Misc.strip_text(message.text)
-    if re.search(Misc.UUID_PATTERN, first_name_to):
+    if re.search(Misc.RE_UUID, first_name_to):
         await message.reply(
             Misc.PROMPT_IOF_INCORRECT,
             reply_markup=Misc.reply_markup_cancel_row(),
@@ -206,14 +212,13 @@ async def put_new_papa_mama(message: types.Message, state: FSMContext):
     if not owner or not owner.get('user_id'):
         await Misc.state_finish(state)
         return
-    owner_id = owner['user_id']
 
     post_data = dict(
         tg_token=settings.TOKEN,
         first_name = first_name_to,
         link_relation='new_is_father' if is_father else 'new_is_mother',
         link_uuid=user_uuid_from,
-        owner_id=owner_id,
+        owner_id=owner['user_id'],
     )
     logging.debug('post new owned user with link_uuid, payload: %s' % post_data)
     status, response = await Misc.api_request(
@@ -469,7 +474,7 @@ async def put_new_child(message: types.Message, state: FSMContext):
         )
         return
     first_name = Misc.strip_text(message.text)
-    if re.search(Misc.UUID_PATTERN, first_name):
+    if re.search(Misc.RE_UUID, first_name):
         await message.reply(
             Misc.PROMPT_IOF_INCORRECT,
             reply_markup=Misc.reply_markup_cancel_row(),
@@ -531,7 +536,7 @@ async def put_new_child(message: types.Message, state: FSMContext):
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.CHILD,
         KeyboardType.SEP,
         # uuid родителя           # 1
@@ -633,7 +638,7 @@ async def process_callback_child_unknown_parent_gender(callback_query: types.Cal
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.NEW_CHILD,
         KeyboardType.SEP,
         # uuid потомка папы или мамы           # 1
@@ -663,7 +668,7 @@ async def process_callback_new_child(callback_query: types.CallbackQuery, state:
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.KEYS,
         KeyboardType.SEP,
         # uuid себя или родственника           # 1
@@ -716,7 +721,7 @@ async def get_keys(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         await message.reply(Misc.MSG_ERROR_TEXT_ONLY, reply_markup=Misc.reply_markup_cancel_row())
         return
-    if re.search(Misc.UUID_PATTERN, message.text):
+    if re.search(Misc.RE_UUID, message.text):
         await message.reply(
             'Не похоже, что это контакты. Напишите ещё раз или Отмена',
             reply_markup=Misc.reply_markup_cancel_row(),
@@ -774,7 +779,7 @@ async def get_keys(message: types.Message, state: FSMContext):
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.CHANGE_OWNER,
         KeyboardType.SEP,
         # uuid родственника           # 1
@@ -889,7 +894,7 @@ async def get_new_owner(message: types.Message, state: FSMContext):
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.CHANGE_OWNER_CONFIRM,
         KeyboardType.SEP,
         # uuid родственника           # 1
@@ -967,7 +972,7 @@ async def process_callback_change_owner_confirmed(callback_query: types.Callback
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.IOF,
         KeyboardType.SEP,
         # uuid своё или родственника           # 1
@@ -1019,7 +1024,7 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
         await message.reply(Misc.MSG_ERROR_TEXT_ONLY, reply_markup=Misc.reply_markup_cancel_row())
         return
     first_name = Misc.strip_text(message.text)
-    if re.search(Misc.UUID_PATTERN, first_name):
+    if re.search(Misc.RE_UUID, first_name):
         await message.reply(
             Misc.PROMPT_IOF_INCORRECT,
             reply_markup=Misc.reply_markup_cancel_row(),
@@ -1050,7 +1055,7 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.OTHER,
         KeyboardType.SEP,
         # uuid своё ил родственника           # 1
@@ -1184,6 +1189,7 @@ async def put_other_data(message, tg_user_sender, state, data):
                     message,
                     bot,
                     response_from=response_sender,
+                    tg_user_from=tg_user_sender,
                 )
             elif status == 400 and response and response.get('message'):
                 await message.reply('Ошибка!\n%s\n\nНазначайте сведения по новой' % response['message'])
@@ -1215,7 +1221,7 @@ async def draw_dod(message, state, data):
     )
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.OTHER_DOB_UNKNOWN,
         KeyboardType.SEP,
     ), c.data,
@@ -1240,7 +1246,7 @@ async def process_callback_other_dob_unknown(callback_query: types.CallbackQuery
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.OTHER_DOD_UNKNOWN,
         KeyboardType.SEP,
     ), c.data,
@@ -1317,7 +1323,7 @@ async def get_dod(message: types.Message, state: FSMContext):
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.SEND_MESSAGE,
         KeyboardType.SEP,
     ), c.data,
@@ -1354,7 +1360,7 @@ async def process_callback_send_message(callback_query: types.CallbackQuery, sta
         )
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.SHOW_MESSAGES,
         KeyboardType.SEP,
     ), c.data,
@@ -1566,7 +1572,7 @@ async def process_command_ability(message):
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.ABILITY,       # 0
         KeyboardType.SEP,
         # uuid, кому                # 1
@@ -1596,7 +1602,7 @@ async def process_command_wish(message):
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.WISH,       # 0
         KeyboardType.SEP,
         # uuid, кому                # 1
@@ -1617,7 +1623,7 @@ async def process_callback_wish(callback_query: types.CallbackQuery, state: FSMC
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.CANCEL_ANY,
         KeyboardType.SEP,
         ), c.data
@@ -1644,7 +1650,7 @@ async def put_ability(message: types.Message, state: FSMContext):
             reply_markup=Misc.reply_markup_cancel_row(),
         )
         return
-    if re.search(Misc.UUID_PATTERN, message.text):
+    if re.search(Misc.RE_UUID, message.text):
         await message.reply(
             'Не похоже, что это возможности. Напишите ещё раз или Отмена',
             reply_markup=Misc.reply_markup_cancel_row(),
@@ -1714,7 +1720,7 @@ async def put_wish(message: types.Message, state: FSMContext):
             reply_markup=Misc.reply_markup_cancel_row(),
         )
         return
-    if re.search(Misc.UUID_PATTERN, message.text):
+    if re.search(Misc.RE_UUID, message.text):
         await message.reply(
             'Не похоже, что это потребности. Напишите ещё раз или Отмена',
             reply_markup=Misc.reply_markup_cancel_row(),
@@ -1827,7 +1833,7 @@ async def put_photo(message: types.Message, state: FSMContext):
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.PHOTO,       # 0
         KeyboardType.SEP,
         # uuid, кому              # 1
@@ -1871,7 +1877,7 @@ async def process_callback_photo(callback_query: types.CallbackQuery, state: FSM
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.PHOTO_REMOVE,      # 0
         KeyboardType.SEP,
         # uuid, кому                    # 1
@@ -1913,7 +1919,7 @@ async def process_callback_photo_remove(callback_query: types.CallbackQuery, sta
         await Misc.state_finish(state)
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.PHOTO_REMOVE_CONFIRMED,      # 0
         KeyboardType.SEP,
         # uuid, кому                    # 1
@@ -1970,7 +1976,7 @@ async def put_new_iof(message: types.Message, state: FSMContext):
         )
         return
     first_name = Misc.strip_text(message.text)
-    if re.search(Misc.UUID_PATTERN, first_name):
+    if re.search(Misc.RE_UUID, first_name):
         await message.reply(
             Misc.PROMPT_IOF_INCORRECT,
             reply_markup=Misc.reply_markup_cancel_row(),
@@ -2078,7 +2084,7 @@ async def process_make_query(message: types.Message, state: FSMContext):
             if len(message.text.strip()) < settings.MIN_LEN_SEARCHED_TEXT:
                 reply = Misc.PROMPT_SEARCH_TEXT_TOO_SHORT
             else:
-                if re.search(Misc.UUID_PATTERN, message.text):
+                if re.search(Misc.RE_UUID, message.text):
                     await message.reply(
                         'Не похоже, что это строка поиска. Напишите ещё раз или Отмена',
                         reply_markup=Misc.reply_markup_cancel_row(),
@@ -2105,7 +2111,7 @@ async def process_make_query(message: types.Message, state: FSMContext):
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.TRUST_THANK_VER_2,
         KeyboardType.SEP,
     ), c.data
@@ -2355,7 +2361,7 @@ async def geo_command_handler(message: types.Message, state: FSMContext):
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.LOCATION,
         KeyboardType.SEP,
         # uuid, кому                # 1
@@ -2814,6 +2820,8 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             logging.debug('get tg_user_by_start_uuid in api, response_to: %s' % response_uuid)
             if status == 200:
                 a_response_to += [response_uuid, ]
+            else:
+                reply = 'Пользователь не найден'
         except:
             pass
 
@@ -3084,7 +3092,7 @@ async def echo_join_chat_request(message: types.Message):
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.CHAT_JOIN_ACCEPT,
         KeyboardType.SEP,
         # tg_subscriber_id          # 1
@@ -3119,7 +3127,7 @@ async def process_callback_chat_join(callback_query: types.CallbackQuery, state:
 
 
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s)%s' % (
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.CHAT_JOIN_REFUSE,
         KeyboardType.SEP,
         # tg_subscriber_id          # 1
@@ -3369,6 +3377,198 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
     for i, response_from in enumerate(a_users_out):
         if response_from.get('created'):
             await Misc.update_user_photo(bot, a_users_in[i], response_from)
+
+
+async def check_user_delete_undelete(callback_query):
+    """
+    Проверить возможность удаления, обезличивания или восстановления после этого
+
+    Делается два раза, линий раз не помешает
+    Возвращает профили:
+        owner: Кто удаляет (если собственного) или обезличивает (сам себя), или восстанавливает (себя)
+        user: его удаляем или обезличиваем, или восстанавливаем
+    """
+    code = callback_query.data.split(KeyboardType.SEP)
+    try:
+        uuid = code[1]
+        if not uuid:
+            raise ValueError
+        owner = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+        if not owner:
+            raise ValueError
+        owner_id = code[2]
+        if owner_id != str(owner['user_id']):
+            raise ValueError
+        user = owner['response_uuid']
+    except (IndexError, ValueError,):
+        user, owner = None, None
+    return user, owner
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.DELETE_USER,
+        KeyboardType.SEP,
+    ), c.data
+    ), state=None,
+    )
+async def process_callback_delete_user(callback_query: types.CallbackQuery, state: FSMContext):
+    user, owner = await check_user_delete_undelete(callback_query)
+    #   owner:  Кто удаляет (если собственного) или обезличивает (сам себя)
+    #   user:   его удаляем или обезличиваем
+    if not user or not (user['is_active'] or user['owner_id']):
+        return
+    if user['user_id'] == owner['user_id']:
+        # Себя обезличиваем
+        prompt = (
+            '<b>%(name)s</b>\n'
+            '\n'
+            'Вы собираетесь <u>обезличить</u> себя в системе.\n'
+            'Будут удалены Ваши данные (ФИО, фото, место и т.д), а также связи с родственниками!\n'
+            '\n'
+            'Если подтверждаете, то нажмите <u>Продолжить</u>. Иначе <u>Отмена</u>\n'
+        ) % dict(name = owner['first_name'])
+    else:
+        bot_data = await bot.get_me()
+        prompt = (
+            'Будет удалён %(name)s!\n'
+            '\n'
+            'Если подтверждаете удаление, нажмите <u>Продолжить</u>. Иначе <u>Отмена</u>\n'
+        ) % dict(name = Misc.get_deeplink_with_name(user, bot_data, with_lifetime_years=True,))
+    callback_data = (Misc.CALLBACK_DATA_UUID_TEMPLATE + '%(owner_id)s%(sep)s') % dict(
+        keyboard_type=KeyboardType.DELETE_USER_CONFIRMED,
+        uuid=user['uuid'],
+        sep=KeyboardType.SEP,
+        owner_id=owner['user_id']
+    )
+    inline_btn_go = InlineKeyboardButton(
+        'Продолжить',
+        callback_data=callback_data,
+    )
+    reply_markup = InlineKeyboardMarkup()
+    reply_markup.row(inline_btn_go, Misc.inline_button_cancel())
+    await FSMdelete.ask.set()
+    await callback_query.message.reply(prompt, reply_markup=reply_markup)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.DELETE_USER_CONFIRMED,
+        KeyboardType.SEP,
+    ), c.data
+    ), state=FSMdelete.ask,
+    )
+async def process_callback_delete_user_confirmed(callback_query: types.CallbackQuery, state: FSMContext):
+    user, owner = await check_user_delete_undelete(callback_query)
+    #   owner:  Кто удаляет (если собственного) или обезличивает (сам себя)
+    #   user:   его удаляем или обезличиваем
+
+    if not user or not (user['is_active'] or user['owner_id']):
+        await Misc.state_finish(state)
+        return
+
+    if user['user_id'] == owner['user_id']:
+        msg_debug = 'depersonalize user, '
+        msg_deleted = 'Теперь Вы обезличены'
+    else:
+        msg_debug = 'delete owned user, '
+        msg_deleted = 'Профиль <u>%s</u> удалён' % user['first_name']
+
+    payload = dict(tg_token=settings.TOKEN, uuid=user['uuid'], owner_id=owner['user_id'])
+    logging.debug(msg_debug + 'payload: %s' % payload)
+    status, response = await Misc.api_request(
+        path='/api/profile',
+        method='delete',
+        data=payload,
+    )
+    logging.debug(msg_debug + 'status: %s' % status)
+    logging.debug(msg_debug + 'response: %s' % response)
+    if status == 400:
+        await callback_query.message.reply('Ошибка: %s' % response['message'])
+    elif status != 200:
+        await callback_query.message.reply('Неизвестная ошибка')
+    else:
+        await callback_query.message.reply(msg_deleted)
+        if user['user_id'] == owner['user_id']:
+            await Misc.show_cards(
+                [response],
+                callback_query.message,
+                bot,
+                response_from=owner,
+                tg_user_from=callback_query.from_user
+            )
+    await Misc.state_finish(state)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.UNDELETE_USER,
+        KeyboardType.SEP,
+    ), c.data
+    ), state=None,
+    )
+async def process_callback_undelete_user(callback_query: types.CallbackQuery, state: FSMContext):
+    user, owner = await check_user_delete_undelete(callback_query)
+    if not user or user['user_id'] != owner['user_id'] or user['is_active'] or user['owner_id']:
+        return
+    prompt = (
+        '<b>%(name)s</b>\n'
+        '\n'
+        'Вы собираетесь <u>восстановить</u> себя и свои данные в системе.\n'
+        '\n'
+        'Если подтверждаете, то нажмите <u>Продолжить</u>. Иначе <u>Отмена</u>\n'
+    ) % dict(name = owner['first_name'])
+    callback_data = (Misc.CALLBACK_DATA_UUID_TEMPLATE + '%(owner_id)s%(sep)s') % dict(
+        keyboard_type=KeyboardType.UNDELETE_USER_CONFIRMED,
+        uuid=user['uuid'],
+        sep=KeyboardType.SEP,
+        owner_id=owner['user_id']
+    )
+    inline_btn_go = InlineKeyboardButton(
+        'Продолжить',
+        callback_data=callback_data,
+    )
+    reply_markup = InlineKeyboardMarkup()
+    reply_markup.row(inline_btn_go, Misc.inline_button_cancel())
+    await FSMundelete.ask.set()
+    await callback_query.message.reply(prompt, reply_markup=reply_markup)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.UNDELETE_USER_CONFIRMED,
+        KeyboardType.SEP,
+    ), c.data
+    ), state=FSMundelete.ask,
+    )
+async def process_callback_undelete_user_confirmed(callback_query: types.CallbackQuery, state: FSMContext):
+    user, owner = await check_user_delete_undelete(callback_query)
+    #   owner:  Кто восстанавливает себя
+    #   user:   Он же должен быть
+    if not user or user['user_id'] != owner['user_id'] or user['is_active'] or user['owner_id']:
+        await Misc.state_finish(state)
+        return
+
+    logging.debug('un-depersonalize user')
+    status, response = await Misc.post_tg_user(callback_query.from_user, activate=True)
+    payload = dict(tg_token=settings.TOKEN, uuid=user['uuid'], owner_id=owner['user_id'])
+    if status == 400:
+        await callback_query.message.reply('Ошибка: %s' % response['message'])
+    elif status != 200:
+        await callback_query.message.reply('Неизвестная ошибка')
+    else:
+        await callback_query.message.reply("Теперь Вы восстановлены в системе.\n\nГружу Ваше фото, если оно есть, из Telegram'а...")
+        status_photo, response_photo = await Misc.update_user_photo(bot, callback_query.from_user, response)
+        if status_photo == 200:
+            response = response_photo
+        await Misc.show_cards(
+            [response],
+            callback_query.message,
+            bot,
+            response_from=owner,
+            tg_user_from=callback_query.from_user
+        )
+    await Misc.state_finish(state)
 
 
 @dp.inline_handler()

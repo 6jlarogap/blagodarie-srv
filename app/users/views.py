@@ -1049,13 +1049,14 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                     except (ValueError, TypeError,):
                         thumb_size = 0
                     try:
+                        q_active = Q(is_superuser=False) & (Q(is_active=True) | Q(profile__owner__isnull=False))
                         search_vector = SearchVector(*fields, config='russian')
                         search_query = SearchQuery(query, search_type="raw", config='russian')
                         users = User.objects.annotate(
                             search=search_vector
                         ).select_related(
                             'profile', 'profile__ability',
-                        ).filter(is_superuser=False, search=search_query).distinct('id')
+                        ).filter(q_active, search=search_query).distinct('id')
                         if number:
                             users = users[from_:from_ + number]
                         for user in users:
@@ -1142,15 +1143,16 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
             )
             user = oauth.user
             profile = user.profile
-            save_ = False
-            for f in ('last_name', 'first_name', 'username', ):
-                input_val = request.data.get(f, '')
-                if getattr(oauth, f) != input_val and (input_val or f == 'username'):
-                    setattr(oauth, f, input_val)
-                    save_ = True
-            if save_:
-                oauth.update_timestamp = int(time.time())
-                oauth.save()
+            if request.data.get('activate'):
+                save_ = False
+                for f in ('last_name', 'first_name', 'username', ):
+                    input_val = request.data.get(f, '')
+                    if getattr(oauth, f) != input_val:
+                        setattr(oauth, f, input_val)
+                        save_ = True
+                if save_:
+                    oauth.update_timestamp = int(time.time())
+                    oauth.save()
 
         except Oauth.DoesNotExist:
             user = self.create_user(
@@ -1164,8 +1166,9 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                 user=user,
                 last_name=last_name,
                 first_name=first_name,
-                username=request.data.get('username'),
+                username=request.data.get('username', ''),
             )
+            token, created_token = Token.objects.get_or_create(user=user)
             self.save_photo(request, profile)
             data.update(created=True)
 
@@ -1173,9 +1176,8 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
             profile.did_bot_start = True
             profile.save(update_fields=('did_bot_start',))
 
-        token, created_token = Token.objects.get_or_create(user=user)
-        # Существующий Пользователь может быть обезличен
-        if created_token and request.data.get('activate'):
+        if not user.is_active and request.data.get('activate'):
+            token, created_token = Token.objects.get_or_create(user=user)
             user.last_name = ''
             user.first_name = Profile.make_first_name(last_name, first_name)
             user.is_active = True
@@ -1407,16 +1409,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                 owner_id=profile.owner and profile.owner.pk or None,
             )
             if got_tg_token:
-                try:
-                    oauth = Oauth.objects.select_related(
-                        'user', 'user__profile'
-                    ).filter(
-                        provider=Oauth.PROVIDER_TELEGRAM,
-                        user=user,
-                    )[0]
-                    data.update(tg_data=profile.tg_data())
-                except IndexError:
-                    pass
+                data.update(tg_data=profile.tg_data())
         except SkipException:
             pass
         except ServiceException as excpt:
@@ -1428,11 +1421,18 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
     @transaction.atomic
     def delete(self, request):
         """
-        Деактивировать профиль пользователя (обезличить)
+        Деактивировать профиль пользователя (обезличить) или удалить собственного
 
-        Если задан uuid, обезличиваем 
-        Удалить:
-            ФИО, фото - в профиле и во всех профилях соцсетей
+        Если из телеграма, задан tg_token, то в принимаемых данных:
+            - нужен uuid, свой или удаляемого собственного
+            - еще owner_id, в любом случе id удаляющего юзера
+        Иначе должен быть авторизован
+
+        Обезличить активного:
+        Устанавливаются:
+            ФИО: Обезличен
+        Удаляются:
+            фото - в профиле и во всех профилях соцсетей
             ключи
             возможности
             желания
@@ -1440,50 +1440,67 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
             широта, долгота,
             пол
         Отметить а auth_user пользователя is_active = False
-        Отправить сообщение в телеграм
         """
         try:
-            if not request.user.is_authenticated:
-                raise NotAuthenticated
-            user, profile = self.check_user_or_owned_uuid(request, need_uuid=False)
-            if profile.is_notified:
-                messages = [
-                    dict(
-                        tg_uid=oauth.uid,
-                        message="Cвязанный профиль '%s' обезличен пользователем" % \
-                            (oauth.first_name + ' ' + oauth.last_name).strip(),
-                    ) for oath in Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)
-                ]
+            tg_token = request.data.get('tg_token')
+            if tg_token:
+                if tg_token != settings.TELEGRAM_BOT_TOKEN:
+                    raise ServiceException('Неверный токен телеграм бота')
+                owner_id = request.data.get('owner_id')
+                if not owner_id:
+                    raise ServiceException('Не задан owner_id')
+                user, profile = self.check_user_uuid(request.data.get('uuid'), related=('user',))
+                if profile.owner:
+                    try:
+                        owner = User.objects.get(pk=owner_id)
+                    except User.DoesNotExist:
+                        raise ServiceException('Не верен owner_id')
+                    if str(profile.owner.pk) != str(owner_id):
+                        raise ServiceException(
+                            "owner_id %s не имеет прав на профиль '%s'" % (owner_id, profile.uuid,)
+                        )
+                else:
+                    if str(owner_id) != str(user.pk):
+                        ServiceException('Вы не тот, за кого себя выдаете')
             else:
-                messages = []
-            for f in ('photo', 'photo_original_filename', 'photo_url', 'middle_name',):
-                    setattr(profile, f, '')
-            for f in ('latitude', 'longitude', 'gender', 'ability', 'comment', 'address',):
-                setattr(profile, f, None)
-            profile.delete_from_media()
-            profile.photo = None
-            profile.photo_original_filename = ''
-            profile.save()
+                if not request.user.is_authenticated:
+                    raise NotAuthenticated
+                user, profile = self.check_user_or_owned_uuid(request, need_uuid=False)
+            if profile.owner:
+                profile.delete()
+                user.delete()
+                data = {}
+            else:
+                for f in ('photo', 'photo_original_filename', 'photo_url', 'middle_name',):
+                        setattr(profile, f, '')
+                for f in ('latitude', 'longitude', 'gender', 'ability', 'comment', 'address', 'dob', 'dod'):
+                    setattr(profile, f, None)
+                profile.delete_from_media()
+                profile.photo = None
+                profile.photo_original_filename = ''
+                profile.save()
 
-            Key.objects.filter(owner=user).delete()
-            Ability.objects.filter(owner=user).delete()
-            Wish.objects.filter(owner=user).delete()
-            Token.objects.filter(user=user).delete()
+                Key.objects.filter(owner=user).delete()
+                Ability.objects.filter(owner=user).delete()
+                Wish.objects.filter(owner=user).delete()
+                Token.objects.filter(user=user).delete()
 
-            for oauth in Oauth.objects.filter(user=user):
-                for f in ('last_name', 'first_name', 'display_name', 'email', 'photo', 'username'):
-                    setattr(oauth, f, '')
-                oauth.update_timestamp = int(time.time())
-                oauth.save()
-            for f in ('last_name', 'email'):
-                setattr(user, f, '')
-            user.first_name = "Обезличен"
-            user.is_active = False
-            user.save()
-            for message in messages:
-                self.send_to_telegram(message['message'], telegram_uid=message['tg_uid'])
-            data = profile.data_dict(request)
-            data.update(profile.parents_dict(request))
+                CurrentState.objects.filter(
+                    (Q(user_from=user) | Q(user_to=user)) & (Q(is_father=True) | Q(is_mother=True))
+                ).update(is_father=False, is_mother=False, is_child=False)
+
+                for oauth in Oauth.objects.filter(user=user):
+                    for f in ('last_name', 'first_name', 'display_name', 'email', 'photo', 'username'):
+                        setattr(oauth, f, '')
+                    oauth.update_timestamp = int(time.time())
+                    oauth.save()
+                for f in ('last_name', 'email'):
+                    setattr(user, f, '')
+                user.first_name = "Обезличен"
+                user.is_active = False
+                user.save()
+                data = profile.data_dict(request)
+                data.update(user_id=user.pk, owner_id=None,)
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             transaction.set_rollback(True)
