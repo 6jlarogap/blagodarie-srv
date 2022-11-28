@@ -1044,7 +1044,7 @@ class Misc(object):
                 reply_markup.row(inline_btn_undelete)
 
             send_text_message = True
-            if user_from_id and response_to['is_active'] and reply:
+            if user_from_id and (response_to['is_active'] or response_to['owner_id']) and reply:
                 # в бот
                 #
                 if response_to.get('photo') and response_from and response_from.get('tg_data') and reply:
