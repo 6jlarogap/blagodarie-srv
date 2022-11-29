@@ -2848,8 +2848,14 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
 
     if state_ and state_ not in ('not_found', 'invalid_message_text', ) and user_from_id and a_response_to:
+        if state_ == 'start':
+            await message.reply(Misc.start_text(), disable_web_page_preview=True)
+            if a_response_to and not a_response_to[0].get('photo'):
+                status_photo, response_photo = await Misc.update_user_photo(bot, tg_user_sender, response_from)
+                if response_photo:
+                    response_from = response_photo
+                    a_response_to[0] = response_photo
         message_to_forward_id = state_ == 'forwarded_from_other' and message.message_id or ''
-        # TODO message.forward_date
         await Misc.show_cards(
             a_response_to,
             message,
@@ -2857,15 +2863,13 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             response_from=response_from,
             message_to_forward_id=message_to_forward_id,
         )
-        if state_ == 'start':
-             await message.reply(Misc.start_text(), disable_web_page_preview=True)
 
     elif reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
     await Misc.show_deeplinks(a_found, message, bot_data)
 
-    if user_from_id and (response_from.get('created') or state_ == 'start'):
+    if user_from_id and response_from.get('created') and state_ != 'start':
         await Misc.update_user_photo(bot, tg_user_sender, response_from)
     if state_ == 'forwarded_from_other' and a_response_to and a_response_to[0].get('created'):
         await Misc.update_user_photo(bot, tg_user_forwarded, response_to)
