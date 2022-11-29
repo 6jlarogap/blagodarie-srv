@@ -1215,8 +1215,6 @@ class Misc(object):
             # Исключаемые граммемы
             # https://pymorphy2.readthedocs.io/en/latest/user/grammemes.html#grammeme-docs
             functors_pos={'INTJ', 'PRCL', 'CONJ', 'PREP'},
-            # or, and or nothing
-            operation='and',
         ):
         """
         Возвращает фразу для полнотекстового поиска
@@ -1234,15 +1232,7 @@ class Misc(object):
                 word = re.sub(r'[\?\!\&\|\,\.\:\;\'\)\(\{\}\*\"\<\>\`\~]', '', word)
                 if len(word) >= settings.MIN_LEN_SEARCHED_TEXT:
                     result.append(word)
-        if result:
-            sep = ' '
-            if operation == 'and':
-                sep = ' & '
-            elif operation == 'or':
-                sep = ' | '
-            result = sep.join(result)
-        else:
-            result = ''
+        result = ' '.join(result) if result else ''
         return result
 
     @classmethod

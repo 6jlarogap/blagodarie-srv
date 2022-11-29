@@ -825,7 +825,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
             получить данные по пользователю телеграма
         с одним из параметров query, query_ability, query_wish, query_person:
             получить список профилей пользователей,
-                - найденных по фио, ключам, возможностям, потребностям (query),
+                - найденных по фио и ключам (query_person),
                 - возможностям (query_ability),
                 - потребностям (query_wish)
                 - или по фио и ключам (query)
@@ -839,6 +839,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                     Thumbnail можем делать только от файлов, которые лежат в апи.
                     Если фото имеется только от других источников (телеграм, google),
                     то берется оттуда полное фото
+                operation: and или or, искать по И или ИЛИ
         с параметром tg_username:
             Это строка telegram @usernames (без @ вначале), разделенных запятой
             например, username1,username2 ...
@@ -1021,21 +1022,46 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                 if request.GET.get('query_ability'):
                     query = request.GET['query_ability']
                     fields = ('ability__text',)
+                    mode = 'fulltext'
                 elif request.GET.get('query_wish'):
                     query = request.GET['query_wish']
                     fields = ('wish__text',)
+                    mode = 'fulltext'
                 elif request.GET.get('query_person'):
                     query = request.GET['query_person']
                     fields = ('first_name', 'key__value',)
+                    mode = 'icontains'
                 else:
+                    # аналог query_person
                     query = request.GET['query']
-                    fields = (
-                        'first_name',
-                        'wish__text',
-                        'ability__text',
-                        'key__value',
-                    )
+                    fields = ('first_name', 'key__value',)
+                    mode = 'icontains'
                 if len(query) >= settings.MIN_LEN_SEARCHED_TEXT:
+                    operation = request.GET.get('operation', 'and')
+                    if operation not in ('and', 'or'):
+                        # default:
+                        operation = 'and'
+                    words = query.split()
+                    if mode == 'fulltext':
+                        sep = ' & ' if operation == 'and' else ' | '
+                        query = sep.join(words)
+                    else:
+                        # icontains
+                        for i, word in enumerate(words):
+                            words[i] = re.escape(words[i].lower().replace('ё', 'е')).replace('е','[её]')
+                            for j, field in enumerate(fields):
+                                dict_regex = {('%s__iregex' % fields[j]): words[i]}
+                                if j == 0:
+                                    q_word = Q(**dict_regex)
+                                else:
+                                    q_word |= Q(**dict_regex)
+                            if i == 0:
+                                q_icontains = q_word
+                            else:
+                                if operation == 'and':
+                                    q_icontains &= q_word
+                                else:
+                                    q_icontains |= q_word
                     try:
                         from_ = int(request.GET.get('from', 0) or 0)
                     except (ValueError, TypeError,):
@@ -1050,13 +1076,17 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                         thumb_size = 0
                     try:
                         q_active = Q(is_superuser=False) & (Q(is_active=True) | Q(profile__owner__isnull=False))
-                        search_vector = SearchVector(*fields, config='russian')
-                        search_query = SearchQuery(query, search_type="raw", config='russian')
-                        users = User.objects.annotate(
-                            search=search_vector
-                        ).select_related(
-                            'profile', 'profile__ability',
-                        ).filter(q_active, search=search_query).distinct('id')
+                        select_related = ('profile',)
+                        if mode == 'fulltext':
+                            search_vector = SearchVector(*fields, config='russian')
+                            search_query = SearchQuery(query, search_type="raw", config='russian')
+                            users = User.objects.annotate(
+                                search=search_vector
+                            ).select_related(*select_related).filter(q_active, search=search_query).distinct('id')
+                        else:
+                            # icontains
+                            users = User.objects.filter(q_active, q_icontains
+                            ).select_related(*select_related).distinct('id')
                         if number:
                             users = users[from_:from_ + number]
                         for user in users:
