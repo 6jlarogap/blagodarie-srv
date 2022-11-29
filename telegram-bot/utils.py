@@ -493,6 +493,8 @@ class Misc(object):
 
         На выходе:
         Имя Фамилия
+        д/р - ...
+        д/с - ....
         Доверий:
         Благодарностей:
         Недоверий:
@@ -511,7 +513,7 @@ class Misc(object):
         if not response:
             return ''
         iof = response['first_name']
-        lifetime_str = response.get('owner_id') and cls.get_lifetime_str(response) or ''
+        lifetime_str = cls.get_lifetime_str(response)
         if lifetime_str:
             lifetime_str += '\n'
         reply = (
@@ -1077,13 +1079,9 @@ class Misc(object):
 
     @classmethod
     def get_lifetime_str(cls, response):
-        lifetime = ''
-        if response.get('dob'):
-            lifetime += response['dob']
-        elif response.get('dod'):
-            lifetime += '...'
+        lifetime = 'д/р - %s\n' % (response['dob'] if response.get('dob') else 'не задано')
         if response.get('dod'):
-            lifetime += " – %s" % response['dod']
+            lifetime += 'д/с - %s\n' % response['dod']
         return lifetime
 
 
