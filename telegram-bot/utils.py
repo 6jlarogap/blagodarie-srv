@@ -138,6 +138,11 @@ class KeyboardType(object):
     UNDELETE_USER = 36
     UNDELETE_USER_CONFIRMED = 37
 
+    # Обнулить папу, маму
+    #
+    CLEAR_PARENT = 38
+    CLEAR_PARENT_CONFIRMED = 39
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -196,6 +201,12 @@ class Misc(object):
                 '%(iof_to)s\n'
                 'отмечен%(_a_)s как %(papa_or_mama)s для:\n'
                 '%(iof_from)s\n'
+    )
+
+    PROMPT_PAPA_MAMA_CLEARED = (
+                'Родственная связь:\n'
+                '%(iof_to)s - %(papa_or_mama)s для: %(iof_from)s\n'
+                'разорвана\n'
     )
 
     PROMPT_CHANGE_OWNER_WARN = (

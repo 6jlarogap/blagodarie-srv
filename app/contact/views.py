@@ -398,7 +398,7 @@ class ApiAddOperationMixin(object):
             try:
                 currentstate = CurrentState.objects.get(q)
             except CurrentState.DoesNotExist:
-                raise ServiceException('Вы и так не связаны отношением потомок - родитель')
+                raise ServiceException('Здесь и так нет связи отношением потомок - родитель', already_code)
 
             currentstate.update_timestamp = update_timestamp
             currentstate.is_father = False
@@ -554,7 +554,8 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin,
                       вернуть ошибку, нельзя не становиться  родителем, если и раньше им не был
                     - если одно из is_father, is_mother == True,
                       установить is_mother = is_father = False
-                - иначе вернуть ошибку, не был родителем, нечего еще раз говорить, что не родитель
+                - иначе вернуть ошибку, не был родителем, нечего еще раз говорить, что не родитель,
+                  при этом кроме message, еще передается code='already'
                 - если нет ошибок, то записать данные в таблицу tbl_journal
 
         Пример исходных данных:

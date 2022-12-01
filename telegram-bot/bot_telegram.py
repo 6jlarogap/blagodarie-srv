@@ -41,6 +41,7 @@ class FSMphoto(StatesGroup):
 class FSMpapaMama(StatesGroup):
     ask = State()
     new = State()
+    confirm_clear = State()
 
 class FSMchild(StatesGroup):
     parent_gender = State()
@@ -133,18 +134,15 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
     if not user_uuid_from or not isinstance(is_father, bool):
         await Misc.state_finish(state)
         return
-    owner = await Misc.check_owner(owner_tg_user=message.from_user, uuid=user_uuid_to)
-    if not owner or not owner.get('user_id'):
+    if not await Misc.check_owner(owner_tg_user=message.from_user, uuid=user_uuid_to):
         await Misc.state_finish(state)
         return
-    owner_id = owner['user_id']
 
     post_op = dict(
         tg_token=settings.TOKEN,
         operation_type_id=OperationType.SET_FATHER if is_father else OperationType.SET_MOTHER,
         user_uuid_from=user_uuid_from,
         user_uuid_to=user_uuid_to,
-        owner_id=owner_id,
     )
     logging.debug('post operation, payload: %s' % post_op)
     status, response = await Misc.api_request(
@@ -281,9 +279,11 @@ async def process_callback_new_papa_mama(callback_query: types.CallbackQuery, st
         except IndexError:
             pass
         if not uuid:
+            await Misc.state_finish(state)
             return
         response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
         if not response_sender:
+            await Misc.state_finish(state)
             return
         bot_data = await bot.get_me()
         is_father = code[0] == str(KeyboardType.NEW_FATHER)
@@ -337,37 +337,215 @@ async def process_callback_papa_mama(callback_query: types.CallbackQuery, state:
         is_father = code[0] == str(KeyboardType.FATHER)
         bot_data = await bot.get_me()
         state = dp.current_state()
+        existing_parent = None
         async with state.proxy() as data:
             data['uuid'] = uuid
             data['is_father'] = is_father
-        prompt_papa_mama = (
-            'Отправьте мне ссылку на профиль %(papy_or_mamy)s для '
-            '%(response_uuid_deeplink)s '
-            'вида t.me/%(bot_data_username)s?start=...\n'
-            'Или нажмите Новый - для нового профиля'
-        )% dict(
-            papy_or_mamy='папы' if is_father else 'мамы',
-            bot_data_username=bot_data['username'],
-            response_uuid_deeplink=Misc.get_deeplink_with_name(response_sender['response_uuid'], bot_data, plus_trusts=True),
-        )
-        callback_data = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+            if is_father and response_sender['response_uuid'].get('father'):
+                existing_parent = response_sender['response_uuid']['father']
+            elif not is_father and response_sender['response_uuid'].get('mother'):
+                existing_parent = response_sender['response_uuid']['mother']
+            data['existing_parent_uuid'] = existing_parent['uuid'] if existing_parent else None,
+            data['existing_parent_name'] = existing_parent['first_name'] if existing_parent else None
+
+        callback_data_new_parent = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
             keyboard_type=KeyboardType.NEW_FATHER if is_father else KeyboardType.NEW_MOTHER,
             uuid=uuid,
             sep=KeyboardType.SEP,
         )
+        novy_novaya = 'Новый' if is_father else 'Новая'
         inline_btn_new_papa_mama = InlineKeyboardButton(
-            'Новый' if is_father else 'Новая',
-            callback_data=callback_data,
+            novy_novaya,
+            callback_data=callback_data_new_parent,
         )
-        inline_button_cancel = Misc.inline_button_cancel()
+        buttons = [inline_btn_new_papa_mama, ]
+        if existing_parent:
+            callback_data_clear_parent = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+                keyboard_type=KeyboardType.CLEAR_PARENT,
+                uuid=uuid,
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_clear_parent = InlineKeyboardButton(
+                'Очистить',
+                callback_data=callback_data_clear_parent,
+            )
+            buttons.append(inline_btn_clear_parent)
+        prompt_papa_mama = (
+            'Отправьте мне ссылку на профиль %(papy_or_mamy)s для '
+            '%(response_uuid_name)s '
+            'вида t.me/%(bot_data_username)s?start=...\n'
+            '\n'
+            'Или нажмите <b><u>%(novy_novaya)s</u></b> - для нового профиля %(papy_or_mamy)s\n'
+        )
+        if existing_parent:
+            prompt_papa_mama += (
+                '\n'
+                'Или нажмите <b><u>Очистить</u></b> - для очистки имеющейся родственной связи: '
+                '<b>%(existing_parent_name)s</b> - %(papa_or_mama)s для <b>%(response_uuid_name)s</b>'
+            )
+        prompt_papa_mama = prompt_papa_mama % dict(
+            papa_or_mama='папа' if is_father else 'мама',
+            papy_or_mamy='папы' if is_father else 'мамы',
+            bot_data_username=bot_data['username'],
+            response_uuid_name=response_sender['response_uuid']['first_name'],
+            existing_parent_name=existing_parent['first_name'] if existing_parent else '',
+            novy_novaya=novy_novaya,
+        )
         reply_markup = InlineKeyboardMarkup()
-        reply_markup.row(inline_btn_new_papa_mama, inline_button_cancel)
+        buttons.append(Misc.inline_button_cancel())
+        reply_markup.row(*buttons)
         await FSMpapaMama.ask.set()
         await callback_query.message.reply(
             prompt_papa_mama,
             reply_markup=reply_markup,
             disable_web_page_preview=True,
         )
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.CLEAR_PARENT,
+        KeyboardType.SEP,
+    ), c.data),
+    state = FSMpapaMama.ask,
+    )
+async def process_callback_clear_parent(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Действия по обнулению папы, мамы
+    """
+    if callback_query.message:
+        tg_user_sender = callback_query.from_user
+        code = callback_query.data.split(KeyboardType.SEP)
+        uuid = None
+        try:
+            uuid = code[1]
+        except IndexError:
+            pass
+        if not uuid:
+            await Misc.state_finish(state)
+            return
+        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
+        if not response_sender:
+            await Misc.state_finish(state)
+            return
+        async with state.proxy() as data:
+            if not data or \
+               not data.get('existing_parent_uuid') or \
+               ('is_father' not in data) or \
+               not data.get('existing_parent_name') or \
+               data.get('uuid') != uuid \
+               :
+                await Misc.state_finish(state)
+                return
+            existing_parent_name = data['existing_parent_name']
+            is_father = data['is_father']
+        prompt = (
+            'Вы уверены, что хотите очистить родственную связь: '
+            '<b>%(existing_parent_name)s</b> - %(papa_or_mama)s для <b>%(response_uuid_name)s</b>?\n\n'
+            'Если уверены, нажмите <b><u>Очистить</u></b>'
+            ) % dict(
+            papa_or_mama='папа' if is_father else 'мама',
+            response_uuid_name=response_sender['response_uuid']['first_name'],
+            existing_parent_name=existing_parent_name,
+        )
+        callback_data_clear_parent_confirmed = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+            keyboard_type=KeyboardType.CLEAR_PARENT_CONFIRMED,
+            uuid=uuid,
+            sep=KeyboardType.SEP,
+        )
+        inline_btn_clear_parent_confirmed = InlineKeyboardButton(
+            'Очистить',
+            callback_data=callback_data_clear_parent_confirmed,
+        )
+        reply_markup = InlineKeyboardMarkup()
+        reply_markup.row(inline_btn_clear_parent_confirmed, Misc.inline_button_cancel())
+        await FSMpapaMama.confirm_clear.set()
+        await callback_query.message.reply(
+            prompt,
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
+        )
+    else:
+        await Misc.state_finish(state)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.CLEAR_PARENT_CONFIRMED,
+        KeyboardType.SEP,
+    ), c.data),
+    state = FSMpapaMama.confirm_clear,
+    )
+async def process_callback_clear_parent_confirmed(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Действия по обнулению папы, мамы
+    """
+    message = callback_query.message
+    if message:
+        tg_user_sender = callback_query.from_user
+        code = callback_query.data.split(KeyboardType.SEP)
+        uuid = None
+        try:
+            uuid = code[1]
+        except IndexError:
+            pass
+        if not uuid:
+            await Misc.state_finish(state)
+            return
+        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
+        if not response_sender:
+            await Misc.state_finish(state)
+            return
+        async with state.proxy() as data:
+            if not data or \
+               not data.get('existing_parent_uuid') or \
+               ('is_father' not in data) or \
+               not data.get('existing_parent_name') or \
+               data.get('uuid') != uuid \
+               :
+                await Misc.state_finish(state)
+                return
+            existing_parent_uuid = data['existing_parent_uuid']
+            existing_parent_name = data['existing_parent_name']
+            is_father = data['is_father']
+        post_op = dict(
+            tg_token=settings.TOKEN,
+            operation_type_id=OperationType.NOT_PARENT,
+            user_uuid_from=response_sender['response_uuid']['uuid'],
+            user_uuid_to=existing_parent_uuid,
+        )
+        logging.debug('post operation, payload: %s' % post_op)
+        status, response = await Misc.api_request(
+            path='/api/addoperation',
+            method='post',
+            data=post_op,
+        )
+        logging.debug('post operation, status: %s' % status)
+        logging.debug('post operation, response: %s' % response)
+        if not (status == 200 or \
+           status == 400 and response.get('code') == 'already'):
+            if status == 400  and response.get('message'):
+                await message.reply(
+                    'Ошибка!\n%s\n\nОчищайте родителя по новой' % response['message']
+                )
+            else:
+                await message.reply(Misc.MSG_ERROR_API)
+        else:
+            if response and response.get('profile_from') and response.get('profile_to'):
+                bot_data = await bot.get_me()
+                await bot.send_message(
+                    callback_query.from_user.id,
+                    Misc.PROMPT_PAPA_MAMA_CLEARED % dict(
+                        iof_from = Misc.get_deeplink_with_name(response['profile_from'], bot_data, plus_trusts=True),
+                        iof_to = Misc.get_deeplink_with_name(response['profile_to'], bot_data, plus_trusts=True),
+                        papa_or_mama='папа' if is_father else 'мама',
+                    ),
+                    disable_web_page_preview=True,
+                )
+            else:
+                await message.reply('Родитель убран из данных')
+    await Misc.state_finish(state)
+
 
 async def ask_child(message, state, data):
     bot_data = await bot.get_me()
