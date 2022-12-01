@@ -2808,16 +2808,8 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
     if user_from_id and state_ == 'start_uuid':
         logging.debug('get tg_user_by_start_uuid data in api...')
-        payload_uuid = dict(
-            uuid=uuid_to_search,
-        )
         try:
-            status, response_uuid = await Misc.api_request(
-                path='/api/profile',
-                method='get',
-                params=payload_uuid,
-            )
-            logging.debug('get tg_user_by_start_uuid in api, response_to: %s' % response_uuid)
+            status, response_uuid = await Misc.get_user_by_uuid(uuid=uuid_to_search)
             if status == 200:
                 a_response_to += [response_uuid, ]
             else:
