@@ -141,7 +141,12 @@ class KeyboardType(object):
     # Обнулить папу, маму
     #
     CLEAR_PARENT = 38
-    CLEAR_PARENT_CONFIRMED = 39
+    CLEAR_PARENT_CONFIRM = 39
+
+    # Очистка связи родитель -> ребенок
+    #
+    CLEAR_CHILD = 40
+    CLEAR_CHILD_CONFIRM = 41
 
     # Разделитель данных в call back data
     #
@@ -178,14 +183,6 @@ class Misc(object):
                     'Укажите %(his_her)s день рождения ' + PROMPT_DATE_FORMAT
     PROMPT_DOD =    '%(name)s.\n\n' + \
                     'Укажите %(his_her)s день смерти ' + PROMPT_DATE_FORMAT
-
-    PROMPT_CHILD = (
-        '<b>%(name)s</b>.\n'
-        'Отправьте мне ссылку на профиль %(his_her)s сына (дочери) '
-        'вида t.me/%(bot_data_username)s?start=...\n\n'
-        'Или нажмите <u>Новый ребёнок</u> для ввода нового родственника, '
-        'который станет %(his_her)s сыном (дочерью)'
-    )
 
     PROMPT_PAPA_MAMA_OF_CHILD = (
         'Укажите пол %(name)s'
@@ -255,6 +252,8 @@ class Misc(object):
     CALLBACK_DATA_UUID_TEMPLATE = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s'
 
     MSG_ERROR_UUID_NOT_VALID = 'Не найден или негодный ид в сообщении'
+
+    MSG_INVALID_LINK = 'Неверная ссылка'
 
     FORMAT_DATE = '%d.%m.%Y'
     FORMAT_TIME = '%H:%M:%S'
