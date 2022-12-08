@@ -1102,10 +1102,12 @@ class Misc(object):
         lifetime = ''
         if response.get('dob'):
             lifetime += response['dob'][-4:]
-        elif response.get('dod'):
+        elif response.get('dod') or response.get('is_dead'):
             lifetime += '...'
         if response.get('dod'):
-            lifetime += " – %s" % response['dod'][-4:]
+            lifetime += " — %s" % response['dod'][-4:]
+        elif response.get('is_dead'):
+            lifetime += " — ?"
         return lifetime
 
 

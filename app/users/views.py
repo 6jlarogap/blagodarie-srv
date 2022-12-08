@@ -1247,7 +1247,9 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
             if not request.data.get('last_name') and not request.data.get('first_name'):
                 raise ServiceException('Фамилия или имя обязательно для нового')
             dob, dod =self.check_dates(request)
-            is_dead = bool(dod) or bool(request.data.get('is_dead'))
+            is_dead = bool(request.data.get('is_dead'))
+            if dod:
+                is_dead = True
             self.check_gender(request)
             link_uuid = request.data.get('link_uuid')
             if link_uuid:
@@ -1399,9 +1401,12 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
             self.check_gender(request)
             if 'dob' in request.data:
                 profile.dob = dob
+            if 'is_dead' in request.data:
+                profile.is_dead = True
             if 'dod' in request.data:
                 profile.dod = dod
-            profile.is_dead = bool(dod) or bool(request.data.get('is_dead'))
+                if dod:
+                    profile.is_dead = True
 
             if request.data.get('last_name') or request.data.get('first_name'):
                 first_name = Profile.make_first_name(
