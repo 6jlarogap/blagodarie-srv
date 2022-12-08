@@ -369,7 +369,11 @@ class Profile(PhotoModel, GeoPointAddressModel):
     owner = models.ForeignKey('auth.User', on_delete=models.CASCADE, null=True, related_name='profile_owner_set')
     gender = models.CharField(_("Пол"), max_length=1, choices=GenderMixin.GENDER_CHOICES, null=True)
     dob = UnclearDateModelField("Дата рождения", null=True, blank=True)
+
+    # Может быть умершим, но дата смерти не задана
+    is_dead = models.BooleanField(_("Умер ли?"), default=False)
     dod = UnclearDateModelField("Дата смерти", null=True, blank=True)
+
     comment = models.TextField(verbose_name=_("Примечание"), null=True)
 
     class Meta:
@@ -405,6 +409,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 ability=self.ability and self.ability.text or None,
                 gender=self.gender,
                 dob=self.dob and self.dob.str_safe() or None,
+                is_dead=self.is_dead or bool(self.dod),
                 dod=self.dod and self.dod.str_safe() or None,
                 comment=self.comment or '',
             )
@@ -546,7 +551,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
         for f in (
             'photo_original_filename', 'photo_url',
             'did_bot_start',
-            'address', 'dob', 'dod', 'gender', 'comment',
+            'address', 'dob', 'dod', 'gender', 'comment' 'is_dead',
            ):
             if not getattr(self, f) and getattr(profile_from, f):
                 setattr(self, f, getattr(profile_from, f))
@@ -719,6 +724,7 @@ class CreateUserMixin(object):
         photo_url='',
         owner=None,
         dob=None,
+        is_dead=False,
         dod=None,
         is_active=True,
         gender=None,
@@ -752,12 +758,15 @@ class CreateUserMixin(object):
                 longitude = float(longitude)
             except (ValueError, TypeError,):
                 latitude = longitude = None
+            if dod:
+                is_dead = True
             Profile.objects.create(
                 user=user,
                 middle_name='',
                 photo_url=photo_url,
                 owner=owner,
                 dob=dob,
+                is_dead=is_dead,
                 dod=dod,
                 gender=gender,
                 latitude=latitude,

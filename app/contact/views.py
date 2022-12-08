@@ -2581,6 +2581,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, APIView)
                     users_profile.dob_no_day,
                     users_profile.dob_no_month,
 
+                    users_profile.is_dead,
                     users_profile.dod,
                     users_profile.dod_no_day,
                     users_profile.dod_no_month,
@@ -2618,6 +2619,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, APIView)
             users.append(profile_q.data_dict(request))
             user_pks = []
             for rec in recs:
+                dod=UnclearDate.str_safe_from_rec(rec, 'dod')
                 users.append(dict(
                     uuid=rec['uuid'],
                     first_name=rec['first_name'],
@@ -2630,7 +2632,8 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, APIView)
                     ability=rec['text'],
                     gender=rec['gender'],
                     dob=UnclearDate.str_safe_from_rec(rec, 'dob'),
-                    dod=UnclearDate.str_safe_from_rec(rec, 'dod'),
+                    is_dead=rec['is_dead'] or bool(dod),
+                    dod=dod,
                     comment=rec['comment'] or '',
                 ))
                 user_pks.append(rec['id'])

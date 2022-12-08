@@ -1092,6 +1092,8 @@ class Misc(object):
         lifetime = 'д/р - %s\n' % (response['dob'] if response.get('dob') else 'не задано')
         if response.get('dod'):
             lifetime += 'д/с - %s\n' % response['dod']
+        elif response.get('is_dead'):
+            lifetime += 'д/с - известно только, что умер\n'
         return lifetime
 
 

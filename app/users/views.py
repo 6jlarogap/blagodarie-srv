@@ -1247,6 +1247,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
             if not request.data.get('last_name') and not request.data.get('first_name'):
                 raise ServiceException('Фамилия или имя обязательно для нового')
             dob, dod =self.check_dates(request)
+            is_dead = bool(dod) or bool(request.data.get('is_dead'))
             self.check_gender(request)
             link_uuid = request.data.get('link_uuid')
             if link_uuid:
@@ -1297,6 +1298,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                 middle_name=request.data.get('middle_name', ''),
                 owner=owner,
                 dob=dob,
+                is_dead=is_dead,
                 dod=dod,
                 is_active=False,
                 gender=gender_new,
@@ -1399,6 +1401,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                 profile.dob = dob
             if 'dod' in request.data:
                 profile.dod = dod
+            profile.is_dead = bool(dod) or bool(request.data.get('is_dead'))
 
             if request.data.get('last_name') or request.data.get('first_name'):
                 first_name = Profile.make_first_name(
@@ -1505,6 +1508,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                         setattr(profile, f, '')
                 for f in ('latitude', 'longitude', 'gender', 'ability', 'comment', 'address', 'dob', 'dod'):
                     setattr(profile, f, None)
+                profile.is_dead = False
                 profile.delete_from_media()
                 profile.photo = None
                 profile.photo_original_filename = ''
