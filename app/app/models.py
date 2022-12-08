@@ -108,26 +108,35 @@ class UnclearDate:
         """
         Сделать UnclearDate из yyyy-mm-dd, yyyy-mm, yyyy, или из None ('null')
 
-        При параметре format='d.m.y.' делаем из нее UnclearDate
+        Возможные форматы:
+            'd.m.y': например, 11.12.1912 12.1912, 1912
+            'd M y': например, 11 Dec 1912, Dec 1912, 1912
+            иначе полагается формат 1912-12-11
+        При неверном формате возвращает None
         """
         if s:
             s = s.strip()
         if not s or s.lower() == 'null':
             return None
-        if format == 'd.m.y':
-            year, month, day = cls.from_str_dmy(s)
-        else:
-            m = re.search(cls.SAFE_STR_REGEX, s)
-            if not m:
-                raise ValueError(cls.VALUE_ERROR_CREATE)
-            day = m.group(3)
-            month = m.group(2)
-            year = m.group(1)
-        return cls(
-            int(year),
-            month and int(month) or None,
-            day and int(day) or None,
-        )
+        try:
+            if format == 'd.m.y':
+                year, month, day = cls.from_str_dmy(s)
+            elif format == 'd M y':
+                year, month, day = cls.from_str_dMONy(s)
+            else:
+                m = re.search(cls.SAFE_STR_REGEX, s)
+                if not m:
+                    raise ValueError(cls.VALUE_ERROR_CREATE)
+                day = m.group(3)
+                month = m.group(2)
+                year = m.group(1)
+            return cls(
+                int(year),
+                month and int(month) or None,
+                day and int(day) or None,
+            )
+        except (ValueError, ServiceException):
+            return None
 
     @property
     def month(self):
@@ -191,7 +200,44 @@ class UnclearDate:
         return self_date > other_date
 
     @classmethod
+    def from_str_dMONy(cls, s):
+        """
+        year, month, day из даты типа '1 JAN 1970'
+
+        Или ValueError
+        """
+        months = ('jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',)
+        pattern_month = '(' + '|'.join(months) + ')'
+        pattern = r'^(\d{1,2})\s+' + pattern_month + '\s+(\d{4})$'
+        s = s.strip()
+        m = re.search(pattern, s, flags=re.I)
+        if m:
+            year = int(m.group(3))
+            month = months.index(m.group(2).lower()) + 1
+            day = int(m.group(1))
+        else:
+            pattern = r'^' + pattern_month + '\s+(\d{4})$'
+            m = re.search(pattern, s, flags=re.I)
+            if m:
+                year = int(m.group(2))
+                month = months.index(m.group(1).lower()) + 1
+            else:
+                m = re.search(r'^(\d{4})$', s)
+                if m:
+                    year = int(m.group(1))
+                else:
+                    raise ValueError(cls.VALUE_ERROR_CREATE)
+        datetime.datetime.strptime("%04d-%02d-%02d" % (year, month or 1, day or 1), "%Y-%m-%d")
+        # может быть ValueError
+        return year, month, day
+
+    @classmethod
     def from_str_dmy(cls, s):
+        """
+        year, month, day из даты типа '01.12.1970'
+
+        Или ValueError
+        """
         m = re.search(r'^(\d{2})[\.\/\-]?(\d{2})[\.\/\-]?(\d{4})$', s)
         if m:
             year = int(m.group(3))
@@ -211,6 +257,8 @@ class UnclearDate:
                     day = None
                 else:
                     raise ValueError(cls.VALUE_ERROR_CREATE)
+        datetime.datetime.strptime("%04d-%02d-%02d" % (year, month or 1, day or 1), "%Y-%m-%d")
+        # может быть ValueError
         return year, month, day
 
     @classmethod
