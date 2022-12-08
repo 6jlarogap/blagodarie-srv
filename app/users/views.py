@@ -1944,3 +1944,11 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
         return Response(data=data, status=200)
 
 api_user_points = ApiUserPoints.as_view()
+
+class ApiImportGedcom(ApiAddOperationMixin, UuidMixin, APIView):
+
+    @classmethod
+    def do_import(self, owner_uuid, bytes_io, request=None):
+        pass
+
+api_import_gedcom = ApiImportGedcom.as_view()
