@@ -22,9 +22,8 @@ from app.utils import ServiceException, SkipException, FrontendMixin, ThumbnailS
 from app.models import UnclearDate, PhotoModel, GenderMixin
 
 from django.contrib.auth.models import User
-from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TgGroup, TempToken, UuidMixin
-from contact.models import Key, KeyType, CurrentState, OperationType, Wish, Ability
-from contact.views import TelegramApiMixin, ApiAddOperationMixin
+from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TgGroup, TempToken, UuidMixin, TelegramApiMixin
+from contact.models import Key, KeyType, CurrentState, OperationType, Wish, Ability, ApiAddOperationMixin
 
 class ApiGetProfileInfo(UuidMixin, APIView):
 

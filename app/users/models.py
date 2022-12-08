@@ -1,5 +1,6 @@
 import datetime, string, random, os, binascii, time
 import urllib.request, urllib.error, urllib.parse
+from urllib.parse import urlencode
 import json, uuid, re, hashlib
 
 from django.conf import settings
@@ -891,3 +892,88 @@ class UuidMixin(object):
                 raise ServiceException(err_message)
         return user, profile
 
+
+class TelegramApiMixin(object):
+
+    API_TELEGRAM = 'https://api.telegram.org'
+    API_TIMEOUT = 20
+
+    def send_to_telegram(self, message, user=None, telegram_uid=None):
+        """
+        Сообщение в телеграм или пользователю user, или по telegram uid
+        """
+        if not settings.SEND_TO_TELEGRAM:
+            return
+
+        uids = []
+        if user:
+            uids = [oauth.user_id for oauth in Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)]
+        elif telegram_uid:
+            uids = [telegram_uid]
+
+        for uid in uids:
+            url = '%s/bot%s/sendMessage?' % (self.API_TELEGRAM, settings.TELEGRAM_BOT_TOKEN)
+            parms = dict(
+                chat_id=uid,
+                parse_mode='html',
+                text=message
+            )
+            url += urlencode(parms)
+            try:
+                req = urllib.request.Request(url)
+                urllib.request.urlopen(req, timeout=self.API_TIMEOUT)
+            except (urllib.error.URLError, ):
+                pass
+
+    def get_bot_data(self):
+        """
+        Получить данные бота
+        """
+        result = None
+        url = '%s/bot%s/getMe' % (self.API_TELEGRAM, settings.TELEGRAM_BOT_TOKEN)
+        try:
+            req = urllib.request.Request(url)
+            r = urllib.request.urlopen(req, timeout=self.API_TIMEOUT)
+            raw_data = r.read().decode(r.headers.get_content_charset('utf-8'))
+            try:
+                data = json.loads(raw_data)
+                if data['ok'] and data['result']:
+                    result = data['result']
+            except (KeyError, ValueError):
+                pass
+        except (urllib.error.URLError, ):
+            pass
+        return result
+
+    def get_bot_username(self):
+        """
+        Получить имя бота
+        """
+        bot_data = self.get_bot_data()
+        if bot_data and bot_data.get('username'):
+            return bot_data['username']
+        else:
+            return None
+
+    def get_deeplink(self, profile, bot_username=None):
+        result = ''
+        if not bot_username:
+            bot_username = self.get_bot_username()
+        if bot_username:
+            result = 'https://t.me/%s?start=%s' % (bot_username, profile.uuid)
+        return result
+
+    def get_deeplink_name(self, profile, bot_username=None, target_blank=False):
+        result = ''
+        deeplink = self.get_deeplink(profile, bot_username)
+        if deeplink:
+            if target_blank:
+                target = ' target="_blank"'
+            else:
+                target = ''
+            result = '<a href="%(deeplink)s"%(target)s>%(full_name)s</a>' % dict(
+                deeplink=deeplink,
+                target=target,
+                full_name=profile.user.first_name,
+            )
+        return result

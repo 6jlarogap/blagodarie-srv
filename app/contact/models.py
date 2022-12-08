@@ -2,7 +2,7 @@ import time, datetime, json, hashlib, re
 import os, uuid
 from collections import OrderedDict
 
-from app.utils import get_moon_day
+from app.utils import get_moon_day, ServiceException
 
 from django.conf import settings
 from django.db import models, connection
@@ -398,3 +398,320 @@ class Ability(BaseModelInsertUpdateTimestamp):
             text=self.text,
             last_edit=self.update_timestamp,
         )
+
+class ApiAddOperationMixin(object):
+
+    def add_operation(self,
+        user_from,
+        profile_to,
+        operationtype_id,
+        comment,
+        insert_timestamp,
+        tg_from_chat_id=None,
+        tg_message_id=None,
+    ):
+        try:
+            operationtype = OperationType.objects.get(pk=operationtype_id)
+        except (ValueError, OperationType.DoesNotExist,):
+            raise ServiceException('Неизвестный operation_type_id = %s' % operationtype_id)
+
+        data = dict()
+        update_timestamp = int(time.time())
+        user_to = profile_to.user
+        already_code = 'already'
+
+        if operationtype_id == OperationType.THANK:
+            currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
+                user_from=user_from,
+                user_to=user_to,
+                defaults=dict(
+                    thanks_count=1,
+            ))
+            if not created_:
+                currentstate.update_timestamp = update_timestamp
+                currentstate.thanks_count += 1
+                currentstate.save()
+
+            profile_to.sum_thanks_count += 1
+            profile_to.save()
+
+        elif operationtype_id == OperationType.MISTRUST:
+            currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
+                user_from=user_from,
+                user_to=user_to,
+                defaults=dict(
+                    is_trust=False,
+            ))
+            if not created_:
+                if not currentstate.is_reverse and currentstate.is_trust == False:
+                    raise ServiceException(
+                        'Вы уже не доверяете пользователю',
+                        already_code,
+                    )
+                currentstate.update_timestamp = update_timestamp
+                currentstate.is_reverse = False
+                currentstate.is_trust = False
+                currentstate.save()
+
+            reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
+                user_to=user_from,
+                user_from=user_to,
+                defaults=dict(
+                    is_reverse=True,
+                    is_trust=False,
+            ))
+            if not reverse_created and (reverse_cs.is_reverse or reverse_cs.is_trust == None):
+                reverse_cs.update_timestamp = update_timestamp
+                reverse_cs.is_reverse = True
+                reverse_cs.is_trust = False
+                reverse_cs.save()
+
+            profile_to.recount_trust_fame()
+
+        elif operationtype_id == OperationType.TRUST:
+            currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
+                user_from=user_from,
+                user_to=user_to,
+                defaults=dict(
+                    is_trust=True,
+            ))
+            if not created_:
+                if not currentstate.is_reverse and currentstate.is_trust == True:
+                    raise ServiceException(
+                        'Вы уже доверяете пользователю',
+                        already_code,
+                    )
+                currentstate.update_timestamp = update_timestamp
+                currentstate.is_reverse = False
+                currentstate.is_trust = True
+                currentstate.save()
+
+            reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
+                user_to=user_from,
+                user_from=user_to,
+                defaults=dict(
+                    is_reverse=True,
+                    is_trust=True,
+            ))
+            if not reverse_created and (reverse_cs.is_reverse or reverse_cs.is_trust == None):
+                reverse_cs.update_timestamp = update_timestamp
+                reverse_cs.is_reverse = True
+                reverse_cs.is_trust = True
+                reverse_cs.save()
+
+            profile_to.recount_trust_fame()
+
+        elif operationtype_id == OperationType.TRUST_AND_THANK:
+            is_trust_previous = None
+            currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
+                user_from=user_from,
+                user_to=user_to,
+                defaults=dict(
+                    is_trust=True,
+                    thanks_count=1,
+            ))
+            if not created_:
+                if not currentstate.is_reverse:
+                    is_trust_previous = currentstate.is_trust
+                currentstate.update_timestamp = update_timestamp
+                currentstate.is_reverse = False
+                currentstate.is_trust = True
+                currentstate.thanks_count += 1
+                currentstate.save()
+
+            data.update(previousstate=dict(is_trust=is_trust_previous))
+            reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
+                user_to=user_from,
+                user_from=user_to,
+                defaults=dict(
+                    is_reverse=True,
+                    is_trust=True,
+            ))
+            if not reverse_created and (reverse_cs.is_reverse or reverse_cs.is_trust == None):
+                reverse_cs.update_timestamp = update_timestamp
+                reverse_cs.is_reverse = True
+                reverse_cs.is_trust = True
+                reverse_cs.save()
+
+            profile_to.sum_thanks_count += 1
+            profile_to.save()
+            profile_to.recount_trust_fame()
+            data.update(currentstate=dict(
+                thanks_count=currentstate.thanks_count,
+            ))
+
+        elif operationtype_id == OperationType.NULLIFY_TRUST:
+            err_message = 'У вас не было ни доверия, ни недоверия к пользователю'
+            try:
+                currentstate = CurrentState.objects.select_for_update().get(
+                    user_from=user_from,
+                    user_to=user_to,
+                )
+            except CurrentState.DoesNotExist:
+                raise ServiceException(err_message, already_code)
+
+            if currentstate.is_reverse:
+                # то же что created
+                raise ServiceException(err_message, already_code)
+            else:
+                if currentstate.is_trust == None:
+                    raise ServiceException(err_message, already_code)
+                else:
+                    # False or True
+                    # Здесь если есть обратная запись, в которой is_trust not null,
+                    #   то:     переводим найденную в is_reverse
+                    #   иначе:  в текущей ставим is_trust = None
+                    #
+                    reverse_cs, reverse_created = CurrentState.objects.get_or_create(
+                        user_from=user_to,
+                        user_to=user_from,
+                        defaults = dict(
+                            is_reverse=True,
+                            is_trust=None,
+                    ))
+                    currentstate.update_timestamp = update_timestamp
+                    if not reverse_created and not (reverse_cs.is_trust == None) and not reverse_cs.is_reverse:
+                        currentstate.is_reverse = True
+                        currentstate.is_trust = reverse_cs.is_trust
+                    else:
+                        currentstate.is_trust = None
+                    currentstate.save()
+
+            CurrentState.objects.filter(
+                user_to=user_from,
+                user_from=user_to,
+                is_reverse=True,
+                is_trust__isnull=False,
+            ).update(is_trust=None, update_timestamp=update_timestamp)
+
+            profile_to.recount_trust_fame()
+
+        elif operationtype_id in (
+                OperationType.FATHER, OperationType.MOTHER,
+                OperationType.SET_FATHER, OperationType.SET_MOTHER,
+             ):
+
+            if operationtype_id in (OperationType.FATHER, OperationType.SET_FATHER,):
+                is_father = True
+                is_mother = False
+            else:
+                is_father = False
+                is_mother = True
+            do_set = operationtype_id in (OperationType.SET_FATHER, OperationType.SET_MOTHER,)
+
+            q = Q(user_from=user_to, user_to=user_from, is_child=False)
+            q &= Q(is_mother=True) | Q(is_father=True)
+            try:
+                CurrentState.objects.filter(q)[0]
+                raise ServiceException('Два человека не могут быть оба родителями по отношению друг к другу')
+            except IndexError:
+                pass
+
+            q_to = Q(user_from=user_from, is_child=False) & ~Q(user_to=user_to)
+            if is_father:
+                q = q_to & Q(is_father=True)
+            else:
+                q = q_to & Q(is_mother=True)
+            if do_set:
+                # При замене папы, если у человека уже есть другой папа, убираем это!
+                # Аналогично если есть другая мама.
+                #
+                CurrentState.objects.filter(q).update(
+                    is_father=False,
+                    is_mother=False,
+                    is_child=False,
+                )
+                q_to = Q(user_to=user_from, is_child=True) & ~Q(user_from=user_to)
+                if is_father:
+                    q = q_to & Q(is_father=True)
+                else:
+                    q = q_to & Q(is_mother=True)
+                CurrentState.objects.filter(q).update(
+                    is_father=False,
+                    is_mother=False,
+                    is_child=False,
+                )
+            else:
+                try:
+                    CurrentState.objects.filter(q)[0]
+                    raise ServiceException('У человека уже есть %s' % ('папа' if is_father else 'мама'))
+                except IndexError:
+                    pass
+
+            currentstate, created_ = CurrentState.objects.get_or_create(
+                user_from=user_from,
+                user_to=user_to,
+                defaults=dict(
+                    is_father=is_father,
+                    is_mother=is_mother,
+                    is_child=False,
+            ))
+            if not created_:
+                if not do_set and is_father and currentstate.is_father and not currentstate.is_child:
+                    raise ServiceException('Такой папа уже задан', already_code)
+                elif not do_set and is_mother and currentstate.is_mother and not currentstate.is_child:
+                    raise ServiceException('Такая мама уже задана', already_code)
+                else:
+                    currentstate.update_timestamp = update_timestamp
+                    currentstate.is_child = False
+                    currentstate.is_father = is_father
+                    currentstate.is_mother = is_mother
+                    currentstate.save()
+
+            reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
+                user_to=user_from,
+                user_from=user_to,
+                defaults=dict(
+                    is_child=True,
+                    is_father=is_father,
+                    is_mother=is_mother,
+                    is_trust=currentstate.is_trust,
+            ))
+            if not reverse_created:
+                reverse_cs.update_timestamp = update_timestamp
+                reverse_cs.is_child = True
+                reverse_cs.is_father = is_father
+                reverse_cs.is_mother = is_mother
+                reverse_cs.save()
+
+        elif operationtype_id == OperationType.NOT_PARENT:
+            q = Q(user_from=user_from, user_to=user_to, is_child=False)
+            q &= Q(is_mother=True) | Q(is_father=True)
+            try:
+                currentstate = CurrentState.objects.get(q)
+            except CurrentState.DoesNotExist:
+                raise ServiceException('Здесь и так нет связи отношением потомок - родитель', already_code)
+
+            currentstate.update_timestamp = update_timestamp
+            currentstate.is_father = False
+            currentstate.is_mother = False
+            currentstate.save()
+
+            CurrentState.objects.filter(
+                user_to=user_from,
+                user_from=user_to,
+            ).update(
+                is_father=False,
+                is_mother=False,
+                is_child=False,
+                update_timestamp=update_timestamp,
+            )
+
+        else:
+            raise ServiceException('Неизвестный operation_type_id')
+
+        journal = Journal.objects.create(
+            user_from=user_from,
+            user_to=user_to,
+            operationtype=operationtype,
+            insert_timestamp=insert_timestamp,
+            comment=comment,
+        )
+        if tg_message_id and tg_from_chat_id:
+            TgJournal.objects.create(
+                journal=journal,
+                from_chat_id=tg_from_chat_id,
+                message_id=tg_message_id,
+            )
+
+        return data
