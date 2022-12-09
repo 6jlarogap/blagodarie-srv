@@ -15,3 +15,5 @@ Pillow
 piexif
 
 geopy
+
+ged4py
