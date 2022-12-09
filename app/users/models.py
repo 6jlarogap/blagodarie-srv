@@ -552,7 +552,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
         for f in (
             'photo_original_filename', 'photo_url',
             'did_bot_start',
-            'address', 'dob', 'dod', 'gender', 'comment' 'is_dead',
+            'address', 'dob', 'dod', 'gender', 'comment', 'is_dead',
            ):
             if not getattr(self, f) and getattr(profile_from, f):
                 setattr(self, f, getattr(profile_from, f))

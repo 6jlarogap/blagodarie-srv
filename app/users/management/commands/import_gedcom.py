@@ -23,11 +23,13 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument('owner_uuid', type=str, help='owner_uuid, assigned as owner of family members')
         parser.add_argument('filename', type=str, help='/path/to/gedcom_file, gedcom file with family tree')
+        parser.add_argument('indi_to_merge', type=str, help='gedcom file individual xref_id to be merged with owner')
 
     @transaction.atomic
     def handle(self, *args, **kwargs):
         owner_uuid = kwargs['owner_uuid']
         filename = kwargs['filename']
+        indi_to_merge = kwargs['indi_to_merge']
         try:
             f = open(filename, mode='rb')
             bytes_io = f.read()
@@ -39,7 +41,7 @@ class Command(BaseCommand):
 
         try:
             import_gedcom = ApiImportGedcom()
-            import_gedcom.do_import(owner_uuid, bytes_io)
+            import_gedcom.do_import(owner_uuid, bytes_io, indi_to_merge)
             print('OK')
         except ServiceException as excpt:
             transaction.set_rollback(True)

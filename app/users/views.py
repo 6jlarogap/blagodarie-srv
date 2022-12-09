@@ -1,6 +1,8 @@
 import os, re, hmac, hashlib, json, time
 import urllib.request, urllib.error, urllib.parse
 
+from ged4py.parser import GedcomReader
+
 from django.shortcuts import render, redirect
 from django.db import transaction, IntegrityError, connection
 from django.conf import settings
@@ -1945,9 +1947,98 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
 
 api_user_points = ApiUserPoints.as_view()
 
-class ApiImportGedcom(ApiAddOperationMixin, UuidMixin, APIView):
+class ApiImportGedcom(ApiAddOperationMixin, UuidMixin, CreateUserMixin, APIView):
 
-    def do_import(self, owner_uuid, bytes_io, request=None):
-        user, profile = self.check_user_uuid(owner_uuid)
+    def do_import(self, owner_uuid, bytes_io, indi_to_merge):
+        """
+        Импорт из gedcom файла
+
+        owner_uuid:         uuid владельца импорируемых персон
+        bytes_io:           считанный в BytesIO gedcom файл
+        indi_to_merge:      в файле может быть владелец,
+                            его сливаем с пользователем c owner_uuid
+        """
+        owner, owner_profile = self.check_user_uuid(owner_uuid, related=[])
+        if owner_profile.owner:
+            raise ServiceException('Допускается owner_id только активного пользователя')
+
+        with GedcomReader(bytes_io) as parser:
+
+            #   (ged)xref_id:
+            #       first_name, first_name, gender, dob, dod, is_dead
+            #       father_xref_id
+            #       mother_xref_id
+            #
+            indis = dict()
+
+            for indi in parser.records0('INDI'):
+                xref_id = indi.xref_id
+                first_name = indi.name.format() or ''
+                gender = indi.sub_tag_value('SEX')
+                if gender:
+                    gender = gender.lower()
+                    if gender not in (GenderMixin.GENDER_MALE, GenderMixin.GENDER_FEMALE):
+                        gender = None
+                dob = indi.sub_tag_value('BIRT/DATE') or None
+                if dob:
+                    dob = UnclearDate.from_str_safe(str(dob), format='d M y')
+                is_dead = bool(indi.sub_tag_value('DEAT'))
+                dod = indi.sub_tag_value('DEAT/DATE') or None
+                if dod:
+                    dod = UnclearDate.from_str_safe(str(dod), format='d M y')
+                    is_dead = True
+                item = dict(
+                    first_name=first_name,
+                    gender=gender,
+                    dob=dob,
+                    is_dead=is_dead,
+                    dod=dod,
+                    father_xref_id=indi.father and indi.father.xref_id or None,
+                    mother_xref_id=indi.mother and indi.mother.xref_id or None,
+                )
+                indis[xref_id] = item
+
+        if indi_to_merge not in indis:
+            raise ServiceException('В gedcom данных не обнаружен человек, который будет владельцем')
+
+        for key in indis:
+            item = indis[key]
+            # Сначала создать пользователей, потом родительские связи
+            user = self.create_user(
+                first_name=item['first_name'] or 'Без имени',
+                owner=owner,
+                dob=item['dob'],
+                is_dead=item['is_dead'],
+                dod=item['dod'],
+                is_active=False,
+                gender=item['gender'],
+            )
+            item.update(user_id=user.pk)
+
+        for key in indis:
+            item = indis[key]
+            if item['father_xref_id']:
+                user_from = User.objects.select_related('profile').get(pk=item['user_id'])
+                user_to = User.objects.select_related('profile').get(pk=indis[item['father_xref_id']]['user_id'])
+                self.add_operation(
+                    user_from,
+                    user_to.profile,
+                    operationtype_id = OperationType.SET_FATHER,
+                    comment = None,
+                    insert_timestamp = int(time.time()),
+                )
+            if item['mother_xref_id']:
+                user_from = User.objects.select_related('profile').get(pk=item['user_id'])
+                user_to = User.objects.select_related('profile').get(pk=indis[item['mother_xref_id']]['user_id'])
+                self.add_operation(
+                    user_from,
+                    user_to.profile,
+                    operationtype_id = OperationType.SET_MOTHER,
+                    comment = None,
+                    insert_timestamp = int(time.time()),
+                )
+
+        user_to_merge = User.objects.select_related('profile').get(pk=indis[indi_to_merge]['user_id'])
+        owner.profile.merge(user_to_merge.profile)
 
 api_import_gedcom = ApiImportGedcom.as_view()
