@@ -1630,11 +1630,13 @@ async def put_other_data(message, tg_user_sender, state, data):
             dob = data.get('dob', '')
             dod = data.get('dod', '')
             is_male = data['is_male']
+            # TODO Пока не отработано меню для умер, но не известна дата
             status, response = await Misc.put_user_properties(
                 uuid=data['uuid'],
                 gender='m' if is_male else 'f',
                 dob=dob,
                 dod=dod,
+                is_dead = '1' if dod else '',
             )
             if status == 200 and response:
                 await message.reply('Данные внесены:\n' + Misc.show_other_data(response), disable_web_page_preview=True,)

@@ -1401,7 +1401,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
             if 'dob' in request.data:
                 profile.dob = dob
             if 'is_dead' in request.data:
-                profile.is_dead = True
+                profile.is_dead = bool(request.data['is_dead'])
             if 'dod' in request.data:
                 profile.dod = dod
                 if dod:
