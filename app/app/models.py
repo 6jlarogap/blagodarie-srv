@@ -221,14 +221,18 @@ class UnclearDate:
             if m:
                 year = int(m.group(2))
                 month = months.index(m.group(1).lower()) + 1
+                day = None
             else:
                 m = re.search(r'^(\d{4})$', s)
                 if m:
                     year = int(m.group(1))
-                else:
-                    raise ValueError(cls.VALUE_ERROR_CREATE)
-        datetime.datetime.strptime("%04d-%02d-%02d" % (year, month or 1, day or 1), "%Y-%m-%d")
-        # может быть ValueError
+                    month = None
+                    day = None
+        if m:
+            datetime.datetime.strptime("%04d-%02d-%02d" % (year, month or 1, day or 1), "%Y-%m-%d")
+        else:
+            raise ValueError(cls.VALUE_ERROR_CREATE)
+            # может быть ValueError
         return year, month, day
 
     @classmethod
@@ -255,10 +259,11 @@ class UnclearDate:
                     year = int(m.group(1))
                     month = None
                     day = None
-                else:
-                    raise ValueError(cls.VALUE_ERROR_CREATE)
-        datetime.datetime.strptime("%04d-%02d-%02d" % (year, month or 1, day or 1), "%Y-%m-%d")
-        # может быть ValueError
+        if m:
+            datetime.datetime.strptime("%04d-%02d-%02d" % (year, month or 1, day or 1), "%Y-%m-%d")
+        else:
+            raise ValueError(cls.VALUE_ERROR_CREATE)
+            # может быть ValueError
         return year, month, day
 
     @classmethod
