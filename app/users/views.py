@@ -1947,8 +1947,7 @@ api_user_points = ApiUserPoints.as_view()
 
 class ApiImportGedcom(ApiAddOperationMixin, UuidMixin, APIView):
 
-    @classmethod
     def do_import(self, owner_uuid, bytes_io, request=None):
-        pass
+        user, profile = self.check_user_uuid(owner_uuid)
 
 api_import_gedcom = ApiImportGedcom.as_view()
