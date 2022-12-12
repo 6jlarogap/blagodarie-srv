@@ -1654,7 +1654,8 @@ class ApiBotStat(APIView):
     """
     def get(self, request):
         data = {
-            'all': Profile.objects.filter(user__is_superuser=False, owner__isnull=True).count(),
+            'active': Profile.objects.filter(user__is_superuser=False, owner__isnull=True).count(),
+            'owned': Profile.objects.filter(owner__isnull=False).count(),
             'did_bot_start': Profile.objects.filter(did_bot_start=True, owner__isnull=True).count(),
             'with_geodata': Profile.objects.filter(latitude__isnull=False, owner__isnull=True).count(),
         }

@@ -3104,11 +3104,15 @@ async def echo_stat_to_bot(message: types.Message, state: FSMContext):
         reply = (
             '<b>Статистика</b>\n'
             '\n'
-            'Всего пользователей: %(all)s\n'
+            'Пользователи: %(active)s\n'
             'Стартовали бот: %(did_bot_start)s\n'
             'Указали местоположение: %(with_geodata)s\n'
+            'Cозданные профили: %(owned)s\n'
+            'Всего профилей: %(all)s\n'
         ) % {
-            'all': response['all'],
+            'active': response['active'],
+            'owned': response['owned'],
+            'all': response['active'] + response['owned'],
             'did_bot_start': response['did_bot_start'],
             'with_geodata': response['with_geodata'],
         }
