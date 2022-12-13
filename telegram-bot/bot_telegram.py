@@ -3083,6 +3083,30 @@ async def echo_getowned_to_bot(message: types.Message, state: FSMContext):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=['graph',],
+    state=None,
+)
+async def echo_graph_to_bot(message: types.Message, state: FSMContext):
+    await message.reply(
+        Misc.get_html_a(settings.GENESIS_HOST, 'Все родственные связи'),
+        disable_web_page_preview=True,
+    )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=['trusts',],
+    state=None,
+)
+async def echo_help_to_bot(message: types.Message, state: FSMContext):
+    await message.reply(
+        Misc.get_html_a(settings.FRONTEND_HOST, 'Все связи доверий'),
+        disable_web_page_preview=True,
+    )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     commands=['help',],
     state=None,
 )
