@@ -824,6 +824,9 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
             получить данные по одному пользователю, необязательно родственнику,
         с параметром tg_uid=...
             получить данные по пользователю телеграма
+        с параметром tg_uids=...
+            получить данные по пользователям телеграма, список с разделителями
+            запятой, более короткая выборка, нежели по одному tg_uid
         с одним из параметров query, query_ability, query_wish, query_person:
             получить список профилей пользователей,
                 - найденных по фио и ключам (query_person),
@@ -999,22 +1002,42 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                 data.update(tg_data=profile.tg_data())
                 if request.GET.get('with_owner'):
                     data.update(profile.owner_dict())
-            elif request.GET.get('tg_username'):
+            elif request.GET.get('tg_uids'):
                 data = []
-                usernames = request.GET['tg_username'].split(',')
-                for username in usernames:
-                    try:
-                        oauth = Oauth.objects.select_related(
+                uids = request.GET['tg_uids'].split(',')
+                user_pks = set()
+                for oauth in Oauth.objects.select_related(
                             'user', 'user__profile'
                         ).filter(
                             provider=Oauth.PROVIDER_TELEGRAM,
-                            username=username,
-                        )[0]
-                        user = oauth.user
+                            uid__in=uids,
+                   ):
+                    user = oauth.user
+                    if user.pk not in user_pks:
+                        # Учтём возможные два тг аккаунта у одного юзера
                         profile = user.profile
-                        data.append(profile.data_dict(request))
-                    except IndexError:
-                        pass
+                        item = profile.data_dict(request)
+                        item.update(tg_data=dict(tg_uid=oauth.uid, tg_username=oauth.username,))
+                        data.append(item)
+                        user_pks.add(user.pk)
+            elif request.GET.get('tg_username'):
+                data = []
+                usernames = request.GET['tg_username'].split(',')
+                user_pks = set()
+                for oauth in Oauth.objects.select_related(
+                            'user', 'user__profile'
+                        ).filter(
+                            provider=Oauth.PROVIDER_TELEGRAM,
+                            username__in=usernames,
+                   ):
+                    user = oauth.user
+                    if user.pk not in user_pks:
+                        # Учтём возможные два тг аккаунта у одного юзера
+                        profile = user.profile
+                        item = profile.data_dict(request)
+                        item.update(tg_data=dict(tg_uid=oauth.uid, tg_username=oauth.username,))
+                        data.append(item)
+                        user_pks.add(user.pk)
             elif request.GET.get('query_ability') or \
                  request.GET.get('query_wish') or \
                  request.GET.get('query_person') or \
