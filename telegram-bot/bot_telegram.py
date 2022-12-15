@@ -58,6 +58,9 @@ class FSMother(StatesGroup):
 class FSMsendMessage(StatesGroup):
     ask = State()
 
+class FSMfeedback(StatesGroup):
+    ask = State()
+
 class FSMchangeOwner(StatesGroup):
     ask = State()
     confirm = State()
@@ -1790,7 +1793,6 @@ async def process_callback_send_message(callback_query: types.CallbackQuery, sta
     Отправка сообщения
     """
     if callback_query.message:
-        tg_user_sender = callback_query.from_user
         code = callback_query.data.split(KeyboardType.SEP)
         uuid = None
         try:
@@ -1943,9 +1945,9 @@ async def got_message_to_send(message: types.Message, state: FSMContext):
                         tg_user_to_tg_data = profile_to['tg_data']
                         user_to_delivered_uuid = profile_to['uuid']
                     if tg_user_to_tg_data:
+                        bot_data = await bot.get_me()
                         for tgd in tg_user_to_tg_data:
                             try:
-                                bot_data = await bot.get_me()
                                 try:
                                     await bot.send_message(
                                         tgd['tg_uid'],
@@ -3143,6 +3145,101 @@ async def echo_stat_to_bot(message: types.Message, state: FSMContext):
     else:
         reply = 'Произошла ошибка'
     await message.reply(reply)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=['feedback',],
+    state=None,
+)
+async def echo_feedback(message: types.Message, state: FSMContext):
+    """
+    Отправка сообщения администраторам (разработчикам)
+    """
+
+    if not settings.BOT_ADMINS:
+        await message.reply('Не указаны администраторы системы',)
+        return
+    params_admins = dict(tg_uids=','.join(map(str, settings.BOT_ADMINS)))
+    logging.debug('get_admins, params: %s' % params_admins)
+    status_admins, response_admins = await Misc.get_admins()
+    if not (status_admins == 200 and response_admins):
+        await message.reply('Не найдены администраторы системы',)
+        return
+    status_sender, profile_sender = await Misc.post_tg_user(message.from_user)
+    if not (status_sender == 200 and profile_sender):
+        return
+
+    await FSMfeedback.ask.set()
+    state = dp.current_state()
+    async with state.proxy() as data:
+        data['uuid'] = profile_sender['uuid']
+    await message.reply(
+        'Напишите или перешлите сообщение для разработчиков',
+        reply_markup=Misc.reply_markup_cancel_row(),
+        disable_web_page_preview=True,
+    )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMfeedback.ask,
+)
+async def got_message_to_send_to_admins(message: types.Message, state: FSMContext):
+    async with state.proxy() as data:
+        # Надо проверить, тот ли человек пишет админам
+        if data.get('uuid'):
+            status_from, profile_from = await Misc.get_user_by_uuid(data['uuid'])
+            if status_from == 200 and profile_from:
+                status_sender, profile_sender = await Misc.post_tg_user(message.from_user)
+                if status_from == 200 and profile_from and profile_sender['uuid'] == profile_from['uuid']:
+                    status_admins, response_admins = await Misc.get_admins()
+                    if not (status_admins == 200 and response_admins):
+                        # fool-proof
+                        await Misc.state_finish(state)
+                        await message.reply('Не найдены администраторы системы',)
+                        return
+                    bot_data = await bot.get_me()
+                    profiles_delivered = []
+                    for admin_profile in response_admins:
+                        try:
+                            await bot.send_message(
+                                admin_profile['tg_data']['tg_uid'],
+                                text='Вам, <b>разработчику</b>, <b>сообщение</b> от %s' % \
+                                    Misc.get_deeplink_with_name(profile_from, bot_data),
+                                disable_web_page_preview=True,
+                            )
+                            await bot.forward_message(
+                                admin_profile['tg_data']['tg_uid'],
+                                from_chat_id=message.chat.id,
+                                message_id=message.message_id,
+                            )
+                            profiles_delivered.append(admin_profile)
+                            payload_log_message = dict(
+                                tg_token=settings.TOKEN,
+                                from_chat_id=message.chat.id,
+                                message_id=message.message_id,
+                                user_from_uuid=profile_from['uuid'],
+                                user_to_uuid=admin_profile['uuid'],
+                                user_to_delivered_uuid=admin_profile['uuid'],
+                            )
+                            try:
+                                status_log, response_log = await Misc.api_request(
+                                    path='/api/tg_message',
+                                    method='post',
+                                    json=payload_log_message,
+                                )
+                            except:
+                                pass
+                        except (ChatNotFound, CantInitiateConversation):
+                            pass
+                    if profiles_delivered:
+                        recipients = '\n'.join([Misc.get_deeplink_with_name(r, bot_data) for r in profiles_delivered])
+                        await message.reply('Сообщение доставлено разработчикам:\n%s' % recipients)
+                    else:
+                        await message.reply('Извините, не удалось доставить')
+    await Misc.state_finish(state)
 
 
 @dp.message_handler(

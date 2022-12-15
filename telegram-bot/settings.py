@@ -55,6 +55,10 @@ GENESIS_HOST = 'https://genesis.blagoroda.org'
 #
 FRONTEND_AUTH_PATH = '/auth/telegram/'
 
+# Админитраторы бота, их telegram ids
+#
+BOT_ADMINS = ()
+
 # Выбираем из фото пользователей, которые шлют сообщения в бот, не меньше такого, в байтах:
 #
 PHOTO_MAX_SIZE = 320 * 320

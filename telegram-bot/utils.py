@@ -148,6 +148,10 @@ class KeyboardType(object):
     CLEAR_CHILD = 40
     CLEAR_CHILD_CONFIRM = 41
 
+    # Письмо администраторам
+    #
+    FEEDBACK = 42
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -654,6 +658,7 @@ class Misc(object):
         params = dict(uuid=uuid)
         if with_owner:
             params.update(with_owner='1')
+        logging.debug('get_user_profile by uuid, params: %s' % params)
         status, response = await Misc.api_request(
             path='/api/profile',
             method='get',
@@ -661,6 +666,23 @@ class Misc(object):
         )
         logging.debug('get_user_profile by uuid, status: %s' % status)
         logging.debug('get_user_profile by uuid, response: %s' % response)
+        return status, response
+
+
+    @classmethod
+    async def get_admins(cls,):
+        """
+        Получить данные администраторов (они же разработчики)
+        """
+        params = dict(tg_uids=','.join(map(str, settings.BOT_ADMINS)))
+        logging.debug('get_admins, params: %s' % params)
+        status, response = await Misc.api_request(
+            path='/api/profile',
+            method='get',
+            params=params,
+        )
+        logging.debug('get_admins, status: %s' % status)
+        logging.debug('get_admins, response: %s' % response)
         return status, response
 
 

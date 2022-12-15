@@ -12,6 +12,9 @@ FRONTEND_HOST = 'https://blagoroda.org'
 GENESIS_HOST = 'https://genesis.blagoroda.org'
 GROUP_HOST = 'https://group.blagoroda.org'
 
+# Админитраторы бота, их telegram ids
+#
+BOT_ADMINS = (12345, 67890,)
 
 import logging
 LOG_LEVEL = logging.WARNING
