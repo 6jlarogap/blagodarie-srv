@@ -2594,9 +2594,6 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         <KeyboardType.SEP>
         <message_to_forward_id>             # 3
         <KeyboardType.SEP>
-        <group_id>                          # 4
-        <KeyboardType.SEP>
-        ''                                  # 5
         например: 2~2~326~62525~-52626~
     """
     code = callback_query.data.split(KeyboardType.SEP)
@@ -2625,10 +2622,6 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
                 tg_from_chat_id=tg_user_sender.id,
                 tg_message_id=message_to_forward_id,
             )
-        try:
-            group_id = int(code[4])
-        except (ValueError, IndexError,):
-            group_id = None
     except (ValueError, IndexError,):
         return
 
@@ -2722,23 +2715,11 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
                 )
         except (ChatNotFound, CantInitiateConversation):
             pass
-    if operation_done and not group_id and text_link:
+    if operation_done and text_link:
         # Не отправляем в личку, если сообщение в группу
         try:
             await bot.send_message(
                 tg_user_sender.id,
-                text=text_link,
-                disable_web_page_preview=True,
-            )
-        except (ChatNotFound, CantInitiateConversation):
-            pass
-
-    # Это в группу
-    #
-    if group_id and operation_done:
-        try:
-            await bot.send_message(
-                group_id,
                 text=text_link,
                 disable_web_page_preview=True,
             )
@@ -3924,28 +3905,6 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 )
                 path = "/profile/?id=%(uuid)s" % dict(uuid=response_from['uuid'],)
                 url = settings.FRONTEND_HOST + path
-                # login_url = Misc.make_login_url(path)
-                # login_url = LoginUrl(url=login_url)
-                #inline_btn_go = InlineKeyboardButton(
-                    #'Доверия',
-                    #url=url,
-                    ## login_url=login_url,
-                #)
-                #dict_reply = dict(
-                    #operation=OperationType.TRUST_AND_THANK,
-                    #keyboard_type=KeyboardType.TRUST_THANK_VER_2,
-                    #sep=KeyboardType.SEP,
-                    #user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
-                    #message_to_forward_id='',
-                    #group_id=message.chat.id,
-                #)
-                #callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE
-                #inline_btn_thank = InlineKeyboardButton(
-                    #'+Доверие',
-                    #callback_data=callback_data_template % dict_reply,
-                #)
-                #buttons = [inline_btn_go, inline_btn_thank]
-
             if buttons:
                 reply_markup = InlineKeyboardMarkup()
                 reply_markup.row(*buttons)
