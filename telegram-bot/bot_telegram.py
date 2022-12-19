@@ -3102,7 +3102,7 @@ async def echo_graph_to_bot(message: types.Message, state: FSMContext):
 )
 async def echo_help_to_bot(message: types.Message, state: FSMContext):
     await message.reply(
-        Misc.get_html_a(settings.FRONTEND_HOST, 'Все связи доверий'),
+        Misc.get_html_a(settings.FRONTEND_HOST + '/?q=2500&f=0', 'Все связи доверий'),
         disable_web_page_preview=True,
     )
 
