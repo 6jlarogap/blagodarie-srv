@@ -84,6 +84,10 @@ class FSMtrip(StatesGroup):
     ask_geo = State()
     geo = State()
 
+class FSMtrustThank(StatesGroup):
+    # благодарности, недоверия, не-знакомы
+    ask = State()
+
 # Отслеживаем по каждой группе (ключ этого словаря),
 # кто был автором последнего сообщения в группу.
 # Если юзер отправит два сообщения подряд, то
@@ -2570,7 +2574,7 @@ async def process_make_query(message: types.Message, state: FSMContext):
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
-        KeyboardType.TRUST_THANK_VER_2,
+        KeyboardType.TRUST_THANK,
         KeyboardType.SEP,
     ), c.data
     ), state=None,
@@ -2580,7 +2584,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
     Действия по (не)доверию, благодарностям
 
     На входе строка:
-        <KeyboardType.TRUST_THANK_VER_2>    # 0
+        <KeyboardType.TRUST_THANK>    # 0
         <KeyboardType.SEP>
         <operation_type_id>                 # 1
         <KeyboardType.SEP>

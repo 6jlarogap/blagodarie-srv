@@ -51,7 +51,7 @@ class KeyboardType(object):
     """
     # Багодарность, доверие, недоверие...
     #
-    TRUST_THANK_VER_2 = 2
+    TRUST_THANK = 2
 
     # Благодарность, доверие, недоверие...
     #
@@ -886,7 +886,7 @@ class Misc(object):
 
                 if user_from_id != response_to['user_id'] and bot_data.id != tg_user_from_id:
                     dict_reply = dict(
-                        keyboard_type=KeyboardType.TRUST_THANK_VER_2,
+                        keyboard_type=KeyboardType.TRUST_THANK,
                         sep=KeyboardType.SEP,
                         user_to_uuid_stripped=cls.uuid_strip(response_to['uuid']),
                         message_to_forward_id=message_to_forward_id,
