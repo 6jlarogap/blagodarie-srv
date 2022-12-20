@@ -3198,7 +3198,7 @@ class ApiTgMessage(UuidMixin, APIView):
 
             data += [
                 tm.data_dict() for tm in TgJournal.objects.filter(
-                    journal__user_from__pk=user_to.pk,
+                    journal__user_to__pk=user_to.pk,
                     ).select_related(
                         'journal__user_from', 'journal__user_to',
                         'journal__user_from__profile', 'journal__user_to__profile',
