@@ -92,9 +92,9 @@ class TgJournal(UserDictMixin, models.Model):
     def data_dict(self):
         return dict(
             timestamp=self.journal.insert_timestamp,
-            user_from=self.user_dict(self.journal.user_to),
-            user_to=self.user_dict(self.journal.user_from),
-            user_to_delivered=self.user_dict(self.journal.user_from),
+            user_from=self.user_dict(self.journal.user_from),
+            user_to=self.user_dict(self.journal.user_to),
+            user_to_delivered=self.user_dict(self.journal.user_to),
             from_chat_id=self.from_chat_id,
             message_id=self.message_id,
         )
