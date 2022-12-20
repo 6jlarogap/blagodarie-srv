@@ -32,7 +32,6 @@ class OperationType(object):
         '%(operation)s%(sep)s'
         '%(user_to_uuid_stripped)s%(sep)s'
         '%(message_to_forward_id)s%(sep)s'
-        '%(group_id)s%(sep)s'
     )
 
     @classmethod
@@ -152,6 +151,8 @@ class KeyboardType(object):
     #
     FEEDBACK = 42
 
+    TRUST_THANK_WO_COMMENT = 43
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -160,6 +161,8 @@ class Misc(object):
     """
     Различные функции, сообщения, константы
     """
+
+    MSG_YOU_GOT_MESSAGE = 'Вам сообщение от <b>%s</b>'
 
     PROMPT_SEARCH_TEXT_TOO_SHORT = 'Минимальное число символов в тексте для поиска: %s\n' % settings.MIN_LEN_SEARCHED_TEXT
     PROMPT_SEARCH_PHRASE_TOO_SHORT = 'Недостаточно для поиска: короткие слова или текст вообще без слов и т.п.'
@@ -781,6 +784,26 @@ class Misc(object):
             for part in parts:
                 await message.reply(part, disable_web_page_preview=True)
 
+
+    @classmethod
+    async def call_response_relations(cls, response_from, response_to):
+        payload = dict(
+            user_id_from=response_from.get('uuid'),
+            user_id_to=response_to.get('uuid'),
+        )
+        status, response = await cls.api_request(
+            path='/api/user/relations/',
+            method='get',
+            params=payload,
+        )
+        logging.debug('get users relations, payload: %s' % payload)
+        logging.debug('get users relations, status: %s' % status)
+        logging.debug('get users relations: %s' % response)
+        if status != 200 or not response:
+            status, response = None, {}
+        return status, response
+
+
     @classmethod
     async def show_cards(cls,
         # Список данных пользователей
@@ -804,10 +827,6 @@ class Misc(object):
         # Ид сообщения, которое включить в кнопки, чтобы его потом перенаправить
         #
         message_to_forward_id='',
-
-        # Список карточек отправляется в группу?
-        #
-        group_id='',
     ):
         """
         Показать карточки пользователей
@@ -829,22 +848,11 @@ class Misc(object):
                 response_to,
                 bot_data=bot_data,
             )
-            response_relations = None
+            response_relations = {}
             if user_from_id and user_from_id != response_to['user_id']:
-                payload_relation = dict(
-                    user_id_from=response_from['uuid'],
-                    user_id_to=response_to['uuid'],
-                )
-                status, response = await cls.api_request(
-                    path='/api/user/relations/',
-                    method='get',
-                    params=payload_relation,
-                )
-                logging.debug('get users relations, status: %s' % status)
-                logging.debug('get users relations: %s' % response)
-                if status == 200:
-                    reply += cls.reply_relations(response)
-                    response_relations = response
+                status_relations, response_relations = await cls.call_response_relations(response_from, response_to)
+                if response_relations:
+                    reply += cls.reply_relations(response_relations)
 
             if response_to['is_active'] or response_to['owner_id']:
                 path = "/profile/?id=%s" % response_to['uuid']
@@ -856,7 +864,7 @@ class Misc(object):
                     # login_url=login_url,
                 )
                 goto_buttons = [inline_btn_friends, ]
-                if not group_id and response_from.get('uuid') and not is_own_account:
+                if response_from.get('uuid') and not is_own_account:
                     path = "/trust/?id=%s,%s&d=10" % (response_from['uuid'], response_to['uuid'],)
                     url = settings.FRONTEND_HOST + path
                     # login_url = LoginUrl(url=cls.make_login_url(path))
@@ -866,7 +874,7 @@ class Misc(object):
                         # login_url=login_url,
                     )
                     goto_buttons.append(inline_btn_path)
-                if not group_id and (is_own_account or is_owned_account):
+                if is_own_account or is_owned_account:
                     path = "?id=%s&depth=3" % response_to['uuid']
                     url = settings.GENESIS_HOST + path
                     inline_btn_genesis = InlineKeyboardButton(
@@ -874,7 +882,7 @@ class Misc(object):
                         url=url,
                     )
                     goto_buttons.append(inline_btn_genesis)
-                if not group_id and response_from.get('uuid') and not is_own_account:
+                if response_from.get('uuid') and not is_own_account:
                     path = "/?id=%s,%s&depth=10" % (response_from['uuid'], response_to['uuid'],)
                     url = settings.GENESIS_HOST + path
                     inline_btn_genesis_path = InlineKeyboardButton(
@@ -890,12 +898,10 @@ class Misc(object):
                         sep=KeyboardType.SEP,
                         user_to_uuid_stripped=cls.uuid_strip(response_to['uuid']),
                         message_to_forward_id=message_to_forward_id,
-                        group_id=group_id,
                     )
                     callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE
                     show_inline_btn_nullify_trust = True
-                    if group_id or \
-                    (response_relations and response_relations['from_to']['is_trust'] is None):
+                    if response_relations and response_relations['from_to']['is_trust'] is None:
                         show_inline_btn_nullify_trust = False
 
                     title_thank = 'Доверие'
@@ -907,27 +913,22 @@ class Misc(object):
                         title_thank,
                         callback_data=callback_data_template % dict_reply,
                     )
-                    dict_reply.update(operation=OperationType.MISTRUST)
-                    inline_btn_mistrust = InlineKeyboardButton(
-                        'Недоверие',
-                        callback_data=callback_data_template % dict_reply,
-                    )
-                    dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-                    inline_btn_nullify_trust = InlineKeyboardButton(
-                        'Забыть',
-                        callback_data=callback_data_template % dict_reply,
-                    )
-                    if show_inline_btn_nullify_trust:
-                        reply_markup.row(
-                            inline_btn_trust,
-                            inline_btn_mistrust,
-                            inline_btn_nullify_trust
+                    thank_buttons = [inline_btn_trust]
+                    if not response_relations or response_relations['from_to']['is_trust'] != False:
+                        dict_reply.update(operation=OperationType.MISTRUST)
+                        inline_btn_mistrust = InlineKeyboardButton(
+                            'Недоверие',
+                            callback_data=callback_data_template % dict_reply,
                         )
-                    else:
-                        reply_markup.row(
-                            inline_btn_trust,
-                            inline_btn_mistrust,
+                        thank_buttons.append(inline_btn_mistrust)
+                    if not response_relations or response_relations['from_to']['is_trust'] is not None:
+                        dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+                        inline_btn_nullify_trust = InlineKeyboardButton(
+                            'Забыть',
+                            callback_data=callback_data_template % dict_reply,
                         )
+                        thank_buttons.append(inline_btn_nullify_trust)
+                    reply_markup.row(*thank_buttons)
 
                 callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE
                 if is_own_account or is_owned_account:
@@ -1027,24 +1028,23 @@ class Misc(object):
                     )
                     reply_markup.row(inline_btn_ability, inline_btn_wish, inline_btn_keys)
 
-                if not group_id:
-                    dict_message = dict(
-                        keyboard_type=KeyboardType.SEND_MESSAGE,
-                        uuid=response_to['uuid'],
-                        sep=KeyboardType.SEP,
-                    )
-                    inline_btn_send_message = InlineKeyboardButton(
-                        'Написать',
-                        callback_data=callback_data_template % dict_message,
-                    )
-                    dict_message.update(
-                        keyboard_type=KeyboardType.SHOW_MESSAGES,
-                    )
-                    inline_btn_show_messages = InlineKeyboardButton(
-                        'Архив',
-                        callback_data=callback_data_template % dict_message,
-                    )
-                    reply_markup.row(inline_btn_send_message, inline_btn_show_messages)
+                dict_message = dict(
+                    keyboard_type=KeyboardType.SEND_MESSAGE,
+                    uuid=response_to['uuid'],
+                    sep=KeyboardType.SEP,
+                )
+                inline_btn_send_message = InlineKeyboardButton(
+                    'Написать',
+                    callback_data=callback_data_template % dict_message,
+                )
+                dict_message.update(
+                    keyboard_type=KeyboardType.SHOW_MESSAGES,
+                )
+                inline_btn_show_messages = InlineKeyboardButton(
+                    'Архив',
+                    callback_data=callback_data_template % dict_message,
+                )
+                reply_markup.row(inline_btn_send_message, inline_btn_show_messages)
 
                 if is_own_account and response_to['is_active'] or is_owned_account:
                     title_delete = 'Удалить' if is_owned_account else 'Обезличить'
