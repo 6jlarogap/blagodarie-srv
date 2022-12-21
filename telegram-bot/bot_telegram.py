@@ -1867,6 +1867,15 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
                     '(%(n)s) %(datetime_string)s\n'
                     'От %(user_from)s к %(user_to)s\n'
                 )
+                if m['operation_type_id']:
+                    if m['operation_type_id'] == OperationType.NULLIFY_TRUST:
+                        msg += 'в связи с тем что забыл(а)\n'
+                    elif m['operation_type_id'] == OperationType.MISTRUST:
+                        msg += 'в связи с утратой доверия\n'
+                    elif m['operation_type_id'] == OperationType.TRUST:
+                        msg += 'в связи с тем что доверяет\n'
+                    elif m['operation_type_id'] in (OperationType.THANK, OperationType.TRUST_AND_THANK,):
+                        msg += 'с благодарностью\n'
                 user_to_delivered = None
                 if m['user_to_delivered']:
                     msg += 'Доставлено'
@@ -2807,6 +2816,7 @@ async def put_thank_etc(tg_user_sender, data, state, comment_message=None):
             user_from_uuid=profile_from['uuid'],
             user_to_uuid=profile_to['uuid'],
             user_to_delivered_uuid=comment_delivered and profile_to['uuid'] or None,
+            operation_type_id=post_op['operation_type_id'],
         )
         try:
             status_log, response_log = await Misc.api_request(

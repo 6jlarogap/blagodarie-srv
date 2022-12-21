@@ -3193,6 +3193,7 @@ class ApiTgMessage(UuidMixin, APIView):
                     ).select_related(
                         'user_from', 'user_to', 'user_to_delivered',
                         'user_from__profile', 'user_to__profile', 'user_to_delivered__profile',
+                        'operationtype',
                     ).order_by('-insert_timestamp')[:self.MESSAGE_COUNT]
             ]
 
@@ -3202,6 +3203,7 @@ class ApiTgMessage(UuidMixin, APIView):
                     ).select_related(
                         'journal__user_from', 'journal__user_to',
                         'journal__user_from__profile', 'journal__user_to__profile',
+                        'journal__operationtype',
                     ).distinct(
                         'journal__insert_timestamp',
                         'message_id', 'from_chat_id',
@@ -3243,12 +3245,19 @@ class ApiTgMessage(UuidMixin, APIView):
                 message_id = int(data.get('message_id'))
             except (TypeError, ValueError,):
                 raise ServiceException('Не задан или не число: message_id')
+            operationtype = None
+            if data.get('operation_type_id'):
+                try:
+                    operationtype = OperationType.objects.get(pk = int(data['operation_type_id']))
+                except (OperationType.DoesNotExist, ValueError, TypeError,):
+                    pass
             TgMessageJournal.objects.create(
                 from_chat_id=from_chat_id,
                 message_id=message_id,
                 user_from=user_from,
                 user_to=user_to,
                 user_to_delivered=user_to_delivered,
+                operationtype=operationtype,
             )
             status_code = status.HTTP_200_OK
             data = {}

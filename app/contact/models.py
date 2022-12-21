@@ -97,6 +97,7 @@ class TgJournal(UserDictMixin, models.Model):
             user_to_delivered=self.user_dict(self.journal.user_to),
             from_chat_id=self.from_chat_id,
             message_id=self.message_id,
+            operation_type_id=self.journal.operationtype.pk,
         )
 
 class TgMessageJournal(UserDictMixin, BaseModelInsertTimestamp):
@@ -116,6 +117,8 @@ class TgMessageJournal(UserDictMixin, BaseModelInsertTimestamp):
                     related_name='tg_message_journal_user_to_delivered_set')
     from_chat_id = models.BigIntegerField(_("Chat Id"),)
     message_id = models.BigIntegerField(_("Message Id"),)
+    operationtype = models.ForeignKey(OperationType, null=True,
+                    verbose_name=_("Тип операции"), on_delete=models.CASCADE)
 
     def data_dict(self):
         return dict(
@@ -125,6 +128,7 @@ class TgMessageJournal(UserDictMixin, BaseModelInsertTimestamp):
             user_to_delivered=self.user_dict(self.user_to_delivered) if self.user_to_delivered else None,
             from_chat_id=self.from_chat_id,
             message_id=self.message_id,
+            operation_type_id=self.operationtype and self.operationtype.pk or None,
         )
 
 class CurrentState(BaseModelInsertUpdateTimestamp):
