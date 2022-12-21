@@ -2763,7 +2763,19 @@ async def put_thank_etc(tg_user_sender, data, state, comment_message=None):
     # Это получателю благодарности и т.п.
     #
     comment_delivered = False
+    text_to_recipient = text
+    if operation_done and data.get('message_to_forward_id') or comment_message:
+        text_to_recipient += ' с комментарием:'
     for tgd in tg_user_to_tg_data:
+        if operation_done:
+            try:
+                await bot.send_message(
+                    tgd['tg_uid'],
+                    text=text_to_recipient,
+                    disable_web_page_preview=True,
+                )
+            except (ChatNotFound, CantInitiateConversation):
+                pass
         if operation_done and data.get('message_to_forward_id'):
             try:
                 await bot.forward_message(
@@ -2775,26 +2787,12 @@ async def put_thank_etc(tg_user_sender, data, state, comment_message=None):
                 pass
         if comment_message:
             try:
-                await bot.send_message(
-                    tgd['tg_uid'],
-                    text=Misc.MSG_YOU_GOT_MESSAGE % Misc.get_deeplink_with_name(profile_from, bot_data, plus_trusts=True),
-                    disable_web_page_preview=True,
-                )
                 await bot.forward_message(
                     tgd['tg_uid'],
                     from_chat_id=comment_message.chat.id,
                     message_id=comment_message.message_id,
                 )
                 comment_delivered = True
-            except (ChatNotFound, CantInitiateConversation):
-                pass
-        if operation_done:
-            try:
-                await bot.send_message(
-                    tgd['tg_uid'],
-                    text=text,
-                    disable_web_page_preview=True,
-                )
             except (ChatNotFound, CantInitiateConversation):
                 pass
     if comment_delivered:
