@@ -383,16 +383,24 @@ class Profile(PhotoModel, GeoPointAddressModel):
     def __str__(self):
         return self.user.first_name or str(self.pk)
 
-    def data_dict(self, request=None, short=False, google_photo_size=None):
+    def data_dict(self, request=None, short=False, google_photo_size=None, fmt='d3js'):
         user = self.user
+        result = dict()
         if short:
-            return dict(
-                uuid=str(self.uuid),
-                first_name=user.first_name,
-                photo=self.choose_photo(request, google_photo_size) if request else '',
-            )
+            if fmt == '3d-force-graph':
+                result.update(
+                    id=user.pk,
+                    first_name=user.first_name,
+                    photo=self.choose_thumb(request, width=64, height=64) if request and self.photo else '',
+                )
+            else:
+                result.update(
+                    uuid=str(self.uuid),
+                    first_name=user.first_name,
+                    photo=self.choose_photo(request, google_photo_size) if request else '',
+                )
         else:
-            return dict(
+            result.update(
                 uuid=str(self.uuid),
                 last_name=user.last_name,
                 first_name=user.first_name,
@@ -414,6 +422,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 dod=self.dod and self.dod.str_safe() or None,
                 comment=self.comment or '',
             )
+        return result
 
     def owner_dict(self, request=None, google_photo_size=None):
         if self.owner:

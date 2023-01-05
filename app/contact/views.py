@@ -2693,19 +2693,28 @@ class GetTrustGenesisMixin(object):
 class ApiProfileGenesisAll(APIView):
     """
     Отдать все профили и все связи
+
+    Возможны форматы выдачи (?fmt= get параметр):
+        - d3js
+        - 3d-force-graph
     """
     def get(self, request):
+        fmt = request.GET.get('fmt', 'd3js')
         users = [
-            profile.data_dict(request=request, short=True) \
+            profile.data_dict(request=request, short=True, fmt=fmt) \
             for profile in Profile.objects.select_related('user').filter(user__is_superuser=False).distinct()
         ]
         q_connections = Q(is_child=False) & (Q(is_father = True) | Q(is_mother=True))
         connections = [
-            cs.data_dict(show_parent=True, show_trust=False, reverse=True, show_id_fio=False) \
+            cs.data_dict(show_parent=fmt=='d3js', show_trust=False, reverse=True, show_id_fio=False, fmt=fmt) \
             for cs in CurrentState.objects.filter(q_connections).select_related(
                     'user_from__profile', 'user_to__profile',
-                ).distinct()        ]
-        data = dict(users=users, connections=connections, trust_connections=[])
+                ).distinct()
+        ]
+        if fmt == '3d-force-graph':
+            data = dict(nodes=users, links=connections)
+        else:
+            data = dict(users=users, connections=connections, trust_connections=[])
         return Response(data=data, status=status.HTTP_200_OK)
 
 api_profile_genesis_all = ApiProfileGenesisAll.as_view()

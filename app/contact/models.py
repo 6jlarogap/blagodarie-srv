@@ -176,21 +176,31 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
     #
     is_reverse = models.BooleanField(_("Обратное отношение"), default=False)
 
-    def data_dict(self, show_parent=False, show_trust=False, reverse=False, show_id_fio=True):
+    def data_dict(self, show_parent=False, show_trust=False, reverse=False, show_id_fio=True, fmt='d3js'):
 
-        #TODO for debug: show_id_fio=True
-        #
-
-        if reverse:
-            result = dict(
-                target=self.user_from.profile.uuid,
-                source=self.user_to.profile.uuid,
-            )
+        result = dict()
+        if fmt == '3d-force-graph':
+            if reverse:
+                result.update(
+                    target=self.user_from.pk,
+                    source=self.user_to.pk,
+                )
+            else:
+                result.update(
+                    source=self.user_from.pk,
+                    target=self.user_to.pk,
+                )
         else:
-            result = dict(
-                source=self.user_from.profile.uuid,
-                target=self.user_to.profile.uuid,
-            )
+            if reverse:
+                result.update(
+                    target=self.user_from.profile.uuid,
+                    source=self.user_to.profile.uuid,
+                )
+            else:
+                result.update(
+                    source=self.user_from.profile.uuid,
+                    target=self.user_to.profile.uuid,
+                )
 
         if show_trust:
             result.update(dict(
