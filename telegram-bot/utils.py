@@ -303,33 +303,32 @@ class Misc(object):
 
 
     @classmethod
-    def help_text(cls):
-        return (
-            'Инструкция:\n'
-            '. заполните Ваши возможности, потребности и местоположение;\n'
-            '. заполните своё родовое дерево;\n'
-            '. напишите мне любой текст для поиска;\n'
-            '. напишите мне @имя или перешлите сообщение - я покажу репутацию его отправителя;\n'
-            '. добавьте меня в любую группу - и я буду показывать репутацию каждого кто отправляет в неё сообщения!\n'
-            '\n'
-            'Мой программный код: https://github.com/6jlarogap/blagodarie-srv/tree/master/telegram-bot\n'
-        )
+    async def get_template(cls, template):
+        status = response = None
+        async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
+            try:
+                async with session.request(
+                    'GET',
+                    "%s/res/telegram-bot/%s.txt" % (settings.FRONTEND_HOST, template),
+                ) as resp:
+                    status = resp.status
+                    response = await resp.text('UTF-8')
+            except:
+                pass
+        return status, response
+
 
     @classmethod
-    def start_text(cls):
-        return (
-'''Правила:
-. всё что Вы отправили этому боту - является опубликованным Вами самими;
-. заполните данные своего профиля - Имя Отчество Фамилию, фотографию крупно лица - собачки и цветочки не подойдут - Ваше лицо - лицо РОДа!, дату рождения, контакты, возможности, потребности и примерное или точное местоположение;
-. заполните профили папы, мамы, детей и известных вам живых и умерших РОДных;
-. пригласите известных вам РОДственников и друзей - особенно разделённых - поРОДниться - занять их места в РОДу! 
-. переходите на канал РОД для вопросов, предложений и совместных действий https://t.me/+Zi6WsvPvUeFiZGZi
-. напишите мне любой текст для поиска РОДных;
-. напишите мне @имя или перешлите сообщение любого пользователя телеграмма - я покажу его профиль;
-. добавьте меня в свои группы или каналы - я буду показывать профиль каждого кто пишет в них сообщения.
+    async def help_text(cls):
+        status, response = await cls.get_template('help')
+        return response if status == 200 and response else cls.MSG_ERROR_API
 
-Мой программный код: https://github.com/6jlarogap/blagodarie-srv/tree/master/telegram-bot'''
-        )
+
+    @classmethod
+    async def rules_text(cls):
+        status, response = await cls.get_template('rules')
+        return response if status == 200 and response else cls.MSG_ERROR_API
+
 
     @classmethod
     async def get_user_photo(cls, bot, user):
