@@ -4,6 +4,9 @@ django-debug-toolbar
 djangorestframework
 django-cors-headers
 
+redis
+django-redis
+
 psycopg2-binary
 
 pytils

@@ -68,6 +68,9 @@ install-readme.txt
          - web сервер apache2:
             sudo apt install apache2  apache2-utils
 
+         - redis-server:
+            для кэшировния запросов к апи
+
          -git
             sudo apt install git
 
