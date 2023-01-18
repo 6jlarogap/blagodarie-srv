@@ -696,9 +696,10 @@ class Profile(PhotoModel, GeoPointAddressModel):
         elif photo_url:
             result = cls.choose_photo_of(request, '', photo_url, google_photo_size=max(width, height))
         else:
-            result = request.build_absolute_uri(static(
-                'images/default_avatar_%sx%s.png' % (width, height)
-            ))
+            fname = 'images/default_avatar_%sx%s.png' % (width, height)
+            if not os.path.exists(os.path.join(settings.STATIC_ROOT, fname)):
+                fname = 'images/default_avatar.png'
+            result = request.build_absolute_uri(static(fname))
         return result
 
     def choose_thumb(self, request, width=64, height=64):

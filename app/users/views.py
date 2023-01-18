@@ -1845,7 +1845,17 @@ api_bot_groupmember = ApiBotGroupMember.as_view()
 
 class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
 
-    THUMB_SIZE = 64
+    # Фото пользователя, когда в карте щелкаешь на балун
+    #
+    THUMB_SIZE_POPUP = 64
+
+    # Фото пользователя, по которому есть параметр uuid
+    #
+    THUMB_SIZE_ICON_FOUND = 48
+
+    # Фото остальных пользователей
+    #
+    THUMB_SIZE_ICON = 32
 
     def get(self, request):
         """
@@ -1926,13 +1936,13 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 trust_count=profile.trust_count,
                 url_deeplink=url_deeplink,
                 url_profile=url_profile,
-                url_photo=profile.choose_thumb(request, width=self.THUMB_SIZE, height=self.THUMB_SIZE),
-                thumb_size = self.THUMB_SIZE,
+                url_photo_popup=profile.choose_thumb(request, width=self.THUMB_SIZE_POPUP, height=self.THUMB_SIZE_POPUP),
+                thumb_size_popup = self.THUMB_SIZE_POPUP,
             )
             popup = (
                 '<table><tr>'
                     '<td>'
-                       '<img src="%(url_photo)s" width=%(thumb_size)s height=%(thumb_size)s>'
+                       '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
                     '</td>'
                     '<td>'
                         ' <a href="%(url_deeplink)s" target="_blank">%(full_name)s</a> (%(trust_count)s)'
@@ -1948,7 +1958,17 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 popup=popup,
             )
             if found_coordinates and profile == found_profile:
-                point.update(is_of_found_user=True)
+                point.update(
+                    is_of_found_user=True,
+                    icon=profile.choose_thumb(request, width=self.THUMB_SIZE_ICON_FOUND, height=self.THUMB_SIZE_ICON_FOUND),
+                    size_icon=self.THUMB_SIZE_ICON_FOUND,
+                )
+            else:
+                point.update(
+                    is_of_found_user=False,
+                    icon=profile.choose_thumb(request, width=self.THUMB_SIZE_ICON, height=self.THUMB_SIZE_ICON),
+                    size_icon=self.THUMB_SIZE_ICON,
+                )
             points.append(point)
             if not found_coordinates:
                 lat_sum += profile.latitude
