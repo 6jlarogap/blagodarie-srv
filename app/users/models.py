@@ -693,8 +693,8 @@ class Profile(PhotoModel, GeoPointAddressModel):
         """
         if photo:
             result = request.build_absolute_uri(ThumbnailSimpleMixin.get_thumbnail_str(photo, width, height))
-        elif photo_url:
-            result = cls.choose_photo_of(request, '', photo_url, google_photo_size=max(width, height))
+        #elif photo_url:
+            #result = cls.choose_photo_of(request, '', photo_url, google_photo_size=max(width, height))
         else:
             fname = 'images/default_avatar_%sx%s.png' % (width, height)
             if not os.path.exists(os.path.join(settings.STATIC_ROOT, fname)):
