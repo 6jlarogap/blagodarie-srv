@@ -650,7 +650,6 @@ class PhotoModel(FilesMixin, models.Model):
                 flags=re.I
             )
             if m:
-                print('HERE')
                 result = m.group(1) + m.group(2) + m.group(3) + m.group(4) + \
                             '/s' + str(google_photo_size) + '-c/' + m.group(6)
         return result
