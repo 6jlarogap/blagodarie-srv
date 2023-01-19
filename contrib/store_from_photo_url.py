@@ -14,6 +14,7 @@ from django.core.files.base import ContentFile
 
 from app.models import PhotoModel
 from users.models import Profile
+from app.utils import ServiceException
 
 from restthumbnails.files import ThumbnailContentFile
 
@@ -24,12 +25,13 @@ for profile in Profile.objects.select_related('user').filter(q):
     print(profile.user.first_name)
     print('   ', photo_url)
 
+    was_error = False
     try:
         req = urllib.request.Request(photo_url)
         r = urllib.request.urlopen(req, timeout=60)
         if r.getcode() != 200:
             print('       ', 'ERROR: status != 200')
-            continue
+            raise ServiceException
         content = ContentFile(r.read(), 'photo.jpg')
         content = ThumbnailContentFile(
             content,
@@ -38,9 +40,16 @@ for profile in Profile.objects.select_related('user').filter(q):
         ).generate()
         if not content:
             print('       ', 'ERROR: not an image')
-            continue
+            raise ServiceException
         profile.photo.save(PhotoModel.DEFAULT_FNAME, content)
         print('       ', 'success')
     except urllib.error.URLError as url_error:
         print('       ', 'ERROR: connection or alike: %s' % url_error)
-        continue
+        was_error = True
+    except ServiceException:
+        was_error = True
+    if was_error:
+        profile.photo_url = ''
+        profile.save()
+        print('           ', 'photo_url cleared')
+
