@@ -627,6 +627,8 @@ class PhotoModel(FilesMixin, models.Model):
         Подправить photo_url с учетом google_photo_size
         """
         result = photo_url
+        if not google_photo_size:
+            google_photo_size = settings.GOOGLE_PHOTO_SIZE
         m = re.search(
             #      1       2     3      4     5
             r'^(https?://)(\S*)(google)(\S+)(\=s\d+\-c)$',
@@ -644,8 +646,7 @@ class PhotoModel(FilesMixin, models.Model):
                 flags=re.I
             )
             if m:
-                if not google_photo_size:
-                    google_photo_size = settings.GOOGLE_PHOTO_SIZE
+                print('HERE')
                 result = m.group(1) + m.group(2) + m.group(3) + m.group(4) + \
                             '/s' + str(google_photo_size) + '-c/' + m.group(6)
         return result
