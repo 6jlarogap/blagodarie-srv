@@ -621,6 +621,35 @@ class PhotoModel(FilesMixin, models.Model):
                 raise ServiceException("Загружаемый файл фото не является изображением")
         return content
 
+    @classmethod
+    def tweek_photo_url(cls, photo_url, google_photo_size=None):
+        """
+        Подправить photo_url с учетом google_photo_size
+        """
+        result = photo_url
+        m = re.search(
+            #      1       2     3      4     5
+            r'^(https?://)(\S*)(google)(\S+)(\=s\d+\-c)$',
+            result,
+            flags=re.I
+        )
+        if m:
+            result = m.group(1) + m.group(2) + m.group(3) + m.group(4) + \
+                    '=s' + str(google_photo_size) + '-c'
+        else:
+            m = re.search(
+                #     1        2     3      4     5         6
+                r'^(https?://)(\S*)(google)(\S+)(/s\d+\-c/)(\S*)$',
+                result,
+                flags=re.I
+            )
+            if m:
+                if not google_photo_size:
+                    google_photo_size = settings.GOOGLE_PHOTO_SIZE
+                result = m.group(1) + m.group(2) + m.group(3) + m.group(4) + \
+                            '/s' + str(google_photo_size) + '-c/' + m.group(6)
+        return result
+
 class GenderMixin(object):
     """
     Применяется в 2 или более моделях

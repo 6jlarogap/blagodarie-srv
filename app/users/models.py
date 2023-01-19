@@ -650,28 +650,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
         if photo:
             result = request.build_absolute_uri(settings.MEDIA_URL + photo)
         elif photo_url:
-            result = photo_url
-            if not google_photo_size:
-                google_photo_size = settings.GOOGLE_PHOTO_SIZE
-            m = re.search(
-                #      1       2     3      4     5
-                r'^(https?://)(\S*)(google)(\S+)(\=s\d+\-c)$',
-                result,
-                flags=re.I
-            )
-            if m:
-                result = m.group(1) + m.group(2) + m.group(3) + m.group(4) + \
-                        '=s' + str(google_photo_size) + '-c'
-            else:
-                m = re.search(
-                    #     1        2     3      4     5         6
-                    r'^(https?://)(\S*)(google)(\S+)(/s\d+\-c/)(\S*)$',
-                    result,
-                    flags=re.I
-                )
-                if m:
-                    result = m.group(1) + m.group(2) + m.group(3) + m.group(4) + \
-                             '/s' + str(google_photo_size) + '-c/' + m.group(6)
+            result = PhotoModel.tweek_photo_url(photo_url)
         return result
 
     def choose_photo(self, request, google_photo_size=None):
