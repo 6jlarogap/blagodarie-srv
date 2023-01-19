@@ -573,6 +573,10 @@ class PhotoModel(FilesMixin, models.Model):
     Базовый (дополнительный) класс для моделей, у которых есть фото объекта
     """
 
+    # Имя по умолчанию для файла, если таковое не задано в потоке
+    #
+    DEFAULT_FNAME = 'photo.png'
+
     class Meta:
         abstract = True
 
@@ -591,7 +595,7 @@ class PhotoModel(FilesMixin, models.Model):
     ):
         content = request.data.get(photofield) or None
         if content:
-            name = getattr(content, 'name', 'photo.png')
+            name = getattr(content, 'name', cls.DEFAULT_FNAME)
             is_base64 = photo_content == 'base64'
             if isinstance(content, str):
                 if is_base64:

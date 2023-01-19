@@ -1178,7 +1178,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                 photo_content=photo_content,
             )
             profile.delete_from_media()
-            profile.photo.save(getattr(request.data['photo'], 'name', 'photo.png'), photo)
+            profile.photo.save(getattr(request.data['photo'], 'name', PhotoModel.DEFAULT_FNAME), photo)
 
     def post_tg_data(self, request):
         """
