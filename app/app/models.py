@@ -575,7 +575,7 @@ class PhotoModel(FilesMixin, models.Model):
 
     # Имя по умолчанию для файла, если таковое не задано в потоке
     #
-    DEFAULT_FNAME = 'photo.png'
+    DEFAULT_FNAME = 'photo.jpg'
 
     class Meta:
         abstract = True
