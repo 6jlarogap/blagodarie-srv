@@ -356,7 +356,6 @@ class Profile(PhotoModel, GeoPointAddressModel):
     user = models.OneToOneField('auth.User', on_delete=models.CASCADE)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
     middle_name = models.CharField(_("Отчество"), max_length=255, blank=True, default='')
-    photo_url = models.URLField(_("Фото из соц. сети"), max_length=255, default='')
     is_notified = models.BooleanField(_("Принимает уведомления"), default=True)
     fame = models.PositiveIntegerField(_("Известность"), default=0)
     sum_thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
