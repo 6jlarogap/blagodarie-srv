@@ -429,7 +429,7 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, APIView)
         return rd
 
     def process_input(self, rd):
-        photo_url = rd.get('photo', '')
+        photo_url = rd.get('photo_url', '')
         try:
             oauth = Oauth.objects.select_related('user', 'user__profile').get(
                 provider = Oauth.PROVIDER_TELEGRAM,
