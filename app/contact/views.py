@@ -602,7 +602,7 @@ class ApiGetTextInfo(SQL_Mixin, APIView):
             thanks_users = []
             req_str = """
                 SELECT
-                    uuid, photo, photo_url
+                    uuid, photo
                 FROM
                     users_profile
                 WHERE
@@ -625,7 +625,7 @@ class ApiGetTextInfo(SQL_Mixin, APIView):
                 recs = self.dictfetchall(cursor)
                 for rec in recs:
                     thanks_users.append(dict(
-                        photo = Profile.choose_photo_of(request, rec['photo'], rec['photo_url']),
+                        photo = Profile.choose_photo_of(request, rec['photo']),
                         user_uuid=str(rec['uuid'])
                     ))
             data.update(
@@ -2174,7 +2174,6 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, APIView)
                     users_profile.longitude,
                     users_profile.photo,
                     users_profile.uuid,
-                    users_profile.photo_url,
 
                     users_profile.dob,
                     users_profile.dob_no_day,
@@ -2224,7 +2223,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, APIView)
                     first_name=rec['first_name'],
                     last_name=rec['last_name'],
                     middle_name=rec['middle_name'],
-                    photo=Profile.choose_photo_of(request, rec['photo'], rec['photo_url']),
+                    photo=Profile.choose_photo_of(request, rec['photo']),
                     is_active=rec['is_active'],
                     latitude=rec['latitude'],
                     longitude=rec['longitude'],

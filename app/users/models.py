@@ -9,7 +9,6 @@ from django.db.models import Sum, F
 from django.db.models.query_utils import Q
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
-from django.templatetags.static import static
 
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
@@ -22,7 +21,7 @@ get_model = apps.get_model
 from app.models import UnclearDateModelField, GenderMixin
 
 from app.models import BaseModelInsertUpdateTimestamp, BaseModelInsertTimestamp, PhotoModel, GeoPointAddressModel
-from app.utils import ServiceException, ThumbnailSimpleMixin
+from app.utils import ServiceException
 
 class TgGroup(BaseModelInsertTimestamp):
     """
@@ -346,7 +345,6 @@ class Oauth(BaseModelInsertUpdateTimestamp):
                             elif provider == Oauth.PROVIDER_VKONTAKTE:
                                 if re.search(provider_details['no_photo_re'], result[key]):
                                     result[key] = ''
-            result['photo_url'] = result['photo']
         except ServiceException as excpt:
             result['message'] = excpt.args[0]
             if result['code'] == 200:
@@ -383,7 +381,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
     def __str__(self):
         return self.user.first_name or str(self.pk)
 
-    def data_dict(self, request=None, short=False, google_photo_size=None, fmt='d3js'):
+    def data_dict(self, request=None, short=False, fmt='d3js'):
         user = self.user
         result = dict()
         if short:
@@ -391,13 +389,13 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 result.update(
                     id=user.pk,
                     first_name=user.first_name,
-                    photo=self.choose_thumb(request, width=64, height=64) if request and self.photo else '',
+                    photo=self.choose_thumb(request, width=64, height=64, put_default_avatar=False) if request else '',
                 )
             else:
                 result.update(
                     uuid=str(self.uuid),
                     first_name=user.first_name,
-                    photo=self.choose_photo(request, google_photo_size) if request else '',
+                    photo=self.choose_photo(request) if request else '',
                 )
         else:
             result.update(
@@ -405,7 +403,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 last_name=user.last_name,
                 first_name=user.first_name,
                 middle_name=self.middle_name,
-                photo=self.choose_photo(request, google_photo_size) if request else '',
+                photo=self.choose_photo(request) if request else '',
                 is_notified=self.is_notified,
                 sum_thanks_count=self.sum_thanks_count,
                 fame=self.fame,
@@ -424,10 +422,10 @@ class Profile(PhotoModel, GeoPointAddressModel):
             )
         return result
 
-    def owner_dict(self, request=None, google_photo_size=None):
+    def owner_dict(self, request=None):
         if self.owner:
             owner_profile = self.owner.profile
-            owner = owner_profile.data_dict(request, google_photo_size)
+            owner = owner_profile.data_dict(request)
             owner.update(tg_data=owner_profile.tg_data())
         else:
             owner = None
@@ -559,7 +557,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
             profile_from.photo = ''
             do_save = True
         for f in (
-            'photo_original_filename', 'photo_url',
+            'photo_original_filename',
             'did_bot_start',
             'address', 'dob', 'dod', 'gender', 'comment', 'is_dead',
            ):
@@ -644,46 +642,6 @@ class Profile(PhotoModel, GeoPointAddressModel):
         result = re.sub(r'\s{2,}', ' ', result)
         return result or 'Без имени'
 
-    @classmethod
-    def choose_photo_of(cls, request, photo, photo_url, google_photo_size=None):
-        result = ''
-        if photo:
-            result = request.build_absolute_uri(settings.MEDIA_URL + photo)
-        elif photo_url:
-            result = PhotoModel.tweek_photo_url(photo_url)
-        return result
-
-    def choose_photo(self, request, google_photo_size=None):
-        """
-        Выбрать фото пользователя
-
-        Если есть выданное пользователем фото (photo), то оно,
-        иначе photo_url
-        """
-        return Profile.choose_photo_of(request, self.photo and self.photo.name or '', self.photo_url, google_photo_size)
-
-    @classmethod
-    def choose_thumb_of(cls, request, photo, photo_url, width=64, height=64):
-        """
-        Выбрать thumbnail.
-
-        photo: относительный путь к фото
-        Если фото только во внешней ссылке (photo_url), вернуть photo_url
-        """
-        if photo:
-            result = request.build_absolute_uri(ThumbnailSimpleMixin.get_thumbnail_str(photo, width, height))
-        #elif photo_url:
-            #result = cls.choose_photo_of(request, '', photo_url, google_photo_size=max(width, height))
-        else:
-            fname = 'images/default_avatar_%sx%s.png' % (width, height)
-            if not os.path.exists(os.path.join(settings.STATIC_ROOT, fname)):
-                fname = 'images/default_avatar.png'
-            result = request.build_absolute_uri(static(fname))
-        return result
-
-    def choose_thumb(self, request, width=64, height=64):
-        return Profile.choose_thumb_of(request, self.photo and self.photo.name or '',  self.photo_url, width, height)
-
     def parents_dict(self, request):
         """
         Вернуть папу, маму и детей из CurrentState
@@ -711,7 +669,6 @@ class CreateUserMixin(object):
         first_name='',
         middle_name='',
         email='',
-        photo_url='',
         owner=None,
         dob=None,
         is_dead=False,
@@ -721,7 +678,7 @@ class CreateUserMixin(object):
         latitude=None,
         longitude=None,
         comment=None,
-            ):
+    ):
         user = None
         random.seed()
         chars = string.ascii_lowercase + string.digits
@@ -753,7 +710,6 @@ class CreateUserMixin(object):
             Profile.objects.create(
                 user=user,
                 middle_name='',
-                photo_url=photo_url,
                 owner=owner,
                 dob=dob,
                 is_dead=is_dead,
@@ -796,15 +752,8 @@ class CreateUserMixin(object):
         if changed:
             user.save(update_fields=user_fields + ('is_active',))
 
-        profile = user.profile
-        profile_fields = ('photo_url',)
-        changed = False
-        for f in profile_fields:
-            if oauth_result[f] and getattr(profile, f) != oauth_result[f]:
-                setattr(profile, f, oauth_result[f])
-                changed = True
-        if changed:
-            profile.save(update_fields=profile_fields)
+        if oauth_result['photo'] and oauth.photo != oauth_result['photo']:
+            user.profile.put_photo_from_url(oauth_result['photo'])
 
 class IncognitoUser(BaseModelInsertUpdateTimestamp):
 

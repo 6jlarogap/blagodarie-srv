@@ -20,7 +20,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import status
 from rest_framework.exceptions import NotAuthenticated
 
-from app.utils import ServiceException, SkipException, FrontendMixin, ThumbnailSimpleMixin
+from app.utils import ServiceException, SkipException, FrontendMixin
 from app.models import UnclearDate, PhotoModel, GenderMixin
 
 from django.contrib.auth.models import User
@@ -429,6 +429,7 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, APIView)
         return rd
 
     def process_input(self, rd):
+        photo_url = rd.get('photo', '')
         try:
             oauth = Oauth.objects.select_related('user', 'user__profile').get(
                 provider = Oauth.PROVIDER_TELEGRAM,
@@ -471,30 +472,17 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, APIView)
             if changed:
                 user.save()
 
-            profile_tg_field_map = dict(
-                photo_url='photo_url',
-            )
-            changed = False
-            for f in profile_tg_field_map:
-                if getattr(profile, f) != rd.get(profile_tg_field_map[f], ''):
-                    changed = True
-                    break
-            if changed:
-                for f in profile_tg_field_map:
-                    setattr(profile, f, rd.get(profile_tg_field_map[f], ''))
-                profile.save()
             if was_not_active and profile.is_notified:
                 fio = profile.user.first_name or 'Без имени'
                 message = "Cвязанный профиль '%s' восстановлен" % fio
                 self.send_to_telegram(message, user=user)
+
         except Oauth.DoesNotExist:
             last_name = rd.get('last_name', '')
             first_name = rd.get('first_name', '')
-            photo_url = rd.get('photo_url', '')
             user = self.create_user(
                 last_name=last_name,
                 first_name=first_name,
-                photo_url=photo_url,
             )
             oauth = Oauth.objects.create(
                 provider = Oauth.PROVIDER_TELEGRAM,
@@ -506,6 +494,9 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, APIView)
                 photo=photo_url,
             )
         token, created_token = Token.objects.get_or_create(user=user)
+
+        if photo_url and oauth.photo != photo_url:
+            user.profile.put_photo_from_url(photo_url)
         return dict(
             user_uuid=str(user.profile.uuid),
             auth_token=token.key,
@@ -807,7 +798,7 @@ class ApiInviteGetToken(APIView):
 
 api_invite_get_token = ApiInviteGetToken.as_view()
 
-class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, TelegramApiMixin, ApiAddOperationMixin, APIView):
+class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, TelegramApiMixin, ApiAddOperationMixin, APIView):
     """
     Получить своих родственников (без связей), добавить/править/обезличить родственника. Правка своего профиля.
 
@@ -1118,13 +1109,10 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                             item = profile.data_dict(request)
                             item.update(user_id=user.pk)
                             if thumb_size:
-                                if profile.photo:
-                                    thumb_url = request.build_absolute_uri(
-                                        self.get_thumbnail_path(profile.photo, thumb_size, thumb_size)
-                                    )
-                                else:
-                                    thumb_url = profile.photo_url or ''
-                                item.update(thumb_url=thumb_url)
+                                item.update(thumb_url=profile.choose_thumb(
+                                    request, width=thumb_size, height=thumb_size,
+                                    put_default_avatar=False,
+                                ))
                             data.append(item)
                     except ProgrammingError:
                         raise ServiceException(
@@ -1174,7 +1162,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
         if request.data.get('photo'):
             photo_content = request.data.get('photo_content', 'base64')
             photo = PhotoModel.get_photo(
-                request,
+                request=request,
                 photo_content=photo_content,
             )
             profile.delete_from_media()
@@ -1533,7 +1521,7 @@ class ApiProfile(ThumbnailSimpleMixin, CreateUserMixin, UuidMixin, GenderMixin, 
                 user.delete()
                 data = {}
             else:
-                for f in ('photo', 'photo_original_filename', 'photo_url', 'middle_name',):
+                for f in ('photo', 'photo_original_filename', 'middle_name',):
                         setattr(profile, f, '')
                 for f in ('latitude', 'longitude', 'gender', 'ability', 'comment', 'address', 'dob', 'dod'):
                     setattr(profile, f, None)
@@ -1936,7 +1924,12 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 trust_count=profile.trust_count,
                 url_deeplink=url_deeplink,
                 url_profile=url_profile,
-                url_photo_popup=profile.choose_thumb(request, width=self.THUMB_SIZE_POPUP, height=self.THUMB_SIZE_POPUP),
+                url_photo_popup=profile.choose_thumb(
+                    request,
+                    width=self.THUMB_SIZE_POPUP,
+                    height=self.THUMB_SIZE_POPUP,
+                    put_default_avatar=True,
+                ),
                 thumb_size_popup = self.THUMB_SIZE_POPUP,
             )
             popup = (
@@ -1960,13 +1953,21 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
             if found_coordinates and profile == found_profile:
                 point.update(
                     is_of_found_user=True,
-                    icon=profile.choose_thumb(request, width=self.THUMB_SIZE_ICON_FOUND, height=self.THUMB_SIZE_ICON_FOUND),
+                    icon=profile.choose_thumb(
+                        request,
+                        width=self.THUMB_SIZE_ICON_FOUND, height=self.THUMB_SIZE_ICON_FOUND,
+                        put_default_avatar=True,
+                    ),
                     size_icon=self.THUMB_SIZE_ICON_FOUND,
                 )
             else:
                 point.update(
                     is_of_found_user=False,
-                    icon=profile.choose_thumb(request, width=self.THUMB_SIZE_ICON, height=self.THUMB_SIZE_ICON),
+                    icon=profile.choose_thumb(
+                        request,
+                        width=self.THUMB_SIZE_ICON, height=self.THUMB_SIZE_ICON,
+                        put_default_avatar=True,
+                    ),
                     size_icon=self.THUMB_SIZE_ICON,
                 )
             points.append(point)

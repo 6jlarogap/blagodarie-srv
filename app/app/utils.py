@@ -18,7 +18,7 @@ class ServiceException(Exception):
             raise ServiceException('Condition 2 failed')
         # all good, going further
     except ServiceException as excpt:
-        print excpt.args[0]
+        print(excpt.args[0])
     else:
         # all good
     """
@@ -140,30 +140,3 @@ class FrontendMixin(object):
         return re.sub(r'\:\d+$', '',
             re.sub(r'^https?://', '', self.get_frontend_url(request).rstrip('/'))
         )
-
-class ThumbnailSimpleMixin(object):
-
-    THUMB_WIDTH = 64
-    THUMB_HEIGHT = 64
-    THUMB_METHOD = 'crop'
-
-    @classmethod
-    def get_thumbnail_str(
-        cls, file_field,
-        width=THUMB_WIDTH, height=THUMB_HEIGHT, method=THUMB_METHOD
-    ):
-        return '%s%s/%sx%s~%s~12.jpg'  % (settings.THUMBNAILS_STORAGE_BASE_PATH,
-                                                file_field, width, height, method)
-
-
-    def get_thumbnail_path(
-        self, file_field,
-        width=THUMB_WIDTH, height=THUMB_HEIGHT, method=THUMB_METHOD,
-    ):
-        result = ''
-        if file_field:
-            try:
-                result = ThumbnailSimpleMixin.get_thumbnail_str(file_field, width, height, method)
-            except:
-                pass
-        return result

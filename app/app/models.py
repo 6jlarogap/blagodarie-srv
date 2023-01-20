@@ -1,12 +1,13 @@
 import time, datetime, re, os, shutil
 import pytils, base64
-from PIL import Image
+import urllib.request, urllib.error
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.apps import apps
 get_model = apps.get_model
 from django.core.files.base import ContentFile
+from django.templatetags.static import static
 
 from app.utils import ServiceException
 
@@ -577,6 +578,10 @@ class PhotoModel(FilesMixin, models.Model):
     #
     DEFAULT_FNAME = 'photo.jpg'
 
+    THUMB_WIDTH = 64
+    THUMB_HEIGHT = 64
+    THUMB_METHOD = 'crop'
+
     class Meta:
         abstract = True
 
@@ -586,18 +591,27 @@ class PhotoModel(FilesMixin, models.Model):
     @classmethod
     def get_photo(
         cls,
-        request,
-        photofield='photo',
+        request=None,
+        content=None,
         max_photo_size=None,
         quality=None,
         quality_min_size=None,
         photo_content='binary'
     ):
-        content = request.data.get(photofield) or None
+        """
+        Получить содержимое, которое положим потом в поле photo
+
+        На входе или request.data.get('photo') или content
+        """
+        if not content:
+            if request:
+                content = request.data.get('photo') or None
         if content:
             name = getattr(content, 'name', cls.DEFAULT_FNAME)
             is_base64 = photo_content == 'base64'
-            if isinstance(content, str):
+            if isinstance(content, bytes):
+                pass
+            elif isinstance(content, str):
                 if is_base64:
                     content = base64.b64decode(content)
                 else:
@@ -653,6 +667,66 @@ class PhotoModel(FilesMixin, models.Model):
                 result = m.group(1) + m.group(2) + m.group(3) + m.group(4) + \
                             '/s' + str(google_photo_size) + '-c/' + m.group(6)
         return result
+
+    def put_photo_from_url(
+        self,
+        photo_url,
+        max_photo_size=None,
+        quality=None,
+        quality_min_size=None,
+    ):
+        """
+        Положить фото в поле photo, считываемое из photo_url
+        """
+        result = False
+        if photo_url:
+            photo_url = PhotoModel.tweek_photo_url(photo_url)
+            try:
+                req = urllib.request.Request(photo_url)
+                r = urllib.request.urlopen(req, timeout=20)
+                if r.getcode() == 200:
+                    content = PhotoModel.get_photo(
+                        content=r.read(),
+                        max_photo_size=max_photo_size,
+                        quality=quality,
+                        quality_min_size=quality_min_size,
+                    )
+                    if content:
+                        self.photo.save(PhotoModel.DEFAULT_FNAME, content)
+                        result = True
+            except urllib.error.URLError:
+                pass
+        return result
+
+    @classmethod
+    def choose_photo_of(cls, request, photo):
+        result = ''
+        if photo:
+            result = request.build_absolute_uri(settings.MEDIA_URL + photo)
+        return result
+
+    def choose_photo(self, request):
+        """
+        Выбрать фото пользователя
+        """
+        return PhotoModel.choose_photo_of(request, self.photo and self.photo.name or '')
+
+    def choose_thumb(self, request,
+        width=THUMB_WIDTH, height=THUMB_HEIGHT, method=THUMB_METHOD,
+        put_default_avatar=False,
+    ):
+        result = ''
+        if self.photo:
+            path = '%s%s/%sx%s~%s~12.jpg'  % (settings.THUMBNAILS_STORAGE_BASE_PATH,
+                                                    self.photo.name, width, height, method)
+            result = request.build_absolute_uri(path)
+        elif put_default_avatar:
+            fname = 'images/default_avatar_%sx%s.png' % (width, height)
+            if not os.path.exists(os.path.join(settings.STATIC_ROOT, fname)):
+                fname = 'images/default_avatar.png'
+            result = request.build_absolute_uri(static(fname))
+        return result
+
 
 class GenderMixin(object):
     """
