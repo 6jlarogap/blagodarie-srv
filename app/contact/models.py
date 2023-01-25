@@ -180,10 +180,16 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
 
         result = dict()
         if fmt == '3d-force-graph':
+            result.update(
+                is_trust=self.is_trust,
+                is_child=self.is_child,
+            )
             if reverse:
                 result.update(
                     target=self.user_from.pk,
                     source=self.user_to.pk,
+                    is_trust=self.is_trust,
+                    is_child=self.is_child,
                 )
             else:
                 result.update(

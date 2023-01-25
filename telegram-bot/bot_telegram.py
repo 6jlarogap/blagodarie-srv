@@ -3514,7 +3514,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             status, response_tg_username = await Misc.api_request(
                 path='/api/profile',
                 method='get',
-                params=dict(tg_username=username_to_search.lstrip('@')),
+                params=dict(tg_username=username_to_search),
             )
             logging.debug('get_user_profile by username, status: %s' % status)
             logging.debug('get_user_profile by username, response: %s' % response_tg_username)
