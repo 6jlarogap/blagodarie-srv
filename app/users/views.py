@@ -1015,18 +1015,25 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 data = []
                 usernames = request.GET['tg_username'].split(',')
                 user_pks = set()
+                q = Q()
+                for username in usernames:
+                    q |= Q(username__iexact=username)
+                q &= Q(provider=Oauth.PROVIDER_TELEGRAM)
                 for oauth in Oauth.objects.select_related(
                             'user', 'user__profile'
-                        ).filter(
-                            provider=Oauth.PROVIDER_TELEGRAM,
-                            username__in=usernames,
-                   ):
+                    ).filter(q):
                     user = oauth.user
                     if user.pk not in user_pks:
                         # Учтём возможные два тг аккаунта у одного юзера
                         profile = user.profile
                         item = profile.data_dict(request)
-                        item.update(tg_data=dict(tg_uid=oauth.uid, tg_username=oauth.username,))
+                        item.update(profile.parents_dict(request))
+                        item.update(profile.data_WAK())
+                        item.update(
+                            user_id=user.pk,
+                            owner_id=profile.owner and profile.owner.pk or None,
+                        )
+                        item.update(tg_data=profile.tg_data())
                         data.append(item)
                         user_pks.add(user.pk)
             elif request.GET.get('query_ability') or \

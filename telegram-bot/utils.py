@@ -163,6 +163,7 @@ class Misc(object):
     """
 
     MSG_YOU_GOT_MESSAGE = 'Вам сообщение от <b>%s</b>'
+    MSG_USER_NOT_FOUND = 'Пользователь не найден'
 
     PROMPT_SEARCH_TEXT_TOO_SHORT = 'Минимальное число символов в тексте для поиска: %s\n' % settings.MIN_LEN_SEARCHED_TEXT
     PROMPT_SEARCH_PHRASE_TOO_SHORT = 'Недостаточно для поиска: короткие слова или текст вообще без слов и т.п.'
@@ -582,10 +583,15 @@ class Misc(object):
                     'Дети: %(children)s\n'
                 ) % dict(papa=papa, mama=mama, children=children)
                 reply += parents
-            keys += ["@%s" % tgd['tg_username'] for tgd in response.get('tg_data', []) if tgd['tg_username']]
-            keys += [key['value'] for key in response.get('keys', [])]
 
+        keys += ['@%s' % tgd['tg_username'] for tgd in response.get('tg_data', []) if tgd['tg_username']]
+        keys += [key['value'] for key in response.get('keys', [])]
         keys.append(cls.get_deeplink(response, bot_data))
+        keys += [
+            't.me/%s?start=%s' % (bot_data['username'], tgd['tg_username']) \
+                for tgd in response.get('tg_data', []) if tgd['tg_username']
+        ]
+
         keys_text = '\n' + '\n'.join(
             key for key in keys
         ) if keys else 'не задано'
