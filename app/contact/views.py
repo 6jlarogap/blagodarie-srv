@@ -2697,40 +2697,41 @@ class ApiProfileGenesisAll(APIView):
     Возможны форматы выдачи (?fmt= get параметр):
         - d3js
         - 3d-force-graph
+    Возможные выборки (get параметры):
+        - dover :   показать доверия
+        - rod   :   показать родственные связи
+
     """
     def get(self, request):
         fmt = request.GET.get('fmt', 'd3js')
         withalone = request.GET.get('withalone')
         dover = request.GET.get('dover')
-        q_connections = Q(is_child=True)
-
-        users_pks = set()
+        rod = request.GET.get('rod')
         connections = []
+        q_connections = Q(pk=0)
+        if rod:
+            q_connections = Q(is_child=True)
+        if dover:
+            q_connections |= Q(is_trust=True, user_to__isnull=False, is_reverse=False)
         if withalone:
             users = [
                 profile.data_dict(request=request, short=True, fmt=fmt) \
                 for profile in Profile.objects.select_related('user').filter(user__is_superuser=False).distinct()
             ]
+            if rod or dover:
+                connections = [
+                    cs.data_dict(show_parent=fmt=='d3js', show_trust=False, reverse=False, show_id_fio=False, fmt=fmt) \
+                    for cs in CurrentState.objects.filter(q_connections).select_related(
+                            'user_from__profile', 'user_to__profile',
+                        ).distinct()
+                ]
         else:
             users = []
-        if withalone and not dover:
-            # withalone=on  dover=
-            connections = [
-                cs.data_dict(show_parent=fmt=='d3js', show_trust=False, reverse=False, show_id_fio=False, fmt=fmt) \
+            if rod or dover:
+                users_pks = set()
                 for cs in CurrentState.objects.filter(q_connections).select_related(
-                        'user_from__profile', 'user_to__profile',
-                    ).distinct()
-            ]
-        else:
-            # withalone=    dover=
-            # withalone=    dover=on
-            # withalone=on  dover=on
-            if dover:
-                q_connections |= Q(is_trust=True, user_to__isnull=False, is_reverse=False)
-            for cs in CurrentState.objects.filter(q_connections).select_related(
-                        'user_from__profile', 'user_to__profile',).distinct():
-                connections.append(cs.data_dict(show_parent=fmt=='d3js', show_trust=False, reverse=False, show_id_fio=False, fmt=fmt))
-                if not withalone:
+                            'user_from__profile', 'user_to__profile',).distinct():
+                    connections.append(cs.data_dict(show_parent=fmt=='d3js', show_trust=False, reverse=False, show_id_fio=False, fmt=fmt))
                     if cs.user_from.pk not in users_pks:
                         users_pks.add(cs.user_from.pk)
                         users.append(cs.user_from.profile.data_dict(request=request, short=True, fmt=fmt))
