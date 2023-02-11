@@ -167,7 +167,7 @@ class Misc(object):
 
     PROMPT_SEARCH_TEXT_TOO_SHORT = 'Минимальное число символов в тексте для поиска: %s\n' % settings.MIN_LEN_SEARCHED_TEXT
     PROMPT_SEARCH_PHRASE_TOO_SHORT = 'Недостаточно для поиска: короткие слова или текст вообще без слов и т.п.'
-    PROMPT_NOTHING_FOUND = 'Ничего не найдено - попробуйте другие слова'
+    PROMPT_NOTHING_FOUND = 'Никто не найден - попробуйте другие слова'
 
     MSG_ERROR_API = 'Ошибка доступа к данным'
     MSG_ERROR_TEXT_ONLY = 'Принимается только текст'
