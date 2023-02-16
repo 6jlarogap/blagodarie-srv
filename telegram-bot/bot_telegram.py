@@ -2859,7 +2859,7 @@ async def process_callback_thank_wo_comment(callback_query: types.CallbackQuery,
         await Misc.state_finish(state)
 
 
-async def geo(message, state, state_to_set, uuid=None):
+async def geo(message, state_to_set, uuid=None):
     # Здесь вынужден отказаться от параметра , one_time_keyboard=True
     # Не убирает телеграм "нижнюю" клавиатуру в мобильных клиентах!
     # Убираю "вручную", потом: собщением с reply_markup=types.reply_keyboard.ReplyKeyboardRemove()
@@ -2892,7 +2892,7 @@ async def geo(message, state, state_to_set, uuid=None):
     state=None,
 )
 async def geo_command_handler(message: types.Message, state: FSMContext):
-    await geo(message, state, FSMgeo.geo)
+    await geo(message, state_to_set=FSMgeo.geo)
 
 
 @dp.callback_query_handler(
@@ -2923,7 +2923,7 @@ async def process_callback_location(callback_query: types.CallbackQuery, state: 
                 return
         except IndexError:
             uuid = None
-        await geo(callback_query.message, state, FSMgeo.geo, uuid)
+        await geo(callback_query.message, state_to_set=FSMgeo.geo, uuid=uuid)
 
 
 @dp.message_handler(
@@ -2964,7 +2964,7 @@ async def trip_geo_command_handler(message: types.Message, state: FSMContext):
                 )
             else:
                 await message.reply('Собираю данные для поездки\n\nУ вас НЕ задано местоположение!')
-                await geo(message, state, FSMtrip.geo, uuid=response_sender['uuid'])
+                await geo(message, state_to_set=FSMtrip.geo, uuid=response_sender['uuid'])
     else:
         await message.reply('В системе пока не предусмотрены туры')
 
@@ -2992,7 +2992,7 @@ async def process_callback_trip_new_location(callback_query: types.CallbackQuery
             uuid = code[1]
             if response_sender.get('uuid') == uuid:
                 if int(code[0]) == KeyboardType.TRIP_NEW_LOCATION:
-                    await geo(callback_query.message, state, FSMtrip.geo, uuid)
+                    await geo(callback_query.message, state_to_set=FSMtrip.geo, uuid=uuid)
                 else:
                     # KeyboardType.TRIP_OLD_LOCATION
                     if response_sender['latitude'] is not None and response_sender['longitude'] is not None:
@@ -3338,16 +3338,18 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
     Обработка остальных сообщений в бот
     """
 
-    if not message.is_forward() and message.content_type != ContentType.TEXT:
-        await message.reply(
-            'Сюда можно слать текст для поиска, включая @username, или пересылать сообщения любого типа'
-        )
+    tg_user_sender = message.from_user
+    reply = ''
+    if tg_user_sender.is_bot:
+        reply = 'Сообщения от ботов пока не обрабатываются'
+    elif not message.is_forward() and message.content_type != ContentType.TEXT:
+        reply = 'Сюда можно слать текст для поиска, включая @username, или пересылать сообщения любого типа'
+    if reply:
+        await message.reply(reply)
         return
 
     reply = ''
     reply_markup = None
-
-    tg_user_sender = message.from_user
 
     # Кто будет благодарить... или чей профиль показывать, когда некого благодарить...
     #
@@ -3367,28 +3369,33 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
     message_text = getattr(message, 'text', '') and message.text.strip() or ''
     bot_data = await bot.get_me()
-    if tg_user_sender.is_bot:
-        reply = 'Сообщения от ботов пока не обрабатываются'
-    else:
-        if message.is_forward():
-            tg_user_forwarded = message.forward_from
-            if not tg_user_forwarded:
-                reply = (
-                    'Автор исходного сообщения '
-                    '<a href="https://telegram.org/blog/unsend-privacy-emoji#anonymous-forwarding">запретил</a> '
-                    'идентифицировать себя в пересылаемых сообщениях\n'
-                )
-            elif tg_user_forwarded.is_bot:
-                reply = 'Сообщения, пересланные от ботов, пока не обрабатываются'
-            elif tg_user_forwarded.id == tg_user_sender.id:
-                state_ = 'forwarded_from_me'
-            else:
-                state_ = 'forwarded_from_other'
+    if message.is_forward():
+        tg_user_forwarded = message.forward_from
+        if not tg_user_forwarded:
+            reply = (
+                'Автор исходного сообщения '
+                '<a href="https://telegram.org/blog/unsend-privacy-emoji#anonymous-forwarding">запретил</a> '
+                'идентифицировать себя в пересылаемых сообщениях\n'
+            )
+        elif tg_user_forwarded.is_bot:
+            reply = 'Сообщения, пересланные от ботов, пока не обрабатываются'
+        elif tg_user_forwarded.id == tg_user_sender.id:
+            state_ = 'forwarded_from_me'
         else:
-            if message_text == '/start':
-                state_ = 'start'
-            elif message_text in ('/ya', '/я'):
-                state_ = 'ya'
+            state_ = 'forwarded_from_other'
+    else:
+        if message_text == '/start':
+            state_ = 'start'
+        elif message_text in ('/ya', '/я'):
+            state_ = 'ya'
+        else:
+            m = re.search(
+                r'^\/start\s+setplace$',
+                message_text,
+                flags=re.I,
+            )
+            if m:
+                state_ = 'start_setplace'
             else:
                 m = re.search(
                     r'^\/start\s+([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
@@ -3547,7 +3554,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 a_found += response
 
 
-    if state_ and state_ not in ('not_found', 'invalid_message_text', ) and user_from_id and a_response_to:
+    if state_ and state_ not in ('not_found', 'invalid_message_text', 'start_setplace') and user_from_id and a_response_to:
         if state_ == 'start':
             await message.reply(await Misc.rules_text(), disable_web_page_preview=True)
             if a_response_to and not a_response_to[0].get('photo'):
@@ -3567,10 +3574,13 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
     elif reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
-    await Misc.show_deeplinks(a_found, message, bot_data)
+    if state_ != 'start_setplace':
+        await Misc.show_deeplinks(a_found, message, bot_data)
 
     if user_from_id and response_from.get('created') and state_ != 'start':
         await Misc.update_user_photo(bot, tg_user_sender, response_from)
+    if user_from_id and state_ == 'start_setplace':
+        await geo(message, state_to_set=FSMgeo.geo)
     if state_ == 'forwarded_from_other' and a_response_to and a_response_to[0].get('created'):
         await Misc.update_user_photo(bot, tg_user_forwarded, response_to)
 
