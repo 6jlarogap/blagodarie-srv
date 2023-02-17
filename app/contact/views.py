@@ -806,7 +806,7 @@ api_get_user_operations = ApiGetUserOperationsView.as_view()
 class ApiTgGroupConnectionsMixin(object):
 
     def get_tg_group_id(self, request):
-        tg_group_chat_id = request.GET.get('tg_group_chat_id', '').strip() or None
+        tg_group_chat_id = request.GET.get('tg_group_chat_id')
         if tg_group_chat_id is not None:
             if tg_group_chat_id:
                 try:
@@ -872,11 +872,18 @@ class ApiGetStats(SQL_Mixin, ApiTgGroupConnectionsMixin, APIView):
             #
             #   При наличии непустого параметра tg_group_chat_id ищет
             #   только тех, кто в этой телеграм группе
+            #
+            #   Учитывается также get параметр fmt, особенно при tg_group_chat_id,
+            #   если fmt == '3d-force-graph', то формат вывода связей и юзеров
+            #   короткий
 
+            fmt = request.GET.get('fmt', 'd3js')
+            short = fmt == '3d-force-graph'
             q_users = Q(is_superuser=False)
 
             tg_group_id = self.get_tg_group_id(request)
             if tg_group_id is not None:
+                tg_group_id = tg_group_id or 0;
                 q_users &= Q(
                     oauth__provider=Oauth.PROVIDER_TELEGRAM,
                     oauth__groups__pk=tg_group_id,
@@ -895,29 +902,38 @@ class ApiGetStats(SQL_Mixin, ApiTgGroupConnectionsMixin, APIView):
             if count:
                 return dict(count=users_selected.count())
 
-            users_selected = users_selected.select_related('profile', 'profile__ability')
-            users = []
-            user_pks = []
             try:
-                from_ = abs(int(request.GET.get("from")))
+                from_ = int(request.GET.get("from"))
+                if from_ <= 0:
+                    from_ = 0
             except (ValueError, TypeError, ):
                 from_ = 0
             try:
-                number_ = abs(int(request.GET.get("number")))
+                number_ = int(request.GET.get("number"))
             except (ValueError, TypeError, ):
                 number_ = settings.PAGINATE_USERS_COUNT
 
-            users_selected = users_selected.order_by('-date_joined')[from_:from_ + number_]
+            if fmt == '3d-force-graph':
+                users_selected = users_selected.select_related('profile')
+            else:
+                users_selected = users_selected.select_related('profile', 'profile__ability').order_by('-date_joined')
+
+            users = []
+            user_pks = []
+            if number_ > 0:
+                users_selected = users_selected[from_:from_ + number_]
+            else:
+                users_selected = users_selected[from_:]
             for user in users_selected:
                 profile = user.profile
-                users.append(profile.data_dict(request))
+                users.append(profile.data_dict(request, short=short, fmt=fmt))
                 user_pks.append(user.pk)
 
             if request.user and request.user.is_authenticated:
                 if request.user.pk not in user_pks:
                     user= request.user
                     profile = user.profile
-                    users.append(profile.data_dict(request))
+                    users.append(profile.data_dict(request, short=short, fmt=fmt))
                     user_pks.append(user.pk)
 
             connections = []
@@ -930,9 +946,13 @@ class ApiGetStats(SQL_Mixin, ApiTgGroupConnectionsMixin, APIView):
             for cs in CurrentState.objects.filter(q_connections).select_related(
                     'user_from__profile', 'user_to__profile',
                 ).distinct():
-                connections.append(cs.data_dict(show_trust=True))
+                connections.append(cs.data_dict(show_trust=True, fmt=fmt, show_id_fio=False))
 
-            return dict(users=users, connections=connections)
+            if fmt == '3d-force-graph':
+                result = dict(nodes=users, links=connections)
+            else:
+                result = dict(users=users, connections=connections)
+            return result
 
         if kwargs.get('only') == 'users':
             # Вернуть число пользователей и симтомов
