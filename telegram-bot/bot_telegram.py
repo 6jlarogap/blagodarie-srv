@@ -2602,6 +2602,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         <message_to_forward_id>             # 3
         <KeyboardType.SEP>
     """
+    is_group = callback_query.message.chat.type in (types.ChatType.GROUP, types.ChatType.SUPERGROUP)
     code = callback_query.data.split(KeyboardType.SEP)
     tg_user_sender = callback_query.from_user
     status_sender, profile_sender = await Misc.post_tg_user(tg_user_sender)
@@ -2618,13 +2619,39 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         if not uuid:
             return
         status_to, profile_to = await Misc.get_user_by_uuid(uuid)
-        if status_to != 200 or not profile_to or profile_sender['uuid'] == profile_to['uuid']:
+        if status_to != 200 or not profile_to:
             return
+        if profile_sender['uuid'] == profile_to['uuid']:
+            if is_group:
+                if operation_type_id in (OperationType.TRUST_AND_THANK, OperationType.TRUST):
+                    try:
+                        await bot.answer_callback_query(
+                                callback_query.id,
+                                text='Благодарности и доверия самому себе не предусмотрены',
+                                show_alert=True,
+                            )
+                    except (ChatNotFound, CantInitiateConversation):
+                        pass
+                return
+            else:
+                return
         try:
             message_to_forward_id = int(code[3])
         except (ValueError, IndexError,):
             message_to_forward_id = None
     except (ValueError, IndexError,):
+        return
+
+    data_ = dict(
+        profile_from = profile_sender,
+        profile_to = profile_to,
+        operation_type_id = operation_type_id,
+        tg_user_sender_id = tg_user_sender.id,
+        message_to_forward_id = message_to_forward_id,
+        is_group= is_group,
+    )
+    if is_group:
+        await put_thank_etc(tg_user_sender, data=data_, state=None, comment_message=None)
         return
 
     if operation_type_id == OperationType.TRUST:
@@ -2640,12 +2667,9 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
     else:
         # OperationType.NULLIFY_TRUST
         msg_what = 'к тому что хотите <b>забыть</b>'
+
     async with state.proxy() as data:
-        data['profile_from'] = profile_sender
-        data['profile_to'] = profile_to
-        data['operation_type_id'] = operation_type_id
-        data['tg_user_sender_id'] = tg_user_sender.id
-        data['message_to_forward_id'] = message_to_forward_id
+        data.update(data_)
     callback_data = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
         keyboard_type=KeyboardType.TRUST_THANK_WO_COMMENT,
         uuid=uuid,
@@ -2667,11 +2691,12 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
     )
 
 
-async def put_thank_etc(tg_user_sender, data, state, comment_message=None):
+async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
     # Может прийти неколько картинок, .т.е сообщений, чтоб не было
     # много благодарностей и т.п. по нескольким сообщениям
     #
-    await Misc.state_finish(state)
+    if state:
+        await Misc.state_finish(state)
     try:
         if not data or not data.get('profile_from', {}).get('uuid'):
             raise ValueError
@@ -4059,8 +4084,16 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                     deeplink_with_name=Misc.get_deeplink_with_name(response_from, bot_data),
                     trust_count=response_from['trust_count'],
                 )
-                path = "/profile/?id=%(uuid)s" % dict(uuid=response_from['uuid'],)
-                url = settings.FRONTEND_HOST + path
+                inline_btn_thank = InlineKeyboardButton(
+                    '+Доверие',
+                    callback_data=OperationType.CALLBACK_DATA_TEMPLATE % dict(
+                    operation=OperationType.TRUST_AND_THANK,
+                    keyboard_type=KeyboardType.TRUST_THANK,
+                    sep=KeyboardType.SEP,
+                    user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
+                    message_to_forward_id='',
+               ))
+                buttons = [inline_btn_thank]
             if buttons:
                 reply_markup = InlineKeyboardMarkup()
                 reply_markup.row(*buttons)
