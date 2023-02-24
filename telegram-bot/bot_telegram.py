@@ -2796,6 +2796,18 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
         except (ChatNotFound, CantInitiateConversation):
             pass
 
+    # Это в группу
+    #
+    if operation_done and group_member:
+        try:
+            await bot.send_message(
+                group_member['group_chat_id'],
+                text=text,
+                disable_web_page_preview=True,
+            )
+        except (ChatNotFound, CantInitiateConversation):
+            pass
+
     # Это получателю благодарности и т.п.
     #
     comment_delivered = False
