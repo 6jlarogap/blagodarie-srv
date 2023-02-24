@@ -2751,7 +2751,7 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
             text = '%(full_name_from_link)s забыл(а) %(full_name_to_link)s'
             operation_done = True
         elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.TRUST):
-            text = '%(full_name_from_link)s %(trusts_or_thanks)s %(full_name_to_link)s'
+            text = '%(full_name_from_link)s %(trusts_or_thanks)s %(thanks_count_str)s %(full_name_to_link)s'
             operation_done = True
     elif status == 400 and response.get('code', '') == 'already':
         if post_op['operation_type_id'] == OperationType.TRUST:
@@ -2765,15 +2765,22 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
     if operation_done:
         profile_from = response['profile_from']
         profile_to = response['profile_to']
+        trusts_or_thanks = ''
+        thanks_count_str = ''
         if text:
-            trusts_or_thanks = 'доверяет'
-            if response.get('previousstate') and response['previousstate']['is_trust']:
-                # точно доверял раньше
-                trusts_or_thanks = 'благодарит'
+            if post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.TRUST):
+                trusts_or_thanks = 'доверяет'
+                if response.get('previousstate') and response['previousstate']['is_trust']:
+                    # точно доверял раньше
+                    trusts_or_thanks = 'благодарит'
+                thanks_count = response.get('currentstate') and response['currentstate'].get('thanks_count') or None
+                if thanks_count is not None:
+                    thanks_count_str = ' (%s)' % thanks_count
             text = text % dict(
                 full_name_from_link=Misc.get_deeplink_with_name(profile_from, bot_data, plus_trusts=True),
                 full_name_to_link=Misc.get_deeplink_with_name(profile_to, bot_data, plus_trusts=True),
                 trusts_or_thanks=trusts_or_thanks,
+                thanks_count_str=thanks_count_str,
             )
 
     if not text and not operation_done:
