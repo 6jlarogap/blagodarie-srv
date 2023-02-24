@@ -2602,12 +2602,19 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         <message_to_forward_id>             # 3
         <KeyboardType.SEP>
     """
-    is_group = callback_query.message.chat.type in (types.ChatType.GROUP, types.ChatType.SUPERGROUP)
-    code = callback_query.data.split(KeyboardType.SEP)
     tg_user_sender = callback_query.from_user
     status_sender, profile_sender = await Misc.post_tg_user(tg_user_sender)
     if status_sender != 200 or not profile_sender:
         return
+    group_member = callback_query.message.chat.type in (types.ChatType.GROUP, types.ChatType.SUPERGROUP) \
+        and dict(
+                group_chat_id=callback_query.message.chat.id,
+                group_title=callback_query.message.chat.title,
+                group_type=callback_query.message.chat.type,
+                user_tg_uid=tg_user_sender.id,
+            ) \
+        or None
+    code = callback_query.data.split(KeyboardType.SEP)
     try:
         operation_type_id=int(code[1])
         if not operation_type_id or operation_type_id not in (
@@ -2622,7 +2629,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         if status_to != 200 or not profile_to:
             return
         if profile_sender['uuid'] == profile_to['uuid']:
-            if is_group:
+            if group_member:
                 if operation_type_id in (OperationType.TRUST_AND_THANK, OperationType.TRUST):
                     try:
                         await bot.answer_callback_query(
@@ -2648,9 +2655,9 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         operation_type_id = operation_type_id,
         tg_user_sender_id = tg_user_sender.id,
         message_to_forward_id = message_to_forward_id,
-        is_group= is_group,
+        group_member= group_member,
     )
-    if is_group:
+    if group_member:
         await put_thank_etc(tg_user_sender, data=data_, state=None, comment_message=None)
         return
 
@@ -2709,6 +2716,10 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
         return
 
     profile_from = data['profile_from']
+    group_member = data.get('group_member')
+    if group_member:
+        await TgGroupMember.add(**group_member)
+
     profile_to = data['profile_to']
     post_op = dict(
         tg_token=settings.TOKEN,
