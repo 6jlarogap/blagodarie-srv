@@ -2057,7 +2057,7 @@ async def process_command_poll(message):
         if i == 0:
             m = re.search(r'^\/poll\s+(.*)$', line)
             if not m or not m.group(1):
-                err_mes = 'Не указана вопрос опроса'
+                err_mes = 'Не указан вопрос опроса'
                 break
             question = m.group(1)
         else:
@@ -2072,7 +2072,7 @@ async def process_command_poll(message):
             text='%s\n\n%s' % (
                 err_mes,
                 'Поручить боту создать неанонимный опрос:\n'
-                '/poll вопрос\n'
+                '/poll Вопрос\n'
                 'Ответ 1\n'
                 'Ответ 2\n'
                 ' и т.д. не больше 10 ответов'
