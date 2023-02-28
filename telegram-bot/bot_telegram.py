@@ -2042,6 +2042,52 @@ async def process_command_ability(message):
     await do_process_ability(message)
 
 
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('poll',),
+    state=None,
+)
+async def process_command_poll(message):
+    err_mes = ''
+    options = []
+    for i, l in enumerate(message.text.split('\n')):
+        line = l.strip()
+        if not line:
+            continue
+        if i == 0:
+            m = re.search(r'^\/poll\s+(.*)$', line)
+            if not m or not m.group(1):
+                err_mes = 'Не указана тема опроса'
+                break
+            question = m.group(1)
+        else:
+            options.append(line)
+    if not err_mes:
+        if not options:
+            err_mes = 'Не указаны вопросы'
+        elif len(options) > 10:
+            err_mes = 'Вопросов может быть не больше 10'
+    if err_mes:
+        await message.reply(
+            text='%s\n\n%s' % (
+                err_mes,
+                'Поручить боту создать неанонимный опрос:\n'
+                '/poll тема\n'
+                'Вопрос 1\n'
+                'Вопрос 2\n'
+                ' и т.д. не больше 10 вопросов'
+            ))
+        return
+    await bot.send_poll(chat_id=message.chat.id, question=question, options=options, is_anonymous=False)
+
+
+@dp.poll_answer_handler()
+async def our_poll_answer_handler(poll_answer: types.PollAnswer):
+    status, response = await Misc.post_tg_user(poll_answer.user)
+    if status == 200 and response.get('created'):
+        await Misc.update_user_photo(bot, poll_answer.user, response)
+
+
 @dp.callback_query_handler(
     lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.ABILITY,       # 0
