@@ -128,12 +128,35 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
         return
     user_uuid_to = Misc.uuid_from_text(message.text)
     if not user_uuid_to:
-        await message.reply(
-            Misc.MSG_ERROR_UUID_NOT_VALID + '\nПовторите, пожалуйста' ,
-            reply_markup=Misc.reply_markup_cancel_row()
-        )
-        return
-
+        async with state.proxy() as data:
+            uuid = data.get('uuid')
+            is_father = data.get('is_father')
+            if uuid and is_father is not None:
+                msg_invalid_link_with_new = Misc.MSG_INVALID_LINK_WITH_NEW
+                if is_father:
+                    prompt_new_parent = 'Новый'
+                else:
+                    prompt_new_parent = 'Новая'
+                    msg_invalid_link_with_new = msg_invalid_link_with_new.replace('Новый', prompt_new_parent)
+                button_new_parent = InlineKeyboardButton(
+                    prompt_new_parent,
+                    callback_data= Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+                        keyboard_type=KeyboardType.NEW_FATHER if is_father else KeyboardType.NEW_MOTHER,
+                        uuid=uuid,
+                        sep=KeyboardType.SEP,
+                ))
+                reply_markup = InlineKeyboardMarkup()
+                reply_markup.row(button_new_parent, Misc.inline_button_cancel())
+                await message.reply(
+                    msg_invalid_link_with_new,
+                    reply_markup=reply_markup
+                )
+            else:
+                await message.reply(
+                    Misc.MSG_INVALID_LINK + '\nПовторите, пожалуйста' ,
+                    reply_markup=Misc.reply_markup_cancel_row()
+                )
+            return
     user_uuid_from = is_father = ''
     async with state.proxy() as data:
         if data.get('uuid'):
@@ -599,7 +622,7 @@ async def ask_child(message, state, data, children):
         sep=KeyboardType.SEP,
     )
     inline_btn_new_child = InlineKeyboardButton(
-        'Новый ребёнок',
+        Misc.PROMPT_BUTTON_NEW_CHILD,
         callback_data=callback_data_new_child,
     )
     buttons = [inline_btn_new_child, ]
@@ -813,7 +836,7 @@ async def process_callback_clear_child(callback_query: types.CallbackQuery, stat
     content_types=ContentType.all(),
     state=FSMchild.choose,
 )
-async def choose_child_to_lear_link(message: types.Message, state: FSMContext):
+async def choose_child_to_clear_link(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         await message.reply(
             Misc.MSG_INVALID_LINK + '\n\n' + Misc.MSG_REPEATE_PLEASE,
@@ -868,11 +891,28 @@ async def put_child_by_uuid(message: types.Message, state: FSMContext):
         return
     user_uuid_from = Misc.uuid_from_text(message.text)
     if not user_uuid_from:
-        await message.reply(
-            Misc.MSG_ERROR_UUID_NOT_VALID + '\nПовторите, пожалуйста' ,
-            reply_markup=Misc.reply_markup_cancel_row()
-        )
-        return
+        async with state.proxy() as data:
+            uuid = data.get('uuid')
+            if uuid:
+                button_new_child = InlineKeyboardButton(
+                    Misc.PROMPT_BUTTON_NEW_CHILD,
+                    callback_data= Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+                        keyboard_type=KeyboardType.NEW_CHILD,
+                        uuid=uuid,
+                        sep=KeyboardType.SEP,
+                ))
+                reply_markup = InlineKeyboardMarkup()
+                reply_markup.row(button_new_child, Misc.inline_button_cancel())
+                await message.reply(
+                    Misc.MSG_INVALID_LINK_WITH_NEW,
+                    reply_markup=reply_markup
+                )
+            else:
+                await message.reply(
+                    Misc.MSG_INVALID_LINK + '\nПовторите, пожалуйста' ,
+                    reply_markup=Misc.reply_markup_cancel_row()
+                )
+            return
     async with state.proxy() as data:
         if data.get('uuid') and data.get('parent_gender'):
             response_sender = await Misc.check_owner(owner_tg_user=message.from_user, uuid=user_uuid_from)
@@ -1305,7 +1345,7 @@ async def get_new_owner(message: types.Message, state: FSMContext):
                 user_uuid_to = Misc.uuid_from_text(message.text)
                 if not user_uuid_to:
                     await message.reply(
-                        Misc.MSG_ERROR_UUID_NOT_VALID + '\nПовторите, пожалуйста' ,
+                        Misc.MSG_ERROR_UUID_NOT_VALID,
                         reply_markup=Misc.reply_markup_cancel_row()
                     )
                     return

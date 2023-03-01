@@ -259,7 +259,15 @@ class Misc(object):
 
     CALLBACK_DATA_UUID_TEMPLATE = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s'
 
-    MSG_ERROR_UUID_NOT_VALID = 'Не найден или негодный ид в сообщении'
+    MSG_ERROR_UUID_NOT_VALID = (
+        'Профиль не найден - попробуйте скопировать и '
+        'отправить ссылку на существующий профиль ещё раз'
+    )
+
+    MSG_INVALID_LINK_WITH_NEW = (
+        'Профиль не найден - попробуйте скопировать и отправить ссылку '
+        'на существующий профиль ещё раз или создайте <u>Новый</u>'
+    )
 
     MSG_INVALID_LINK = 'Неверная ссылка'
 
@@ -268,6 +276,8 @@ class Misc(object):
 
     PROMPT_CANCEL_LOCATION = 'Отмена'
     PROMPT_LOCATION = 'Отправить местоположение'
+
+    PROMPT_BUTTON_NEW_CHILD = 'Новый ребёнок'
 
     PROMPT_IOF_INCORRECT = 'Некорректные ФИО - напишите ещё раз имя отчество и фамилию или Отмена'
 
