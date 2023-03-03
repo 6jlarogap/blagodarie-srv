@@ -476,6 +476,12 @@ commands_dict = {
 }
 
 async def is_it_command(message: types.Message, state: FSMContext):
+    """
+    Проверка, не обнаружилась ли команда, когда от пользователя ждут данных
+
+    Если обнаружилась, то состояние обнуляется,
+    сообщение пользователю, вызов функции, выполняющей команду
+    """
     result = False
     if message.content_type == ContentType.TEXT:
         message_text = Misc.strip_text(message.text).lower()
