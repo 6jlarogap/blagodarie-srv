@@ -163,6 +163,7 @@ class Misc(object):
     """
 
     MSG_YOU_GOT_MESSAGE = 'Вам сообщение от <b>%s</b>'
+    MSG_YOU_CANCELLED_INPUT = 'Вы отказались от ввода данных'
     MSG_USER_NOT_FOUND = 'Пользователь не найден'
 
     PROMPT_SEARCH_TEXT_TOO_SHORT = 'Минимальное число символов в тексте для поиска: %s\n' % settings.MIN_LEN_SEARCHED_TEXT

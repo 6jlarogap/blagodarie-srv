@@ -113,6 +113,420 @@ async def on_shutdown(dp):
     if settings.START_MODE == 'webhook':
         await bot.delete_webhook()
 
+# --- commands ----
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('map', 'карта'),
+    state=None,
+)
+async def process_command_map(message: types.Message, state: FSMContext):
+    await bot.send_message(
+        message.from_user.id,
+        text=Misc.get_html_a(href=settings.MAP_HOST, text='Карта участников'),
+        disable_web_page_preview=True,
+    )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('setvozm', 'возможности', ),
+    state=None,
+)
+async def process_command_ability(message: types.Message, state: FSMContext):
+    await do_process_ability(message)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('poll',),
+    state=None,
+)
+async def process_command_poll(message: types.Message, state: FSMContext):
+    err_mes = ''
+    options = []
+    for i, l in enumerate(message.text.split('\n')):
+        line = l.strip()
+        if not line:
+            continue
+        if i == 0:
+            m = re.search(r'^\/poll\s+(.*)$', line)
+            if not m or not m.group(1):
+                err_mes = 'Не указан вопрос опроса'
+                break
+            question = m.group(1)
+        else:
+            options.append(line)
+    if not err_mes:
+        if not options:
+            err_mes = 'Не указаны вопросы'
+        elif len(options) > 10:
+            err_mes = 'Вопросов может быть не больше 10'
+    if err_mes:
+        await message.reply(
+            text='%s\n\n%s' % (
+                err_mes,
+                'Поручить боту создать неанонимный опрос:\n'
+                '/poll Вопрос\n'
+                'Ответ 1\n'
+                'Ответ 2\n'
+                ' и т.д. не больше 10 ответов'
+            ))
+        return
+    await bot.send_poll(chat_id=message.chat.id, question=question, options=options, is_anonymous=False)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('setpotr', 'потребности',),
+    state=None,
+)
+async def process_command_wish(message: types.Message, state: FSMContext):
+    await do_process_wish(message)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('new',),
+    state=None,
+)
+async def process_command_new(message: types.Message, state: FSMContext):
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender == 200:
+        await FSMnewIOF.ask.set()
+        state = dp.current_state()
+        await message.reply(Misc.PROMPT_NEW_IOF, reply_markup=Misc.reply_markup_cancel_row())
+        if response_sender.get('created'):
+            await Misc.update_user_photo(bot, message.from_user, response_sender)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('findpotr', 'findvozm', 'findperson',  ),
+    state=None,
+)
+async def process_commands_query(message: types.Message, state: FSMContext):
+    message_text = message.text.split()[0].lstrip('/')
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender == 200:
+        await FSMquery.ask.set()
+        state = dp.current_state()
+        async with state.proxy() as data:
+            if message_text == 'findpotr':
+                query_what = 'query_wish'
+            elif message_text == 'findvozm':
+                query_what = 'query_ability'
+            elif message_text == 'findperson':
+                query_what = 'query_person'
+            else:
+                return
+            data['what'] = query_what
+        await message.reply(Misc.PROMPT_QUERY[query_what], reply_markup=Misc.reply_markup_cancel_row())
+        if response_sender.get('created'):
+            await Misc.update_user_photo(bot, message.from_user, response_sender)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('setplace', 'место',),
+    state=None,
+)
+async def geo_command_handler(message: types.Message, state: FSMContext):
+    await geo(message, state_to_set=FSMgeo.geo)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('trip', 'тур'),
+    state=None,
+)
+async def trip_geo_command_handler(message: types.Message, state: FSMContext):
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if settings.TRIP_DATA and settings.TRIP_DATA.get('chat_id') and settings.TRIP_DATA.get('invite_link'):
+        if status_sender == 200:
+            if response_sender['latitude'] is not None and response_sender['longitude'] is not None:
+                callback_data_dict = dict(
+                    keyboard_type=KeyboardType.TRIP_NEW_LOCATION,
+                    uuid=response_sender['uuid'],
+                    sep=KeyboardType.SEP,
+                )
+                inline_btn_new_location = InlineKeyboardButton(
+                    'Задать сейчас',
+                    callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % callback_data_dict,
+                )
+                callback_data_dict.update(keyboard_type=KeyboardType.TRIP_OLD_LOCATION)
+                inline_btn_use_old_location = InlineKeyboardButton(
+                    'Использовать заданное',
+                    callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % callback_data_dict,
+                )
+                reply_markup = InlineKeyboardMarkup()
+                reply_markup.row(inline_btn_use_old_location, inline_btn_new_location, Misc.inline_button_cancel())
+                address = response_sender.get('address') or '%s,%s' % (response_sender['latitude'], response_sender['longitude'])
+                await FSMtrip.ask_geo.set()
+                await message.reply(
+                    (
+                        'Собираю данные для поездки\n\n'
+                        'У вас задано местоположение:\n\n%s\n\n'
+                        '<u>Использовать заданное</u> местоположение? Или <u>задать сейчас</u> новое местоположение? '
+                    ) % address,
+                    reply_markup=reply_markup
+                )
+            else:
+                await message.reply('Собираю данные для поездки\n\nУ вас НЕ задано местоположение!')
+                await geo(message, state_to_set=FSMtrip.geo, uuid=response_sender['uuid'])
+    else:
+        await message.reply('В системе пока не предусмотрены туры')
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('getowned', 'listown',),
+    state=None,
+)
+async def echo_getowned_to_bot(message: types.Message, state: FSMContext):
+    tg_user_sender = message.from_user
+    status, response_from = await Misc.post_tg_user(tg_user_sender)
+    if status == 200:
+        try:
+            status, a_response_to = await Misc.api_request(
+                path='/api/profile',
+                method='get',
+                params=dict(uuid_owner=response_from['uuid']),
+            )
+            logging.debug('get_tg_user_sender_owned data in api, status: %s' % status)
+            logging.debug('get_tg_user_sender_owned data in api, response: %s' % a_response_to)
+        except:
+            return
+
+        if a_response_to:
+            bot_data = await bot.get_me()
+            await Misc.show_deeplinks(a_response_to, message, bot_data)
+        else:
+            await message.reply('У вас нет запрошенных данных')
+        if response_from.get('created'):
+            await Misc.update_user_photo(bot, tg_user_sender, response_from)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('graph',),
+    state=None,
+)
+async def echo_graph_to_bot(message: types.Message, state: FSMContext):
+    await message.reply(
+        Misc.get_html_a(settings.GENESIS_HOST + '/?all=on', 'Все родственные связи'),
+        disable_web_page_preview=True,
+    )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('trusts',),
+    state=None,
+)
+async def echo_trusts_to_bot(message: types.Message, state: FSMContext):
+    await message.reply(
+        Misc.get_html_a(settings.FRONTEND_HOST + '/?q=2500&f=0', 'Все связи доверий'),
+        disable_web_page_preview=True,
+    )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('rules',),
+    state=None,
+)
+async def echo_rules_to_bot(message: types.Message, state: FSMContext):
+    await message.reply(await Misc.rules_text(), disable_web_page_preview=True)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('help',),
+    state=None,
+)
+async def echo_help_to_bot(message: types.Message, state: FSMContext):
+    await message.reply(await Misc.help_text(), disable_web_page_preview=True)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('stat',),
+    state=None,
+)
+async def echo_stat_to_bot(message: types.Message, state: FSMContext):
+    status, response = await Misc.api_request(
+        path='/api/bot/stat',
+        method='get',
+    )
+    if status == 200 and response:
+        reply = (
+            '<b>Статистика</b>\n'
+            '\n'
+            'Пользователи: %(active)s\n'
+            'Стартовали бот: %(did_bot_start)s\n'
+            'Указали местоположение: %(with_geodata)s\n'
+            'Cозданные профили: %(owned)s\n'
+            'Всего профилей: %(all)s\n'
+        ) % {
+            'active': response['active'],
+            'owned': response['owned'],
+            'all': response['active'] + response['owned'],
+            'did_bot_start': response['did_bot_start'],
+            'with_geodata': response['with_geodata'],
+        }
+    else:
+        reply = 'Произошла ошибка'
+    await message.reply(reply)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('feedback',),
+    state=None,
+)
+async def echo_feedback(message: types.Message, state: FSMContext):
+    """
+    Отправка сообщения администраторам (разработчикам)
+    """
+
+    if not settings.BOT_ADMINS:
+        await message.reply('Не указаны администраторы системы',)
+        return
+    params_admins = dict(tg_uids=','.join(map(str, settings.BOT_ADMINS)))
+    logging.debug('get_admins, params: %s' % params_admins)
+    status_admins, response_admins = await Misc.get_admins()
+    if not (status_admins == 200 and response_admins):
+        await message.reply('Не найдены администраторы системы',)
+        return
+    status_sender, profile_sender = await Misc.post_tg_user(message.from_user)
+    if not (status_sender == 200 and profile_sender):
+        return
+
+    await FSMfeedback.ask.set()
+    state = dp.current_state()
+    async with state.proxy() as data:
+        data['uuid'] = profile_sender['uuid']
+    await message.reply(
+        'Напишите или перешлите сообщение для разработчиков',
+        reply_markup=Misc.reply_markup_cancel_row(),
+        disable_web_page_preview=True,
+    )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=(types.ChatType.GROUP, types.ChatType.SUPERGROUP)),
+    commands=('get_group_id',),
+    state=None,
+)
+async def get_group_id(message: types.Message, state: FSMContext):
+    if not message.from_user.is_bot:
+        chat = message.chat
+        status, response = await TgGroup.post(chat.id, chat.title, chat.type)
+        try:
+            await message.delete()
+        except:
+            pass
+        reply =  (
+            'Вы запросили ИД группы <b>%s</b>\n'
+            'Отвечаю:\n\n'
+            'ИД: %s\n'
+            'Тип: %s\n'
+        ) % (chat.title, chat.id, chat.type)
+        try:
+            if status == 200:
+                await bot.send_message(
+                    message.from_user.id, reply + (
+                        'Группа только что создана Вами в данных\n' if response['created'] else 'Группа существовала в данных до Вашего запроса\n'
+                ))
+            else:
+                await bot.send_message(
+                    message.from_user.id, reply + 'ОШИБКА создания, если не существует, группы в данных\n'
+                )
+        except (ChatNotFound, CantInitiateConversation):
+            pass
+
+
+# --- command list ----
+
+commands_dict = {
+    'map': process_command_map,
+    'карта': process_command_map, 
+    'setvozm': process_command_ability,
+    'возможности': process_command_ability,
+    'setpotr': process_command_wish,
+    'потребности': process_command_wish,
+    'findpotr': process_commands_query,
+    'findvozm': process_commands_query,
+    'findperson': process_commands_query,
+    'setplace': geo_command_handler,
+    'место': geo_command_handler,
+    'poll': process_command_poll,
+    'new': process_command_new,
+    'trip': trip_geo_command_handler,
+    'тур': trip_geo_command_handler,
+    'getowned': echo_getowned_to_bot,
+    'listown': echo_getowned_to_bot,
+    'graph': echo_graph_to_bot,
+    'trusts': echo_trusts_to_bot,
+    'rules': echo_rules_to_bot,
+    'help': echo_help_to_bot,
+    'stat': echo_stat_to_bot,
+    'feedback': echo_feedback,
+}
+
+async def is_it_command(message: types.Message, state: FSMContext):
+    result = False
+    if message.content_type == ContentType.TEXT:
+        message_text = Misc.strip_text(message.text).lower()
+        m = re.search(r'^\/(\S+)', message_text)
+        if m:
+            command = m.group(1)
+            if command in commands_dict:
+                if state:
+                    await state.finish()
+                await message.reply('%s\n%s /%s' % (
+                     Misc.MSG_YOU_CANCELLED_INPUT,
+                     'Выполняю команду',
+                     command
+                ))
+                result = True
+                await commands_dict[command](message, state)
+    return result
+
+
+# --- end of commands ----
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.LOCATION,
+        KeyboardType.SEP,
+        # uuid, кому                # 1
+        # KeyboardType.SEP,
+    ), c.data
+    ), state=None,
+    )
+async def process_callback_location(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Действия по местоположению
+
+    На входе строка:
+        <KeyboardType.LOCATION>             # 0
+        <KeyboardType.SEP>
+        uuid                                # 1
+        <KeyboardType.SEP>
+    """
+    if callback_query.message:
+        tg_user_sender = callback_query.from_user
+        code = callback_query.data.split(KeyboardType.SEP)
+        try:
+            uuid = code[1]
+            if uuid and not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+                return
+        except IndexError:
+            uuid = None
+        await geo(callback_query.message, state_to_set=FSMgeo.geo, uuid=uuid)
+
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
@@ -128,6 +542,8 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
         return
     user_uuid_to = Misc.uuid_from_text(message.text)
     if not user_uuid_to:
+        if await is_it_command(message, state):
+            return
         async with state.proxy() as data:
             uuid = data.get('uuid')
             is_father = data.get('is_father')
@@ -226,6 +642,8 @@ async def put_new_papa_mama(message: types.Message, state: FSMContext):
             Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + Misc.MSG_REPEATE_PLEASE,
             reply_markup=Misc.reply_markup_cancel_row()
         )
+        return
+    if await is_it_command(message, state):
         return
     first_name_to = Misc.strip_text(message.text)
     if re.search(Misc.RE_UUID, first_name_to):
@@ -843,6 +1261,8 @@ async def choose_child_to_clear_link(message: types.Message, state: FSMContext):
             reply_markup=Misc.reply_markup_cancel_row()
         )
         return
+    if await is_it_command(message, state):
+        return
     child_uuid = Misc.uuid_from_text(message.text)
     if not child_uuid:
         await message.reply(
@@ -891,6 +1311,8 @@ async def put_child_by_uuid(message: types.Message, state: FSMContext):
         return
     user_uuid_from = Misc.uuid_from_text(message.text)
     if not user_uuid_from:
+        if await is_it_command(message, state):
+            return
         async with state.proxy() as data:
             uuid = data.get('uuid')
             if uuid:
@@ -972,6 +1394,8 @@ async def put_new_child(message: types.Message, state: FSMContext):
             Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + Misc.MSG_REPEATE_PLEASE,
             reply_markup=Misc.reply_markup_cancel_row()
         )
+        return
+    if await is_it_command(message, state):
         return
     first_name = Misc.strip_text(message.text)
     if re.search(Misc.RE_UUID, first_name):
@@ -1172,8 +1596,6 @@ async def process_callback_new_child(callback_query: types.CallbackQuery, state:
     lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.KEYS,
         KeyboardType.SEP,
-        # uuid себя или родственника           # 1
-        # KeyboardType.SEP,
     ), c.data,
     ), state=None,
     )
@@ -1227,6 +1649,8 @@ async def get_keys(message: types.Message, state: FSMContext):
             'Не похоже, что это контакты. Напишите ещё раз или Отмена',
             reply_markup=Misc.reply_markup_cancel_row(),
         )
+        return
+    if await is_it_command(message, state):
         return
     async with state.proxy() as data:
         uuid = data.get('uuid')
@@ -1332,6 +1756,8 @@ async def process_callback_change_owner(callback_query: types.CallbackQuery, sta
 async def get_new_owner(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         await message.reply(Misc.MSG_ERROR_TEXT_ONLY, reply_markup=Misc.reply_markup_cancel_row())
+        return
+    if await is_it_command(message, state):
         return
     async with state.proxy() as data:
         uuid = data.get('uuid')
@@ -1523,6 +1949,8 @@ async def process_callback_iof(callback_query: types.CallbackQuery, state: FSMCo
 async def put_change_existing_iof(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         await message.reply(Misc.MSG_ERROR_TEXT_ONLY, reply_markup=Misc.reply_markup_cancel_row())
+        return
+    if await is_it_command(message, state):
         return
     first_name = Misc.strip_text(message.text)
     if re.search(Misc.RE_UUID, first_name):
@@ -1782,6 +2210,8 @@ async def get_dob(message: types.Message, state: FSMContext):
             reply_markup=Misc.reply_markup_cancel_row()
         )
         return
+    if await is_it_command(message, state):
+        return
     async with state.proxy() as data:
         if data.get('uuid') and isinstance(data.get('is_male'), bool) and isinstance(data.get('is_owned'), bool):
             message_text = Misc.strip_text(message.text)
@@ -1810,6 +2240,8 @@ async def get_dod(message: types.Message, state: FSMContext):
             Misc.MSG_ERROR_TEXT_ONLY,
             reply_markup=Misc.reply_markup_cancel_row()
         )
+        return
+    if await is_it_command(message, state):
         return
     async with state.proxy() as data:
         if data.get('uuid') and isinstance(data.get('is_male'), bool) and isinstance(data.get('is_owned'), bool):
@@ -2061,66 +2493,6 @@ async def do_process_wish(message: types.Message, uuid=None):
     await message.reply(Misc.PROMPT_WISH, reply_markup=reply_markup)
 
 
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=('map', 'карта'),
-    state=None,
-)
-async def process_command_map(message):
-    await bot.send_message(
-        message.from_user.id,
-        text=Misc.get_html_a(href=settings.MAP_HOST, text='Карта участников'),
-        disable_web_page_preview=True,
-    )
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=('setvozm', 'возможности'),
-    state=None,
-)
-async def process_command_ability(message):
-    await do_process_ability(message)
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=('poll',),
-    state=None,
-)
-async def process_command_poll(message):
-    err_mes = ''
-    options = []
-    for i, l in enumerate(message.text.split('\n')):
-        line = l.strip()
-        if not line:
-            continue
-        if i == 0:
-            m = re.search(r'^\/poll\s+(.*)$', line)
-            if not m or not m.group(1):
-                err_mes = 'Не указан вопрос опроса'
-                break
-            question = m.group(1)
-        else:
-            options.append(line)
-    if not err_mes:
-        if not options:
-            err_mes = 'Не указаны вопросы'
-        elif len(options) > 10:
-            err_mes = 'Вопросов может быть не больше 10'
-    if err_mes:
-        await message.reply(
-            text='%s\n\n%s' % (
-                err_mes,
-                'Поручить боту создать неанонимный опрос:\n'
-                '/poll Вопрос\n'
-                'Ответ 1\n'
-                'Ответ 2\n'
-                ' и т.д. не больше 10 ответов'
-            ))
-        return
-    await bot.send_poll(chat_id=message.chat.id, question=question, options=options, is_anonymous=False)
-
-
 @dp.poll_answer_handler()
 async def our_poll_answer_handler(poll_answer: types.PollAnswer):
     status, response = await Misc.post_tg_user(poll_answer.user)
@@ -2148,14 +2520,6 @@ async def process_callback_ability(callback_query: types.CallbackQuery, state: F
         uuid = None
     await do_process_ability(callback_query.message, uuid=uuid)
 
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=('setpotr', 'потребности'),
-    state=None,
-)
-async def process_command_wish(message):
-    await do_process_wish(message)
 
 
 @dp.callback_query_handler(
@@ -2191,7 +2555,7 @@ async def process_callback_cancel_any(callback_query: types.CallbackQuery, state
     current_state = await state.get_state()
     if current_state:
         await Misc.state_finish(state)
-        await callback_query.message.reply('Вы отказались от ввода данных')
+        await callback_query.message.reply(Misc.MSG_YOU_CANCELLED_INPUT)
 
 
 @dp.message_handler(
@@ -2539,7 +2903,8 @@ async def put_new_iof(message: types.Message, state: FSMContext):
             reply_markup=Misc.reply_markup_cancel_row(),
         )
         return
-
+    if await is_it_command(message, state):
+        return
     logging.debug('put_new_iof: post tg_user data')
     tg_user_sender = message.from_user
     status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
@@ -2575,53 +2940,14 @@ async def put_new_iof(message: types.Message, state: FSMContext):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=('new', ),
-    state=None,
-)
-async def process_command_new(message: types.Message, state: FSMContext):
-    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
-    if status_sender == 200:
-        await FSMnewIOF.ask.set()
-        state = dp.current_state()
-        await message.reply(Misc.PROMPT_NEW_IOF, reply_markup=Misc.reply_markup_cancel_row())
-        if response_sender.get('created'):
-            await Misc.update_user_photo(bot, message.from_user, response_sender)
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=('findpotr', 'findvozm', 'findperson',  ),
-    state=None,
-)
-async def process_commands_query(message: types.Message, state: FSMContext):
-    message_text = message.text.split()[0].lstrip('/')
-    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
-    if status_sender == 200:
-        await FSMquery.ask.set()
-        state = dp.current_state()
-        async with state.proxy() as data:
-            if message_text == 'findpotr':
-                query_what = 'query_wish'
-            elif message_text == 'findvozm':
-                query_what = 'query_ability'
-            elif message_text == 'findperson':
-                query_what = 'query_person'
-            else:
-                return
-            data['what'] = query_what
-        await message.reply(Misc.PROMPT_QUERY[query_what], reply_markup=Misc.reply_markup_cancel_row())
-        if response_sender.get('created'):
-            await Misc.update_user_photo(bot, message.from_user, response_sender)
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     content_types=ContentType.all(),
     state=FSMquery.ask,
 )
 async def process_make_query(message: types.Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     state = dp.current_state()
+    if await is_it_command(message, state):
+        return
     async with state.proxy() as data:
         try:
             data['what']
@@ -3027,89 +3353,6 @@ async def geo(message, state_to_set, uuid=None):
     )
 
 
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=['setplace', 'место'],
-    state=None,
-)
-async def geo_command_handler(message: types.Message, state: FSMContext):
-    await geo(message, state_to_set=FSMgeo.geo)
-
-
-@dp.callback_query_handler(
-    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
-        KeyboardType.LOCATION,
-        KeyboardType.SEP,
-        # uuid, кому                # 1
-        # KeyboardType.SEP,
-    ), c.data
-    ), state=None,
-    )
-async def process_callback_location(callback_query: types.CallbackQuery, state: FSMContext):
-    """
-    Действия по местоположению
-
-    На входе строка:
-        <KeyboardType.LOCATION>             # 0
-        <KeyboardType.SEP>
-        uuid                                # 1
-        <KeyboardType.SEP>
-    """
-    if callback_query.message:
-        tg_user_sender = callback_query.from_user
-        code = callback_query.data.split(KeyboardType.SEP)
-        try:
-            uuid = code[1]
-            if uuid and not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
-                return
-        except IndexError:
-            uuid = None
-        await geo(callback_query.message, state_to_set=FSMgeo.geo, uuid=uuid)
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=('trip', 'тур'),
-    state=None,
-)
-async def trip_geo_command_handler(message: types.Message, state: FSMContext):
-    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
-    if settings.TRIP_DATA and settings.TRIP_DATA.get('chat_id') and settings.TRIP_DATA.get('invite_link'):
-        if status_sender == 200:
-            if response_sender['latitude'] is not None and response_sender['longitude'] is not None:
-                callback_data_dict = dict(
-                    keyboard_type=KeyboardType.TRIP_NEW_LOCATION,
-                    uuid=response_sender['uuid'],
-                    sep=KeyboardType.SEP,
-                )
-                inline_btn_new_location = InlineKeyboardButton(
-                    'Задать сейчас',
-                    callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % callback_data_dict,
-                )
-                callback_data_dict.update(keyboard_type=KeyboardType.TRIP_OLD_LOCATION)
-                inline_btn_use_old_location = InlineKeyboardButton(
-                    'Использовать заданное',
-                    callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % callback_data_dict,
-                )
-                reply_markup = InlineKeyboardMarkup()
-                reply_markup.row(inline_btn_use_old_location, inline_btn_new_location, Misc.inline_button_cancel())
-                address = response_sender.get('address') or '%s,%s' % (response_sender['latitude'], response_sender['longitude'])
-                await FSMtrip.ask_geo.set()
-                await message.reply(
-                    (
-                        'Собираю данные для поездки\n\n'
-                        'У вас задано местоположение:\n\n%s\n\n'
-                        '<u>Использовать заданное</u> местоположение? Или <u>задать сейчас</u> новое местоположение? '
-                    ) % address,
-                    reply_markup=reply_markup
-                )
-            else:
-                await message.reply('Собираю данные для поездки\n\nУ вас НЕ задано местоположение!')
-                await geo(message, state_to_set=FSMtrip.geo, uuid=response_sender['uuid'])
-    else:
-        await message.reply('В системе пока не предусмотрены туры')
-
-
 async def prompt_trip_conditions(message, state, profile):
     text_invite = settings.TRIP_DATA['text_with_invite_link'] % settings.TRIP_DATA
     await message.reply(text_invite, reply_markup=types.reply_keyboard.ReplyKeyboardRemove())
@@ -3245,13 +3488,15 @@ async def put_location(message, state, show_card=False):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    content_types=['location', ContentType.TEXT],
+    content_types=('location', ContentType.TEXT,),
     state=FSMtrip.geo,
 )
 async def location_trip(message: types.Message, state: FSMContext):
     """
     Записать местоположение пользователя в процессе сбора данных для тура
     """
+    if message.content_type == ContentType.TEXT and await is_it_command(message, state):
+        return
     profile = await put_location(message, state, show_card=False)
     if profile:
         await prompt_trip_conditions(message, state, profile)
@@ -3268,144 +3513,10 @@ async def location(message: types.Message, state: FSMContext):
     """
     Записать местоположение пользователя телеграма или uuid в состоянии
     """
+    if message.content_type == ContentType.TEXT and await is_it_command(message, state):
+        return
     await put_location(message, state, show_card=True)
     await state.finish()
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=('getowned', 'listown',),
-    state=None,
-)
-async def echo_getowned_to_bot(message: types.Message, state: FSMContext):
-    tg_user_sender = message.from_user
-    status, response_from = await Misc.post_tg_user(tg_user_sender)
-    if status == 200:
-        try:
-            status, a_response_to = await Misc.api_request(
-                path='/api/profile',
-                method='get',
-                params=dict(uuid_owner=response_from['uuid']),
-            )
-            logging.debug('get_tg_user_sender_owned data in api, status: %s' % status)
-            logging.debug('get_tg_user_sender_owned data in api, response: %s' % a_response_to)
-        except:
-            return
-
-        if a_response_to:
-            bot_data = await bot.get_me()
-            await Misc.show_deeplinks(a_response_to, message, bot_data)
-        else:
-            await message.reply('У вас нет запрошенных данных')
-        if response_from.get('created'):
-            await Misc.update_user_photo(bot, tg_user_sender, response_from)
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=['graph',],
-    state=None,
-)
-async def echo_graph_to_bot(message: types.Message, state: FSMContext):
-    await message.reply(
-        Misc.get_html_a(settings.GENESIS_HOST + '/?all=on', 'Все родственные связи'),
-        disable_web_page_preview=True,
-    )
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=['trusts',],
-    state=None,
-)
-async def echo_trusts_to_bot(message: types.Message, state: FSMContext):
-    await message.reply(
-        Misc.get_html_a(settings.FRONTEND_HOST + '/?q=2500&f=0', 'Все связи доверий'),
-        disable_web_page_preview=True,
-    )
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=['rules',],
-    state=None,
-)
-async def echo_rules_to_bot(message: types.Message, state: FSMContext):
-    await message.reply(await Misc.rules_text(), disable_web_page_preview=True)
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=['help',],
-    state=None,
-)
-async def echo_help_to_bot(message: types.Message, state: FSMContext):
-    await message.reply(await Misc.help_text(), disable_web_page_preview=True)
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=['stat',],
-    state=None,
-)
-async def echo_stat_to_bot(message: types.Message, state: FSMContext):
-    status, response = await Misc.api_request(
-        path='/api/bot/stat',
-        method='get',
-    )
-    if status == 200 and response:
-        reply = (
-            '<b>Статистика</b>\n'
-            '\n'
-            'Пользователи: %(active)s\n'
-            'Стартовали бот: %(did_bot_start)s\n'
-            'Указали местоположение: %(with_geodata)s\n'
-            'Cозданные профили: %(owned)s\n'
-            'Всего профилей: %(all)s\n'
-        ) % {
-            'active': response['active'],
-            'owned': response['owned'],
-            'all': response['active'] + response['owned'],
-            'did_bot_start': response['did_bot_start'],
-            'with_geodata': response['with_geodata'],
-        }
-    else:
-        reply = 'Произошла ошибка'
-    await message.reply(reply)
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=['feedback',],
-    state=None,
-)
-async def echo_feedback(message: types.Message, state: FSMContext):
-    """
-    Отправка сообщения администраторам (разработчикам)
-    """
-
-    if not settings.BOT_ADMINS:
-        await message.reply('Не указаны администраторы системы',)
-        return
-    params_admins = dict(tg_uids=','.join(map(str, settings.BOT_ADMINS)))
-    logging.debug('get_admins, params: %s' % params_admins)
-    status_admins, response_admins = await Misc.get_admins()
-    if not (status_admins == 200 and response_admins):
-        await message.reply('Не найдены администраторы системы',)
-        return
-    status_sender, profile_sender = await Misc.post_tg_user(message.from_user)
-    if not (status_sender == 200 and profile_sender):
-        return
-
-    await FSMfeedback.ask.set()
-    state = dp.current_state()
-    async with state.proxy() as data:
-        data['uuid'] = profile_sender['uuid']
-    await message.reply(
-        'Напишите или перешлите сообщение для разработчиков',
-        reply_markup=Misc.reply_markup_cancel_row(),
-        disable_web_page_preview=True,
-    )
 
 
 @dp.message_handler(
@@ -3724,39 +3835,6 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         await geo(message, state_to_set=FSMgeo.geo)
     if state_ == 'forwarded_from_other' and a_response_to and a_response_to[0].get('created'):
         await Misc.update_user_photo(bot, tg_user_forwarded, response_to)
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=(types.ChatType.GROUP, types.ChatType.SUPERGROUP)),
-    commands=('get_group_id',),
-    state=None,
-)
-async def get_group_id(message: types.Message, state: FSMContext):
-    if not message.from_user.is_bot:
-        chat = message.chat
-        status, response = await TgGroup.post(chat.id, chat.title, chat.type)
-        try:
-            await message.delete()
-        except:
-            pass
-        reply =  (
-            'Вы запросили ИД группы <b>%s</b>\n'
-            'Отвечаю:\n\n'
-            'ИД: %s\n'
-            'Тип: %s\n'
-        ) % (chat.title, chat.id, chat.type)
-        try:
-            if status == 200:
-                await bot.send_message(
-                    message.from_user.id, reply + (
-                        'Группа только что создана Вами в данных\n' if response['created'] else 'Группа существовала в данных до Вашего запроса\n'
-                ))
-            else:
-                await bot.send_message(
-                    message.from_user.id, reply + 'ОШИБКА создания, если не существует, группы в данных\n'
-                )
-        except (ChatNotFound, CantInitiateConversation):
-            pass
 
 
 async def do_chat_join(
