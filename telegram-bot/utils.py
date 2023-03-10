@@ -946,8 +946,8 @@ class Misc(object):
                     thank_buttons.append(inline_btn_nullify_trust)
                 reply_markup.row(*thank_buttons)
 
+            callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE
             if response_to['is_active'] or response_to['owner_id']:
-                callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE
                 if is_own_account or is_owned_account:
                     # Карточка самому пользователю или его родственнику
                     #
@@ -1045,40 +1045,38 @@ class Misc(object):
                     )
                     reply_markup.row(inline_btn_ability, inline_btn_wish, inline_btn_keys)
 
-                dict_message = dict(
-                    keyboard_type=KeyboardType.SEND_MESSAGE,
+            dict_message = dict(
+                keyboard_type=KeyboardType.SEND_MESSAGE,
+                uuid=response_to['uuid'],
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_send_message = InlineKeyboardButton(
+                'Написать',
+                callback_data=callback_data_template % dict_message,
+            )
+            dict_message.update(
+                keyboard_type=KeyboardType.SHOW_MESSAGES,
+            )
+            inline_btn_show_messages = InlineKeyboardButton(
+                'Архив',
+                callback_data=callback_data_template % dict_message,
+            )
+            reply_markup.row(inline_btn_send_message, inline_btn_show_messages)
+
+            if is_own_account and response_to['is_active'] or is_owned_account:
+                title_delete = 'Удалить' if is_owned_account else 'Обезличить'
+                callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE + '%(owner_id)s%(sep)s'
+                dict_delete = dict(
+                    keyboard_type=KeyboardType.DELETE_USER,
                     uuid=response_to['uuid'],
+                    owner_id=user_from_id,
                     sep=KeyboardType.SEP,
                 )
-                inline_btn_send_message = InlineKeyboardButton(
-                    'Написать',
-                    callback_data=callback_data_template % dict_message,
+                inline_btn_delete = InlineKeyboardButton(
+                    title_delete,
+                    callback_data=callback_data_template % dict_delete,
                 )
-                dict_message.update(
-                    keyboard_type=KeyboardType.SHOW_MESSAGES,
-                )
-                inline_btn_show_messages = InlineKeyboardButton(
-                    'Архив',
-                    callback_data=callback_data_template % dict_message,
-                )
-                reply_markup.row(inline_btn_send_message, inline_btn_show_messages)
-
-                if is_own_account and response_to['is_active'] or is_owned_account:
-                    title_delete = 'Удалить' if is_owned_account else 'Обезличить'
-                    callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE + '%(owner_id)s%(sep)s'
-                    dict_delete = dict(
-                        keyboard_type=KeyboardType.DELETE_USER,
-                        uuid=response_to['uuid'],
-                        owner_id=user_from_id,
-                        sep=KeyboardType.SEP,
-                    )
-                    inline_btn_delete = InlineKeyboardButton(
-                        title_delete,
-                        callback_data=callback_data_template % dict_delete,
-                    )
-                    reply_markup.row(inline_btn_delete)
-
-            # end if: response_to['is_active'] or response_to['owner_id']
+                reply_markup.row(inline_btn_delete)
 
             if is_own_account and not response_to['is_active']:
                 callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE + '%(owner_id)s%(sep)s'
