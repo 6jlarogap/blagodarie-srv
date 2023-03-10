@@ -197,7 +197,7 @@ async def process_command_poll(message: types.Message, state: FSMContext):
     logging.debug('create poll in api, response: %s' % response)
     if status == 200:
         await message.reply(
-            'Опрос успешно сохранен. Ниже ссылка об опросе, которой ВЫ, возможно, хотите поделиться:',
+            'Опрос успешно сохранен. Ниже ссылка об опросе. Можете ею поделиться:',
             disable_web_page_preview=True,
         )
         bot_data = await bot.get_me()
