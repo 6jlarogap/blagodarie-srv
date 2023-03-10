@@ -908,44 +908,45 @@ class Misc(object):
                     goto_buttons.append(inline_btn_genesis_path)
                 reply_markup.row(*goto_buttons)
 
-                if user_from_id != response_to['user_id'] and bot_data.id != tg_user_from_id:
-                    dict_reply = dict(
-                        keyboard_type=KeyboardType.TRUST_THANK,
-                        sep=KeyboardType.SEP,
-                        user_to_uuid_stripped=cls.uuid_strip(response_to['uuid']),
-                        message_to_forward_id=message_to_forward_id,
-                    )
-                    callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE
-                    show_inline_btn_nullify_trust = True
-                    if response_relations and response_relations['from_to']['is_trust'] is None:
-                        show_inline_btn_nullify_trust = False
+            if user_from_id != response_to['user_id'] and bot_data.id != tg_user_from_id:
+                dict_reply = dict(
+                    keyboard_type=KeyboardType.TRUST_THANK,
+                    sep=KeyboardType.SEP,
+                    user_to_uuid_stripped=cls.uuid_strip(response_to['uuid']),
+                    message_to_forward_id=message_to_forward_id,
+                )
+                callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE
+                show_inline_btn_nullify_trust = True
+                if response_relations and response_relations['from_to']['is_trust'] is None:
+                    show_inline_btn_nullify_trust = False
 
-                    title_thank = 'Доверие'
-                    if response_relations:
-                        if response_relations['from_to']['is_trust'] and response_relations['from_to']['thanks_count']:
-                            title_thank = 'Благодарить'
-                    dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-                    inline_btn_trust = InlineKeyboardButton(
-                        title_thank,
+                title_thank = 'Доверие'
+                if response_relations:
+                    if response_relations['from_to']['is_trust'] and response_relations['from_to']['thanks_count']:
+                        title_thank = 'Благодарить'
+                dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+                inline_btn_trust = InlineKeyboardButton(
+                    title_thank,
+                    callback_data=callback_data_template % dict_reply,
+                )
+                thank_buttons = [inline_btn_trust]
+                if not response_relations or response_relations['from_to']['is_trust'] != False:
+                    dict_reply.update(operation=OperationType.MISTRUST)
+                    inline_btn_mistrust = InlineKeyboardButton(
+                        'Недоверие',
                         callback_data=callback_data_template % dict_reply,
                     )
-                    thank_buttons = [inline_btn_trust]
-                    if not response_relations or response_relations['from_to']['is_trust'] != False:
-                        dict_reply.update(operation=OperationType.MISTRUST)
-                        inline_btn_mistrust = InlineKeyboardButton(
-                            'Недоверие',
-                            callback_data=callback_data_template % dict_reply,
-                        )
-                        thank_buttons.append(inline_btn_mistrust)
-                    if not response_relations or response_relations['from_to']['is_trust'] is not None:
-                        dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-                        inline_btn_nullify_trust = InlineKeyboardButton(
-                            'Забыть',
-                            callback_data=callback_data_template % dict_reply,
-                        )
-                        thank_buttons.append(inline_btn_nullify_trust)
-                    reply_markup.row(*thank_buttons)
+                    thank_buttons.append(inline_btn_mistrust)
+                if not response_relations or response_relations['from_to']['is_trust'] is not None:
+                    dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+                    inline_btn_nullify_trust = InlineKeyboardButton(
+                        'Забыть',
+                        callback_data=callback_data_template % dict_reply,
+                    )
+                    thank_buttons.append(inline_btn_nullify_trust)
+                reply_markup.row(*thank_buttons)
 
+            if response_to['is_active'] or response_to['owner_id']:
                 callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE
                 if is_own_account or is_owned_account:
                     # Карточка самому пользователю или его родственнику
