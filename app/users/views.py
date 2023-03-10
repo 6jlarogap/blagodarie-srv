@@ -24,7 +24,9 @@ from app.utils import ServiceException, SkipException, FrontendMixin
 from app.models import UnclearDate, PhotoModel, GenderMixin
 
 from django.contrib.auth.models import User
-from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TgGroup, TempToken, UuidMixin, TelegramApiMixin
+from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TgGroup, \
+    TempToken, UuidMixin, TelegramApiMixin, \
+    TgPoll, TgPollAnswer
 from contact.models import Key, KeyType, CurrentState, OperationType, Wish, Ability, ApiAddOperationMixin
 
 class ApiGetProfileInfo(UuidMixin, APIView):
@@ -2094,3 +2096,121 @@ class ApiImportGedcom(ApiAddOperationMixin, UuidMixin, CreateUserMixin, APIView)
         owner.profile.merge(user_to_merge.profile)
 
 api_import_gedcom = ApiImportGedcom.as_view()
+
+class ApiBotPoll(APIView):
+
+    @transaction.atomic
+    def post(self, request):
+        """
+        Создать телеграм опрос
+
+        Принимает то, что отдает телеграм при создании опроса:
+        {
+            "message_id": 13052,
+            "from": {"id": 12345, "is_bot": true, "first_name": "SevTrusts", "username": "DevBlagoBot"},
+            "chat": {"id": 54321, "first_name": "Евгений", "last_name": "Фамилия", "username": "his_username", "type": "private"},
+            "date": 1677680550,
+            "poll": {
+                "id": "987654321",
+                "question": "Как дела",
+                "options": [
+                        {"text": "Отлично", "voter_count": 0},
+                        {"text": "Хорошо", "voter_count": 0},
+                        {"text": "Плохо", "voter_count": 0}
+                    ],
+                    "total_voter_count": 0, "is_closed": false, "is_anonymous": false, "type": "regular", "allows_multiple_answers": false
+                }
+        }
+        Но не всё использует
+        Еще в исходных данных должно быть: request.data.get('tg_token') == settings.TELEGRAM_BOT_TOKEN
+        Проверок не производим: если бот правильно отдаст запрос, и здесь всё будет правильно
+        """
+        try:
+            if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                raise ServiceException('Неверный токен телеграм бота')
+            tgpoll, created_ = TgPoll.objects.get_or_create(
+                poll_id=request.data['poll']['id'],
+                defaults=dict(
+                    question=request.data['poll']['question'],
+                    message_id=request.data['message_id'],
+                    chat_id=request.data['chat']['id'],
+            ))
+            if created_:
+                TgPollAnswer.objects.create(tgpoll=tgpoll, number=0, answer='')
+                for i, option in enumerate(request.data['poll']['options']):
+                    TgPollAnswer.objects.create(tgpoll=tgpoll, number=i+1, answer=option['text'])
+            data = tgpoll.data_dict()
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+
+    def get(self, request):
+        try:
+            poll_id = int(request.GET.get('poll_id'))
+            tgpoll = TgPoll.objects.get(poll_id=poll_id)
+            data = tgpoll.data_dict()
+            status_code = status.HTTP_200_OK
+        except (TypeError, ValueError, TgPoll.DoesNotExist,):
+            data = {}
+            status_code = status.HTTP_404_NOT_FOUND
+        return Response(data=data, status=status_code)
+
+api_bot_poll = ApiBotPoll.as_view()
+
+class ApiBotPollAnswer(APIView):
+
+    @transaction.atomic
+    def post(self, request):
+        """
+        Послать или отменить голос в телеграм опросу
+
+        {
+            "poll_id": "54321",
+            "user": {
+                "id": 12345, "is_bot": false, "first_name": "Eugene",
+                "last_name": "Surname", "username": "his_username", "language_code": "ru"
+            },
+            "option_ids": [0]
+        }
+        Принимает то, что отдает телеграм при получении голоса:
+        Но не всё использует
+        Еще в исходных данных должно быть: request.data.get('tg_token') == settings.TELEGRAM_BOT_TOKEN
+        Проверок не производим: если бот правильно отдаст запрос, и здесь всё будет правильно
+        """
+        try:
+            if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                raise ServiceException('Неверный токен телеграм бота')
+            try:
+                tgpoll = TgPoll.objects.get(poll_id=request.data['poll_id'])
+            except (KeyError, TgPoll.DoesNotExist,):
+                raise ServiceException('Не найден опрос')
+            try:
+                oauth = Oauth.objects.get(
+                    provider = Oauth.PROVIDER_TELEGRAM,
+                    uid=str(request.data['user']['id']),
+                )
+            except (KeyError, Oauth.DoesNotExist,):
+                raise ServiceException('Телеграм пользователь не найден')
+            oauth.tg_poll_answers.clear()
+            try:
+                if request.data['option_ids']:
+                    for o in request.data['option_ids']:
+                        number = o + 1
+                        tgpollanswer = TgPollAnswer.objects.get(tgpoll=tgpoll, number=number)
+                        oauth.tg_poll_answers.add(tgpollanswer)
+                else:
+                    tgpollanswer = TgPollAnswer.objects.get(tgpoll=tgpoll, number=0)
+                    oauth.tg_poll_answers.add(tgpollanswer)
+            except (KeyError, TgPollAnswer.DoesNotExist,):
+                raise ServiceException('Получен не существующий ответ')
+            data = {}
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_bot_poll_answer = ApiBotPollAnswer.as_view()

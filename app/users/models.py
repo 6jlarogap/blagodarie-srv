@@ -205,6 +205,7 @@ class Oauth(BaseModelInsertUpdateTimestamp):
     email = models.EmailField(_("Email у провайдера"), max_length=255, default='')
     photo = models.URLField(_("Фото у провайдера"), max_length=255, default='')
     groups = models.ManyToManyField(TgGroup, verbose_name=_("Группы telegram пользователя"))
+    tg_poll_answers = models.ManyToManyField('users.TgPollAnswer', verbose_name=_("Ответы на опросы телеграм"))
 
     class Meta:
         unique_together = ('provider', 'uid')
@@ -914,3 +915,49 @@ class TelegramApiMixin(object):
                 full_name=profile.user.first_name,
             )
         return result
+
+class TgPoll(BaseModelInsertTimestamp):
+    """
+    Опрос в телеграме
+    """
+
+    poll_id = models.BigIntegerField(_("Poll Id"), unique=True, db_index=True)
+    question = models.CharField(_("Вопрос"), max_length=256)
+    # Сообщение с опросом и где это сообщение
+    message_id = models.BigIntegerField(_("Message Id"))
+    chat_id = models.BigIntegerField(_("Chat Id"))
+
+    def data_dict(self):
+        result = dict(
+            poll_id=self.poll_id,
+            question=self.question,
+            message_id=self.message_id,
+            chat_id=self.chat_id,
+        )
+        result.update(answers=[
+            answer.data_dict() for answer in TgPollAnswer.objects.filter(
+                tgpoll=self).order_by('number')
+        ])
+        return result
+
+class TgPollAnswer(BaseModelInsertTimestamp):
+    """
+    Опрос в телеграме
+    """
+    tgpoll = models.ForeignKey(TgPoll, on_delete=models.CASCADE)
+    # 0-й ответ резервируем для тех, кто сбросил свой голос
+    number = models.PositiveIntegerField(_("Номер"), default=0)
+    answer = models.CharField(_("Ответ"), max_length=255, blank=True, default='')
+
+    class Meta:
+        unique_together = ('tgpoll', 'number',)
+        ordering = ('tgpoll', 'number',)
+
+    def data_dict(self):
+        return dict(
+            number=self.number,
+            answer=self.answer,
+        )
+
+    def __str__(self):
+        return '%s: %s' % (self.number, self.answer)

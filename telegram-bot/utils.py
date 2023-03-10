@@ -645,7 +645,7 @@ class Misc(object):
         )
 
     @classmethod
-    async def post_tg_user(cls, tg_user_sender, activate=False):
+    async def post_tg_user(cls, tg_user_sender, activate=False, did_bot_start=True):
         """
         Получить данные и/или сформировать пользователя
         """
@@ -656,7 +656,7 @@ class Misc(object):
             first_name=tg_user_sender.first_name or '',
             username=tg_user_sender.username or '',
             activate='1' if activate else '',
-            did_bot_start='1',
+            did_bot_start='1' if did_bot_start else '',
         )
         logging.debug('get_or_create tg_user by tg_uid in api, payload: %s' % payload_sender)
         status_sender, response_sender = await cls.api_request(
