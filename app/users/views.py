@@ -1194,7 +1194,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
             )
             user = oauth.user
             profile = user.profile
-            if request.data.get('activate'):
+            if user.is_active or request.data.get('activate'):
                 save_ = False
                 for f in ('last_name', 'first_name', 'username', ):
                     input_val = request.data.get(f, '')
