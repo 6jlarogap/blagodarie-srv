@@ -2260,7 +2260,7 @@ class ApiBotPollResults(APIView):
             )
             for cs in CurrentState.objects.filter(q_connections).select_related(
                         'user_from__profile', 'user_to__profile',).distinct():
-                links.append(cs.data_dict(fmt='3d-force-graph', reverse=False, show_id_fio=False))
+                links.append(dict(source=cs.user_from.pk, target=cs.user_to.pk))
 
             data.update(nodes=nodes, links=links)
             status_code = status.HTTP_200_OK
