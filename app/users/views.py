@@ -2249,7 +2249,19 @@ class ApiBotPollResults(APIView):
                         user_pks.add(user.pk)
                         nodes.append(user.profile.data_dict(request, short=True, fmt='3d-force-graph'))
                     if answer.number > 0:
-                        links.append(dict(source=user.pk, target=-answer.number))
+                        links.append(dict(
+                            source=user.pk,
+                            target=-answer.number,
+                            is_poll=True,
+                    ))
+            q_connections = Q(
+                is_trust=True, is_reverse=False,
+                user_from__in=user_pks, user_to__in=user_pks
+            )
+            for cs in CurrentState.objects.filter(q_connections).select_related(
+                        'user_from__profile', 'user_to__profile',).distinct():
+                links.append(cs.data_dict(fmt='3d-force-graph', reverse=False, show_id_fio=False))
+
             data.update(nodes=nodes, links=links)
             status_code = status.HTTP_200_OK
         except (TypeError, ValueError, TgPoll.DoesNotExist,):

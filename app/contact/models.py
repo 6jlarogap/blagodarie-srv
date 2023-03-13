@@ -188,8 +188,6 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
                 result.update(
                     target=self.user_from.pk,
                     source=self.user_to.pk,
-                    is_trust=self.is_trust,
-                    is_child=self.is_child,
                 )
             else:
                 result.update(
