@@ -12,7 +12,6 @@ from django.db.models import Prefetch
 from django.http import Http404
 from django.contrib.postgres.search import SearchQuery, SearchVector
 from django.db.utils import ProgrammingError
-from django.templatetags.static import static
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -2227,18 +2226,17 @@ class ApiBotPollResults(APIView):
         Включая связи доверия
         """
         try:
-            poll_id = int(request.GET.get('poll_id'))
+            poll_id = int(request.GET.get('tg_poll_id'))
             tgpoll = TgPoll.objects.get(poll_id=poll_id)
             nodes = []
             links = []
-            data = dict(poll_id=poll_id)
+            data = dict(question=tgpoll.question)
             for answer in TgPollAnswer.objects.filter(tgpoll=tgpoll, number__gt=0):
                 nodes.append(dict(
                     id=-answer.number,
                     first_name=answer.answer,
-                    photo=request.build_absolute_uri(
-                        static('images/poll-answers/poll-answer_%s.png' % answer.number)
-                )))
+                    photo='poll-answer'
+                ))
             prefetch = Prefetch('oauth_set', queryset=Oauth.objects.select_related('user', 'user__profile').filter(provider=Oauth.PROVIDER_TELEGRAM))
             queryset = TgPollAnswer.objects.prefetch_related(prefetch).select_related('tgpoll').filter(tgpoll=tgpoll)
             user_pks = set()
