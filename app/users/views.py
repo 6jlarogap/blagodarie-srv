@@ -8,9 +8,11 @@ from django.db import transaction, IntegrityError, connection
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
+from django.db.models import Prefetch
 from django.http import Http404
 from django.contrib.postgres.search import SearchQuery, SearchVector
 from django.db.utils import ProgrammingError
+from django.templatetags.static import static
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -2214,3 +2216,45 @@ class ApiBotPollAnswer(APIView):
         return Response(data=data, status=status_code)
 
 api_bot_poll_answer = ApiBotPollAnswer.as_view()
+
+
+class ApiBotPollResults(APIView):
+
+    def get(self, request):
+        """
+        Получить результаты опроса в пригодном для отображения всех связей пользователь - ответ
+
+        Включая связи доверия
+        """
+        try:
+            poll_id = int(request.GET.get('poll_id'))
+            tgpoll = TgPoll.objects.get(poll_id=poll_id)
+            nodes = []
+            links = []
+            data = dict(poll_id=poll_id)
+            for answer in TgPollAnswer.objects.filter(tgpoll=tgpoll, number__gt=0):
+                nodes.append(dict(
+                    id=-answer.number,
+                    first_name=answer.answer,
+                    photo=request.build_absolute_uri(
+                        static('images/poll-answers/poll-answer_%s.png' % answer.number)
+                )))
+            prefetch = Prefetch('oauth_set', queryset=Oauth.objects.select_related('user', 'user__profile').filter(provider=Oauth.PROVIDER_TELEGRAM))
+            queryset = TgPollAnswer.objects.prefetch_related(prefetch).select_related('tgpoll').filter(tgpoll=tgpoll)
+            user_pks = set()
+            for answer in queryset:
+                for oauth in answer.oauth_set.all():
+                    user = oauth.user
+                    if user.pk not in user_pks:
+                        user_pks.add(user.pk)
+                        nodes.append(user.profile.data_dict(request, short=True, fmt='3d-force-graph'))
+                    if answer.number > 0:
+                        links.append(dict(source=user.pk, target=-answer.number))
+            data.update(nodes=nodes, links=links)
+            status_code = status.HTTP_200_OK
+        except (TypeError, ValueError, TgPoll.DoesNotExist,):
+            data = {}
+            status_code = status.HTTP_404_NOT_FOUND
+        return Response(data=data, status=status_code)
+
+api_bot_poll_results = ApiBotPollResults.as_view()

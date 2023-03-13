@@ -35,6 +35,7 @@ urlpatterns = [
 
     re_path(r'^api/bot/poll/?$', views.api_bot_poll),
     re_path(r'^api/bot/poll/answer/?$', views.api_bot_poll_answer),
+    re_path(r'^api/bot/poll/results/?$', views.api_bot_poll_results),
 
     re_path(r'^test/goto/(?P<temp_token>[a-f0-9]{40})/link/?$', views.test_goto_auth_link),
 
