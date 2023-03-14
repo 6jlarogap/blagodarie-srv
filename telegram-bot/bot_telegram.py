@@ -3648,6 +3648,8 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
     reply = ''
     if tg_user_sender.is_bot:
         reply = 'Сообщения от ботов пока не обрабатываются'
+    elif message.content_type == ContentType.PINNED_MESSAGE:
+        return
     elif not message.is_forward() and message.content_type != ContentType.TEXT:
         reply = 'Сюда можно слать текст для поиска, включая @username, или пересылать сообщения любого типа'
     if reply:
