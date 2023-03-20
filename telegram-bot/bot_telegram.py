@@ -165,7 +165,7 @@ async def process_command_poll(message: types.Message, state: FSMContext):
             options.append(line)
     if not err_mes:
         if not options:
-            err_mes = 'Не указаны вопросы'
+            err_mes = 'Не указаны ответы'
         elif len(options) > 10:
             err_mes = 'Вопросов может быть не больше 10'
     if err_mes:
@@ -249,10 +249,11 @@ async def process_command_offer(message: types.Message, state: FSMContext):
                 if err_mes:
                     break
                 answers.append(line)
-        if not answers:
-            err_mes = 'Не указаны вопросы'
-        elif len(answers) > 10:
-            err_mes = 'Превышен максимум числа ответов'
+        if not err_mes:
+            if not answers:
+                err_mes = 'Не указаны ответы'
+            elif len(answers) > 10:
+                err_mes = 'Превышен максимум числа ответов'
         if err_mes:
             await message.reply(help_mes % dict(err_mes=err_mes))
             return
