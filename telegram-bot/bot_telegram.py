@@ -4098,8 +4098,8 @@ def text_offer(user_from, offer, bot_data):
     Хорошо - 2
     Плохо - 0
 
-    Схема <graph.blagoroda.org/offer_uuid=offerUUID>
-    Ссылка <t.me/bot_username?start=offer-offerUUID>
+    Результаты <graph.blagoroda.org/offer_uuid=offerUUID>
+    Нажмите чтобы голосовать <t.me/bot_username?start=offer-offerUUID>
 
     Это всё сообщение - под ним - 5 кнопок:
     Отлично
@@ -4122,12 +4122,12 @@ def text_offer(user_from, offer, bot_data):
             result += '%s - %s\n' % (answer['answer'], len(answer['users']),)
     result += '\n'
     result += Misc.get_html_a(
-        href='%s/?offer_uuid=%s' % (settings.GRAPH_HOST, offer['uuid']),
-        text='Схема'
+        href='t.me/%s?start=offer-%s' % (bot_data['username'], offer['uuid'],),
+        text='Нажмите чтобы голосовать'
     ) + '\n'
     result += Misc.get_html_a(
-        href='t.me/%s?start=offer-%s' % (bot_data['username'], offer['uuid'],),
-        text='Ссылка'
+        href='%s/?offer_uuid=%s' % (settings.GRAPH_HOST, offer['uuid']),
+        text='Результаты'
     ) + '\n'
     return result
 
