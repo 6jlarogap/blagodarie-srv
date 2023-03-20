@@ -27,7 +27,7 @@ from app.models import UnclearDate, PhotoModel, GenderMixin
 from django.contrib.auth.models import User
 from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TgGroup, \
     TempToken, UuidMixin, TelegramApiMixin, \
-    TgPoll, TgPollAnswer
+    TgPoll, TgPollAnswer, Offer, OfferAnswer
 from contact.models import Key, KeyType, CurrentState, OperationType, Wish, Ability, ApiAddOperationMixin
 
 class ApiGetProfileInfo(UuidMixin, APIView):
@@ -2147,18 +2147,6 @@ class ApiBotPoll(APIView):
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
-
-    def get(self, request):
-        try:
-            poll_id = int(request.GET.get('poll_id'))
-            tgpoll = TgPoll.objects.get(poll_id=poll_id)
-            data = tgpoll.data_dict()
-            status_code = status.HTTP_200_OK
-        except (TypeError, ValueError, TgPoll.DoesNotExist,):
-            data = {}
-            status_code = status.HTTP_404_NOT_FOUND
-        return Response(data=data, status=status_code)
-
 api_bot_poll = ApiBotPoll.as_view()
 
 class ApiBotPollAnswer(APIView):
@@ -2166,7 +2154,7 @@ class ApiBotPollAnswer(APIView):
     @transaction.atomic
     def post(self, request):
         """
-        Послать или отменить голос в телеграм опросу
+        Послать или отменить голос в телеграм опрос
 
         {
             "poll_id": "54321",
@@ -2195,7 +2183,8 @@ class ApiBotPollAnswer(APIView):
                 )
             except (KeyError, Oauth.DoesNotExist,):
                 raise ServiceException('Телеграм пользователь не найден')
-            oauth.tg_poll_answers.clear()
+            for a in oauth.tg_poll_answers.filter(tgpoll=tgpoll):
+                oauth.tg_poll_answers.remove(a)
             try:
                 if request.data['option_ids']:
                     for o in request.data['option_ids']:
@@ -2268,3 +2257,171 @@ class ApiBotPollResults(APIView):
         return Response(data=data, status=status_code)
 
 api_bot_poll_results = ApiBotPollResults.as_view()
+
+
+class ApiOffer(UuidMixin, APIView):
+
+    @transaction.atomic
+    def post(self, request):
+        """
+        Создать опрос/предложение
+
+        На входе:
+        {
+            "tg_token": settings.TELEGRAM_BOT_TOKEN,
+            "user_uuid": ....,
+            "question": "Как дела",
+            "answers": [
+                    {"text": "Отлично"},
+                    {"text": "Хорошо"},
+                    {"text": "Плохо"}
+                ],
+        }
+        """
+        try:
+            if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                raise ServiceException('Неверный токен телеграм бота')
+            owner, profile = self.check_user_uuid(uuid=request.data.get('user_uuid'), related=('user',))
+            if not request.data.get('question'):
+                raise ServiceException('Не задан вопрос')
+            if not request.data.get('answers'):
+                raise ServiceException('Не заданы ответы')
+            if len(request.data['answers']) > Offer.MAX_NUM_ANSWERS:
+                raise ServiceException('Число ответов > %s' % Offer.MAX_NUM_ANSWERS)
+            offer = Offer.objects.create(
+                owner=owner,
+                question=request.data['question'],
+            )
+            offeranswer0 = OfferAnswer.objects.create(offer=offer, number=0, answer='')
+            # Создатель опроса его видел. Ему присваивается "фиктивный" номер 0 ответа
+            profile.offer_answers.add(offeranswer0)
+            for i, answer in enumerate(request.data['answers']):
+                if not answer.strip():
+                    raise ServiceException('Обнаружен пустой вопрос')
+                OfferAnswer.objects.create(offer=offer, number=i+1, answer=answer)
+            data = offer.data_dict()
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+
+    def get(self, request):
+        try:
+            offer = Offer.objects.select_related('owner', 'owner__profile').get(uuid=request.GET.get('uuid'))
+            user_ids_only=request.GET.get('user_ids_only')
+            data = offer.data_dict(request=request, user_ids_only=user_ids_only)
+            status_code = status.HTTP_200_OK
+        except (TypeError, ValueError, ValidationError, Offer.DoesNotExist,):
+            data = {}
+            status_code = status.HTTP_404_NOT_FOUND
+        return Response(data=data, status=status_code)
+
+api_offer = ApiOffer.as_view()
+
+
+class ApiOfferAnswer(UuidMixin, APIView):
+
+    @transaction.atomic
+    def post(self, request):
+        """
+        Послать или отменить голос в опрос-предложение
+
+        На входе:
+        {
+            "tg_token": settings.TELEGRAM_BOT_TOKEN,
+            "offer_uuid": "...",
+            "user_uuid": "...",
+            "answers": [1]  // Нумерация ответов начинается с 1 !!!
+                            // Если [0], то сброс ответов
+                            // Если [-1], то только показать текущие результаты
+        }
+        В случае успеха на выходе словарь опроса с ответами, кто за что отвечал:
+            offer.data_dict(request)
+        """
+        try:
+            if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                raise ServiceException('Неверный токен телеграм бота')
+            owner, profile = self.check_user_uuid(uuid=request.data.get('user_uuid'), related=('user',))
+            try:
+                offer = Offer.objects.get(uuid=request.data.get('offer_uuid'))
+            except (KeyError, TypeError, ValidationError, Offer.DoesNotExist,):
+                raise ServiceException('Не найден опрос')
+            numbers = request.data['answers']
+            if len(numbers) == 1 and numbers[0] == -1:
+                # Обновить. Если еще не голосовал или впервые видит
+                # опрос, задать фиктивный номер 0: видел опрос
+                if profile.offer_answers.filter(offer=offer).count() == 0:
+                    offeranswer0 = OfferAnswer.objects.get(offer=offer, number=0)
+                    profile.offer_answers.add(offeranswer0)
+            else:
+                current_numbers = [a.number for a in profile.offer_answers.filter(offer=offer)]
+                if set(current_numbers) != set(numbers):
+                    for a in profile.offer_answers.filter(offer=offer):
+                        profile.offer_answers.remove(a)
+                    try:
+                        for number in numbers:
+                            offeranswer = OfferAnswer.objects.get(offer=offer, number=number)
+                            profile.offer_answers.add(offeranswer)
+                    except (KeyError, OfferAnswer.DoesNotExist,):
+                        raise ServiceException('Получен не существующий ответ')
+            data = offer.data_dict(request, user_ids_only=True)
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_offer_answer = ApiOfferAnswer.as_view()
+
+
+class ApiOfferResults(APIView):
+
+    def get(self, request):
+        """
+        Получить результаты опроса в пригодном для отображения всех связей пользователь - ответ
+
+        Включая связи доверия
+        """
+        try:
+            offer_uuid = request.GET.get('offer_uuid')
+            offer = Offer.objects.get(uuid=offer_uuid)
+            offer_dict = offer.data_dict(request, user_ids_only=False)
+            nodes = []
+            links = []
+            data = dict(question=offer.question)
+            user_pks = set()
+            for answer in offer_dict['answers']:
+                if answer['number'] > 0:
+                    nodes.append(dict(
+                        id=-answer['number'],
+                        first_name=answer['answer'],
+                        photo='poll-answer'
+                    ))
+                for user in answer['users']:
+                    if user['id'] not in user_pks:
+                        user_pks.add(user['id'])
+                        nodes.append(user)
+                    if answer['number'] > 0:
+                        links.append(dict(
+                            source=user['id'],
+                            target=-answer['number'],
+                            is_offer=True,
+                        ))
+            q_connections = Q(
+                is_trust=True, is_reverse=False,
+                user_from__in=user_pks, user_to__in=user_pks
+            )
+            for cs in CurrentState.objects.filter(q_connections).select_related(
+                        'user_from__profile', 'user_to__profile',).distinct():
+                links.append(dict(source=cs.user_from.pk, target=cs.user_to.pk))
+
+            data.update(nodes=nodes, links=links)
+            status_code = status.HTTP_200_OK
+        except (TypeError, ValueError, ValidationError, Offer.DoesNotExist,):
+            data = {}
+            status_code = status.HTTP_404_NOT_FOUND
+        return Response(data=data, status=status_code)
+
+api_offer_results = ApiOfferResults.as_view()

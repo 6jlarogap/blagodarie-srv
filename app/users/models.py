@@ -5,7 +5,7 @@ import json, uuid, re, hashlib
 
 from django.conf import settings
 from django.db import models, transaction, IntegrityError
-from django.db.models import Sum, F
+from django.db.models import Sum, F, Prefetch
 from django.db.models.query_utils import Q
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
@@ -374,6 +374,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
     dod = UnclearDateModelField("Дата смерти", null=True, blank=True)
 
     comment = models.TextField(verbose_name=_("Примечание"), null=True)
+    offer_answers = models.ManyToManyField('users.OfferAnswer', verbose_name=_("Ответы на опросы/предложения"))
 
     class Meta:
         ordering = ('user__first_name', )
@@ -942,7 +943,7 @@ class TgPoll(BaseModelInsertTimestamp):
 
 class TgPollAnswer(BaseModelInsertTimestamp):
     """
-    Опрос в телеграме
+    Ответы на опросы в телеграме
     """
     tgpoll = models.ForeignKey(TgPoll, on_delete=models.CASCADE)
     # 0-й ответ резервируем для тех, кто сбросил свой голос
@@ -952,6 +953,64 @@ class TgPollAnswer(BaseModelInsertTimestamp):
     class Meta:
         unique_together = ('tgpoll', 'number',)
         ordering = ('tgpoll', 'number',)
+
+    def data_dict(self):
+        return dict(
+            number=self.number,
+            answer=self.answer,
+        )
+
+    def __str__(self):
+        return '%s: %s' % (self.number, self.answer)
+
+class Offer(BaseModelInsertTimestamp):
+    """
+    Самодельный опрос в телеграме
+
+    Теоретически может быть и не в телеграме, например сделанный в web приложении
+    """
+
+    MAX_NUM_ANSWERS = 10
+
+    owner = models.ForeignKey('auth.User', verbose_name=_("Владелец"), on_delete=models.CASCADE)
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
+    question = models.CharField(_("Вопрос"), max_length=256)
+
+    def data_dict(self, request=None, user_ids_only=False):
+        result = dict(
+            uuid=self.uuid,
+            owner_uuid=self.owner.profile.uuid,
+            question=self.question,
+            timestamp=int(time.time()),
+        )
+        prefetch = Prefetch('profile_set', queryset=Profile.objects.select_related('user',).all())
+        queryset = OfferAnswer.objects.prefetch_related(prefetch).select_related('offer').filter(offer=self)
+        answers = []
+        for answer in queryset:
+            answer_dict = answer.data_dict()
+            users = []
+            for profile in answer.profile_set.all():
+                if user_ids_only:
+                    users.append(profile.user.pk)
+                else:
+                    users.append(profile.data_dict(request, short=True, fmt='3d-force-graph'))
+            answer_dict.update(users=users)
+            answers.append(answer_dict)
+        result.update(answers=answers)
+        return result
+
+class OfferAnswer(BaseModelInsertTimestamp):
+    """
+    Ответы на опросы типа offer
+    """
+    offer = models.ForeignKey(Offer, on_delete=models.CASCADE)
+    # 0-й ответ резервируем для тех, кто сбросил свой голос
+    number = models.PositiveIntegerField(_("Номер"), default=0)
+    answer = models.CharField(_("Ответ"), max_length=255, blank=True, default='')
+
+    class Meta:
+        unique_together = ('offer', 'number',)
+        ordering = ('offer', 'number',)
 
     def data_dict(self):
         return dict(

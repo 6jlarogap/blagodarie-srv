@@ -153,6 +153,8 @@ class KeyboardType(object):
 
     TRUST_THANK_WO_COMMENT = 43
 
+    OFFER_ANSWER = 44
+
     # Разделитель данных в call back data
     #
     SEP = '~'

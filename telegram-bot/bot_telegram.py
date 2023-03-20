@@ -215,6 +215,79 @@ async def process_command_poll(message: types.Message, state: FSMContext):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('offer',),
+    state=None,
+)
+async def process_command_offer(message: types.Message, state: FSMContext):
+    help_mes = (
+        '%(err_mes)s\n\n'
+        'Поручить боту создать опрос-предложение:\n'
+        '/offer Вопрос\n'
+        'Ответ 1\n'
+        'Ответ 2\n'
+        ' и т.д. не больше 10 ответов'
+    )
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender == 200:
+        answers = []
+        err_mes = ''
+        for i, l in enumerate(message.text.split('\n')):
+            line = l.strip()
+            if not line:
+                continue
+            if i == 0:
+                m = re.search(r'^\/offer\s+(.*)$', line)
+                if not m or not m.group(1):
+                    err_mes = 'Не указан вопрос опроса'
+                    break
+                question = m.group(1)
+            else:
+                for a in answers:
+                    if line == a:
+                        err_mes = 'Обнаружен повтор вопроса'
+                        break
+                if err_mes:
+                    break
+                answers.append(line)
+        if not answers:
+            err_mes = 'Не указаны вопросы'
+        elif len(answers) > 10:
+            err_mes = 'Превышен максимум числа ответов'
+        if err_mes:
+            await message.reply(help_mes % dict(err_mes=err_mes))
+            return
+
+        create_offer_dict = dict(
+            tg_token=settings.TOKEN,
+            user_uuid=response_sender['uuid'],
+            question=question,
+            answers=answers,
+        )
+        logging.debug('create offer in api, payload: %s' % create_offer_dict)
+        status, response = await Misc.api_request(
+            path='/api/offer',
+            method='post',
+            json=create_offer_dict,
+        )
+        logging.debug('create offer in api, status: %s' % status)
+        logging.debug('create offer in api, response: %s' % response)
+        if status == 400 and response.get('message'):
+            err_mes = response['message']
+        elif status != 200:
+            err_mes = 'Ошибка сохранения опроса-предложения'
+        if err_mes:
+            await message.reply(err_mes, disable_web_page_preview=True,)
+            return
+        await message.reply('Создан опрос:', disable_web_page_preview=True,)
+        bot_data = await bot.get_me()
+        await show_offer(response_sender, response, message, bot_data)
+
+        if response_sender.get('created'):
+            await Misc.update_user_photo(bot, message.from_user, response_sender)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     commands=('setpotr', 'потребности',),
     state=None,
 )
@@ -499,6 +572,8 @@ commands_dict = {
     'setplace': geo_command_handler,
     'место': geo_command_handler,
     'poll': process_command_poll,
+    'offer': process_command_offer,
+    'poll': process_command_offer,
     'new': process_command_new,
     'trip': trip_geo_command_handler,
     'тур': trip_geo_command_handler,
@@ -3718,119 +3793,141 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
                 else:
                     m = re.search(
-                        r'^\/start\s+([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
+                        r'^\/start\s+offer\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
                         message_text,
                         flags=re.I,
                     )
                     if m:
-                        uuid_to_search = m.group(1).lower()
-                        state_ = 'start_uuid'
+                        offer_to_search = m.group(1).lower()
+                        state_ = 'start_offer'
                     else:
                         m = re.search(
                             (
-                                r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\='
+                                r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\=offer\-'
                                 '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
                             ) % re.escape(bot_data['username']),
                             message_text,
                             flags=re.I,
                         )
                         if m:
-                            uuid_to_search = m.group(1).lower()
-                            state_ = 'start_uuid'
+                            offer_to_search = m.group(1).lower()
+                            state_ = 'start_offer'
 
                         else:
                             m = re.search(
-                                r'^\/start\s+(\w{5,})$',
+                                r'^\/start\s+([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
                                 message_text,
                                 flags=re.I,
                             )
                             if m:
-                                username_to_search = m.group(1)
-                                state_ = 'start_username'
+                                uuid_to_search = m.group(1).lower()
+                                state_ = 'start_uuid'
                             else:
                                 m = re.search(
                                     (
                                         r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\='
-                                        '(\w{5,})$'
+                                        '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
                                     ) % re.escape(bot_data['username']),
                                     message_text,
                                     flags=re.I,
                                 )
                                 if m:
-                                    username_to_search = m.group(1)
-                                    state_ = 'start_username'
+                                    uuid_to_search = m.group(1).lower()
+                                    state_ = 'start_uuid'
 
                                 else:
                                     m = re.search(
-                                        (
-                                            r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\=poll\-'
-                                            '(\d{3,})$'
-                                        ) % re.escape(bot_data['username']),
+                                        r'^\/start\s+(\w{5,})$',
                                         message_text,
                                         flags=re.I,
                                     )
                                     if m:
-                                        # https://t.me/doverabot?start=poll
-                                        poll_to_search = m.group(1)
-                                        state_ = 'start_poll'
+                                        username_to_search = m.group(1)
+                                        state_ = 'start_username'
                                     else:
                                         m = re.search(
-                                            r'^\/start\s+poll-(\d{3,})$',
+                                            (
+                                                r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\='
+                                                '(\w{5,})$'
+                                            ) % re.escape(bot_data['username']),
                                             message_text,
                                             flags=re.I,
                                         )
                                         if m:
-                                            # /start poll:
-                                            poll_to_search = m.group(1)
-                                            state_ = 'start_poll'
+                                            username_to_search = m.group(1)
+                                            state_ = 'start_username'
 
                                         else:
-                                            if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
-                                                state_ = 'invalid_message_text'
-                                                reply = Misc.invalid_search_text()
+                                            m = re.search(
+                                                (
+                                                    r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\=poll\-'
+                                                    '(\d{3,})$'
+                                                ) % re.escape(bot_data['username']),
+                                                message_text,
+                                                flags=re.I,
+                                            )
+                                            if m:
+                                                # https://t.me/doverabot?start=poll
+                                                poll_to_search = m.group(1)
+                                                state_ = 'start_poll'
                                             else:
-                                                search_phrase = ''
-                                                usernames, text_stripped = Misc.get_text_usernames(message_text)
-                                                if text_stripped:
-                                                    search_phrase = Misc.text_search_phrase(
-                                                        text_stripped,
-                                                        MorphAnalyzer,
-                                                    )
-                                                    if not search_phrase and not usernames:
+                                                m = re.search(
+                                                    r'^\/start\s+poll-(\d{3,})$',
+                                                    message_text,
+                                                    flags=re.I,
+                                                )
+                                                if m:
+                                                    # /start poll:
+                                                    poll_to_search = m.group(1)
+                                                    state_ = 'start_poll'
+
+                                                else:
+                                                    if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
                                                         state_ = 'invalid_message_text'
-                                                        reply = Misc.PROMPT_SEARCH_PHRASE_TOO_SHORT
-
-                                                if usernames:
-                                                    logging.debug('@usernames found in message text\n')
-                                                    payload_username = dict(tg_username=','.join(usernames),)
-                                                    status, response = await Misc.api_request(
-                                                        path='/api/profile',
-                                                        method='get',
-                                                        params=payload_username,
-                                                    )
-                                                    logging.debug('get by username, status: %s' % status)
-                                                    logging.debug('get by username, response: %s' % response)
-                                                    if status == 200 and response:
-                                                        a_found += response
-                                                        state_ = 'found_username'
+                                                        reply = Misc.invalid_search_text()
                                                     else:
-                                                        state_ = 'not_found'
+                                                        search_phrase = ''
+                                                        usernames, text_stripped = Misc.get_text_usernames(message_text)
+                                                        if text_stripped:
+                                                            search_phrase = Misc.text_search_phrase(
+                                                                text_stripped,
+                                                                MorphAnalyzer,
+                                                            )
+                                                            if not search_phrase and not usernames:
+                                                                state_ = 'invalid_message_text'
+                                                                reply = Misc.PROMPT_SEARCH_PHRASE_TOO_SHORT
 
-                                                if search_phrase:
-                                                    status, response = await Misc.search_users('query', search_phrase)
-                                                    if status == 400 and response.get('code') and response['code'] == 'programming_error':
-                                                        if state_ != 'found_username':
-                                                            state_ = 'not_found'
-                                                            reply = 'Ошибка доступа к данных. Получили отказ по такой строке в поиске'
-                                                    elif status == 200:
-                                                        if response:
-                                                            a_found += response
-                                                            state_ = 'found_in_search'
-                                                        elif state_ != 'found_username':
-                                                            state_ = 'not_found'
-                                                    else:
-                                                        state_ = 'not_found'
-                                                        reply = Misc.MSG_ERROR_API
+                                                        if usernames:
+                                                            logging.debug('@usernames found in message text\n')
+                                                            payload_username = dict(tg_username=','.join(usernames),)
+                                                            status, response = await Misc.api_request(
+                                                                path='/api/profile',
+                                                                method='get',
+                                                                params=payload_username,
+                                                            )
+                                                            logging.debug('get by username, status: %s' % status)
+                                                            logging.debug('get by username, response: %s' % response)
+                                                            if status == 200 and response:
+                                                                a_found += response
+                                                                state_ = 'found_username'
+                                                            else:
+                                                                state_ = 'not_found'
+
+                                                        if search_phrase:
+                                                            status, response = await Misc.search_users('query', search_phrase)
+                                                            if status == 400 and response.get('code') and response['code'] == 'programming_error':
+                                                                if state_ != 'found_username':
+                                                                    state_ = 'not_found'
+                                                                    reply = 'Ошибка доступа к данных. Получили отказ по такой строке в поиске'
+                                                            elif status == 200:
+                                                                if response:
+                                                                    a_found += response
+                                                                    state_ = 'found_in_search'
+                                                                elif state_ != 'found_username':
+                                                                    state_ = 'not_found'
+                                                            else:
+                                                                state_ = 'not_found'
+                                                                reply = Misc.MSG_ERROR_API
 
     if state_ == 'not_found' and not reply:
         reply = Misc.PROMPT_NOTHING_FOUND
@@ -3841,7 +3938,9 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             response_from.update(tg_username=tg_user_sender.username)
             user_from_id = response_from.get('user_id')
             if state_ in ('ya', 'forwarded_from_me', 'start', ) or \
-                state_ in ('start_uuid', 'start_username', 'start_setplace', 'start_poll',) and response_from.get('created'):
+               state_ in (
+                    'start_uuid', 'start_username', 'start_setplace', 'start_poll', 'start_offer'
+               ) and response_from.get('created'):
                 a_response_to += [response_from, ]
 
     if user_from_id and state_ == 'start_uuid':
@@ -3894,7 +3993,9 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 a_found += response
 
 
-    if state_ and state_ not in ('not_found', 'invalid_message_text', 'start_setplace', 'start_poll') and user_from_id and a_response_to:
+    if state_ and state_ not in (
+        'not_found', 'invalid_message_text', 'start_setplace', 'start_poll', 'start_offer',
+       ) and user_from_id and a_response_to:
         if state_ == 'start':
             await message.reply(await Misc.rules_text(), disable_web_page_preview=True)
             if a_response_to and not a_response_to[0].get('photo'):
@@ -3914,13 +4015,14 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
     elif reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
-    if state_ not in ('start_setplace', 'start_poll',):
+    if state_ not in ('start_setplace', 'start_poll', 'start_offer',):
         await Misc.show_deeplinks(a_found, message, bot_data)
 
     if user_from_id:
         if response_from.get('created') and state_ != 'start':
             await Misc.update_user_photo(bot, tg_user_sender, response_from)
-            #if a_response_to and state_ in ('start_setplace', 'start_poll',):
+            # Будем показывать карточку нового юзера в таких случаях?
+            #if a_response_to and state_ in ('start_setplace', 'start_poll', 'start_offer', ):
                 #await Misc.show_cards(
                     #a_response_to,
                     #message,
@@ -3952,10 +4054,195 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             else:
                 await message.reply('Опрос не найден')
             return
+        if state_ == 'start_offer':
+            status_offer, response_offer = await post_offer_answer(offer_to_search, response_from, [-1])
+            if status_offer == 200:
+                await show_offer(response_from, response_offer, message, bot_data)
+            else:
+                await message.reply('Опрос-предложение не найдено')
+            return
 
     if state_ == 'forwarded_from_other' and a_response_to and a_response_to[0].get('created'):
         await Misc.update_user_photo(bot, tg_user_forwarded, response_to)
 
+
+async def post_offer_answer(offer_uuid, user_from, answers):
+    payload = dict(
+        tg_token=settings.TOKEN,
+        offer_uuid=offer_uuid,
+        answers=answers,
+        user_uuid=user_from['uuid'],
+    )
+    logging.debug('post_offer, payload: %s' % payload)
+    status, response = await Misc.api_request(
+        path='/api/offer/answer',
+        method='post',
+        json=payload,
+    )
+    logging.debug('post_offer_answer, status: %s' % status)
+    logging.debug('get_offer_answer, response: %s' % response)
+    return status, response
+
+
+def text_offer(user_from, offer, bot_data):
+    """
+    Текст опроса-предложения
+
+    На примере опроса 'Как дела?' с ответами Отлично (3 голоса), Хорошо (2), Плохо (0)
+
+    Как дела?
+
+    Голоса на <датавремя>
+    Отлично - 3
+    Хорошо - 2
+    Плохо - 0
+
+    Схема <graph.blagoroda.org/offer_uuid=offerUUID>
+    Ссылка <t.me/bot_username?start=offer-offerUUID>
+
+    Это всё сообщение - под ним - 5 кнопок:
+    Отлично
+    Хорошо
+    Плохо
+    Отмена
+    Обновить
+    """
+
+    result = (
+        '%(question)s\n'
+        '\n'
+        'Голоса на %(datetime_string)s\n'
+    ) % dict(
+        question=offer['question'],
+        datetime_string=Misc.datetime_string(offer['timestamp'], with_timezone=True)
+    )
+    for answer in offer['answers']:
+        if answer['number'] > 0:
+            result += '%s - %s\n' % (answer['answer'], len(answer['users']),)
+    result += '\n'
+    result += Misc.get_html_a(
+        href='%s/?offer_uuid=%s' % (settings.GRAPH_HOST, offer['uuid']),
+        text='Схема'
+    ) + '\n'
+    result += Misc.get_html_a(
+        href='t.me/%s?start=offer-%s' % (bot_data['username'], offer['uuid'],),
+        text='Ссылка'
+    ) + '\n'
+    return result
+
+
+def markup_offer(user_from, offer):
+    reply_markup = InlineKeyboardMarkup()
+    callback_data_template = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s%(number)s%(sep)s'
+    callback_data_dict = dict(
+        keyboard_type=KeyboardType.OFFER_ANSWER,
+        uuid=offer['uuid'],
+        sep=KeyboardType.SEP,
+    )
+    have_i_voted = False
+    for answer in offer['answers']:
+        if answer['number'] > 0:
+            callback_data_dict.update(number=answer['number'])
+            answer_text = answer['answer']
+            if user_from['user_id'] in answer['users']:
+                have_i_voted = True
+                answer_text = '(*) ' + answer_text
+            inline_btn_answer = InlineKeyboardButton(
+                answer_text,
+                callback_data=callback_data_template % callback_data_dict
+            )
+            reply_markup.row(inline_btn_answer)
+
+    if have_i_voted:
+        callback_data_dict.update(number=0)
+        inline_btn_answer = InlineKeyboardButton(
+            'Отозвать мой голос',
+            callback_data=callback_data_template % callback_data_dict
+        )
+        reply_markup.row(inline_btn_answer)
+
+    callback_data_dict.update(number=-1)
+    inline_btn_answer = InlineKeyboardButton(
+        'Обновить',
+        callback_data=callback_data_template % callback_data_dict
+    )
+    reply_markup.row(inline_btn_answer)
+    return reply_markup
+
+
+async def show_offer(user_from, offer, message, bot_data):
+    """
+    Показать опрос-предложение
+
+    Текст получаем из text_offer(), формируем сообщение с этим текстом и с кнопками:
+    Ответ 1
+    Ответ 2
+    ...
+    Ответ N
+    Отмена
+    Обновить
+    Кнопки будут иметь свой keyboard_type, uuid опроса, а также номер ответа:
+        - для ответов 1 ... N номер будет: 1 ... N
+        - для Отмена: 0
+        - для Обновить: -1
+    """
+    text = text_offer(user_from, offer, bot_data)
+    reply_markup = markup_offer(user_from, offer)
+    try:
+        await bot.send_message(
+            message.from_user.id,
+            text,
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
+        )
+    except:
+        await message.reply('Опрос-предложение предъявить не удалось')
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.OFFER_ANSWER,
+        KeyboardType.SEP,
+        # uuid опроса           # 1
+        # KeyboardType.SEP,
+        # номер ответа          # 2
+        # KeyboardType.SEP,
+    ), c.data),
+    state = None,
+    )
+async def process_callback_offer_answer(callback_query: types.CallbackQuery, state: FSMContext):
+    if callback_query.message:
+        tg_user_sender = callback_query.from_user
+        code = callback_query.data.split(KeyboardType.SEP)
+        try:
+            offer_uuid = code[1]
+            number = int(code[2])
+        except (IndexError, ValueError,):
+            return
+        status_from, profile_from = await Misc.post_tg_user(tg_user_sender)
+        if not profile_from:
+            return
+        status_answer, response_answer = await post_offer_answer(offer_uuid, profile_from, [number])
+        if status_answer == 200:
+            bot_data = await bot.get_me()
+            text = text_offer(profile_from, response_answer, bot_data)
+            reply_markup = markup_offer(profile_from, response_answer)
+            await callback_query.message.edit_text(text, reply_markup=reply_markup, disable_web_page_preview=True)
+            success_message = ''
+            if number > 0:
+                success_message = 'Вы выбрали вариант: %s' % response_answer['answers'][number]['answer']
+            elif number == 0:
+                success_message = 'Вы отозвали свой голос'
+            if success_message:
+                await callback_query.message.reply(success_message)
+        else:
+            if number > 0:
+                err_mes = 'Не далось подать голос'
+            elif number == 0:
+                err_mes = 'Не удалось отозвать голос'
+            else:
+                err_mes = 'Не удалось обновить'
+            await callback_query.message.reply(err_mes)
 
 async def do_chat_join(
     callback_query,

@@ -45,6 +45,10 @@ MAP_HOST = 'https://map.blagoroda.org'
 #
 GROUP_HOST = 'https://group.blagoroda.org'
 
+# Ссылка на отношения в группе
+#
+GRAPH_HOST = 'https://graph.blagoroda.org'
+
 # Ссылка на свзи в роду
 #
 GENESIS_HOST = 'https://genesis.blagoroda.org'
