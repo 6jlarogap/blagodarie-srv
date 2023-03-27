@@ -577,6 +577,7 @@ class PhotoModel(FilesMixin, models.Model):
     # Имя по умолчанию для файла, если таковое не задано в потоке
     #
     DEFAULT_FNAME = 'photo.jpg'
+    DEFAULT_AVATAR_IN_MEDIA = 'images/default_avatar.jpg'
 
     THUMB_WIDTH = 64
     THUMB_HEIGHT = 64
@@ -712,19 +713,24 @@ class PhotoModel(FilesMixin, models.Model):
         return PhotoModel.choose_photo_of(request, self.photo and self.photo.name or '')
 
     def choose_thumb(self, request,
-        width=THUMB_WIDTH, height=THUMB_HEIGHT, method=THUMB_METHOD,
+        width=THUMB_WIDTH, height=THUMB_HEIGHT,
+        method=THUMB_METHOD,
         put_default_avatar=False,
+        default_avatar_in_media=DEFAULT_AVATAR_IN_MEDIA,
     ):
         result = ''
-        if self.photo:
-            path = '%s%s/%sx%s~%s~12.jpg'  % (settings.THUMBNAILS_STORAGE_BASE_PATH,
-                                                    self.photo.name, width, height, method)
+        fname = self.photo.name if self.photo else ''
+        if not fname and put_default_avatar:
+            fname = default_avatar_in_media
+        if fname:
+            path = '%(path_to_media)s%(fname)s/%(width)sx%(height)s~%(method)s~12.jpg'  % dict(
+                    path_to_media=settings.THUMBNAILS_STORAGE_BASE_PATH,
+                    fname=fname,
+                    width=width,
+                    height=height,
+                    method=method,
+            )
             result = request.build_absolute_uri(path)
-        elif put_default_avatar:
-            fname = 'images/default_avatar_%sx%s.png' % (width, height)
-            if not os.path.exists(os.path.join(settings.STATIC_ROOT, fname)):
-                fname = 'images/default_avatar.png'
-            result = request.build_absolute_uri(static(fname))
         return result
 
 

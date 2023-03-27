@@ -215,6 +215,9 @@ install-readme.txt
       В /etc/crontab такого типа строки:
           15 2 * * * www-data   cd /home/www-data/django/project/app && ./manage.py clearsessions
 
+    * Процедура обновления api:
+        см. contrib/update_backend_prod.sh
+
 Установка Websockets server на сервер Apache в Ubuntu Linux.
 ----------------------------------------------------------------
 
