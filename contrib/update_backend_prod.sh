@@ -1,8 +1,10 @@
 #! /bin/bash
 
-# Процедура обновления по изменении кода API
+# Процедура обновления по изменению кода служб
 
-PROJECT_='/home/www-data/django/api_blagodarie_org'
+VERSION_='api_blagodarie_org'
+
+PROJECT_=/home/www-data/django/$VERSION_
 APP='app'
 TELEGRAM_BOT_SERVICE='telegram-bot'
 
@@ -18,6 +20,9 @@ egrep -i '^[1-9][0-9]* static files? copied' > /dev/null && \
 echo 'Static file(s) changed. Touching static folder.' && \
 sudo -u www-data touch static
 
+sudo -u www-data mkdir -p ../../MEDIA/$VERSION_/images && \
+sudo -u www-data rsync -aq --delete static_src/images/  \
+    ../../MEDIA/$VERSION_/images/
 sudo service apache2 reload
 
 echo ""
