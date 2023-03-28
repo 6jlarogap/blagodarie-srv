@@ -366,6 +366,35 @@ PHOTO_QUALITY = 30
 # Урезать любого размера: <= 0 или None
 #
 PHOTO_QUALITY_MIN_SIZE = 800 * 600
+#
+# -------------
+
+# Опрос (Offer или Poll), карта номер ответа -> цвет
+# Цвет -- что-то из:
+#   - rgb<6-hex-digits>
+#   - <WellKnowColor>:
+#       из PIL.ImageColor.colormap,
+#       https://github.com/python-pillow/Pillow/blob/main/src/PIL/ImageColor.py,
+#       который наверняка соответствует: https://www.w3.org/TR/css-color-3/
+#
+OFFER_ANSWER_COLOR_MAP = [
+    # Нулевой ответ. Это не ответ, но признак того, что юзер опрос offer видел,
+    # и/или отозвал свой голос (опросы poll и OFFER):
+    #
+    'white',            #  0
+    'red',              #  1
+    'purple'            #  2
+    'orange',           #  3
+    'yellow',           #  4
+    'lime'              #  5
+    'green',            #  6
+    'aqua',             #  7
+    'teal',             #  8
+    'blue',             #  9
+    'navy',             # 10
+    'black',            # 11
+]
+#
 # -------------
 
 # THUMBNAILS

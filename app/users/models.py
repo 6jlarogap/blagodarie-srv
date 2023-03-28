@@ -970,7 +970,7 @@ class Offer(BaseModelInsertTimestamp):
     Теоретически может быть и не в телеграме, например сделанный в web приложении
     """
 
-    MAX_NUM_ANSWERS = 10
+    MAX_NUM_ANSWERS = 9
 
     owner = models.ForeignKey('auth.User', verbose_name=_("Владелец"), on_delete=models.CASCADE)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)

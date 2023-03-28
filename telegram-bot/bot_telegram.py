@@ -225,7 +225,7 @@ async def process_command_offer(message: types.Message, state: FSMContext):
         '/offer Вопрос\n'
         'Ответ 1\n'
         'Ответ 2\n'
-        ' и т.д. не больше 10 ответов'
+        ' и т.д. не больше %s ответов' % settings.OFFER_MAX_NUM_ANSWERS
     )
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
@@ -252,8 +252,8 @@ async def process_command_offer(message: types.Message, state: FSMContext):
         if not err_mes:
             if not answers:
                 err_mes = 'Не указаны ответы'
-            elif len(answers) > 10:
-                err_mes = 'Превышен максимум числа ответов'
+            elif len(answers) > settings.OFFER_MAX_NUM_ANSWERS:
+                err_mes = 'Превышен максимум числа ответов (до %s)' % settings.OFFER_MAX_NUM_ANSWERS
         if err_mes:
             await message.reply(help_mes % dict(err_mes=err_mes))
             return

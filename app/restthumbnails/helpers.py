@@ -46,32 +46,47 @@ def parse_method(method):
     #         залить это место белым цветом
     # (2) crop-rgb<6-hex-digits>:
     #       Тоже самое, что (1), но с цветом #<6-hex-digits>
-    # (3) crop-WellKnowColor:
-    #       Тоже самое, что (1), но с цветом WellKnowColor
-    #       из ImageColor.colormap, которая соответствует
-    #       https://www.w3.org/TR/2002/WD-css3-color-20020418/#x11-color
-    #       "supported by popular browsers"
+    # (3) crop-<WellKnowColor>:
+    #       Тоже самое, что (1), но с цветом <WellKnowColor>
+    #       из PIL.ImageColor.colormap,
+    #       https://github.com/python-pillow/Pillow/blob/main/src/PIL/ImageColor.py,
+    #       который наверняка соответствует: https://www.w3.org/TR/css-color-3/
+    # (4)
+    #   crop-frame-N
+    #   crop-rgb<6-hex-digits>-frame-N
+    #   crop-<WellKnowColor>-frame-N
+    #       Вокруг прямоугольника иконки (thumbnail) с его размером size
+    #       рисуется рамка толщиной N пикселей с заданным цветом
+    #       rgb<6-hex-digits> или <WellKnowColor> или
+    #       белым цветом, если не цвет не задан.
+    #   (!) То есть реальный размер иконки увеличивается на N пикселей
+    #       со всех сторон.
     #
     valid = True
     crop_background = 'white'
+    frame = 0
     if method == 'crop':
         pass
     else:
-        m = re.search(r'^crop\-rgb([0-9A-Fa-f]{6})$', method)
+        m = re.search(r'^crop\-rgb([0-9A-Fa-f]{6})', method)
         if m:
             crop_background = '#%s' % m.group(1)
         else:
-            m = re.search(r'^crop\-(\w+)$', method)
+            m = re.search(r'^crop\-(\w+)', method)
             if m:
                 crop_background = m.group(1).lower()
                 if crop_background not in ImageColor.colormap:
                     valid = False
-            elif method not in ['smart', 'scale']:
-                valid = False
+        if valid and method.startswith('crop'):
+            m = re.search(r'\-frame\-(\d+)$', method)
+            if m:
+                frame = int(m.group(1))
+    if valid and not method.startswith('crop') and method not in ('smart', 'scale',):
+        valid = False
     if not valid:
         raise exceptions.InvalidMethodError(
             "'%s' is not a valid method string." % method)
-    return method, crop_background
+    return method, crop_background, frame
 
 
 def get_secret(source, size, method, extension):

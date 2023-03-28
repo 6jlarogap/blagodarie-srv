@@ -85,6 +85,8 @@ TRIP_DATA = dict(
     #   text_agreement='',
 )
 
+OFFER_MAX_NUM_ANSWERS = 9
+
 try:
     from local_settings import *
 except ModuleNotFoundError:

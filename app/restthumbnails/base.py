@@ -15,7 +15,7 @@ class ThumbnailBase(object):
         self.source = getattr(source, 'name', source)
         self.file_signature = defaults.FILE_SIGNATURE
         self.size = helpers.parse_size(size)
-        self.method, self.crop_background = helpers.parse_method(method)
+        self.method, self.crop_background, self.frame = helpers.parse_method(method)
         self.extension = extension
 
     @property
