@@ -1855,6 +1855,10 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
     #
     THUMB_SIZE_ICON = 32
 
+    # Ширина рамки для фоток, где ответ на опрос
+    #
+    OFFER_PHOTO_FRAME = 5
+
     def get(self, request):
         """
         Вернуть пользователй с координатами
@@ -1865,10 +1869,15 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
         #
         lat_avg = 55.7522200
         lng_avg = 37.6155600
+
+        # Ищем пользователя. Его помещаем в центр и делаем больше по размеру иконки на карте
+        #
         found_coordinates = False
+
         first_name = ''
         address = None
         chat_id = chat_title = chat_type = None
+        offer_id = offer_question = None
         if request.GET.get('uuid'):
             try:
                 found_user, found_profile = self.check_user_uuid(request.GET['uuid'], related=('user',))
@@ -1882,6 +1891,8 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 pass
         elif request.GET.get('chat_id'):
             chat_id = request.GET['chat_id']
+        elif request.GET.get('offer_id'):
+            offer_id = request.GET['offer_id']
         bot_username = self.get_bot_username()
         lat_sum = lng_sum = 0
         points = []
@@ -1901,6 +1912,18 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
             qs = Profile.objects.none()
         elif chat_id:
             qs = Profile.objects.filter(q).select_related('user').distinct()
+        elif offer_id:
+            try:
+                offer = Offer.objects.select_related('owner', 'owner__profile').get(uuid=offer_id)
+                q &= Q(offer_answers__offer__uuid=offer_id)
+                qs = Profile.objects.filter(q).select_related('user').distinct()
+                offer_dict = offer.data_dict(request=None, user_ids_only=True)
+                offer_question = offer_dict['question']
+                answers = [answer['answer'] for answer in offer_dict['answers']]
+                answers[0] = 'не ответил(а)'
+            except (ValueError, Offer.DoesNotExist,):
+                qs = Profile.objects.none()
+                offer = None
         else:
             # Или задан uuid, или ничего
             qq_or = []
@@ -1929,6 +1952,26 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 url_deeplink = self.get_deeplink(profile, bot_username)
             else:
                 url_deeplink = url_profile
+            if offer_question:
+                answer_number = offer_dict['user_answered'].get(profile.user.pk, [0])[0]
+                answer_color = settings.OFFER_ANSWER_COLOR_MAP[answer_number]
+                answer_text = answers[answer_number]
+                offer_reply_html = (
+                    '<tr>'
+                        '<td colspan=2>'
+                        'Ответ: %s'
+                        '</td>'
+                    '</tr>'
+                ) % answer_text
+                frame = self.OFFER_PHOTO_FRAME
+                method = 'crop-%s-frame-%s' % (answer_color, frame,)
+                title_template = '%(full_name)s: %(answer_text)s'
+            else:
+                offer_reply_html = ''
+                frame = 0
+                method = 'crop'
+                answer_text=''
+                title_template = '(%(trust_count)s) %(full_name)s'
             dict_user = dict(
                 full_name = profile.user.first_name,
                 trust_count=profile.trust_count,
@@ -1936,14 +1979,19 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 url_profile=url_profile,
                 url_photo_popup=profile.choose_thumb(
                     request,
-                    width=self.THUMB_SIZE_POPUP,
-                    height=self.THUMB_SIZE_POPUP,
+                    method=method,
+                    width=self.THUMB_SIZE_POPUP + frame * 2,
+                    height=self.THUMB_SIZE_POPUP + frame * 2,
                     put_default_avatar=True,
                 ),
                 thumb_size_popup = self.THUMB_SIZE_POPUP,
+                offer_reply_html=offer_reply_html,
+                answer_text=answer_text,
+                title_template=title_template,
             )
             popup = (
-                '<table><tr>'
+                '<table>'
+                '<tr>'
                     '<td>'
                        '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
                     '</td>'
@@ -1952,20 +2000,25 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                         '<br /><br />'
                         ' <a href="%(url_profile)s" target="_blank">Доверия</a>'
                     '</td>'
-                '</tr></table>'
+                '</tr>'
+                '%(offer_reply_html)s'
+                '</table>'
             ) % dict_user
             point = dict(
                 latitude=profile.latitude,
                 longitude=profile.longitude,
-                title='(%(trust_count)s) %(full_name)s' % dict_user,
+                title=title_template % dict_user,
                 popup=popup,
             )
-            if found_coordinates and profile == found_profile:
+            if (found_coordinates and profile == found_profile) or \
+               (offer_question and offer_dict['owner_id'] == profile.user.pk):
                 point.update(
                     is_of_found_user=True,
                     icon=profile.choose_thumb(
                         request,
-                        width=self.THUMB_SIZE_ICON_FOUND, height=self.THUMB_SIZE_ICON_FOUND,
+                        method=method,
+                        width=self.THUMB_SIZE_ICON_FOUND + frame * 2,
+                        height=self.THUMB_SIZE_ICON_FOUND + frame * 2,
                         put_default_avatar=True,
                     ),
                     size_icon=self.THUMB_SIZE_ICON_FOUND,
@@ -1975,7 +2028,9 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                     is_of_found_user=False,
                     icon=profile.choose_thumb(
                         request,
-                        width=self.THUMB_SIZE_ICON, height=self.THUMB_SIZE_ICON,
+                        method=method,
+                        width=self.THUMB_SIZE_ICON + frame * 2,
+                        height=self.THUMB_SIZE_ICON + frame * 2,
                         put_default_avatar=True,
                     ),
                     size_icon=self.THUMB_SIZE_ICON,
@@ -1997,6 +2052,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
             chat_id=chat_id,
             chat_title=chat_title,
             chat_type=chat_type,
+            offer_question=offer_question,
         )
         return Response(data=data, status=200)
 

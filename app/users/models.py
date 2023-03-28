@@ -980,23 +980,30 @@ class Offer(BaseModelInsertTimestamp):
         result = dict(
             uuid=self.uuid,
             owner_uuid=self.owner.profile.uuid,
+            owner_id=self.owner.pk,
             question=self.question,
             timestamp=int(time.time()),
         )
         prefetch = Prefetch('profile_set', queryset=Profile.objects.select_related('user',).all())
         queryset = OfferAnswer.objects.prefetch_related(prefetch).select_related('offer').filter(offer=self)
         answers = []
+        user_answered = dict()
         for answer in queryset:
             answer_dict = answer.data_dict()
             users = []
             for profile in answer.profile_set.all():
+                user_id = profile.user.pk
                 if user_ids_only:
-                    users.append(profile.user.pk)
+                    users.append(user_id)
                 else:
                     users.append(profile.data_dict(request, short=True, fmt='3d-force-graph'))
+                if user_answered.get(user_id):
+                    user_answered[user_id].append(answer_dict['answer'])
+                else:
+                    user_answered[user_id] = [answer_dict['number']]
             answer_dict.update(users=users)
             answers.append(answer_dict)
-        result.update(answers=answers)
+        result.update(answers=answers, user_answered=user_answered)
         return result
 
 class OfferAnswer(BaseModelInsertTimestamp):

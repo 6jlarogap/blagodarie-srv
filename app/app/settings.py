@@ -383,10 +383,10 @@ OFFER_ANSWER_COLOR_MAP = [
     #
     'white',            #  0
     'red',              #  1
-    'purple'            #  2
+    'purple',           #  2
     'orange',           #  3
     'yellow',           #  4
-    'lime'              #  5
+    'lime',             #  5
     'green',            #  6
     'aqua',             #  7
     'teal',             #  8

@@ -4098,7 +4098,8 @@ def text_offer(user_from, offer, bot_data):
     Хорошо - 2
     Плохо - 0
 
-    Результаты <graph.blagoroda.org/offer_uuid=offerUUID>
+    Доверия <graph.blagoroda.org/?offer_uuid=offerUUID>
+    Карта map.blagoroda.org/?offer_id=offerUUID
     Нажмите чтобы голосовать <t.me/bot_username?start=offer-offerUUID>
 
     Это всё сообщение - под ним - 5 кнопок:
@@ -4127,7 +4128,11 @@ def text_offer(user_from, offer, bot_data):
     ) + '\n'
     result += Misc.get_html_a(
         href='%s/?offer_uuid=%s' % (settings.GRAPH_HOST, offer['uuid']),
-        text='Результаты'
+        text='Доверия'
+    ) + '\n'
+    result += Misc.get_html_a(
+        href='%s/?offer_id=%s' % (settings.MAP_HOST, offer['uuid']),
+        text='Карта'
     ) + '\n'
     return result
 
