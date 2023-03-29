@@ -2301,12 +2301,12 @@ class ApiBotPollResults(APIView):
                             is_poll=True,
                     ))
             q_connections = Q(
-                is_trust=True, is_reverse=False,
+                is_trust__isnull=False, is_reverse=False,
                 user_from__in=user_pks, user_to__in=user_pks
             )
             for cs in CurrentState.objects.filter(q_connections).select_related(
                         'user_from__profile', 'user_to__profile',).distinct():
-                links.append(dict(source=cs.user_from.pk, target=cs.user_to.pk))
+                links.append(dict(source=cs.user_from.pk, target=cs.user_to.pk, is_trust=cs.is_trust))
 
             data.update(nodes=nodes, links=links)
             status_code = status.HTTP_200_OK
@@ -2469,12 +2469,12 @@ class ApiOfferResults(APIView):
                             is_offer=True,
                         ))
             q_connections = Q(
-                is_trust=True, is_reverse=False,
+                is_trust__isnull=False, is_reverse=False,
                 user_from__in=user_pks, user_to__in=user_pks
             )
             for cs in CurrentState.objects.filter(q_connections).select_related(
                         'user_from__profile', 'user_to__profile',).distinct():
-                links.append(dict(source=cs.user_from.pk, target=cs.user_to.pk))
+                links.append(dict(source=cs.user_from.pk, target=cs.user_to.pk, is_trust=cs.is_trust))
 
             data.update(nodes=nodes, links=links)
             status_code = status.HTTP_200_OK
