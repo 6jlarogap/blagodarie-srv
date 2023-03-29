@@ -1877,7 +1877,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
         first_name = ''
         address = None
         chat_id = chat_title = chat_type = None
-        offer_id = offer_question = None
+        offer_id = offer_question = offer_deeplink = None
         if request.GET.get('uuid'):
             try:
                 found_user, found_profile = self.check_user_uuid(request.GET['uuid'], related=('user',))
@@ -1921,6 +1921,8 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 offer_question = offer_dict['question']
                 answers = [answer['answer'] for answer in offer_dict['answers']]
                 answers[0] = 'не ответил(а)'
+                if bot_username:
+                    offer_deeplink = 'https://t.me/%s?start=offer-%s' % (bot_username, offer.uuid)
             except (ValueError, Offer.DoesNotExist,):
                 qs = Profile.objects.none()
                 offer = None
@@ -2053,6 +2055,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
             chat_title=chat_title,
             chat_type=chat_type,
             offer_question=offer_question,
+            offer_deeplink=offer_deeplink,
         )
         return Response(data=data, status=200)
 
