@@ -2279,12 +2279,14 @@ class ApiBotPollResults(APIView):
             nodes = []
             links = []
             data = dict(question=tgpoll.question)
-            for answer in TgPollAnswer.objects.filter(tgpoll=tgpoll, number__gt=0):
+            for answer in TgPollAnswer.objects.filter(tgpoll=tgpoll):
                 nodes.append(dict(
-                    id=-answer.number,
-                    first_name=answer.answer,
-                    photo='poll-answer'
-                ))
+                    id=-answer.number if answer.number else 0,
+                    first_name=answer.answer if answer.number else 'Без ответа',
+                    photo=Profile.image_thumb(request, 'images/poll_answer_%s.jpg' % answer.number,
+                    width=128, height=128,
+                    method='crop-%s-frame-%s' % (settings.OFFER_ANSWER_COLOR_MAP[answer.number], 10,),
+                )))
             prefetch = Prefetch('oauth_set', queryset=Oauth.objects.select_related('user', 'user__profile').filter(provider=Oauth.PROVIDER_TELEGRAM))
             queryset = TgPollAnswer.objects.prefetch_related(prefetch).select_related('tgpoll').filter(tgpoll=tgpoll)
             user_pks = set()
@@ -2294,11 +2296,10 @@ class ApiBotPollResults(APIView):
                     if user.pk not in user_pks:
                         user_pks.add(user.pk)
                         nodes.append(user.profile.data_dict(request, short=True, fmt='3d-force-graph'))
-                    if answer.number > 0:
-                        links.append(dict(
-                            source=user.pk,
-                            target=-answer.number,
-                            is_poll=True,
+                    links.append(dict(
+                        source=user.pk,
+                        target=-answer.number,
+                        is_poll=True,
                     ))
             q_connections = Q(
                 is_trust__isnull=False, is_reverse=False,
@@ -2452,22 +2453,22 @@ class ApiOfferResults(APIView):
             data = dict(question=offer.question)
             user_pks = set()
             for answer in offer_dict['answers']:
-                if answer['number'] > 0:
-                    nodes.append(dict(
-                        id=-answer['number'],
-                        first_name=answer['answer'],
-                        photo='poll-answer'
-                    ))
+                nodes.append(dict(
+                    id=-answer['number'],
+                    first_name=answer['answer'] if answer['number'] else 'Без ответа',
+                    photo=Profile.image_thumb(request, 'images/poll_answer_%s.jpg' % answer['number'],
+                        width=128, height=128,
+                        method='crop-%s-frame-%s' % (settings.OFFER_ANSWER_COLOR_MAP[answer['number']], 10,),
+                )))
                 for user in answer['users']:
                     if user['id'] not in user_pks:
                         user_pks.add(user['id'])
                         nodes.append(user)
-                    if answer['number'] > 0:
-                        links.append(dict(
-                            source=user['id'],
-                            target=-answer['number'],
-                            is_offer=True,
-                        ))
+                    links.append(dict(
+                        source=user['id'],
+                        target=-answer['number'],
+                        is_offer=True,
+                    ))
             q_connections = Q(
                 is_trust__isnull=False, is_reverse=False,
                 user_from__in=user_pks, user_to__in=user_pks
