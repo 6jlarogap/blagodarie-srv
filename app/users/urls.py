@@ -40,6 +40,7 @@ urlpatterns = [
     re_path(r'^api/offer/?$', views.api_offer),
     re_path(r'^api/offer/answer/?$', views.api_offer_answer),
     re_path(r'^api/offer/results/?$', views.api_offer_results),
+    re_path(r'^api/offer/voted/tg_users?$', views.api_offer_voted_tg_users),
 
     re_path(r'^test/goto/(?P<temp_token>[a-f0-9]{40})/link/?$', views.test_goto_auth_link),
 

@@ -222,6 +222,9 @@ class Oauth(BaseModelInsertUpdateTimestamp):
             dn = "%s (uid=%s)" % (self.provider, self.uid)
         return dn
 
+    def tg_data(self):
+        return dict(tg_uid=self.uid, tg_username=self.username)
+
     @classmethod
     def check_token(cls, oauth_dict):
         """
@@ -436,11 +439,8 @@ class Profile(PhotoModel, GeoPointAddressModel):
         """
         Найти профиль среди telegtam ouath's, вернуть данные
         """
-        return [
-            dict(
-                tg_uid=oauth.uid,
-                tg_username=oauth.username,
-            ) for oauth in Oauth.objects.filter(user=self.user, provider=Oauth.PROVIDER_TELEGRAM)
+        return [ oauth.tg_data()
+            for oauth in Oauth.objects.filter(user=self.user, provider=Oauth.PROVIDER_TELEGRAM)
         ]
 
     def data_WAK(self):

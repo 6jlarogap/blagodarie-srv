@@ -2409,7 +2409,7 @@ class ApiOfferAnswer(UuidMixin, APIView):
             except (KeyError, TypeError, ValidationError, Offer.DoesNotExist,):
                 raise ServiceException('Не найден опрос')
             numbers = request.data['answers']
-            if len(numbers) == 1 and numbers[0] == -1:
+            if len(numbers) == 1 and numbers[0] < 0:
                 # Обновить. Если еще не голосовал или впервые видит
                 # опрос, задать фиктивный номер 0: видел опрос
                 if profile.offer_answers.filter(offer=offer).count() == 0:
@@ -2485,3 +2485,78 @@ class ApiOfferResults(APIView):
         return Response(data=data, status=status_code)
 
 api_offer_results = ApiOfferResults.as_view()
+
+class ApiVotedTgUsers(APIView):
+
+    def get(self, request):
+        """
+        Получить проголосовавших в опросе-предложении телеграм- пользователй
+
+        Владелец опроса не включается
+        Не включаются пользователи, которые не доверяют юзеру
+        На входе:
+            offer_uuid, user_uuid
+        Если не найден опрос или владелец опроса имеет иной user_uuid, HTTP_404_NOT_FOUND
+        Результат:
+        {
+            "question": "Как дела",
+            "users": [
+                {
+                    "tg_data": [
+                        {
+                            "tg_uid": "1111111111"
+                        }
+                    ]
+                },
+                {
+                    "tg_data": [
+                        {
+                            "tg_uid": "2222222222"
+                        }
+                    ]
+                }
+            ]
+        }
+        """
+        data = dict()
+        status_code = status.HTTP_404_NOT_FOUND
+        try:
+            offer_uuid = request.GET.get('offer_uuid')
+            offer = Offer.objects.select_related('owner','owner__profile').get(uuid=offer_uuid)
+        except (TypeError, ValueError, ValidationError, Offer.DoesNotExist,):
+            pass
+        else:
+            user_uuid = request.GET.get('user_uuid')
+            if str(user_uuid) != str(offer.owner.profile.uuid):
+                pass
+            else:
+                data = dict(
+                    question=offer.question,
+                )
+                q = Q(
+                    provider=Oauth.PROVIDER_TELEGRAM,
+                )
+                q &= Q(
+                    user__profile__offer_answers__offer__uuid=offer_uuid,
+                    user__profile__offer_answers__number__gt=0,
+                ) & ~Q(user__profile__uuid=user_uuid)
+                users = dict()
+                for oauth in Oauth.objects.select_related('user', 'user__profile').filter(q).distinct():
+                    if users.get(oauth.user.pk):
+                        users[oauth.user.pk]['tg_data'].append(dict(tg_uid=oauth.uid))
+                    else:
+                        users[oauth.user.pk] = dict(
+                            tg_data=[dict(tg_uid=oauth.uid)]
+                        )
+                for cs in CurrentState.objects.filter(
+                    is_reverse=False,
+                    is_trust=False,
+                    user_from__pk__in=users.keys(),
+                    user_to__profile__uuid=user_uuid,
+                    ).distinct():
+                    del users[cs.user_from.pk]
+                data.update(users=users.values())
+                status_code = status.HTTP_200_OK
+        return Response(data=data, status=status_code)
+
+api_offer_voted_tg_users = ApiVotedTgUsers.as_view()

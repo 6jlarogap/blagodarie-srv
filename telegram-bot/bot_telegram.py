@@ -58,6 +58,9 @@ class FSMother(StatesGroup):
 class FSMsendMessage(StatesGroup):
     ask = State()
 
+class FSMsendMessageToOffer(StatesGroup):
+    ask = State()
+
 class FSMfeedback(StatesGroup):
     ask = State()
 
@@ -2514,6 +2517,8 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
     state=FSMsendMessage.ask,
 )
 async def got_message_to_send(message: types.Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
     msg_saved = 'Сообщение сохранено'
     async with state.proxy() as data:
         if data.get('uuid'):
@@ -4173,7 +4178,87 @@ def markup_offer(user_from, offer):
         callback_data=callback_data_template % callback_data_dict
     )
     reply_markup.row(inline_btn_answer)
+
+    if user_from['uuid'] == offer['owner_uuid']:
+        callback_data_dict.update(number=-2)
+        inline_btn_answer = InlineKeyboardButton(
+            'Сообщение участникам',
+            callback_data=callback_data_template % callback_data_dict
+        )
+        reply_markup.row(inline_btn_answer)
+
     return reply_markup
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMsendMessageToOffer.ask,
+)
+async def got_message_to_send_to_offer(message: types.Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    state_finished = False
+    async with state.proxy() as data:
+        if data.get('uuid') and data.get('offer_uuid'):
+            status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+            if status_sender == 200 and response_sender.get('uuid') == data['uuid']:
+                payload = dict(
+                    user_uuid=data['uuid'],
+                    offer_uuid=data['offer_uuid']
+                )
+                logging.debug('/api/offer/voted/tg_users %s' % payload )
+                status, response = await Misc.api_request(
+                    path='/api/offer/voted/tg_users',
+                    method='get',
+                    params=payload,
+                )
+                logging.debug('/api/offer/voted/tg_users, status: %s' % status)
+                logging.debug('/api/offer/voted/tg_users: %s' % response)
+                if status == 200:
+                    n_delivered = 0
+                    if response['users']:
+                        bot_data = await bot.get_me()
+                        msg_to = 'Сообщение участникам опроса:\n %(offer_deeplink)s\n от %(sender_deeplink)s' % dict(
+                            offer_deeplink=Misc.get_html_a(
+                                href='t.me/%s?start=offer-%s' % (bot_data['username'], data['offer_uuid'],),
+                                text=response['question'],
+                            ),
+                            sender_deeplink=Misc.get_deeplink_with_name(response_sender, bot_data)
+                        )
+                        await Misc.state_finish(state)
+                        state_finished = True
+                        for user in response['users']:
+                            delivered_to_user = False
+                            for tg_account in user['tg_data']:
+                                tg_uid = tg_account['tg_uid']
+                                try:
+                                    await bot.send_message(
+                                        tg_uid,
+                                        text=msg_to,
+                                        disable_web_page_preview=True,
+                                    )
+                                    await bot.forward_message(
+                                        tg_uid,
+                                        from_chat_id=message.chat.id,
+                                        message_id=message.message_id,
+                                    )
+                                    delivered_to_user = True
+                                except (ChatNotFound, CantInitiateConversation, CantTalkWithBots,):
+                                    pass
+                            if delivered_to_user:
+                                n_delivered += 1
+                    if n_delivered == 0:
+                        msg = 'Сообщение никому не отправлено'
+                    else:
+                        msg = 'Сообщение отправлено %s %s' % (
+                            n_delivered,
+                            'адресату' if n_delivered == 1 else 'адресатам',
+                        )
+                    await message.reply(msg)
+                else:
+                    await message.reply('Опрос не найден или вы не его ваделец')
+    if not state_finished:
+        await Misc.state_finish(state)
 
 
 async def show_offer(user_from, offer, message, bot_data):
@@ -4212,6 +4297,10 @@ async def show_offer(user_from, offer, message, bot_data):
         # uuid опроса           # 1
         # KeyboardType.SEP,
         # номер ответа          # 2
+        #   >= 1:   подать голос
+        #      0:   отозвать голос
+        #     -1:   обновить результаты
+        #     -2:   сообщение, пока доступно только владельцу опроса
         # KeyboardType.SEP,
     ), c.data),
     state = None,
@@ -4228,6 +4317,24 @@ async def process_callback_offer_answer(callback_query: types.CallbackQuery, sta
         status_from, profile_from = await Misc.post_tg_user(tg_user_sender)
         if not profile_from:
             return
+        if number == -2:
+            # Сообщение
+            await FSMsendMessageToOffer.ask.set()
+            state = dp.current_state()
+            async with state.proxy() as data:
+                data['uuid'] = profile_from['uuid']
+                data['offer_uuid'] = offer_uuid
+            await callback_query.message.reply(
+                (
+                    'Отправьте или перешлите мне сообщение для отправки '
+                    'всем проголосовавшим участникам, кроме недоверенных. '
+                    'Чтобы не получить недоверия - пишите только по делу!'
+                ),
+                reply_markup=Misc.reply_markup_cancel_row(),
+                disable_web_page_preview=True,
+            )
+            return
+
         status_answer, response_answer = await post_offer_answer(offer_uuid, profile_from, [number])
         if status_answer == 200:
             bot_data = await bot.get_me()
@@ -4249,6 +4356,7 @@ async def process_callback_offer_answer(callback_query: types.CallbackQuery, sta
             else:
                 err_mes = 'Не удалось обновить'
             await callback_query.message.reply(err_mes)
+
 
 async def do_chat_join(
     callback_query,
