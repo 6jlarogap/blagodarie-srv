@@ -1955,7 +1955,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
             else:
                 url_deeplink = url_profile
             if offer_question:
-                answer_number = offer_dict['user_answered'].get(profile.user.pk, [0])[0]
+                answer_number = offer_dict['user_answered'].get(profile.user.pk, dict(answers=[0]))['answers'][0]
                 answer_color = settings.OFFER_ANSWER_COLOR_MAP[answer_number]
                 answer_text = answers[answer_number]
                 offer_reply_html = (
@@ -2440,7 +2440,7 @@ class ApiOfferResults(APIView):
 
     def get(self, request):
         """
-        Получить результаты опроса в пригодном для отображения всех связей пользователь - ответ
+        Получить результаты опроса-предложения в пригодном для отображения всех связей пользователь - ответ
 
         Включая связи доверия
         """
