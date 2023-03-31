@@ -222,14 +222,6 @@ async def process_command_poll(message: types.Message, state: FSMContext):
     state=None,
 )
 async def process_command_offer(message: types.Message, state: FSMContext):
-    help_mes = (
-        '%(err_mes)s\n\n'
-        'Поручить боту создать опрос-предложение:\n'
-        '/offer Вопрос\n'
-        'Ответ 1\n'
-        'Ответ 2\n'
-        ' и т.д. не больше %s ответов' % settings.OFFER_MAX_NUM_ANSWERS
-    )
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
         answers = []
@@ -258,7 +250,18 @@ async def process_command_offer(message: types.Message, state: FSMContext):
             elif len(answers) > settings.OFFER_MAX_NUM_ANSWERS:
                 err_mes = 'Превышен максимум числа ответов (до %s)' % settings.OFFER_MAX_NUM_ANSWERS
         if err_mes:
-            await message.reply(help_mes % dict(err_mes=err_mes))
+            help_mes = (
+                '%(err_mes)s\n\n'
+                'Поручить боту создать опрос-предложение:\n'
+                '/offer Вопрос\n'
+                'Ответ 1\n'
+                'Ответ 2\n'
+                ' и т.д. не больше %(offer_max_num_answers)s ответов'
+            )
+            await message.reply(help_mes % dict(
+                err_mes=err_mes,
+                offer_max_num_answers=settings.OFFER_MAX_NUM_ANSWERS
+            ))
             return
 
         create_offer_dict = dict(
