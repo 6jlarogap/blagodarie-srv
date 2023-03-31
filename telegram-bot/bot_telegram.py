@@ -4144,7 +4144,7 @@ def text_offer(user_from, offer, bot_data):
     ) + '\n'
     result += Misc.get_html_a(
         href=Misc.get_deeplink(offer['owner'], bot_data, https=True),
-        text='Автор опроса'
+        text='Автор опроса: ' + offer['owner']['first_name']
     ) + '\n'
     return result
 
