@@ -4142,6 +4142,10 @@ def text_offer(user_from, offer, bot_data):
         href='%s/?offer_id=%s' % (settings.MAP_HOST, offer['uuid']),
         text='Карта'
     ) + '\n'
+    result += Misc.get_html_a(
+        href=Misc.get_deeplink(offer['owner'], bot_data, https=True),
+        text='Автор опроса'
+    ) + '\n'
     return result
 
 
@@ -4182,7 +4186,7 @@ def markup_offer(user_from, offer):
     )
     reply_markup.row(inline_btn_answer)
 
-    if user_from['uuid'] == offer['owner_uuid']:
+    if user_from['uuid'] == offer['owner']['uuid']:
         callback_data_dict.update(number=-2)
         inline_btn_answer = InlineKeyboardButton(
             'Сообщение участникам',

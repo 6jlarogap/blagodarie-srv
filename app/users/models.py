@@ -979,7 +979,9 @@ class Offer(BaseModelInsertTimestamp):
     def data_dict(self, request=None, user_ids_only=False):
         result = dict(
             uuid=self.uuid,
-            owner_uuid=self.owner.profile.uuid,
+            owner=dict(
+                uuid=self.owner.profile.uuid,
+            ),
             owner_id=self.owner.pk,
             question=self.question,
             timestamp=int(time.time()),
