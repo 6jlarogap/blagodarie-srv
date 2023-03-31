@@ -980,6 +980,7 @@ class Offer(BaseModelInsertTimestamp):
         result = dict(
             uuid=self.uuid,
             owner=dict(
+                first_name=self.owner.first_name,
                 uuid=self.owner.profile.uuid,
             ),
             owner_id=self.owner.pk,
