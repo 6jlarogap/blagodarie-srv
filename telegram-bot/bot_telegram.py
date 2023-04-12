@@ -14,7 +14,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_polling, start_webhook
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation, CantTalkWithBots, \
-    BadRequest
+    BadRequest, MessageNotModified
 from aiogram.utils.parts import safe_split_text
 
 import pymorphy2
@@ -217,7 +217,7 @@ async def process_command_poll(message: types.Message, state: FSMContext):
 
 
 @dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    ChatTypeFilter(chat_type=(types.ChatType.PRIVATE,)),
     commands=('offer',),
     state=None,
 )
@@ -4093,7 +4093,7 @@ async def post_offer_answer(offer_uuid, user_from, answers):
     return status, response
 
 
-def text_offer(user_from, offer, bot_data):
+def text_offer(user_from, offer, message, bot_data):
     """
     Текст опроса-предложения
 
@@ -4120,11 +4120,13 @@ def text_offer(user_from, offer, bot_data):
 
     result = (
         '%(question)s\n'
+        '%(closed_text)s'
         '\n'
         'Голоса на %(datetime_string)s\n'
     ) % dict(
         question=offer['question'],
-        datetime_string=Misc.datetime_string(offer['timestamp'], with_timezone=True)
+        datetime_string=Misc.datetime_string(offer['timestamp'], with_timezone=True),
+        closed_text='(опрос приостановлен)\n' if offer['closed_timestamp'] else '',
     )
     for answer in offer['answers']:
         if answer['number'] > 0:
@@ -4149,7 +4151,7 @@ def text_offer(user_from, offer, bot_data):
     return result
 
 
-def markup_offer(user_from, offer):
+def markup_offer(user_from, offer, message):
     reply_markup = InlineKeyboardMarkup()
     callback_data_template = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s%(number)s%(sep)s'
     callback_data_dict = dict(
@@ -4157,27 +4159,29 @@ def markup_offer(user_from, offer):
         uuid=offer['uuid'],
         sep=KeyboardType.SEP,
     )
-    have_i_voted = False
-    for answer in offer['answers']:
-        if answer['number'] > 0:
-            callback_data_dict.update(number=answer['number'])
-            answer_text = answer['answer']
-            if user_from['user_id'] in answer['users']:
-                have_i_voted = True
-                answer_text = '(*) ' + answer_text
+    if not offer['closed_timestamp']:
+        have_i_voted = False
+        for answer in offer['answers']:
+            if answer['number'] > 0:
+                callback_data_dict.update(number=answer['number'])
+                answer_text = answer['answer']
+                if user_from['user_id'] in answer['users']:
+                    have_i_voted = True
+                    if message.chat.type == types.ChatType.PRIVATE:
+                        answer_text = '(*) ' + answer_text
+                inline_btn_answer = InlineKeyboardButton(
+                    answer_text,
+                    callback_data=callback_data_template % callback_data_dict
+                )
+                reply_markup.row(inline_btn_answer)
+
+        if have_i_voted or message.chat.type != types.ChatType.PRIVATE:
+            callback_data_dict.update(number=0)
             inline_btn_answer = InlineKeyboardButton(
-                answer_text,
+                'Отозвать мой голос',
                 callback_data=callback_data_template % callback_data_dict
             )
             reply_markup.row(inline_btn_answer)
-
-    if have_i_voted:
-        callback_data_dict.update(number=0)
-        inline_btn_answer = InlineKeyboardButton(
-            'Отозвать мой голос',
-            callback_data=callback_data_template % callback_data_dict
-        )
-        reply_markup.row(inline_btn_answer)
 
     callback_data_dict.update(number=-1)
     inline_btn_answer = InlineKeyboardButton(
@@ -4186,12 +4190,26 @@ def markup_offer(user_from, offer):
     )
     reply_markup.row(inline_btn_answer)
 
-    if user_from['uuid'] == offer['owner']['uuid']:
+    if message.chat.type == types.ChatType.PRIVATE and user_from['uuid'] == offer['owner']['uuid']:
         callback_data_dict.update(number=-2)
         inline_btn_answer = InlineKeyboardButton(
             'Сообщение участникам',
             callback_data=callback_data_template % callback_data_dict
         )
+        reply_markup.row(inline_btn_answer)
+
+        if offer['closed_timestamp']:
+            callback_data_dict.update(number=-4)
+            inline_btn_answer = InlineKeyboardButton(
+                'Возбновить опрос',
+                callback_data=callback_data_template % callback_data_dict
+            )
+        else:
+            callback_data_dict.update(number=-3)
+            inline_btn_answer = InlineKeyboardButton(
+                'Остановить опрос',
+                callback_data=callback_data_template % callback_data_dict
+            )
         reply_markup.row(inline_btn_answer)
 
     return reply_markup
@@ -4284,8 +4302,8 @@ async def show_offer(user_from, offer, message, bot_data):
         - для Отмена: 0
         - для Обновить: -1
     """
-    text = text_offer(user_from, offer, bot_data)
-    reply_markup = markup_offer(user_from, offer)
+    text = text_offer(user_from, offer, message, bot_data)
+    reply_markup = markup_offer(user_from, offer, message)
     try:
         await bot.send_message(
             message.from_user.id,
@@ -4308,6 +4326,8 @@ async def show_offer(user_from, offer, message, bot_data):
         #      0:   отозвать голос
         #     -1:   обновить результаты
         #     -2:   сообщение, пока доступно только владельцу опроса
+        #     -3:   остановить опрос
+        #     -4:   возобновить опрос
         # KeyboardType.SEP,
     ), c.data),
     state = None,
@@ -4322,7 +4342,7 @@ async def process_callback_offer_answer(callback_query: types.CallbackQuery, sta
         except (IndexError, ValueError,):
             return
         status_from, profile_from = await Misc.post_tg_user(tg_user_sender)
-        if not profile_from:
+        if status_from != 200 or not profile_from:
             return
         if number == -2:
             # Сообщение
@@ -4345,24 +4365,40 @@ async def process_callback_offer_answer(callback_query: types.CallbackQuery, sta
         status_answer, response_answer = await post_offer_answer(offer_uuid, profile_from, [number])
         if status_answer == 200:
             bot_data = await bot.get_me()
-            text = text_offer(profile_from, response_answer, bot_data)
-            reply_markup = markup_offer(profile_from, response_answer)
-            await callback_query.message.edit_text(text, reply_markup=reply_markup, disable_web_page_preview=True)
-            success_message = ''
-            if number > 0:
-                success_message = 'Вы выбрали вариант: %s' % response_answer['answers'][number]['answer']
-            elif number == 0:
-                success_message = 'Вы отозвали свой голос'
-            if success_message:
-                await callback_query.message.reply(success_message)
-        else:
+            text = text_offer(profile_from, response_answer, callback_query.message, bot_data)
+            reply_markup = markup_offer(profile_from, response_answer, callback_query.message)
+            try:
+                await callback_query.message.edit_text(text, reply_markup=reply_markup, disable_web_page_preview=True)
+            except MessageNotModified:
+                pass
+            if callback_query.message.chat.type == types.ChatType.PRIVATE:
+                success_message = ''
+                if number > 0:
+                    success_message = 'Вы выбрали вариант: %s' % response_answer['answers'][number]['answer']
+                elif number == 0:
+                    success_message = 'Вы отозвали свой голос'
+                elif number == -3:
+                    success_message = 'Опрос приостановлен'
+                elif number == -4:
+                    success_message = 'Опрос возобновлен'
+                if success_message and callback_query.message.chat.type == types.ChatType.PRIVATE:
+                    await callback_query.message.reply(success_message)
+        elif callback_query.message.chat.type == types.ChatType.PRIVATE:
             if number > 0:
                 err_mes = 'Не далось подать голос'
             elif number == 0:
                 err_mes = 'Не удалось отозвать голос'
-            else:
+            elif number == -1:
                 err_mes = 'Не удалось обновить'
+            elif number == -3:
+                err_mes = 'Не удалось приостановить опрос'
+            elif number == -4:
+                err_mes = 'Не удалось возобновить опрос'
+            else:
+                err_mes = 'Ошибка выполнения запроса'
             await callback_query.message.reply(err_mes)
+    if profile_from.get('created'):
+        await Misc.update_user_photo(bot, tg_user_sender, profile_from)
 
 
 async def do_chat_join(
@@ -5016,6 +5052,14 @@ async def process_callback_undelete_user_confirmed(callback_query: types.Callbac
             tg_user_from=callback_query.from_user
         )
     await Misc.state_finish(state)
+
+
+@dp.channel_post_handler(
+    content_types= ContentType.all(),
+    state=None,
+)
+async def channel_post_handler(message: types.Message, state: FSMContext):
+    pass
 
 
 @dp.inline_handler()

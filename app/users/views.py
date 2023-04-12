@@ -2396,6 +2396,8 @@ class ApiOfferAnswer(UuidMixin, APIView):
             "answers": [1]  // Нумерация ответов начинается с 1 !!!
                             // Если [0], то сброс ответов
                             // Если [-1], то только показать текущие результаты
+                            // Если [-3], то остановить опрос
+                            // Если [-4], то возобновить опрос
         }
         В случае успеха на выходе словарь опроса с ответами, кто за что отвечал:
             offer.data_dict(request)
@@ -2409,12 +2411,22 @@ class ApiOfferAnswer(UuidMixin, APIView):
             except (KeyError, TypeError, ValidationError, Offer.DoesNotExist,):
                 raise ServiceException('Не найден опрос')
             numbers = request.data['answers']
-            if len(numbers) == 1 and numbers[0] < 0:
+            if len(numbers) == 1 and numbers[0] == -1:
                 # Обновить. Если еще не голосовал или впервые видит
                 # опрос, задать фиктивный номер 0: видел опрос
                 if profile.offer_answers.filter(offer=offer).count() == 0:
                     offeranswer0 = OfferAnswer.objects.get(offer=offer, number=0)
                     profile.offer_answers.add(offeranswer0)
+            elif len(numbers) == 1 and numbers[0] == -3 and owner == offer.owner:
+                # Остановить опрос
+                if not offer.closed_timestamp:
+                    offer.closed_timestamp = int(time.time())
+                    offer.save(update_fields=('closed_timestamp',))
+            elif len(numbers) == 1 and numbers[0] == -4 and owner == offer.owner:
+                # Возобновить опрос
+                if offer.closed_timestamp:
+                    offer.closed_timestamp = None
+                    offer.save(update_fields=('closed_timestamp',))
             else:
                 current_numbers = [a.number for a in profile.offer_answers.filter(offer=offer)]
                 if set(current_numbers) != set(numbers):

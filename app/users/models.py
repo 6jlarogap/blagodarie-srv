@@ -975,6 +975,7 @@ class Offer(BaseModelInsertTimestamp):
     owner = models.ForeignKey('auth.User', verbose_name=_("Владелец"), on_delete=models.CASCADE)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
     question = models.CharField(_("Вопрос"), max_length=256)
+    closed_timestamp = models.PositiveIntegerField(_("Приостановлен"), null=True, default=None)
 
     def data_dict(self, request=None, user_ids_only=False):
         result = dict(
@@ -985,7 +986,8 @@ class Offer(BaseModelInsertTimestamp):
             ),
             owner_id=self.owner.pk,
             question=self.question,
-            timestamp=int(time.time()),
+            timestamp=self.closed_timestamp if self.closed_timestamp else int(time.time()),
+            closed_timestamp=self.closed_timestamp,
         )
         prefetch = Prefetch('profile_set', queryset=Profile.objects.select_related('user',).all())
         queryset = OfferAnswer.objects.prefetch_related(prefetch).select_related('offer').filter(offer=self)
