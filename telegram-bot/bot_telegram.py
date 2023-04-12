@@ -14,7 +14,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_polling, start_webhook
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation, CantTalkWithBots, \
-    BadRequest, MessageNotModified
+    BadRequest, MessageNotModified, MessageCantBeDeleted
 from aiogram.utils.parts import safe_split_text
 from aiogram.types.message_entity import MessageEntityType
 
@@ -4716,6 +4716,9 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
        ):
         return
 
+    if await offer_forwarded_in_group_or_channel(message, state):
+        return
+
     global last_user_in_group
 
     # Данные из телеграма пользователя /пользователей/, данные которых надо выводить при поступлении
@@ -5071,6 +5074,10 @@ async def offer_forwarded_in_group_or_channel(message: types.Message, state: FSM
                     bot_data = await bot.get_me()
                     await show_offer(None, response_offer, message, bot_data)
                     result = True
+                    try:
+                        await message.delete()
+                    except MessageCantBeDeleted:
+                        pass
                     break
     return result
 
