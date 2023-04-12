@@ -2405,39 +2405,42 @@ class ApiOfferAnswer(UuidMixin, APIView):
         try:
             if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
                 raise ServiceException('Неверный токен телеграм бота')
-            owner, profile = self.check_user_uuid(uuid=request.data.get('user_uuid'), related=('user',))
+            owner, profile = None, None
+            if request.data.get('user_uuid'):
+                owner, profile = self.check_user_uuid(uuid=request.data.get('user_uuid'), related=('user',))
             try:
                 offer = Offer.objects.get(uuid=request.data.get('offer_uuid'))
             except (KeyError, TypeError, ValidationError, Offer.DoesNotExist,):
                 raise ServiceException('Не найден опрос')
-            numbers = request.data['answers']
-            if len(numbers) == 1 and numbers[0] == -1:
-                # Обновить. Если еще не голосовал или впервые видит
-                # опрос, задать фиктивный номер 0: видел опрос
-                if profile.offer_answers.filter(offer=offer).count() == 0:
-                    offeranswer0 = OfferAnswer.objects.get(offer=offer, number=0)
-                    profile.offer_answers.add(offeranswer0)
-            elif len(numbers) == 1 and numbers[0] == -3 and owner == offer.owner:
-                # Остановить опрос
-                if not offer.closed_timestamp:
-                    offer.closed_timestamp = int(time.time())
-                    offer.save(update_fields=('closed_timestamp',))
-            elif len(numbers) == 1 and numbers[0] == -4 and owner == offer.owner:
-                # Возобновить опрос
-                if offer.closed_timestamp:
-                    offer.closed_timestamp = None
-                    offer.save(update_fields=('closed_timestamp',))
-            else:
-                current_numbers = [a.number for a in profile.offer_answers.filter(offer=offer)]
-                if set(current_numbers) != set(numbers):
-                    for a in profile.offer_answers.filter(offer=offer):
-                        profile.offer_answers.remove(a)
-                    try:
-                        for number in numbers:
-                            offeranswer = OfferAnswer.objects.get(offer=offer, number=number)
-                            profile.offer_answers.add(offeranswer)
-                    except (KeyError, OfferAnswer.DoesNotExist,):
-                        raise ServiceException('Получен не существующий ответ')
+            if profile:
+                numbers = request.data['answers']
+                if len(numbers) == 1 and numbers[0] == -1:
+                    # Обновить. Если еще не голосовал или впервые видит
+                    # опрос, задать фиктивный номер 0: видел опрос
+                    if profile.offer_answers.filter(offer=offer).count() == 0:
+                        offeranswer0 = OfferAnswer.objects.get(offer=offer, number=0)
+                        profile.offer_answers.add(offeranswer0)
+                elif len(numbers) == 1 and numbers[0] == -3 and owner == offer.owner:
+                    # Остановить опрос
+                    if not offer.closed_timestamp:
+                        offer.closed_timestamp = int(time.time())
+                        offer.save(update_fields=('closed_timestamp',))
+                elif len(numbers) == 1 and numbers[0] == -4 and owner == offer.owner:
+                    # Возобновить опрос
+                    if offer.closed_timestamp:
+                        offer.closed_timestamp = None
+                        offer.save(update_fields=('closed_timestamp',))
+                else:
+                    current_numbers = [a.number for a in profile.offer_answers.filter(offer=offer)]
+                    if profile and set(current_numbers) != set(numbers):
+                        for a in profile.offer_answers.filter(offer=offer):
+                            profile.offer_answers.remove(a)
+                        try:
+                            for number in numbers:
+                                offeranswer = OfferAnswer.objects.get(offer=offer, number=number)
+                                profile.offer_answers.add(offeranswer)
+                        except (KeyError, OfferAnswer.DoesNotExist,):
+                            raise ServiceException('Получен не существующий ответ')
             data = offer.data_dict(request, user_ids_only=True)
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:

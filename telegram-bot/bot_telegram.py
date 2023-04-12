@@ -16,6 +16,7 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation, CantTalkWithBots, \
     BadRequest, MessageNotModified
 from aiogram.utils.parts import safe_split_text
+from aiogram.types.message_entity import MessageEntityType
 
 import pymorphy2
 MorphAnalyzer = pymorphy2.MorphAnalyzer()
@@ -4080,7 +4081,7 @@ async def post_offer_answer(offer_uuid, user_from, answers):
         tg_token=settings.TOKEN,
         offer_uuid=offer_uuid,
         answers=answers,
-        user_uuid=user_from['uuid'],
+        user_uuid=user_from and user_from['uuid'] or None,
     )
     logging.debug('post_offer, payload: %s' % payload)
     status, response = await Misc.api_request(
@@ -4126,7 +4127,7 @@ def text_offer(user_from, offer, message, bot_data):
     ) % dict(
         question=offer['question'],
         datetime_string=Misc.datetime_string(offer['timestamp'], with_timezone=True),
-        closed_text='(опрос приостановлен)\n' if offer['closed_timestamp'] else '',
+        closed_text='(опрос остановлен)\n' if offer['closed_timestamp'] else '',
     )
     for answer in offer['answers']:
         if answer['number'] > 0:
@@ -4165,7 +4166,7 @@ def markup_offer(user_from, offer, message):
             if answer['number'] > 0:
                 callback_data_dict.update(number=answer['number'])
                 answer_text = answer['answer']
-                if user_from['user_id'] in answer['users']:
+                if user_from and user_from['user_id'] in answer['users']:
                     have_i_voted = True
                     if message.chat.type == types.ChatType.PRIVATE:
                         answer_text = '(*) ' + answer_text
@@ -4306,7 +4307,7 @@ async def show_offer(user_from, offer, message, bot_data):
     reply_markup = markup_offer(user_from, offer, message)
     try:
         await bot.send_message(
-            message.from_user.id,
+            message.chat.id,
             text,
             reply_markup=reply_markup,
             disable_web_page_preview=True,
@@ -5054,12 +5055,35 @@ async def process_callback_undelete_user_confirmed(callback_query: types.Callbac
     await Misc.state_finish(state)
 
 
+async def offer_forwarded_in_group_or_channel(message: types.Message, state: FSMContext):
+    result = False
+    if message.is_forward() and message.content_type == ContentType.TEXT:
+        num_links = 0
+        for entity in message.entities:
+            if entity.type == MessageEntityType.TEXT_LINK:
+                m = re.search(r'(?:start\=offer\-|offer_uuid\=|offer_id=)([\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12})', entity.url, flags=re.I)
+            if m:
+                num_links += 1
+                offer_uuid = m.group(1)
+            if num_links >= 2:
+                status_offer, response_offer = await post_offer_answer(offer_uuid, None, [-1])
+                if status_offer == 200:
+                    bot_data = await bot.get_me()
+                    await show_offer(None, response_offer, message, bot_data)
+                    result = True
+                    break
+    return result
+
+
 @dp.channel_post_handler(
     content_types= ContentType.all(),
     state=None,
 )
 async def channel_post_handler(message: types.Message, state: FSMContext):
-    pass
+    status, response = await TgGroup.post(message.chat.id, message.chat.title, message.chat.type)
+    if status != 200:
+        return
+    await offer_forwarded_in_group_or_channel(message, state)
 
 
 @dp.inline_handler()
