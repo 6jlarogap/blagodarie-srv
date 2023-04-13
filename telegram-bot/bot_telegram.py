@@ -4819,6 +4819,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
 
         buttons = []
+        reply = ''
         if not is_previous_his and not tg_user_left:
             if is_this_bot:
                 # ЭТОТ бот подключился. Достаточно его full name и ссылку на доверия в группе
@@ -4841,25 +4842,26 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                         chat_id=message.chat.id,
                 ))
                 buttons = [inline_btn_trusts]
-            else:
-                reply = '<b>%(deeplink_with_name)s</b> (%(trust_count)s)' % dict(
-                    deeplink_with_name=Misc.get_deeplink_with_name(response_from, bot_data),
-                    trust_count=response_from['trust_count'],
-                )
-                inline_btn_thank = InlineKeyboardButton(
-                    '+Доверие',
-                    callback_data=OperationType.CALLBACK_DATA_TEMPLATE % dict(
-                    operation=OperationType.TRUST_AND_THANK,
-                    keyboard_type=KeyboardType.TRUST_THANK,
-                    sep=KeyboardType.SEP,
-                    user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
-                    message_to_forward_id='',
-               ))
-                buttons = [inline_btn_thank]
+            #else:
+                #reply = '<b>%(deeplink_with_name)s</b> (%(trust_count)s)' % dict(
+                    #deeplink_with_name=Misc.get_deeplink_with_name(response_from, bot_data),
+                    #trust_count=response_from['trust_count'],
+                #)
+                #inline_btn_thank = InlineKeyboardButton(
+                    #'+Доверие',
+                    #callback_data=OperationType.CALLBACK_DATA_TEMPLATE % dict(
+                    #operation=OperationType.TRUST_AND_THANK,
+                    #keyboard_type=KeyboardType.TRUST_THANK,
+                    #sep=KeyboardType.SEP,
+                    #user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
+                    #message_to_forward_id='',
+               #))
+                #buttons = [inline_btn_thank]
             if buttons:
                 reply_markup = InlineKeyboardMarkup()
                 reply_markup.row(*buttons)
-            await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+            if reply:
+                await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
     for i, response_from in enumerate(a_users_out):
         if response_from.get('created'):
