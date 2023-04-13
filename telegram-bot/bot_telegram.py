@@ -4116,7 +4116,7 @@ def text_offer(user_from, offer, message, bot_data):
     Хорошо
     Плохо
     Отмена
-    Обновить
+    Обновить результаты
     """
 
     result = (
@@ -4186,7 +4186,7 @@ def markup_offer(user_from, offer, message):
 
     callback_data_dict.update(number=-1)
     inline_btn_answer = InlineKeyboardButton(
-        'Обновить',
+        'Обновить результаты',
         callback_data=callback_data_template % callback_data_dict
     )
     reply_markup.row(inline_btn_answer)
