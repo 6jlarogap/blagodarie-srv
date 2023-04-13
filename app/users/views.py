@@ -2430,7 +2430,7 @@ class ApiOfferAnswer(UuidMixin, APIView):
                     if offer.closed_timestamp:
                         offer.closed_timestamp = None
                         offer.save(update_fields=('closed_timestamp',))
-                else:
+                elif not offer.closed_timestamp:
                     current_numbers = [a.number for a in profile.offer_answers.filter(offer=offer)]
                     if profile and set(current_numbers) != set(numbers):
                         for a in profile.offer_answers.filter(offer=offer):

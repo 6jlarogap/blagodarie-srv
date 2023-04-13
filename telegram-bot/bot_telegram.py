@@ -4379,7 +4379,7 @@ async def process_callback_offer_answer(callback_query: types.CallbackQuery, sta
                 elif number == 0:
                     success_message = 'Вы отозвали свой голос'
                 elif number == -3:
-                    success_message = 'Опрос приостановлен'
+                    success_message = 'Опрос остановлен'
                 elif number == -4:
                     success_message = 'Опрос возобновлен'
                 if success_message and callback_query.message.chat.type == types.ChatType.PRIVATE:
