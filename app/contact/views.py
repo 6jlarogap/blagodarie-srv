@@ -21,6 +21,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework.exceptions import NotAuthenticated
 
 from app.utils import ServiceException, FrontendMixin, SQL_Mixin, get_moon_day
+
 from app.models import UnclearDate
 
 from contact.models import KeyType, Key, \
@@ -825,7 +826,7 @@ class ApiTgGroupConnectionsMixin(object):
         return tg_group_id
 
 
-class ApiGetStats(SQL_Mixin, ApiTgGroupConnectionsMixin, APIView):
+class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIView):
 
     # За сколько часов берем статистику
     #
@@ -949,7 +950,8 @@ class ApiGetStats(SQL_Mixin, ApiTgGroupConnectionsMixin, APIView):
                 connections.append(cs.data_dict(show_trust=True, fmt=fmt, show_id_fio=False))
 
             if fmt == '3d-force-graph':
-                result = dict(nodes=users, links=connections)
+                bot_username = self.get_bot_username()
+                result = dict(bot_username=bot_username, nodes=users, links=connections)
             else:
                 result = dict(users=users, connections=connections)
             return result
@@ -2710,7 +2712,7 @@ class GetTrustGenesisMixin(object):
         return Response(data=data, status=status_code)
 
 
-class ApiProfileGenesisAll(APIView):
+class ApiProfileGenesisAll(TelegramApiMixin, APIView):
     """
     Отдать все профили и все связи
 
@@ -2760,7 +2762,8 @@ class ApiProfileGenesisAll(APIView):
                         users.append(cs.user_to.profile.data_dict(request=request, short=True, fmt=fmt))
 
         if fmt == '3d-force-graph':
-            data = dict(nodes=users, links=connections)
+            bot_username = self.get_bot_username()
+            data = dict(bot_username=bot_username, nodes=users, links=connections)
         else:
             data = dict(users=users, connections=connections, trust_connections=[])
         return Response(data=data, status=status.HTTP_200_OK)

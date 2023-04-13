@@ -4043,10 +4043,10 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             await geo(message, state_to_set=FSMgeo.geo)
             return
         if state_ == 'start_poll':
-            params = dict(poll_id=poll_to_search)
+            params = dict(tg_poll_id=poll_to_search)
             logging.debug('get_poll, params: %s' % params)
             status_poll, response_poll = await Misc.api_request(
-                path='/api/bot/poll',
+                path='/api/bot/poll/results',
                 method='get',
                 params=params,
             )

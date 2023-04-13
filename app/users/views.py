@@ -2265,7 +2265,7 @@ class ApiBotPollAnswer(APIView):
 api_bot_poll_answer = ApiBotPollAnswer.as_view()
 
 
-class ApiBotPollResults(APIView):
+class ApiBotPollResults(TelegramApiMixin, APIView):
 
     def get(self, request):
         """
@@ -2278,7 +2278,11 @@ class ApiBotPollResults(APIView):
             tgpoll = TgPoll.objects.get(poll_id=poll_id)
             nodes = []
             links = []
-            data = dict(question=tgpoll.question)
+            data = dict(
+                question=tgpoll.question,
+                message_id=tgpoll.message_id,
+                chat_id=tgpoll.chat_id,
+            )
             for answer in TgPollAnswer.objects.filter(tgpoll=tgpoll):
                 nodes.append(dict(
                     id=-answer.number if answer.number else 0,
@@ -2309,7 +2313,8 @@ class ApiBotPollResults(APIView):
                         'user_from__profile', 'user_to__profile',).distinct():
                 links.append(dict(source=cs.user_from.pk, target=cs.user_to.pk, is_trust=cs.is_trust))
 
-            data.update(nodes=nodes, links=links)
+            bot_username = self.get_bot_username()
+            data.update(bot_username=bot_username, nodes=nodes, links=links)
             status_code = status.HTTP_200_OK
         except (TypeError, ValueError, TgPoll.DoesNotExist,):
             data = {}
@@ -2451,7 +2456,7 @@ class ApiOfferAnswer(UuidMixin, APIView):
 api_offer_answer = ApiOfferAnswer.as_view()
 
 
-class ApiOfferResults(APIView):
+class ApiOfferResults(TelegramApiMixin, APIView):
 
     def get(self, request):
         """
@@ -2492,7 +2497,8 @@ class ApiOfferResults(APIView):
                         'user_from__profile', 'user_to__profile',).distinct():
                 links.append(dict(source=cs.user_from.pk, target=cs.user_to.pk, is_trust=cs.is_trust))
 
-            data.update(nodes=nodes, links=links)
+            bot_username = self.get_bot_username()
+            data.update(bot_username=bot_username, nodes=nodes, links=links)
             status_code = status.HTTP_200_OK
         except (TypeError, ValueError, ValidationError, Offer.DoesNotExist,):
             data = {}

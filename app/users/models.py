@@ -392,6 +392,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
             if fmt == '3d-force-graph':
                 result.update(
                     id=user.pk,
+                    uuid=self.uuid,
                     first_name=user.first_name,
                     photo=self.choose_thumb(request, width=64, height=64, put_default_avatar=False) if request else '',
                 )
