@@ -22,7 +22,7 @@ from rest_framework.exceptions import NotAuthenticated
 
 from app.utils import ServiceException, FrontendMixin, SQL_Mixin, get_moon_day
 
-from app.models import UnclearDate
+from app.models import UnclearDate, PhotoModel
 
 from contact.models import KeyType, Key, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
@@ -947,7 +947,7 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
             for cs in CurrentState.objects.filter(q_connections).select_related(
                     'user_from__profile', 'user_to__profile',
                 ).distinct():
-                connections.append(cs.data_dict(show_trust=True, fmt=fmt, show_id_fio=False))
+                connections.append(cs.data_dict(show_trust=True, fmt=fmt))
 
             if fmt == '3d-force-graph':
                 bot_username = self.get_bot_username()
@@ -1971,15 +1971,41 @@ class ApiDeleteKeyView(APIView):
 
 api_delete_key = ApiDeleteKeyView.as_view()
 
-class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, APIView):
+
+class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, TelegramApiMixin, APIView):
 
     def get(self, request, *args, **kwargs):
         """
-        Возвращает связи пользователя, его желания и ключи
+        Возвращает связи пользователя
+        Если параметр fmt != '3d-force-graph', то еще его желания и ключи
 
         Параметры:
         uuid
             Опрашиваемый пользователь
+
+        Если fmt == '3d-force-graph', то вывод:
+        {
+            "bot_username": "DevBlagoBot",
+            "nodes": [
+            {
+                "id": 1228,
+                "uuid": "6f9a0e44-9a58-47ce-9e8d-55fac1cbc685",
+                "first_name": "Просковья Александровна Иванова",
+                "photo": ""
+            },
+            ...
+            ],
+            "links": [
+            {
+                "is_trust": true,
+                "source": 1228,
+                "target": 436
+            },
+            ...
+            ]
+        }
+
+        Остальные параметры, если fmt != '3d-force-graph'
         count=1
             Возвращать лишь число пользователей -  ближайших связей опрашиваемого
         from
@@ -2059,25 +2085,11 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, APIView)
         }
         """
         try:
+            data = dict()
+            status_code = status.HTTP_200_OK
+            fmt = request.GET.get('fmt')
             uuid = request.GET.get('uuid')
             user_q, profile_q = self.check_user_uuid(uuid)
-            status_code = status.HTTP_200_OK
-
-            tg_group_id = self.get_tg_group_id(request)
-            if tg_group_id is not None:
-                inner_joins = """
-                    INNER JOIN
-                        users_oauth ON (auth_user.id = users_oauth.user_id)
-                    INNER JOIN
-                        users_oauth_groups ON (users_oauth.id = users_oauth_groups.oauth_id)
-                """
-                and_tg_group_id = ' AND users_oauth_groups.tggroup_id = %s ' % tg_group_id
-            else:
-                inner_joins = ''
-                and_tg_group_id = ''
-
-            query = request.GET.get('query', '')
-
             req_union = """
                 SELECT
                     DISTINCT user_to_id as id
@@ -2095,220 +2107,303 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, APIView)
                     contact_currentstate
                 WHERE
                     is_reverse = false AND
-                    is_trust = true AND
+                    is_trust is not null AND
                     user_to_id = %(user_q_pk)s
             """ % dict(
                 user_q_pk=user_q.pk
             )
 
-            outer_joins = """
-                LEFT OUTER JOIN
-                    contact_wish ON (auth_user.id = contact_wish.owner_id)
-                LEFT OUTER JOIN
-                    contact_ability ON (auth_user.id = contact_ability.owner_id)
-                LEFT OUTER JOIN
-                    contact_key ON (auth_user.id = contact_key.owner_id)
-                LEFT OUTER JOIN
-                    users_profile ON (auth_user.id = users_profile.user_id)
-                LEFT OUTER JOIN
-                    contact_ability profile__ability ON (users_profile.ability_id = profile__ability.uuid)
-            """
-            if query:
-                # '%QUERY%' :
-                like_value = "'%" + self.sql_like_value(query.upper()) + "%'"
-                query_where = """
-                    UPPER(auth_user.first_name) LIKE %(like_value)s OR
-                    UPPER(contact_wish.text) LIKE %(like_value)s OR
-                    UPPER(contact_ability.text) LIKE %(like_value)s OR
-                    UPPER(contact_key.value) LIKE %(like_value)s
-                """ % dict(like_value=like_value)
+            tg_group_id = self.get_tg_group_id(request)
+            if tg_group_id is not None:
+                inner_joins = """
+                    INNER JOIN
+                        users_oauth ON (auth_user.id = users_oauth.user_id)
+                    INNER JOIN
+                        users_oauth_groups ON (users_oauth.id = users_oauth_groups.oauth_id)
+                """
+                and_tg_group_id = ' AND users_oauth_groups.tggroup_id = %s ' % tg_group_id
+            else:
+                inner_joins = ''
+                and_tg_group_id = ''
 
-            if request.GET.get('count'):
+                outer_joins = \
+                """
+                    LEFT OUTER JOIN
+                        users_profile ON (auth_user.id = users_profile.user_id)
+                """ \
+                    if fmt == '3d-force-graph' else \
+                """
+                    LEFT OUTER JOIN
+                        contact_wish ON (auth_user.id = contact_wish.owner_id)
+                    LEFT OUTER JOIN
+                        contact_ability ON (auth_user.id = contact_ability.owner_id)
+                    LEFT OUTER JOIN
+                        contact_key ON (auth_user.id = contact_key.owner_id)
+                    LEFT OUTER JOIN
+                        users_profile ON (auth_user.id = users_profile.user_id)
+                    LEFT OUTER JOIN
+                        contact_ability profile__ability ON (users_profile.ability_id = profile__ability.uuid)
+                """
+
+            if fmt == '3d-force-graph':
+                req = """
+                    SELECT
+                        distinct auth_user.id as id,
+                        auth_user.is_active,
+                        auth_user.first_name,
+                        users_profile.uuid,
+                        users_profile.photo
+                    FROM
+                        auth_user
+                    %(outer_joins)s
+                    %(inner_joins)s
+                    WHERE
+                        auth_user.id IN (%(req_union)s) %(and_tg_group_id)s
+                """ % dict(
+                    req_union=req_union,
+                    outer_joins=outer_joins,
+                    inner_joins=inner_joins,
+                    and_tg_group_id=and_tg_group_id,
+                )
+                with connection.cursor() as cursor:
+                    cursor.execute(req)
+                    recs = self.dictfetchall(cursor)
+                nodes = []
+                user_pks = []
+                bot_username = self.get_bot_username()
+                nodes.append(dict(
+                    id=user_q.pk,
+                    uuid=user_q.profile.uuid,
+                    first_name=user_q.first_name,
+                    photo=Profile.image_thumb(
+                        request, user_q.profile.photo,
+                        width = PhotoModel.THUMB_WIDTH * 4,
+                        height = PhotoModel.THUMB_HEIGHT * 4,
+                        method='crop-red-frame-5',
+                    ),
+                ))
+                user_pks.append(user_q.pk)
+                for rec in recs:
+                    if rec['id'] not in user_pks:
+                        nodes.append(dict(
+                            id=rec['id'],
+                            uuid=rec['uuid'],
+                            first_name=rec['first_name'],
+                            photo=Profile.image_thumb(request, rec['photo']),
+                        ))
+                        user_pks.append(rec['id'])
+                links = []
+                if user_q.pk not in user_pks:
+                    user_pks.append(user_q.pk)
+                q = Q(user_from__in=user_pks) & Q(user_to__in=user_pks)
+                q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust__isnull=False)
+                for cs in CurrentState.objects.filter(q).select_related(
+                    'user_to__profile', 'user_from__profile',
+                    ).distinct():
+                    links.append(cs.data_dict(fmt=fmt, show_trust=True))
+                data.update( bot_username= bot_username, nodes=nodes, links=links,)
+
+            else:
+                # fmt != '3d-force-graph, "old 3d style"
+
+                query = request.GET.get('query', '')
                 if query:
-                    req = """
-                        SELECT
-                            Count(distinct auth_user.id) as count
-                        FROM
-                            auth_user
-                        %(outer_joins)s
-                        %(inner_joins)s
-                        WHERE
-                            auth_user.id IN (%(req_union)s) AND
-                            (%(query_where)s) %(and_tg_group_id)s
-                    """ % dict(
-                        outer_joins=outer_joins,
-                        query_where=query_where,
-                        req_union=req_union,
-                        inner_joins=inner_joins,
-                        and_tg_group_id=and_tg_group_id,
-                    )
-                else:
-                    if tg_group_id is not None:
+                    # '%QUERY%' :
+                    like_value = "'%" + self.sql_like_value(query.upper()) + "%'"
+                    query_where = """
+                        UPPER(auth_user.first_name) LIKE %(like_value)s OR
+                        UPPER(contact_wish.text) LIKE %(like_value)s OR
+                        UPPER(contact_ability.text) LIKE %(like_value)s OR
+                        UPPER(contact_key.value) LIKE %(like_value)s
+                    """ % dict(like_value=like_value)
+
+                if request.GET.get('count'):
+                    if query:
                         req = """
                             SELECT
                                 Count(distinct auth_user.id) as count
                             FROM
                                 auth_user
+                            %(outer_joins)s
                             %(inner_joins)s
                             WHERE
-                                auth_user.id IN (%(req_union)s) %(and_tg_group_id)s
+                                auth_user.id IN (%(req_union)s) AND
+                                (%(query_where)s) %(and_tg_group_id)s
                         """ % dict(
                             outer_joins=outer_joins,
+                            query_where=query_where,
                             req_union=req_union,
                             inner_joins=inner_joins,
                             and_tg_group_id=and_tg_group_id,
                         )
                     else:
-                        req = """
-                            SELECT
-                                Count(distinct id) as count
-                            FROM
-                                (%(req_union)s) as foo
-                        """ % dict(
-                            req_union=req_union
-                        )
+                        if tg_group_id is not None:
+                            req = """
+                                SELECT
+                                    Count(distinct auth_user.id) as count
+                                FROM
+                                    auth_user
+                                %(inner_joins)s
+                                WHERE
+                                    auth_user.id IN (%(req_union)s) %(and_tg_group_id)s
+                            """ % dict(
+                                outer_joins=outer_joins,
+                                req_union=req_union,
+                                inner_joins=inner_joins,
+                                and_tg_group_id=and_tg_group_id,
+                            )
+                        else:
+                            req = """
+                                SELECT
+                                    Count(distinct id) as count
+                                FROM
+                                    (%(req_union)s) as foo
+                            """ % dict(
+                                req_union=req_union
+                            )
 
+                    with connection.cursor() as cursor:
+                        cursor.execute(req)
+                        recs = self.dictfetchall(cursor)
+                    return Response(data=dict(count=recs[0]['count']), status=status_code)
+
+                try:
+                    from_ = abs(int(request.GET.get("from")))
+                except (ValueError, TypeError, ):
+                    from_ = 0
+                try:
+                    number_ = abs(int(request.GET.get("number")))
+                except (ValueError, TypeError, ):
+                    number_ = settings.PAGINATE_USERS_COUNT
+
+                req = """
+                    SELECT
+                        distinct auth_user.id,
+                        auth_user.is_active,
+                        auth_user.first_name,
+                        auth_user.last_name,
+                        auth_user.date_joined,
+
+                        users_profile.middle_name,
+                        users_profile.gender,
+                        users_profile.latitude,
+                        users_profile.longitude,
+                        users_profile.photo,
+                        users_profile.uuid,
+
+                        users_profile.dob,
+                        users_profile.dob_no_day,
+                        users_profile.dob_no_month,
+
+                        users_profile.is_dead,
+                        users_profile.dod,
+                        users_profile.dod_no_day,
+                        users_profile.dod_no_month,
+
+                        profile__ability.text,
+                        users_profile.comment
+                    FROM
+                        auth_user
+                    %(outer_joins)s
+                    %(inner_joins)s
+                    WHERE
+                        auth_user.id IN (%(req_union)s) %(and_tg_group_id)s
+                """ % dict(
+                    outer_joins=outer_joins,
+                    req_union=req_union,
+                    inner_joins=inner_joins,
+                    and_tg_group_id=and_tg_group_id,
+                )
+                if query:
+                    req += "AND (%(query_where)s)" % dict(query_where=query_where)
+                req += """
+                    ORDER BY
+                        date_joined
+                    DESC
+                    OFFSET %(from_)s
+                    LIMIT %(number_)s
+                """ % dict(
+                    from_=from_,
+                    number_=number_,
+                )
                 with connection.cursor() as cursor:
                     cursor.execute(req)
                     recs = self.dictfetchall(cursor)
-                return Response(data=dict(count=recs[0]['count']), status=status_code)
+                users = []
+                users.append(profile_q.data_dict(request))
+                user_pks = []
+                for rec in recs:
+                    dod=UnclearDate.str_safe_from_rec(rec, 'dod')
+                    users.append(dict(
+                        uuid=rec['uuid'],
+                        first_name=rec['first_name'],
+                        last_name=rec['last_name'],
+                        middle_name=rec['middle_name'],
+                        photo=Profile.choose_photo_of(request, rec['photo']),
+                        is_active=rec['is_active'],
+                        latitude=rec['latitude'],
+                        longitude=rec['longitude'],
+                        ability=rec['text'],
+                        gender=rec['gender'],
+                        dob=UnclearDate.str_safe_from_rec(rec, 'dob'),
+                        is_dead=rec['is_dead'] or bool(dod),
+                        dod=dod,
+                        comment=rec['comment'] or '',
+                    ))
+                    user_pks.append(rec['id'])
+                connections = []
 
-            try:
-                from_ = abs(int(request.GET.get("from")))
-            except (ValueError, TypeError, ):
-                from_ = 0
-            try:
-                number_ = abs(int(request.GET.get("number")))
-            except (ValueError, TypeError, ):
-                number_ = settings.PAGINATE_USERS_COUNT
+                if user_q.pk not in user_pks:
+                    user_pks.append(user_q.pk)
+                user_a = request.user
+                if user_a.is_authenticated and user_a.pk not in user_pks:
+                    users.append(user_a.profile.data_dict(request))
+                    user_pks.append(user_a.pk)
+                q = Q(user_from__in=user_pks) & Q(user_to__in=user_pks)
+                q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust__isnull=False)
+                for cs in CurrentState.objects.filter(q).select_related(
+                    'user_to__profile', 'user_from__profile',
+                    ).distinct():
+                    connections.append(cs.data_dict(show_trust=True))
 
-            req = """
-                SELECT
-                    distinct auth_user.id,
-                    auth_user.is_active,
-                    auth_user.first_name,
-                    auth_user.last_name,
-                    auth_user.date_joined,
-
-                    users_profile.middle_name,
-                    users_profile.gender,
-                    users_profile.latitude,
-                    users_profile.longitude,
-                    users_profile.photo,
-                    users_profile.uuid,
-
-                    users_profile.dob,
-                    users_profile.dob_no_day,
-                    users_profile.dob_no_month,
-
-                    users_profile.is_dead,
-                    users_profile.dod,
-                    users_profile.dod_no_day,
-                    users_profile.dod_no_month,
-
-                    profile__ability.text,
-                    users_profile.comment
-                FROM
-                    auth_user
-                %(outer_joins)s
-                %(inner_joins)s
-                WHERE 
-                    auth_user.id IN (%(req_union)s) %(and_tg_group_id)s
-            """ % dict(
-                outer_joins=outer_joins,
-                req_union=req_union,
-                inner_joins=inner_joins,
-                and_tg_group_id=and_tg_group_id,
-            )
-            if query:
-                req += "AND (%(query_where)s)" % dict(query_where=query_where)
-            req += """
-                ORDER BY
-                    date_joined
-                DESC
-                OFFSET %(from_)s
-                LIMIT %(number_)s
-            """ % dict(
-                from_=from_,
-                number_=number_,
-            )
-            with connection.cursor() as cursor:
-                cursor.execute(req)
-                recs = self.dictfetchall(cursor)
-            users = []
-            users.append(profile_q.data_dict(request))
-            user_pks = []
-            for rec in recs:
-                dod=UnclearDate.str_safe_from_rec(rec, 'dod')
-                users.append(dict(
-                    uuid=rec['uuid'],
-                    first_name=rec['first_name'],
-                    last_name=rec['last_name'],
-                    middle_name=rec['middle_name'],
-                    photo=Profile.choose_photo_of(request, rec['photo']),
-                    is_active=rec['is_active'],
-                    latitude=rec['latitude'],
-                    longitude=rec['longitude'],
-                    ability=rec['text'],
-                    gender=rec['gender'],
-                    dob=UnclearDate.str_safe_from_rec(rec, 'dob'),
-                    is_dead=rec['is_dead'] or bool(dod),
-                    dod=dod,
-                    comment=rec['comment'] or '',
-                ))
-                user_pks.append(rec['id'])
-            connections = []
-
-            user_pks.append(user_q.pk)
-            user_a = request.user
-            if user_a.is_authenticated and user_a.pk not in user_pks:
-                users.append(user_a.profile.data_dict(request))
-                user_pks.append(user_a.pk)
-            q = Q(user_from__in=user_pks) & Q(user_to__in=user_pks)
-            q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust=True)
-            for cs in CurrentState.objects.filter(q).select_related(
-                'user_to__profile', 'user_from__profile',
-                ).distinct():
-                connections.append(cs.data_dict(show_trust=True))
-
-            keys = [
-                {
-                    'id': key.pk,
-                    'type_id': key.type.pk,
-                    'value': key.value,
-                } \
-                for key in Key.objects.filter(owner=user_q).select_related('type')
-            ]
-            for oauth in Oauth.objects.filter(user=user_q, provider=Oauth.PROVIDER_TELEGRAM, username__gt=''):
-                keys.append({
-                    'id': None,
-                    'type_id': KeyType.LINK_ID,
-                    'value': 'https://t.me/%s' % oauth.username,
-                })
-            wishes = [
-                {
-                    'uuid': wish.uuid,
-                    'text': wish.text,
-                } \
-                for wish in Wish.objects.filter(owner=user_q)
-            ]
-            abilities = [
-                {
-                    'uuid': ability.uuid,
-                    'text': ability.text,
-                } \
-                for ability in Ability.objects.filter(owner=user_q)
-            ]
-            data = dict(
-                users=users,
-                connections=connections,
-                keys=keys,
-                wishes=wishes,
-                abilities=abilities,
-            )
+                keys = [
+                    {
+                        'id': key.pk,
+                        'type_id': key.type.pk,
+                        'value': key.value,
+                    } \
+                    for key in Key.objects.filter(owner=user_q).select_related('type')
+                ]
+                for oauth in Oauth.objects.filter(user=user_q, provider=Oauth.PROVIDER_TELEGRAM, username__gt=''):
+                    keys.append({
+                        'id': None,
+                        'type_id': KeyType.LINK_ID,
+                        'value': 'https://t.me/%s' % oauth.username,
+                    })
+                wishes = [
+                    {
+                        'uuid': wish.uuid,
+                        'text': wish.text,
+                    } \
+                    for wish in Wish.objects.filter(owner=user_q)
+                ]
+                abilities = [
+                    {
+                        'uuid': ability.uuid,
+                        'text': ability.text,
+                    } \
+                    for ability in Ability.objects.filter(owner=user_q)
+                ]
+                data.update(
+                    users=users,
+                    connections=connections,
+                    keys=keys,
+                    wishes=wishes,
+                    abilities=abilities,
+                )
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
+            status_code = status.HTTP_404_NOT_FOUND
         return Response(data=data, status=status_code)
 
 api_profile_graph = ApiProfileGraph.as_view()
@@ -2742,7 +2837,7 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
             ]
             if rod or dover:
                 connections = [
-                    cs.data_dict(show_parent=fmt=='d3js', show_trust=False, reverse=False, show_id_fio=False, fmt=fmt) \
+                    cs.data_dict(show_parent=fmt=='d3js', show_trust=False, reverse=False, fmt=fmt) \
                     for cs in CurrentState.objects.filter(q_connections).select_related(
                             'user_from__profile', 'user_to__profile',
                         ).distinct()
@@ -2753,7 +2848,7 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
                 users_pks = set()
                 for cs in CurrentState.objects.filter(q_connections).select_related(
                             'user_from__profile', 'user_to__profile',).distinct():
-                    connections.append(cs.data_dict(show_parent=fmt=='d3js', show_trust=False, reverse=False, show_id_fio=False, fmt=fmt))
+                    connections.append(cs.data_dict(show_parent=fmt=='d3js', show_trust=bool(dover), reverse=False, fmt=fmt))
                     if cs.user_from.pk not in users_pks:
                         users_pks.add(cs.user_from.pk)
                         users.append(cs.user_from.profile.data_dict(request=request, short=True, fmt=fmt))

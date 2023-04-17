@@ -717,14 +717,17 @@ class PhotoModel(FilesMixin, models.Model):
             width=THUMB_WIDTH, height=THUMB_HEIGHT,
             method=THUMB_METHOD
         ):
-        path = '%(path_to_media)s%(fname)s/%(width)sx%(height)s~%(method)s~12.jpg'  % dict(
-                path_to_media=settings.THUMBNAILS_STORAGE_BASE_PATH,
-                fname=fname,
-                width=width,
-                height=height,
-                method=method,
-        )
-        return request.build_absolute_uri(path)
+        if fname:
+            path = '%(path_to_media)s%(fname)s/%(width)sx%(height)s~%(method)s~12.jpg'  % dict(
+                    path_to_media=settings.THUMBNAILS_STORAGE_BASE_PATH,
+                    fname=fname,
+                    width=width,
+                    height=height,
+                    method=method,
+            )
+            return request.build_absolute_uri(path)
+        else:
+            return ''
 
     def choose_thumb(self, request,
         width=THUMB_WIDTH, height=THUMB_HEIGHT,
