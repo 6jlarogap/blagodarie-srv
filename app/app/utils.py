@@ -120,8 +120,11 @@ class FrontendMixin(object):
             ending_slash=ending_slash,
         )
 
-    def profile_url(self, request, profile,):
-        return self.get_frontend_url(request, 'profile') + '?id=%s' % profile.uuid
+    def profile_url(self, request, profile, fmt='d3js'):
+        if fmt == '3d-force-graph':
+            return settings.GRAPH_URL + '?user_uuid_trusts=%s' % profile.uuid
+        else:
+            return self.get_frontend_url(request, 'profile') + '?id=%s' % profile.uuid
 
     def profile_link(self, request, profile,):
         url_profile = self.profile_url(request, profile,)

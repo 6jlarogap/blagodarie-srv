@@ -1859,14 +1859,75 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
     #
     OFFER_PHOTO_FRAME = 5
 
+    # В каком формате и куда выводим профиль пользователя
+    #
+    FMT = '3d-force-graph'
+
     def get(self, request):
         """
-        Вернуть пользователй с координатами
-        """
+        Вернуть список координат пользователей
 
-        # Если точек нет, то пусть будут координаты Москвы
-        # Чтобы не показывался в этом случае в Атлантическом океане
-        #
+        На входе:
+        без параметров:
+            на выходе пустой список
+        возможные параметры
+        (в порядке их анализа):
+            chat_id         ид группы/канала в телеграме,
+                            показать участников этой группы/канала
+            offer_id        ид опроса- предложения в телеграме,
+                            показать участников опроса, как они голосовали,
+                            каждый из участников на карте будет в рамке цвета,
+                            назначенного опросу (settings.OFFER_ANSWER_COLOR_MAP)
+            uuid            показать координаты пользователя с этим uuid.
+                            Вместе с этим в выводе могут быть, при наличии параметров
+                            participants и/или owned и другие пользователи
+            participants    (on или пусто)
+                            показать активных пользователей (не родственников, точнее
+                            not owned профили)
+            owned          (on или пусто)
+                            показать не активных пользователей (например, родственников, точнее
+                            owned профили)
+
+        Пример выходных данных:
+        {
+            "first_name": "",                   // имя запрошенного пользователя, при параметре uuid
+            "found_coordinates": false,         // нашелся ли пользователь, при параметре uuid
+            "address": null,                    // текстовый адрес пользователя, при параметре uuid
+            "lat_avg": 50.94895896995098,       // где центрировать карту. При параметре uuid это
+            "lng_avg": 33.90609824676903,       // адрес найденного с координатами пользователя с uuid,
+                                                // иначе центр относительно всех найденных
+
+            "chat_title": null,                 // Название телеграм группы/канала, где ищем пользователей
+            "chat_type": null,                  // тип телеграм группы/канала, где ищем пользоватей,
+                                                // группа или канал
+            "offer_question": null,             // вопрос телеграм опроса- предложения (offer)
+            "offer_deeplink": null,             // ссылка на опроса- предложение (offer) в телеграме
+
+            "points": [
+                {
+                    // Информация по каждому найденному пользователю с координатами
+                    "latitude": 54.208471,
+                    "longitude": 28.500346,
+                    // имя фамилия
+                    "title": "(0) Eugene S",
+                    // что выскочит на карте при щелчке по пользователю
+                    "popup": "<table>
+                                <tr>
+                                    <td><img src=\"http://api.x.org/thumb/profile-photo/2023/04/12/1484/photo_cUfiWNv.jpg/64x64~crop~12.jpg\" width=64 height=64></td>
+                                    <td> Eugene S (0)<br /> <a href=\"https://t.me/DevBlagoBot?start=cf047bf6-ade6-4167-82e1-a266b43b96e0\" target=\"_blank\">Профиль</a>
+                                        <br /><br /> <a href=\"http://x.org/genesis/relations?user_uuid_trusts=cf047bf6-ade6-4167-82e1-a266b43b96e0\" target=\"_blank\">Доверия</a>
+                                        </td>
+                                    </tr></table>",
+                    // это пользователь, которого искали с параметром uuid?
+                    "is_of_found_user": false,
+                    "icon": "http://api.x.org/thumb/profile-photo/2023/04/12/1484/photo.jpg/32x32~crop~12.jpg",
+                    "size_icon": 32
+                },
+                ...
+            ]
+        }
+        Если не нашли никого, что показать на карте, она центрируется по Москве
+        """
         lat_avg = 55.7522200
         lng_avg = 37.6155600
 
@@ -1949,7 +2010,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 else:
                     qs = Profile.objects.none()
         for profile in qs:
-            url_profile = self.profile_url(request, profile)
+            url_profile = self.profile_url(request, profile, fmt=self.FMT)
             if bot_username:
                 url_deeplink = self.get_deeplink(profile, bot_username)
             else:
@@ -1998,7 +2059,9 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                        '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
                     '</td>'
                     '<td>'
-                        ' <a href="%(url_deeplink)s" target="_blank">%(full_name)s</a> (%(trust_count)s)'
+                        ' %(full_name)s (%(trust_count)s)'
+                        '<br />'
+                        ' <a href="%(url_deeplink)s" target="_blank">Профиль</a>'
                         '<br /><br />'
                         ' <a href="%(url_profile)s" target="_blank">Доверия</a>'
                     '</td>'
@@ -2051,7 +2114,6 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
             lat_avg=lat_avg,
             lng_avg=lng_avg,
             points=points,
-            chat_id=chat_id,
             chat_title=chat_title,
             chat_type=chat_type,
             offer_question=offer_question,

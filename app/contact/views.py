@@ -2177,8 +2177,6 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     first_name=user_q.first_name,
                     photo=Profile.image_thumb(
                         request, user_q.profile.photo,
-                        width = PhotoModel.THUMB_WIDTH * 4,
-                        height = PhotoModel.THUMB_HEIGHT * 4,
                         method='crop-red-frame-5',
                     ),
                 ))

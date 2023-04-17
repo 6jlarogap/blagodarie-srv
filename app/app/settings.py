@@ -303,6 +303,8 @@ SEND_TO_TELEGRAM = True
 
 # ------------------------------------------------
 
+# front-end stuff
+
 # Адрес front end. Вычисляется из url запроса к апи.
 # Например, если запрос к апи пришел по
 # https://(api.blagodarie.org), то будем считать,
@@ -323,6 +325,12 @@ FRONTEND_ROOT = ''
 # на frontend.
 #
 REDIRECT_FROM_CALLBACK = 'oauth-landing'
+
+# Рисуем графики в формате '3d-force-graph' здесь
+#
+GRAPH_URL = 'https://graph.blagoroda.org'
+
+# ------------------------------------------------
 
 # Это надо полностью переписать в local_settings.py:
 #
