@@ -404,7 +404,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 )
         else:
             result.update(
-                uuid=str(self.uuid),
+                uuid=self.uuid,
                 last_name=user.last_name,
                 first_name=user.first_name,
                 middle_name=self.middle_name,

@@ -2199,7 +2199,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     'user_to__profile', 'user_from__profile',
                     ).distinct():
                     links.append(cs.data_dict(fmt=fmt, show_trust=True))
-                data.update( bot_username= bot_username, nodes=nodes, links=links,)
+                data.update(bot_username=bot_username, nodes=nodes, links=links,)
 
             else:
                 # fmt != '3d-force-graph, "old 3d style"
@@ -2776,6 +2776,7 @@ class GetTrustGenesisMixin(object):
     def get(self, request):
         try:
             chat_id = request.GET.get('chat_id')
+            fmt = request.GET.get('fmt', 'd3js')
             try:
                 recursion_depth = int(request.GET.get('depth', 0) or 0)
             except (TypeError, ValueError,):
@@ -2791,9 +2792,9 @@ class GetTrustGenesisMixin(object):
                 uuids = re.split(r'[, ]+', uuid)
                 len_uuids = len(uuids)
                 if len_uuids == 1:
-                    data = self.get_tree(request, uuids[0], recursion_depth)
+                    data = self.get_tree(request, uuids[0], recursion_depth, fmt)
                 elif len_uuids == 2:
-                    data = self.get_shortest_path(request, uuids, recursion_depth)
+                    data = self.get_shortest_path(request, uuids, recursion_depth, fmt)
                 else:
                     raise ServiceException("Допускается  uuid (дерево) или 2 uuid's (найти путь между)")
             else:
@@ -2835,7 +2836,13 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
             ]
             if rod or dover:
                 connections = [
-                    cs.data_dict(show_parent=fmt=='d3js', show_trust=False, reverse=False, fmt=fmt) \
+                    cs.data_dict(
+                        show_child=rod and fmt=='3d-force-graph',
+                        show_parent=fmt=='d3js',
+                        show_trust=bool(dover),
+                        reverse=False,
+                        fmt=fmt
+                    ) \
                     for cs in CurrentState.objects.filter(q_connections).select_related(
                             'user_from__profile', 'user_to__profile',
                         ).distinct()
@@ -2846,7 +2853,13 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
                 users_pks = set()
                 for cs in CurrentState.objects.filter(q_connections).select_related(
                             'user_from__profile', 'user_to__profile',).distinct():
-                    connections.append(cs.data_dict(show_parent=fmt=='d3js', show_trust=bool(dover), reverse=False, fmt=fmt))
+                    connections.append(cs.data_dict(
+                        show_child=rod and fmt=='3d-force-graph',
+                        show_parent=fmt=='d3js',
+                        show_trust=bool(dover),
+                        reverse=False,
+                        fmt=fmt
+                    ))
                     if cs.user_from.pk not in users_pks:
                         users_pks.add(cs.user_from.pk)
                         users.append(cs.user_from.profile.data_dict(request=request, short=True, fmt=fmt))
@@ -3017,7 +3030,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
 
         return dict(users=users, connections=connections, trust_connections=trust_connections, participants_on_page=participants_on_page)
 
-    def get_shortest_path(self, request, uuids, recursion_depth):
+    def get_shortest_path(self, request, uuids, recursion_depth, fmt='d3js'):
         user_pks = []
         try:
             user_pks = [int(profile.user.pk) for profile in Profile.objects.filter(uuid__in=uuids)]
@@ -3081,7 +3094,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
 
         return dict(users=users, connections=connections, trust_connections=trust_connections)
 
-    def get_tree(self, request, uuid, recursion_depth):
+    def get_tree(self, request, uuid, recursion_depth, fmt='d3js'):
         related = ('user', 'owner', 'ability',)
         user_q, profile_q = self.check_user_uuid(uuid, related=related)
 
@@ -3175,9 +3188,9 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
 
 api_profile_genesis = ApiProfileGenesis.as_view()
 
-class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
+class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMixin, APIView):
     """
-    Дерево доверия в чате телеграма, или просто среди пользователей
+    Дерево доверия пользователя или путь доверий между пользователями
 
     Если задан параметр chat_id, то показ связей доверия между участниками
     телеграм группы/канала, возможно опосредованный через иных пользователей
@@ -3187,10 +3200,12 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         если задан 1 uuid, или кратчайший путь (пути) по доверию между 2 пользователями
 
         Если указан один uuid:
-            Возвращает информацию о пользователе, а также его довериям.
+            Возвращает информацию о пользователе, а также его довериям в дереве доверий
 
         Если указаны 2 uuid через запятую:
-            Возвращает кратчайший путь (пути) между двумя пользователями
+            Возвращает кратчайший путь (пути) доверия между двумя пользователями
+            При этом анализ параметра fmt, или для показа в 3djs фронте,
+            или для показа в 3d-force-graph фронте
 
     Параметры
     Если задан параметр uuid:
@@ -3202,23 +3217,18 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
                 (в этом случае она таки ограничена, но немыслимо большИм для глубины рекурсии числом: 100)
             1 или более:
                 показать в рекурсии связи не дальше указанной глубины рекурсии
-
-    Если задан параметр chat_id:
-        chat_id:
-            id телеграм группы или канала
-        from:
-            откуда начинать страницу показа результатов для участников группы,
-            по умолчанию 0
-        count:
-            сколько показывать участников группы в очередной странице,
-            по умолчанию settings.MAX_RECURSION_DEPTH
     """
 
     def get_chat_mesh(self, request, chat_id, recursion_depth):
         raise ServiceException('Не реализовано, ибо не востребовано')
         #return dict(users=[], connections=[], trust_connections=[])
 
-    def get_shortest_path(self, request, uuids, recursion_depth):
+    def get_shortest_path(self, request, uuids, recursion_depth, fmt='d3js'):
+        """
+        Кратчайший путь доверий между двумя пользователями
+
+        Реализована для двух форматов на фронте
+        """
         try:
             user_from_id = Profile.objects.get(uuid=uuids[0]).user_id
             user_to_id = Profile.objects.get(uuid=uuids[1]).user_id
@@ -3257,23 +3267,28 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            d = cs.data_dict(show_trust=True)
-            d.update(
-                # Это ради фронта, который заточен для обработки родственных
-                # деревьев
-                is_father=True,
-            )
+            d = cs.data_dict(show_trust=True, fmt=fmt)
+            if fmt == 'd3js':
+                d.update(
+                    # Это ради фронта, который заточен для обработки родственных
+                    # деревьев
+                    is_father=True,
+                )
             connections.append(d)
 
         user_pks.add(user_from_id)
         user_pks.add(user_to_id)
         users = []
         for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
-            users.append(profile.data_dict(request))
+            users.append(profile.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt))
 
-        return dict(users=users, connections=connections, trust_connections=[])
+        if fmt == '3d-force-graph':
+            bot_username = self.get_bot_username()
+            return dict(bot_username=bot_username, nodes=users, links=connections)
+        else:
+            return dict(users=users, connections=connections, trust_connections=[])
 
-    def get_tree(self, request, uuid, recursion_depth):
+    def get_tree(self, request, uuid, recursion_depth, fmt='d3js'):
 
         user_q, profile_q = self.check_user_uuid(uuid, related=[])
 

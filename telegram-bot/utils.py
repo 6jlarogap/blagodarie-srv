@@ -887,10 +887,13 @@ class Misc(object):
                 )
                 goto_buttons = [inline_btn_friends, ]
                 if response_from.get('uuid') and not is_own_account:
-                    path = "/trust/?id=%s,%s&d=10" % (response_from['uuid'], response_to['uuid'],)
-                    url = settings.FRONTEND_HOST + path
+                    # 3djs links
+                    #path = "/trust/?id=%s,%s&d=10" % (response_from['uuid'], response_to['uuid'],)
+                    #url = settings.FRONTEND_HOST + path
                     ## не реализовано в 3djs front-end
                     # login_url = LoginUrl(url=cls.make_login_url(path))
+                    path = "/?user_uuid_trust_path=%s,%s" % (response_from['uuid'], response_to['uuid'],)
+                    url = settings.GRAPH_HOST + path
                     inline_btn_path = InlineKeyboardButton(
                         'Путь (доверия)',
                         url=url,
