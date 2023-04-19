@@ -629,7 +629,7 @@ class Misc(object):
         Сформировать ссылку, которая будет открываться авторизованным пользователем
 
         Пример результата:
-        https://dev.blagodarie.org/auth/telegram/?redirect_path=/profile/?id=...
+        https://dev.blagoroda.org/auth/telegram/?redirect_path=/profile/?id=...
 
         где /profile/?id=... - путь на фронте, куда после авторизации уходим
         """
@@ -873,9 +873,13 @@ class Misc(object):
                     reply += cls.reply_relations(response_relations)
 
             if response_to['is_active'] or response_to['owner_id']:
-                path = "/profile/?id=%s" % response_to['uuid']
-                url = settings.FRONTEND_HOST + path
-                # login_url = LoginUrl(url=cls.make_login_url(path))
+               # 3djs links
+               #path = "/profile/?id=%s" % response_to['uuid']
+               #url = settings.FRONTEND_HOST + path
+               ## не реализовано в 3djs front-end
+               ## login_url = LoginUrl(url=cls.make_login_url(path))
+                path = "/?user_uuid_trusts=%s" % response_to['uuid']
+                url = settings.GRAPH_HOST + path
                 inline_btn_friends = InlineKeyboardButton(
                     'Доверия',
                     url=url,
@@ -885,6 +889,7 @@ class Misc(object):
                 if response_from.get('uuid') and not is_own_account:
                     path = "/trust/?id=%s,%s&d=10" % (response_from['uuid'], response_to['uuid'],)
                     url = settings.FRONTEND_HOST + path
+                    ## не реализовано в 3djs front-end
                     # login_url = LoginUrl(url=cls.make_login_url(path))
                     inline_btn_path = InlineKeyboardButton(
                         'Путь (доверия)',
