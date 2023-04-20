@@ -3059,40 +3059,31 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
                 user_pks.add(user_id)
 
         connections = []
-        q_connections = Q(
-            is_child=False,
-            user_to__isnull=False,
-        )
-        q_connections &= Q(is_father=True) | Q(is_mother=True)
+        if fmt == '3d-force-graph':
+            q_connections = Q(is_child=True)
+        else:
+            q_connections = Q(
+                is_child=False,
+                user_to__isnull=False,
+            )
+            q_connections &= Q(is_father=True) | Q(is_mother=True)
         q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            connections.append(cs.data_dict(show_parent=True, reverse=True))
-
-        trust_connections = []
-
-        if request.user.is_authenticated:
-            user = request.user
-            user_pks.add(int(request.user.pk))
+            if fmt == '3d-force-graph':
+                connections.append(cs.data_dict(show_child=True, fmt=fmt))
+            else:
+                connections.append(cs.data_dict(show_parent=True, reverse=True, fmt=fmt))
 
         users = [
-            p.data_dict(request) for p in \
+            p.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt) for p in \
             Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability')
         ]
-
-        q_connections = Q(
-            is_reverse=False,
-            user_to__isnull=False,
-            is_trust=True,
-        )
-        q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
-        for cs in CurrentState.objects.filter(q_connections).select_related(
-                'user_from__profile', 'user_to__profile',
-            ).distinct():
-            trust_connections.append(cs.data_dict(show_trust=True))
-
-        return dict(users=users, connections=connections, trust_connections=trust_connections)
+        if fmt == '3d-force-graph':
+            return dict(nodes=users, links=connections,)
+        else:
+            return dict(users=users, connections=connections, trust_connections=[])
 
     def get_tree(self, request, uuid, recursion_depth, fmt='d3js'):
         related = ('user', 'owner', 'ability',)
