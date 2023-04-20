@@ -2032,7 +2032,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
             else:
                 offer_reply_html = ''
                 frame = 0
-                method = 'crop'
+                method = 'crop-blue-frame-3' if found_coordinates and profile == found_profile else 'crop'
                 answer_text=''
                 title_template = '(%(trust_count)s) %(full_name)s'
             dict_user = dict(

@@ -902,12 +902,12 @@ class Misc(object):
                     goto_buttons.append(inline_btn_path)
                 if is_own_account or is_owned_account:
                     # 3djs links
-                    #path = "?id=%s&depth=3" % response_to['uuid']
+                    #path = "/?id=%s&depth=3" % response_to['uuid']
                     #url = settings.GENESIS_HOST + path
                     ## не реализовано в 3djs front-end
                     # login_url = LoginUrl(url=cls.make_login_url(path))
-                    path = "?id=%s&depth=3" % response_to['uuid']
-                    url = settings.GENESIS_HOST + path
+                    path = "/?user_uuid_genesis_tree=%s&depth=3&up=&down=" % response_to['uuid']
+                    url = settings.GRAPH_HOST + path
                     inline_btn_genesis = InlineKeyboardButton(
                         'Род',
                         url=url,

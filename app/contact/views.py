@@ -2177,7 +2177,8 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     first_name=user_q.first_name,
                     photo=Profile.image_thumb(
                         request, user_q.profile.photo,
-                        method='crop-red-frame-5',
+                        method='crop-red-frame-3',
+                        put_default_avatar=True,
                     ),
                 ))
                 user_pks.append(user_q.pk)
@@ -2199,7 +2200,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     'user_to__profile', 'user_from__profile',
                     ).distinct():
                     links.append(cs.data_dict(fmt=fmt, show_trust=True))
-                data.update(bot_username=bot_username, nodes=nodes, links=links,)
+                data.update(bot_username=bot_username, nodes=nodes, links=links, user_q_name=user_q.first_name)
 
             else:
                 # fmt != '3d-force-graph, "old 3d style"
@@ -2857,7 +2858,6 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
                         show_child=rod and fmt=='3d-force-graph',
                         show_parent=fmt=='d3js',
                         show_trust=bool(dover),
-                        reverse=False,
                         fmt=fmt
                     ))
                     if cs.user_from.pk not in users_pks:
@@ -2877,7 +2877,7 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
 api_profile_genesis_all = cache_page(30)(ApiProfileGenesisAll.as_view())
 
 
-class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
+class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMixin, APIView):
     """
     Дерево родни в чате телеграма, или просто среди пользователей.
 
@@ -3073,13 +3073,14 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability')
         ]
         if fmt == '3d-force-graph':
-            return dict(nodes=users, links=connections,)
+            bot_username = self.get_bot_username()
+            return dict(bot_username=bot_username, nodes=users, links=connections)
         else:
             return dict(users=users, connections=connections, trust_connections=[])
 
     def get_tree(self, request, uuid, recursion_depth, fmt='d3js'):
         """
-        Дерево родственных связей
+        Дерево родственных связей от пользователя
         """
         related = ('user', 'owner', 'ability',)
         user_q, profile_q = self.check_user_uuid(uuid, related=related)
@@ -3137,10 +3138,20 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             user_pks.add(rec['user_to_id'])
 
         user_pks.add(user_q.pk)
-        users = [
-            p.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt) for p in \
-            Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability')
-        ]
+        users = []
+        for p in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
+            if p == profile_q and fmt=='3d-force-graph':
+                users.append(dict(
+                    id=user_q.pk,
+                    uuid=profile_q.uuid,
+                    first_name=user_q.first_name,
+                    photo=Profile.image_thumb(
+                        request, profile_q.photo,
+                        method='crop-red-frame-3',
+                        put_default_avatar=True,
+                )))
+            else:
+                users.append(p.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt))
 
         connections = []
         q_connections = Q(is_child=True)
@@ -3153,7 +3164,11 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             else:
                 connections.append(cs.data_dict(show_parent=True, fmt=fmt))
 
-        return dict(users=users, connections=connections, trust_connections=[])
+        if fmt == '3d-force-graph':
+            bot_username = self.get_bot_username()
+            return dict(bot_username=bot_username, nodes=users, links=connections, user_q_name=user_q.first_name)
+        else:
+            return dict(users=users, connections=connections, trust_connections=[])
 
 api_profile_genesis = ApiProfileGenesis.as_view()
 

@@ -715,8 +715,12 @@ class PhotoModel(FilesMixin, models.Model):
     @classmethod
     def image_thumb(cls, request, fname,
             width=THUMB_WIDTH, height=THUMB_HEIGHT,
-            method=THUMB_METHOD
+            method=THUMB_METHOD,
+            put_default_avatar=False,
+            default_avatar_in_media=DEFAULT_AVATAR_IN_MEDIA,
         ):
+        if not fname and put_default_avatar:
+            fname = default_avatar_in_media
         if fname:
             path = '%(path_to_media)s%(fname)s/%(width)sx%(height)s~%(method)s~12.jpg'  % dict(
                     path_to_media=settings.THUMBNAILS_STORAGE_BASE_PATH,
@@ -735,15 +739,12 @@ class PhotoModel(FilesMixin, models.Model):
         put_default_avatar=False,
         default_avatar_in_media=DEFAULT_AVATAR_IN_MEDIA,
     ):
-        result = ''
         fname = self.photo.name if self.photo else ''
-        if not fname and put_default_avatar:
-            fname = default_avatar_in_media
-        if fname:
-            result = PhotoModel.image_thumb(request, fname,
-                width=width, height=height, method=method
-            )
-        return result
+        return PhotoModel.image_thumb(request, fname,
+            width=width, height=height, method=method,
+            put_default_avatar=put_default_avatar,
+            default_avatar_in_media=default_avatar_in_media,
+        )
 
 
 class GenderMixin(object):
