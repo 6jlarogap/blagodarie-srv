@@ -901,6 +901,11 @@ class Misc(object):
                     )
                     goto_buttons.append(inline_btn_path)
                 if is_own_account or is_owned_account:
+                    # 3djs links
+                    #path = "?id=%s&depth=3" % response_to['uuid']
+                    #url = settings.GENESIS_HOST + path
+                    ## не реализовано в 3djs front-end
+                    # login_url = LoginUrl(url=cls.make_login_url(path))
                     path = "?id=%s&depth=3" % response_to['uuid']
                     url = settings.GENESIS_HOST + path
                     inline_btn_genesis = InlineKeyboardButton(
@@ -909,8 +914,13 @@ class Misc(object):
                     )
                     goto_buttons.append(inline_btn_genesis)
                 if response_from.get('uuid') and not is_own_account:
-                    path = "/?id=%s,%s&depth=10" % (response_from['uuid'], response_to['uuid'],)
-                    url = settings.GENESIS_HOST + path
+                    # 3djs links
+                    #path = "/?id=%s,%s&depth=10" % (response_from['uuid'], response_to['uuid'],)
+                    #url = settings.GENESIS_HOST + path
+                    ## не реализовано в 3djs front-end
+                    # login_url = LoginUrl(url=cls.make_login_url(path))
+                    path = "/?user_uuid_genesis_path=%s,%s&depth=10" % (response_from['uuid'], response_to['uuid'],)
+                    url = settings.GRAPH_HOST + path
                     inline_btn_genesis_path = InlineKeyboardButton(
                         'Путь ( род)',
                         url=url,
