@@ -3078,6 +3078,9 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             return dict(users=users, connections=connections, trust_connections=[])
 
     def get_tree(self, request, uuid, recursion_depth, fmt='d3js'):
+        """
+        Дерево родственных связей
+        """
         related = ('user', 'owner', 'ability',)
         user_q, profile_q = self.check_user_uuid(uuid, related=related)
 
@@ -3135,7 +3138,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
 
         user_pks.add(user_q.pk)
         users = [
-            p.data_dict(request) for p in \
+            p.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt) for p in \
             Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability')
         ]
 
@@ -3145,7 +3148,10 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            connections.append(cs.data_dict(show_parent=True))
+            if fmt == '3d-force-graph':
+                connections.append(cs.data_dict(show_child=True, fmt=fmt))
+            else:
+                connections.append(cs.data_dict(show_parent=True, fmt=fmt))
 
         return dict(users=users, connections=connections, trust_connections=[])
 
@@ -3252,6 +3258,11 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
             return dict(users=users, connections=connections, trust_connections=[])
 
     def get_tree(self, request, uuid, recursion_depth, fmt='d3js'):
+        """
+        Дерево доверий
+
+        Пока нигде не используется на фронте
+        """
 
         user_q, profile_q = self.check_user_uuid(uuid, related=[])
 
