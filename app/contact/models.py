@@ -181,35 +181,21 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
         show_child=False,
         show_parent=False,
         show_trust=False,
-        reverse=False,
         show_id_fio=False,
         fmt='d3js'
     ):
 
         result = dict()
         if fmt == '3d-force-graph':
-            if reverse:
-                result.update(
-                    target=self.user_from.pk,
-                    source=self.user_to.pk,
-                )
-            else:
-                result.update(
-                    source=self.user_from.pk,
-                    target=self.user_to.pk,
-                )
+            result.update(
+                source=self.user_from.pk,
+                target=self.user_to.pk,
+            )
         else:
-            if reverse:
-                result.update(
-                    target=self.user_from.profile.uuid,
-                    source=self.user_to.profile.uuid,
-                )
-            else:
-                result.update(
-                    source=self.user_from.profile.uuid,
-                    target=self.user_to.profile.uuid,
-                )
-
+            result.update(
+                source=self.user_from.profile.uuid,
+                target=self.user_to.profile.uuid,
+            )
         if show_child:
             result.update(is_child=self.is_child,)
         if show_trust:
@@ -223,20 +209,12 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
                 is_mother=self.is_mother,
             ))
         if show_id_fio:
-            if reverse:
-                result.update(dict(
-                    target_fio=self.user_from.first_name,
-                    target_id=self.user_from.pk,
-                    source_fio=self.user_to.first_name,
-                    source_id=self.user_to.pk,
-                ))
-            else:
-                result.update(dict(
-                    source_fio=self.user_from.first_name,
-                    source_id=self.user_from.pk,
-                    target_fio=self.user_to.first_name,
-                    target_id=self.user_to.pk,
-                ))
+            result.update(dict(
+                source_fio=self.user_from.first_name,
+                source_id=self.user_from.pk,
+                target_fio=self.user_to.first_name,
+                target_id=self.user_to.pk,
+            ))
         return result
 
     class Meta:

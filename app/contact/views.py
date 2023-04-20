@@ -2991,16 +2991,12 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
                         for user_pk in path[1:len(path)-1]:
                             user_pks.add(user_pk)
 
-                q_connections = Q(
-                    is_child=False,
-                    user_to__isnull=False,
-                )
-                q_connections &= Q(is_father=True) | Q(is_mother=True)
+                q_connections = Q(is_child=True)
                 q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
                 for cs in CurrentState.objects.filter(q_connections).select_related(
                         'user_from__profile', 'user_to__profile',
                     ).distinct():
-                    connections.append(cs.data_dict(show_parent=True, reverse=True))
+                    connections.append(cs.data_dict(show_parent=True))
 
                 if request.user.is_authenticated:
                     user = request.user
@@ -3031,6 +3027,9 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
         return dict(users=users, connections=connections, trust_connections=trust_connections, participants_on_page=participants_on_page)
 
     def get_shortest_path(self, request, uuids, recursion_depth, fmt='d3js'):
+        """
+        Кратчайший путь родства от uuids[0] к uuids[1]
+        """
         user_pks = []
         try:
             user_pks = [int(profile.user.pk) for profile in Profile.objects.filter(uuid__in=uuids)]
@@ -3059,14 +3058,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
                 user_pks.add(user_id)
 
         connections = []
-        if fmt == '3d-force-graph':
-            q_connections = Q(is_child=True)
-        else:
-            q_connections = Q(
-                is_child=False,
-                user_to__isnull=False,
-            )
-            q_connections &= Q(is_father=True) | Q(is_mother=True)
+        q_connections = Q(is_child=True)
         q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
@@ -3074,7 +3066,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             if fmt == '3d-force-graph':
                 connections.append(cs.data_dict(show_child=True, fmt=fmt))
             else:
-                connections.append(cs.data_dict(show_parent=True, reverse=True, fmt=fmt))
+                connections.append(cs.data_dict(show_parent=True, fmt=fmt))
 
         users = [
             p.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt) for p in \
@@ -3141,41 +3133,21 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, APIView):
             user_pks.add(rec['user_from_id'])
             user_pks.add(rec['user_to_id'])
 
-        connections = []
-        q_connections = Q(
-            is_child=False,
-            user_to__isnull=False,
-        )
-        q_connections &= Q(is_father=True) | Q(is_mother=True)
-        q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
-        for cs in CurrentState.objects.filter(q_connections).select_related(
-                'user_from__profile', 'user_to__profile',
-            ).distinct():
-            connections.append(cs.data_dict(show_parent=True, reverse=True))
-
-        trust_connections = []
-        if request.user.is_authenticated:
-            user = request.user
-            user_pks.add(int(request.user.pk))
-
         user_pks.add(user_q.pk)
         users = [
             p.data_dict(request) for p in \
             Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability')
         ]
 
-        q_connections = Q(
-            is_reverse=False,
-            user_to__isnull=False,
-            is_trust=True,
-        )
+        connections = []
+        q_connections = Q(is_child=True)
         q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            trust_connections.append(cs.data_dict(show_trust=True))
+            connections.append(cs.data_dict(show_parent=True))
 
-        return dict(users=users, connections=connections, trust_connections=trust_connections)
+        return dict(users=users, connections=connections, trust_connections=[])
 
 api_profile_genesis = ApiProfileGenesis.as_view()
 
