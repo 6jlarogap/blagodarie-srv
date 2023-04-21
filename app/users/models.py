@@ -553,6 +553,8 @@ class Profile(PhotoModel, GeoPointAddressModel):
         except Token.DoesNotExist:
             Token.objects.filter(user=user_from).update(user=user)
 
+        Offer.objects.filter(owner=user_from).update(owner=user)
+
         do_save = False
         if not self.photo and profile_from.photo:
             self.photo = profile_from.photo
