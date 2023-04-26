@@ -20,6 +20,18 @@ DATABASES = {
     },
 }
 
+# Полезно для несоторых вызовов, которые кэшируются
+#
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://127.0.0.1:6379/1",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}
+
 # Webhook ключ от github репозитория. Webhook обеспечивает при каждом
 # push в репозиторий отправку запроса для получения данных о версии
 # мобильного приложения.
