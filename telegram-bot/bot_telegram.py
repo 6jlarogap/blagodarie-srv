@@ -4685,11 +4685,11 @@ async def echo_my_chat_member_for_bot(chat_member: types.ChatMemberUpdated):
                     text='Карта',
                 ) + ' \n' + \
                 Misc.get_html_a(
-                    href='%s/?chat_id=%s&depth=10&q=50&f=0' % (
-                        settings.GENESIS_HOST,
+                    href='%s/?tg_group_chat_id=%s' % (
+                        settings.GRAPH_HOST,
                         chat_member.chat.id,
                     ),
-                    text='Род'
+                    text='Схема'
                 ),
             reply_markup=reply_markup,
             disable_web_page_preview=True,
@@ -4833,13 +4833,13 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 reply = Misc.get_html_a(
                     href='%s/?chat_id=%s' % (settings.MAP_HOST, message.chat.id),
                     text='Карта',
-                ) + ' ...\n' + \
+                ) + ' \n' + \
                 Misc.get_html_a(
-                    href='%s/?chat_id=%s&depth=10&q=20&f=0' % (
-                        settings.GENESIS_HOST,
+                    href='%s/?tg_group_chat_id=%s' % (
+                        settings.GRAPH_HOST,
                         message.chat.id,
                     ),
-                    text='Род',
+                    text='Схема'
                 )
                 inline_btn_trusts = InlineKeyboardButton(
                     'Доверия',
