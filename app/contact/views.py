@@ -805,9 +805,22 @@ class ApiGetUserOperationsView(APIView):
 api_get_user_operations = ApiGetUserOperationsView.as_view()
 
 class ApiTgGroupConnectionsMixin(object):
+    """
+    Получить данные о группе из запроса
+
+    Возвращает:
+        tg_group_id:
+            None, если не было в запросе ничего о группе/канале
+            0, если было в запросе о группе/канале
+            id группы/канала, если группа/канал найден
+        tggroup:
+            запись о группе/канале или None
+    """
 
     def get_tg_group_id(self, request):
+        tg_group_id, tggroup = None, None
         tg_group_chat_id = request.GET.get('tg_group_chat_id')
+        tggroup = None
         if tg_group_chat_id is not None:
             if tg_group_chat_id:
                 try:
@@ -818,12 +831,11 @@ class ApiTgGroupConnectionsMixin(object):
             tg_group_id = tg_group_chat_id
             if tg_group_id:
                 try:
-                    tg_group_id = TgGroup.objects.get(chat_id=tg_group_chat_id).pk
+                    tggroup = TgGroup.objects.get(chat_id=tg_group_chat_id)
+                    tg_group_id = tggroup.pk
                 except TgGroup.DoesNotExist:
                     tg_group_id = 0
-        else:
-            tg_group_id = None
-        return tg_group_id
+        return tg_group_id, tggroup
 
 
 class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIView):
@@ -882,7 +894,7 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
             short = fmt == '3d-force-graph'
             q_users = Q(is_superuser=False)
 
-            tg_group_id = self.get_tg_group_id(request)
+            tg_group_id, tggroup = self.get_tg_group_id(request)
             if tg_group_id is not None:
                 tg_group_id = tg_group_id or 0;
                 q_users &= Q(
@@ -952,6 +964,8 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
             if fmt == '3d-force-graph':
                 bot_username = self.get_bot_username()
                 result = dict(bot_username=bot_username, nodes=users, links=connections)
+                if tggroup:
+                    result.update(tg_group=dict(type=tggroup.type, title=tggroup.title))
             else:
                 result = dict(users=users, connections=connections)
             return result
@@ -2113,7 +2127,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                 user_q_pk=user_q.pk
             )
 
-            tg_group_id = self.get_tg_group_id(request)
+            tg_group_id, tggroup = self.get_tg_group_id(request)
             if tg_group_id is not None:
                 inner_joins = """
                     INNER JOIN
@@ -2126,26 +2140,11 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                 inner_joins = ''
                 and_tg_group_id = ''
 
-                outer_joins = \
-                """
-                    LEFT OUTER JOIN
-                        users_profile ON (auth_user.id = users_profile.user_id)
-                """ \
-                    if fmt == '3d-force-graph' else \
-                """
-                    LEFT OUTER JOIN
-                        contact_wish ON (auth_user.id = contact_wish.owner_id)
-                    LEFT OUTER JOIN
-                        contact_ability ON (auth_user.id = contact_ability.owner_id)
-                    LEFT OUTER JOIN
-                        contact_key ON (auth_user.id = contact_key.owner_id)
-                    LEFT OUTER JOIN
-                        users_profile ON (auth_user.id = users_profile.user_id)
-                    LEFT OUTER JOIN
-                        contact_ability profile__ability ON (users_profile.ability_id = profile__ability.uuid)
-                """
-
             if fmt == '3d-force-graph':
+                outer_joins = """
+                    LEFT OUTER JOIN
+                        users_profile ON (auth_user.id = users_profile.user_id)
+                """
                 req = """
                     SELECT
                         distinct auth_user.id as id,
@@ -2201,10 +2200,23 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     ).distinct():
                     links.append(cs.data_dict(fmt=fmt, show_trust=True))
                 data.update(bot_username=bot_username, nodes=nodes, links=links, user_q_name=user_q.first_name)
+                if tggroup:
+                    data.update(tg_group=dict(type=tggroup.type, title=tggroup.title))
 
             else:
                 # fmt != '3d-force-graph, "old 3d style"
-
+                outer_joins = """
+                    LEFT OUTER JOIN
+                        contact_wish ON (auth_user.id = contact_wish.owner_id)
+                    LEFT OUTER JOIN
+                        contact_ability ON (auth_user.id = contact_ability.owner_id)
+                    LEFT OUTER JOIN
+                        contact_key ON (auth_user.id = contact_key.owner_id)
+                    LEFT OUTER JOIN
+                        users_profile ON (auth_user.id = users_profile.user_id)
+                    LEFT OUTER JOIN
+                        contact_ability profile__ability ON (users_profile.ability_id = profile__ability.uuid)
+                """
                 query = request.GET.get('query', '')
                 if query:
                     # '%QUERY%' :
