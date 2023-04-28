@@ -15,7 +15,6 @@ from aiogram.utils.executor import start_polling, start_webhook
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation, CantTalkWithBots, \
     BadRequest, MessageNotModified, MessageCantBeDeleted
-from aiogram.utils.parts import safe_split_text
 from aiogram.types.message_entity import MessageEntityType
 
 import pymorphy2

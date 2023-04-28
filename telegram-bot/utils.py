@@ -1140,9 +1140,9 @@ class Misc(object):
                     except:
                         pass
             if send_text_message and reply:
-                # в группу или нет смысла слать фото
-                await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
-
+                parts = safe_split_text(reply, split_separator='\n')
+                for part in parts:
+                    await message.answer(part, reply_markup=reply_markup, disable_web_page_preview=True)
 
     @classmethod
     def get_lifetime_str(cls, response):
