@@ -2853,7 +2853,6 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
                         show_child=rod and fmt=='3d-force-graph',
                         show_parent=fmt=='d3js',
                         show_trust=bool(dover),
-                        reverse=False,
                         fmt=fmt
                     ) \
                     for cs in CurrentState.objects.filter(q_connections).select_related(
