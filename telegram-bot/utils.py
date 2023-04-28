@@ -860,32 +860,23 @@ class Misc(object):
         for response_to in a_response_to:
             is_own_account = user_from_id and user_from_id == response_to['user_id']
             is_owned_account = user_from_id and response_to.get('owner_id') and response_to['owner_id'] == user_from_id
-            reply_markup = InlineKeyboardMarkup()
 
             reply = cls.reply_user_card(
                 response_to,
                 bot_data=bot_data,
             )
-            response_relations = {}
-            if user_from_id and user_from_id != response_to['user_id']:
-                status_relations, response_relations = await cls.call_response_relations(response_from, response_to)
-                if response_relations:
-                    reply += cls.reply_relations(response_relations)
 
             if response_to['is_active'] or response_to['owner_id']:
-               # 3djs links
-               #path = "/profile/?id=%s" % response_to['uuid']
-               #url = settings.FRONTEND_HOST + path
-               ## не реализовано в 3djs front-end
-               ## login_url = LoginUrl(url=cls.make_login_url(path))
+                reply += 'Схемы:\n'
+                # 3djs links
+                #path = "/profile/?id=%s" % response_to['uuid']
+                #url = settings.FRONTEND_HOST + path
+                ## не реализовано в 3djs front-end
+                ## login_url = LoginUrl(url=cls.make_login_url(path))
                 path = "/?user_uuid_trusts=%s" % response_to['uuid']
                 url = settings.GRAPH_HOST + path
-                inline_btn_friends = InlineKeyboardButton(
-                    'Доверия',
-                    url=url,
-                    # login_url=login_url,
-                )
-                goto_buttons = [inline_btn_friends, ]
+                reply += Misc.get_html_a(href=url, text='Доверия') +'\n'
+
                 if response_from.get('uuid') and not is_own_account:
                     # 3djs links
                     #path = "/trust/?id=%s,%s&d=10" % (response_from['uuid'], response_to['uuid'],)
@@ -894,12 +885,8 @@ class Misc(object):
                     # login_url = LoginUrl(url=cls.make_login_url(path))
                     path = "/?user_uuid_trust_path=%s,%s" % (response_from['uuid'], response_to['uuid'],)
                     url = settings.GRAPH_HOST + path
-                    inline_btn_path = InlineKeyboardButton(
-                        'Путь (доверия)',
-                        url=url,
-                        # login_url=login_url,
-                    )
-                    goto_buttons.append(inline_btn_path)
+                    reply += Misc.get_html_a(href=url, text='Путь (доверия)') +'\n'
+
                 if is_own_account or is_owned_account:
                     # 3djs links
                     #path = "/?id=%s&depth=3" % response_to['uuid']
@@ -908,11 +895,8 @@ class Misc(object):
                     # login_url = LoginUrl(url=cls.make_login_url(path))
                     path = "/?user_uuid_genesis_tree=%s&depth=3&up=&down=" % response_to['uuid']
                     url = settings.GRAPH_HOST + path
-                    inline_btn_genesis = InlineKeyboardButton(
-                        'Род',
-                        url=url,
-                    )
-                    goto_buttons.append(inline_btn_genesis)
+                    reply += Misc.get_html_a(href=url, text='Род') +'\n'
+
                 if response_from.get('uuid') and not is_own_account:
                     # 3djs links
                     #path = "/?id=%s,%s&depth=10" % (response_from['uuid'], response_to['uuid'],)
@@ -921,13 +905,17 @@ class Misc(object):
                     # login_url = LoginUrl(url=cls.make_login_url(path))
                     path = "/?user_uuid_genesis_path=%s,%s&depth=10" % (response_from['uuid'], response_to['uuid'],)
                     url = settings.GRAPH_HOST + path
-                    inline_btn_genesis_path = InlineKeyboardButton(
-                        'Путь ( род)',
-                        url=url,
-                    )
-                    goto_buttons.append(inline_btn_genesis_path)
-                reply_markup.row(*goto_buttons)
+                    reply += Misc.get_html_a(href=url, text='Путь ( род)') +'\n'
 
+                reply += '\n'
+
+            response_relations = {}
+            if user_from_id and user_from_id != response_to['user_id']:
+                status_relations, response_relations = await cls.call_response_relations(response_from, response_to)
+                if response_relations:
+                    reply += cls.reply_relations(response_relations)
+
+            reply_markup = InlineKeyboardMarkup()
             if user_from_id != response_to['user_id'] and bot_data.id != tg_user_from_id:
                 dict_reply = dict(
                     keyboard_type=KeyboardType.TRUST_THANK,
