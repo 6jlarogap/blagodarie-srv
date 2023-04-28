@@ -3481,13 +3481,19 @@ async def geo(message, state_to_set, uuid=None):
             data['uuid'] = uuid
     await bot.send_message(
         message.chat.id,(
-            'Пожалуйста, нажмите на кнопку "%s" снизу '
-            '(кнопки может и не быть в некоторых клиентах).\n\n'
-            'Или введите координаты <i>широта, долгота</i>, '
-            'где <i>широта</i> и <i>долгота</i> - числа, возможные для координат!\n\n'
-            'Чтобы отказаться, нажмите на кнопку "%s" снизу '
-            '(если есть кнопка) или наберите <u>%s</u>\n\n'
-        ) % (Misc.PROMPT_LOCATION, Misc.PROMPT_CANCEL_LOCATION, Misc.PROMPT_CANCEL_LOCATION,),
+            'Пожалуйста, отправьте мне координаты вида \'74.188586, 95.790195\' '
+            '(<i>широта</i>,<i>долгота</i>, '
+            'удобно скопировать из приложения карт).\n'
+            '\n'
+            'Или нажмите на кнопку "%(prompt_location)s" внизу '
+            '(на некоторых устройствах кнопка может отсутствовать).\n'
+            '\n'
+            'Чтобы отказаться - нажмите на кнопку "%(prompt_cancel_location)s" внизу '
+            '(если есть кнопка) или наберите <u>%(prompt_cancel_location)s</u>'
+        ) % dict(
+            prompt_location=Misc.PROMPT_LOCATION,
+            prompt_cancel_location=Misc.PROMPT_CANCEL_LOCATION,
+        ),
         reply_markup=keyboard
     )
 
