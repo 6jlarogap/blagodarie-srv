@@ -2177,7 +2177,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     first_name=user_q.first_name,
                     photo=Profile.image_thumb(
                         request, user_q.profile.photo,
-                        method='crop-red-frame-3',
+                        method='crop-green-frame-3',
                         put_default_avatar=True,
                     ),
                 ))
@@ -3147,7 +3147,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     first_name=user_q.first_name,
                     photo=Profile.image_thumb(
                         request, profile_q.photo,
-                        method='crop-red-frame-3',
+                        method='crop-green-frame-3',
                         put_default_avatar=True,
                 )))
             else:
