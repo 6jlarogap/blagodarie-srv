@@ -2279,11 +2279,11 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     return Response(data=dict(count=recs[0]['count']), status=status_code)
 
                 try:
-                    from_ = abs(int(request.GET.get("from")))
+                    from_ = abs(int(request.GET.get('from')))
                 except (ValueError, TypeError, ):
                     from_ = 0
                 try:
-                    number_ = abs(int(request.GET.get("number")))
+                    number_ = abs(int(request.GET.get('number')))
                 except (ValueError, TypeError, ):
                     number_ = settings.PAGINATE_USERS_COUNT
 
@@ -2829,6 +2829,12 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
     Возможные выборки (get параметры):
         - dover :   показать доверия
         - rod   :   показать родственные связи
+        - withalone: показать и тех, у кого нет связей родственных и/или доверия
+        * from
+        * number    параметры страницы. Выборка пользователей числом number,
+                    начиная с from, в порядке убывания дат их присоединения
+                    к сообществу.
+                    Если заданы from и/или number, по полагается withalone=on
 
     """
     def get(self, request):
@@ -2836,6 +2842,24 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
         withalone = request.GET.get('withalone')
         dover = request.GET.get('dover')
         rod = request.GET.get('rod')
+        from_ = number_ = None
+        try:
+            from_ = int(request.GET.get('from'))
+            if from_ < 0:
+                from_ = 0
+        except (ValueError, TypeError,):
+            pass
+        try:
+            number_ = int(request.GET.get('number'))
+        except (ValueError, TypeError,):
+            pass
+        if number_ and from_ is None:
+            from_ = 0
+        if from_ is not None and not number_:
+            number_ = settings.PAGINATE_USERS_COUNT
+        if number_ and from_ is not None:
+            withalone = 'on'
+
         connections = []
         q_connections = Q(pk=0)
         if rod:
@@ -2843,22 +2867,49 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
         if dover:
             q_connections |= Q(is_trust=True, user_to__isnull=False, is_reverse=False)
         if withalone:
-            users = [
-                profile.data_dict(request=request, short=True, fmt=fmt) \
-                for profile in Profile.objects.select_related('user').filter(user__is_superuser=False).distinct()
-            ]
-            if rod or dover:
-                connections = [
-                    cs.data_dict(
-                        show_child=rod and fmt=='3d-force-graph',
-                        show_parent=fmt=='d3js',
-                        show_trust=bool(dover),
-                        fmt=fmt
-                    ) \
-                    for cs in CurrentState.objects.filter(q_connections).select_related(
-                            'user_from__profile', 'user_to__profile',
-                        ).distinct()
+            if from_ is None:
+                users = [
+                    profile.data_dict(request=request, short=True, fmt=fmt) \
+                    for profile in Profile.objects.select_related('user').filter(user__is_superuser=False).distinct()
                 ]
+                if rod or dover:
+                    connections = [
+                        cs.data_dict(
+                            show_child=rod and fmt=='3d-force-graph',
+                            show_parent=fmt=='d3js',
+                            show_trust=bool(dover),
+                            fmt=fmt
+                        ) \
+                        for cs in CurrentState.objects.filter(q_connections).select_related(
+                                'user_from__profile', 'user_to__profile',
+                            ).distinct()
+                    ]
+            else:
+                users = []
+                connections = []
+                user_pks = []
+                if rod or dover:
+                    for profile in Profile.objects.select_related('user').filter(
+                            user__is_superuser=False,
+                        ).order_by(
+                            '-user__date_joined'
+                        ).distinct()[from_: from_ + number_]:
+                        users.append(profile.data_dict(request=request, short=True, fmt=fmt))
+                        user_pks.append(profile.user.pk)
+                    connections = [
+                        cs.data_dict(
+                            show_child=rod and fmt=='3d-force-graph',
+                            show_parent=fmt=='d3js',
+                            show_trust=bool(dover),
+                            fmt=fmt
+                        ) \
+                        for cs in CurrentState.objects.filter(q_connections).select_related(
+                                'user_from__profile', 'user_to__profile',
+                            ).filter(
+                                user_from__in=user_pks,
+                                user_to__in=user_pks,
+                            ).distinct()
+                    ]
         else:
             users = []
             if rod or dover:
