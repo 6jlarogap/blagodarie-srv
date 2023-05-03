@@ -2171,7 +2171,6 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                 nodes = []
                 user_pks = []
                 bot_username = self.get_bot_username()
-                print('HERE')
                 nodes.append(dict(
                     id=user_q.pk,
                     uuid=user_q.profile.uuid,
