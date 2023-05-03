@@ -578,6 +578,9 @@ class PhotoModel(FilesMixin, models.Model):
     #
     DEFAULT_FNAME = 'photo.jpg'
     DEFAULT_AVATAR_IN_MEDIA = 'images/default_avatar.jpg'
+    DEFAULT_AVATAR_IN_MEDIA_MALE = 'images/no-photo-gender-male.jpg'
+    DEFAULT_AVATAR_IN_MEDIA_FEMALE = 'images/no-photo-gender-female.jpg'
+    DEFAULT_AVATAR_IN_MEDIA_NONE = 'images/no-photo-gender-none.jpg'
 
     THUMB_WIDTH = 64
     THUMB_HEIGHT = 64
@@ -711,6 +714,24 @@ class PhotoModel(FilesMixin, models.Model):
         Выбрать фото пользователя
         """
         return PhotoModel.choose_photo_of(request, self.photo and self.photo.name or '')
+
+    @classmethod
+    def get_gendered_default_avatar(cls,
+            gender,
+            female_avatar=DEFAULT_AVATAR_IN_MEDIA_FEMALE,
+            male_avatar=DEFAULT_AVATAR_IN_MEDIA_MALE,
+            none_avatar=DEFAULT_AVATAR_IN_MEDIA_NONE,
+        ):
+        """
+        Выбрать аватар по умолчанию в зависимости от пола
+        """
+        if gender == 'f':
+            result = female_avatar
+        elif gender == 'm':
+            result = male_avatar
+        else:
+            result = none_avatar
+        return result
 
     @classmethod
     def image_thumb(cls, request, fname,

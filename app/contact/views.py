@@ -2171,6 +2171,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                 nodes = []
                 user_pks = []
                 bot_username = self.get_bot_username()
+                print('HERE')
                 nodes.append(dict(
                     id=user_q.pk,
                     uuid=user_q.profile.uuid,
@@ -2179,6 +2180,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                         request, user_q.profile.photo,
                         method='crop-green-frame-3',
                         put_default_avatar=True,
+                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(user_q.profile.gender)
                     ),
                 ))
                 user_pks.append(user_q.pk)
@@ -3213,6 +3215,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                         request, profile_q.photo,
                         method='crop-green-frame-3',
                         put_default_avatar=True,
+                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile_q.gender)
                 )))
             else:
                 users.append(p.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt))
