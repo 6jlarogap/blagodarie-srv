@@ -2151,7 +2151,8 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                         auth_user.is_active,
                         auth_user.first_name,
                         users_profile.uuid,
-                        users_profile.photo
+                        users_profile.photo,
+                        users_profile.gender
                     FROM
                         auth_user
                     %(outer_joins)s
@@ -2188,6 +2189,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                             uuid=rec['uuid'],
                             first_name=rec['first_name'],
                             photo=Profile.image_thumb(request, rec['photo']),
+                            gender=rec['gender'],
                         ))
                         user_pks.append(rec['id'])
                 links = []
