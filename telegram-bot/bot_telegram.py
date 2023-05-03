@@ -4112,9 +4112,9 @@ def text_offer(user_from, offer, message, bot_data):
     Хорошо - 2
     Плохо - 0
 
-    Доверия <graph.blagoroda.org/?offer_uuid=offerUUID>
+    Схема <graph.blagoroda.org/?offer_uuid=offerUUID>
     Карта map.blagoroda.org/?offer_id=offerUUID
-    Нажмите чтобы голосовать <t.me/bot_username?start=offer-offerUUID>
+    Ссылка на опрос <t.me/bot_username?start=offer-offerUUID>
 
     Это всё сообщение - под ним - 5 кнопок:
     Отлично
@@ -4140,11 +4140,11 @@ def text_offer(user_from, offer, message, bot_data):
     result += '\n'
     result += Misc.get_html_a(
         href='t.me/%s?start=offer-%s' % (bot_data['username'], offer['uuid'],),
-        text='Нажмите чтобы голосовать'
+        text='Ссылка на опрос'
     ) + '\n'
     result += Misc.get_html_a(
         href='%s/?offer_uuid=%s' % (settings.GRAPH_HOST, offer['uuid']),
-        text='Доверия'
+        text='Схема'
     ) + '\n'
     result += Misc.get_html_a(
         href='%s/?offer_id=%s' % (settings.MAP_HOST, offer['uuid']),
@@ -4377,18 +4377,20 @@ async def process_callback_offer_answer(callback_query: types.CallbackQuery, sta
                 await callback_query.message.edit_text(text, reply_markup=reply_markup, disable_web_page_preview=True)
             except MessageNotModified:
                 pass
-            if callback_query.message.chat.type == types.ChatType.PRIVATE:
-                success_message = ''
-                if number > 0:
-                    success_message = 'Вы выбрали вариант: %s' % response_answer['answers'][number]['answer']
-                elif number == 0:
-                    success_message = 'Вы отозвали свой голос'
-                elif number == -3:
-                    success_message = 'Опрос остановлен'
-                elif number == -4:
-                    success_message = 'Опрос возобновлен'
-                if success_message and callback_query.message.chat.type == types.ChatType.PRIVATE:
+            success_message = ''
+            if number > 0:
+                success_message = 'Вы выбрали вариант: %s' % response_answer['answers'][number]['answer']
+            elif number == 0:
+                success_message = 'Вы отозвали свой голос'
+            elif number == -3 and callback_query.message.chat.type == types.ChatType.PRIVATE:
+                success_message = 'Опрос остановлен'
+            elif number == -4 and callback_query.message.chat.type == types.ChatType.PRIVATE:
+                success_message = 'Опрос возобновлен'
+            if success_message:
+                if callback_query.message.chat.type == types.ChatType.PRIVATE:
                     await callback_query.message.reply(success_message)
+                else:
+                    await callback_query.answer(success_message, show_alert=True,)
         elif callback_query.message.chat.type == types.ChatType.PRIVATE:
             if number > 0:
                 err_mes = 'Не далось подать голос'
@@ -4421,7 +4423,7 @@ async def do_chat_join(
         if status != 200:
             return
     tg_subscriber_id = tg_subscriber.id
-    status, response = await TgGroupMember.add(
+    status, response_add_member = await TgGroupMember.add(
         group_chat_id=chat_id,
         group_title='',
         group_type='',
@@ -4429,14 +4431,10 @@ async def do_chat_join(
     )
     if status != 200:
         return
-    status, response = await TgGroup.get(chat_id=chat_id)
-    if status != 200:
-        return
-    is_channel = response['type'] == types.ChatType.CHANNEL
+    data_group = response_add_member['group']
+    is_channel = data_group['type'] == types.ChatType.CHANNEL
     in_chat = 'в канале' if is_channel else 'в группе'
-    to_chat = 'к каналу' if is_channel else 'к группе'
     to_to_chat = 'в канал' if is_channel else 'в группу'
-    of_chat = 'канала' if is_channel else 'группы'
     try:
         await bot.approve_chat_join_request(
                 chat_id,
@@ -4462,24 +4460,27 @@ async def do_chat_join(
     tc_inviter = 0
     if tg_inviter_id:
         pass
-        ## Сразу доверие c благодарностью от входящего в канал/группу к владельцу канала/группы
-        ##
-        #post_op = dict(
-            #tg_token=settings.TOKEN,
-            #operation_type_id=OperationType.TRUST_AND_THANK,
-            #tg_user_id_from=tg_subscriber_id,
-            #user_uuid_to=response_inviter['uuid'],
-        #)
-        #logging.debug('post operation (chat subscriber thanks inviter), payload: %s' % post_op)
-        #status_op, response_op = await Misc.api_request(
-            #path='/api/addoperation',
-            #method='post',
-            #data=post_op,
-        #)
-        #logging.debug('post operation (chat subscriber thanks inviter), status: %s' % status_op)
-        #logging.debug('post operation (chat subscriber thanks inviter), response: %s' % response_op)
-        #if status_op == 200:
-            #tc_inviter = response_op['profile_to']['trust_count']
+        # Сразу доверие c благодарностью от входящего в канал/группу к владельцу канала/группы
+        #
+        post_op = dict(
+            tg_token=settings.TOKEN,
+            operation_type_id=OperationType.TRUST_AND_THANK,
+            tg_user_id_from=tg_subscriber_id,
+            user_uuid_to=response_inviter['uuid'],
+        )
+        logging.debug('post operation (chat subscriber thanks inviter), payload: %s' % post_op)
+        status_op, response_op = await Misc.api_request(
+            path='/api/addoperation',
+            method='post',
+            data=post_op,
+        )
+        logging.debug('post operation (chat subscriber thanks inviter), status: %s' % status_op)
+        logging.debug('post operation (chat subscriber thanks inviter), response: %s' % response_op)
+        if status_op == 200:
+            tc_inviter = response_op['profile_to']['trust_count']
+        else:
+            # может быть 400: уже доверяет
+            tc_inviter = response_inviter['trust_count']
 
     bot_data = await bot.get_me()
     dl_subscriber = Misc.get_deeplink_with_name(response_subscriber, bot_data)
@@ -4487,27 +4488,18 @@ async def do_chat_join(
     msg_dict = dict(
         dl_subscriber=dl_subscriber,
         dl_inviter=dl_inviter,
-        to_chat=to_chat,
-        of_chat=of_chat,
         tc_inviter=tc_inviter,
         tc_subscriber=response_subscriber['trust_count'],
+        to_to_chat=to_to_chat,
+        map_link = Misc.get_html_a(href=settings.MAP_HOST, text='карте участников'),
+        group_title=data_group['title'],
     )
-    if is_channel:
-        #if tg_inviter_id and status_op == 200:
-            #reply = (
-                #'%(dl_subscriber)s (%(tc_subscriber)s) подключен(а) %(to_chat)s '
-                #'и доверяет владельцу %(of_chat)s: %(dl_inviter)s (%(tc_inviter)s)'
-            #) % msg_dict
-        #else:
-            #reply = '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а) %(to_chat)s' % msg_dict
-        reply = '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а)' % msg_dict
-        await bot.send_message(
-            chat_id,
-            reply,
-            disable_notification=True,
-            disable_web_page_preview=True,
-        )
-    msg = 'Добро пожаловать %s' % to_to_chat
+    msg = (
+            'Ваша заявка на вступление в %(to_to_chat)s %(group_title)s одобрена.\n'
+            'Нажмите /setplace чтобы указать Ваше местоположение на %(map_link)s. \n'
+            '\n'
+            '%(dl_subscriber)s (%(tc_subscriber)s) доверяет %(dl_inviter)s (%(tc_inviter)s).'
+        ) %  msg_dict
     if callback_query:
         await callback_query.message.reply(msg, disable_web_page_preview=True,)
     else:
@@ -4516,6 +4508,15 @@ async def do_chat_join(
             text=msg,
             disable_web_page_preview=True
         )
+    if is_channel:
+        reply = '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а)' % msg_dict
+        await bot.send_message(
+            chat_id,
+            reply,
+            disable_notification=True,
+            disable_web_page_preview=True,
+        )
+
     await Misc.put_user_properties(
         uuid=response_subscriber['uuid'],
         did_bot_start='1',

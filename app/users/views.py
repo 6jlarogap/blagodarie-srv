@@ -1821,7 +1821,7 @@ class ApiBotGroupMember(ApiBotGroupMixin, APIView):
         try:
             oauth, tg_group = self.check_data(request)
             oauth.groups.add(tg_group)
-            data = dict()
+            data = dict(group=tg_group.data_dict())
             status_code = 200
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
