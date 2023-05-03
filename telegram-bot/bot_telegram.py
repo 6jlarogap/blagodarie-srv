@@ -4379,18 +4379,21 @@ async def process_callback_offer_answer(callback_query: types.CallbackQuery, sta
                 pass
             success_message = ''
             if number > 0:
-                success_message = 'Вы выбрали вариант: %s' % response_answer['answers'][number]['answer']
+                if response_answer['closed_timestamp']:
+                    success_message = 'Владелец остановил голосование'
+                else:
+                    success_message = 'Вы выбрали вариант: %s' % response_answer['answers'][number]['answer']
             elif number == 0:
-                success_message = 'Вы отозвали свой голос'
+                if response_answer['closed_timestamp']:
+                    success_message = 'Владелец остановил голосование'
+                else:
+                    success_message = 'Вы отозвали свой голос'
             elif number == -3 and callback_query.message.chat.type == types.ChatType.PRIVATE:
                 success_message = 'Опрос остановлен'
             elif number == -4 and callback_query.message.chat.type == types.ChatType.PRIVATE:
                 success_message = 'Опрос возобновлен'
             if success_message:
-                if callback_query.message.chat.type == types.ChatType.PRIVATE:
-                    await callback_query.message.reply(success_message)
-                else:
-                    await callback_query.answer(success_message, show_alert=True,)
+                await callback_query.answer(success_message, show_alert=True,)
         elif callback_query.message.chat.type == types.ChatType.PRIVATE:
             if number > 0:
                 err_mes = 'Не далось подать голос'
