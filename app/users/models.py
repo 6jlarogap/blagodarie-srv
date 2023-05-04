@@ -1001,6 +1001,7 @@ class Offer(BaseModelInsertTimestamp):
         user_answered = dict()
         for answer in queryset:
             answer_dict = answer.data_dict()
+            print(answer_dict)
             users = []
             for profile in answer.profile_set.all():
                 user_id = profile.user.pk
@@ -1009,7 +1010,7 @@ class Offer(BaseModelInsertTimestamp):
                 else:
                     users.append(profile.data_dict(request, short=True, fmt='3d-force-graph'))
                 if user_answered.get(user_id):
-                    user_answered[user_id]['answers'].append(answer_dict['answer'])
+                    user_answered[user_id]['answers'].append(answer_dict['number'])
                 else:
                     user_answered[user_id] = dict(answers=[answer_dict['number']])
             answer_dict.update(users=users)

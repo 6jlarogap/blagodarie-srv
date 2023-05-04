@@ -2401,6 +2401,7 @@ class ApiOffer(UuidMixin, APIView):
             "tg_token": settings.TELEGRAM_BOT_TOKEN,
             "user_uuid": ....,
             "question": "Как дела",
+            "is_multi": True,
             "answers": [
                     {"text": "Отлично"},
                     {"text": "Хорошо"},
@@ -2416,11 +2417,14 @@ class ApiOffer(UuidMixin, APIView):
                 raise ServiceException('Не задан вопрос')
             if not request.data.get('answers'):
                 raise ServiceException('Не заданы ответы')
-            if len(request.data['answers']) > Offer.MAX_NUM_ANSWERS:
+            elif len(request.data['answers']) == 1:
+                raise ServiceException('Опрос с одним ответом -- не опрос')
+            elif len(request.data['answers']) > Offer.MAX_NUM_ANSWERS:
                 raise ServiceException('Число ответов > %s' % Offer.MAX_NUM_ANSWERS)
             offer = Offer.objects.create(
                 owner=owner,
                 question=request.data['question'],
+                is_multi=request.data['is_multi'],
             )
             offeranswer0 = OfferAnswer.objects.create(offer=offer, number=0, answer='')
             # Создатель опроса его видел. Ему присваивается "фиктивный" номер 0 ответа
@@ -2466,6 +2470,7 @@ class ApiOfferAnswer(UuidMixin, APIView):
             "answers": [1]  // Нумерация ответов начинается с 1 !!!
                             // Если [0], то сброс ответов
                             // Если [-1], то только показать текущие результаты
+                            // [-2] прийти не может, это сообщение участникам
                             // Если [-3], то остановить опрос
                             // Если [-4], то возобновить опрос
         }
@@ -2490,6 +2495,7 @@ class ApiOfferAnswer(UuidMixin, APIView):
                     if profile.offer_answers.filter(offer=offer).count() == 0:
                         offeranswer0 = OfferAnswer.objects.get(offer=offer, number=0)
                         profile.offer_answers.add(offeranswer0)
+                # numbers[0] == -2: пропускаем, это сообщение участникам
                 elif len(numbers) == 1 and numbers[0] == -3 and owner == offer.owner:
                     # Остановить опрос
                     if not offer.closed_timestamp:
@@ -2503,8 +2509,13 @@ class ApiOfferAnswer(UuidMixin, APIView):
                 elif not offer.closed_timestamp:
                     current_numbers = [a.number for a in profile.offer_answers.filter(offer=offer)]
                     if profile and set(current_numbers) != set(numbers):
-                        for a in profile.offer_answers.filter(offer=offer):
-                            profile.offer_answers.remove(a)
+                        if len(numbers) == 1 and numbers[0] == 0 or not offer.is_multi:
+                            for a in profile.offer_answers.filter(offer=offer):
+                                profile.offer_answers.remove(a)
+                        if offer.is_multi and len(numbers) == 1 and numbers[0] > 0:
+                            if profile.offer_answers.filter(offer=offer, number=0).exists():
+                                offeranswer0 = OfferAnswer.objects.get(offer=offer, number=0)
+                                profile.offer_answers.remove(offeranswer0)
                         try:
                             for number in numbers:
                                 offeranswer = OfferAnswer.objects.get(offer=offer, number=number)

@@ -218,10 +218,16 @@ async def process_command_poll(message: types.Message, state: FSMContext):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=(types.ChatType.PRIVATE,)),
-    commands=('offer',),
+    commands=('offer', 'offer_multi'),
     state=None,
 )
 async def process_command_offer(message: types.Message, state: FSMContext):
+    """
+    Создание опроса- предложения из сообщения- команды
+
+    offer:          опрос c выбором лишь одного ответа
+    offer_multi:    опрос с возможным выбором нескольких ответов
+    """
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
         answers = []
@@ -231,15 +237,16 @@ async def process_command_offer(message: types.Message, state: FSMContext):
             if not line:
                 continue
             if i == 0:
-                m = re.search(r'^\/offer\s+(.*)$', line)
-                if not m or not m.group(1):
+                m = re.search(r'^\/(offer|offer_multi)\s+(.*)$', line, flags=re.I)
+                if not m or not m.group(2):
                     err_mes = 'Не указан вопрос опроса'
                     break
-                question = m.group(1)
+                question = m.group(2)
+                is_multi = m.group(1).lower() == 'offer_multi'
             else:
                 for a in answers:
                     if line == a:
-                        err_mes = 'Обнаружен повтор вопроса'
+                        err_mes = 'Обнаружен повтор ответа'
                         break
                 if err_mes:
                     break
@@ -247,16 +254,23 @@ async def process_command_offer(message: types.Message, state: FSMContext):
         if not err_mes:
             if not answers:
                 err_mes = 'Не указаны ответы'
+            elif len(answers) == 1:
+                err_mes = 'Опрос из одного ответа? Так нельзя'
             elif len(answers) > settings.OFFER_MAX_NUM_ANSWERS:
                 err_mes = 'Превышен максимум числа ответов (до %s)' % settings.OFFER_MAX_NUM_ANSWERS
         if err_mes:
             help_mes = (
                 '%(err_mes)s\n\n'
                 'Поручить боту создать опрос-предложение:\n'
-                '/offer Вопрос\n'
+                '\n'
+                '/offer Вопрос ИЛИ\n'
+                '/offer_multi Вопрос\n'
                 'Ответ 1\n'
                 'Ответ 2\n'
-                ' и т.д. не больше %(offer_max_num_answers)s ответов'
+                ' и т.д. не больше %(offer_max_num_answers)s ответов\n'
+                '\n'
+                '/offer: опрос c выбором лишь одного ответа\n'
+                '/offer_multi: опрос с возможным выбором нескольких ответов\n'
             )
             await message.reply(help_mes % dict(
                 err_mes=err_mes,
@@ -269,6 +283,7 @@ async def process_command_offer(message: types.Message, state: FSMContext):
             user_uuid=response_sender['uuid'],
             question=question,
             answers=answers,
+            is_multi=is_multi,
         )
         logging.debug('create offer in api, payload: %s' % create_offer_dict)
         status, response = await Misc.api_request(
@@ -4126,12 +4141,13 @@ def text_offer(user_from, offer, message, bot_data):
 
     result = (
         '%(question)s\n'
-        '%(closed_text)s'
+        '%(multi_text)s%(closed_text)s'
         '\n'
         'Голоса на %(datetime_string)s\n'
     ) % dict(
         question=offer['question'],
         datetime_string=Misc.datetime_string(offer['timestamp'], with_timezone=True),
+        multi_text='(возможны несколько ответов)\n' if offer['is_multi'] else '',
         closed_text='(опрос остановлен)\n' if offer['closed_timestamp'] else '',
     )
     for answer in offer['answers']:
@@ -4184,7 +4200,7 @@ def markup_offer(user_from, offer, message):
         if have_i_voted or message.chat.type != types.ChatType.PRIVATE:
             callback_data_dict.update(number=0)
             inline_btn_answer = InlineKeyboardButton(
-                'Отозвать мой голос',
+                'Отозвать мой выбор',
                 callback_data=callback_data_template % callback_data_dict
             )
             reply_markup.row(inline_btn_answer)
@@ -4307,6 +4323,29 @@ async def show_offer(user_from, offer, message, bot_data):
         - для ответов 1 ... N номер будет: 1 ... N
         - для Отмена: 0
         - для Обновить: -1
+
+    Структура offer на входе имееет вид:
+    {
+        'uuid': '6caf0f7f-d9f4-4c4f-a04b-4a9169f7461c',
+        'owner': {'first_name': 'Евгений Супрун', 'uuid': '8f686101-c5a2-46d0-a5ee-c74386ffffff', 'id': 326},
+        'question': 'How are you',
+        'timestamp': 1683197002,
+        'closed_timestamp': None,
+        'is_multi': True,
+        'answers': [
+            {
+                'number': 0,        // ответ с фиктивным номером 0: тот кто видел опрос, возможно голосовал
+                'answer': '',       // и отменил голос
+                'users': [
+                    { 'id': 326, 'uuid': '8f686101-c5a2-46d0-a5ee-c74386ffffff', 'first_name': 'X Y'}
+                ]
+            },
+            { 'number': 1, 'answer': 'Excellent', 'users': [] },
+            { 'number': 2, 'answer': 'Good', 'users': [] },
+            { 'number': 3, 'answer': 'Bad', 'users': []  }
+        ],
+        'user_answered': {'326': {'answers': [0]}} // создатель опроса его видел
+    }
     """
     text = text_offer(user_from, offer, message, bot_data)
     reply_markup = markup_offer(user_from, offer, message)
@@ -4382,12 +4421,19 @@ async def process_callback_offer_answer(callback_query: types.CallbackQuery, sta
                 if response_answer['closed_timestamp']:
                     success_message = 'Владелец остановил голосование'
                 else:
-                    success_message = 'Вы выбрали вариант: %s' % response_answer['answers'][number]['answer']
+                    if response_answer['is_multi']:
+                        num_answers = response_answer['user_answered'][str(profile_from['user_id'])]['answers']
+                        num_answers.sort()
+                        success_message = 'Вы выбрали вариант%s:\n' % ('ы' if len(num_answers) > 1 else '')
+                        answers_text = '\n'.join([' ' + response_answer['answers'][n]['answer'] for n in num_answers])
+                        success_message += answers_text
+                    else:
+                        success_message = 'Вы выбрали вариант: %s' % response_answer['answers'][number]['answer']
             elif number == 0:
                 if response_answer['closed_timestamp']:
                     success_message = 'Владелец остановил голосование'
                 else:
-                    success_message = 'Вы отозвали свой голос'
+                    success_message = 'Вы отозвали свой выбор'
             elif number == -3 and callback_query.message.chat.type == types.ChatType.PRIVATE:
                 success_message = 'Опрос остановлен'
             elif number == -4 and callback_query.message.chat.type == types.ChatType.PRIVATE:
