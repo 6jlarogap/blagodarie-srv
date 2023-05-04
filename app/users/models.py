@@ -980,18 +980,20 @@ class Offer(BaseModelInsertTimestamp):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
     question = models.CharField(_("Вопрос"), max_length=256)
     closed_timestamp = models.PositiveIntegerField(_("Приостановлен"), null=True, default=None)
+    is_multi = models.BooleanField(_("Множественный выбор"), default=False)
 
     def data_dict(self, request=None, user_ids_only=False):
         result = dict(
             uuid=self.uuid,
-            owner=dict(
-                first_name=self.owner.first_name,
-                uuid=self.owner.profile.uuid,
-            ),
-            owner_id=self.owner.pk,
+            owner={
+                'first_name': self.owner.first_name,
+                'uuid':self.owner.profile.uuid,
+                'id': self.owner.pk,
+            },
             question=self.question,
             timestamp=self.closed_timestamp if self.closed_timestamp else int(time.time()),
             closed_timestamp=self.closed_timestamp,
+            is_multi=self.is_multi,
         )
         prefetch = Prefetch('profile_set', queryset=Profile.objects.select_related('user',).all())
         queryset = OfferAnswer.objects.prefetch_related(prefetch).select_related('offer').filter(offer=self)

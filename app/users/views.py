@@ -2046,6 +2046,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                     width=self.THUMB_SIZE_POPUP + frame * 2,
                     height=self.THUMB_SIZE_POPUP + frame * 2,
                     put_default_avatar=True,
+                    default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
                 ),
                 thumb_size_popup = self.THUMB_SIZE_POPUP,
                 offer_reply_html=offer_reply_html,
@@ -2076,7 +2077,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 popup=popup,
             )
             if (found_coordinates and profile == found_profile) or \
-               (offer_question and offer_dict['owner_id'] == profile.user.pk):
+               (offer_question and offer_dict['owner']['id'] == profile.user.pk):
                 point.update(
                     is_of_found_user=True,
                     icon=profile.choose_thumb(
@@ -2085,8 +2086,9 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                         width=self.THUMB_SIZE_ICON_FOUND + frame * 2,
                         height=self.THUMB_SIZE_ICON_FOUND + frame * 2,
                         put_default_avatar=True,
+                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
                     ),
-                    size_icon=self.THUMB_SIZE_ICON_FOUND,
+                    size_icon=self.THUMB_SIZE_ICON_FOUND + frame * 2,
                 )
             else:
                 point.update(
@@ -2097,8 +2099,9 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                         width=self.THUMB_SIZE_ICON + frame * 2,
                         height=self.THUMB_SIZE_ICON + frame * 2,
                         put_default_avatar=True,
+                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
                     ),
-                    size_icon=self.THUMB_SIZE_ICON,
+                    size_icon=self.THUMB_SIZE_ICON + frame * 2,
                 )
             points.append(point)
             if not found_coordinates:
