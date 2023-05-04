@@ -2016,19 +2016,30 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
             else:
                 url_deeplink = url_profile
             if offer_question:
-                answer_number = offer_dict['user_answered'].get(profile.user.pk, dict(answers=[0]))['answers'][0]
-                answer_color = settings.OFFER_ANSWER_COLOR_MAP[answer_number]
-                answer_text = answers[answer_number]
+                answer_numbers = offer_dict['user_answered'].get(profile.user.pk, dict(answers=[0]))['answers']
+                if len(answer_numbers) == 1:
+                    answer_color = settings.OFFER_ANSWER_COLOR_MAP[answer_numbers[0]]
+                    frame = self.OFFER_PHOTO_FRAME
+                    method = 'crop-%s-frame-%s' % (answer_color, frame, )
+                    answer_text = answers[answer_numbers[0]]
+                    title_template = '%(full_name)s: %(answer_text)s'
+                else:
+                    frame = 0
+                    method = 'crop'
+                    answer_text = '<br />' + '<br />'.join(
+                        [' &nbsp;&nbsp;' + offer_dict['answers'][n]['answer'] for n in answer_numbers]
+                    )
+                    title_template = '%(full_name)s'
                 offer_reply_html = (
                     '<tr>'
                         '<td colspan=2>'
-                        'Ответ: %s'
+                        'Ответ%s: %s'
                         '</td>'
                     '</tr>'
-                ) % answer_text
-                frame = self.OFFER_PHOTO_FRAME
-                method = 'crop-%s-frame-%s' % (answer_color, frame,)
-                title_template = '%(full_name)s: %(answer_text)s'
+                ) % (
+                    'ы' if len(answer_numbers) > 1 else '',
+                    answer_text
+                )
             else:
                 offer_reply_html = ''
                 frame = 0

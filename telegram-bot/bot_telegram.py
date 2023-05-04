@@ -4423,7 +4423,6 @@ async def process_callback_offer_answer(callback_query: types.CallbackQuery, sta
                 else:
                     if response_answer['is_multi']:
                         num_answers = response_answer['user_answered'][str(profile_from['user_id'])]['answers']
-                        num_answers.sort()
                         success_message = 'Вы выбрали вариант%s:\n' % ('ы' if len(num_answers) > 1 else '')
                         answers_text = '\n'.join([' ' + response_answer['answers'][n]['answer'] for n in num_answers])
                         success_message += answers_text
