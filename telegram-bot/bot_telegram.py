@@ -447,19 +447,10 @@ async def echo_getowned_to_bot(message: types.Message, state: FSMContext):
 )
 async def echo_graph_to_bot(message: types.Message, state: FSMContext):
     await message.reply(
-        Misc.get_html_a(settings.GENESIS_HOST + '/?all=on', 'Все родственные связи'),
-        disable_web_page_preview=True,
-    )
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=('trusts',),
-    state=None,
-)
-async def echo_trusts_to_bot(message: types.Message, state: FSMContext):
-    await message.reply(
-        Misc.get_html_a(settings.FRONTEND_HOST + '/?q=2500&f=0', 'Все связи доверий'),
+        '%s\n\n%s' % (
+            Misc.get_html_a(settings.GRAPH_HOST + '/?rod=on&dover=on&withalone=on', 'Отношения участников'),
+            Misc.get_html_a(settings.FRONTEND_HOST + '/?f=0&q=50', 'Недавно добавленные'),
+        ),
         disable_web_page_preview=True,
     )
 
@@ -603,7 +594,6 @@ commands_dict = {
     'getowned': echo_getowned_to_bot,
     'listown': echo_getowned_to_bot,
     'graph': echo_graph_to_bot,
-    'trusts': echo_trusts_to_bot,
     'rules': echo_rules_to_bot,
     'help': echo_help_to_bot,
     'stat': echo_stat_to_bot,
