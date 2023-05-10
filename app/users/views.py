@@ -1937,6 +1937,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
 
         first_name = ''
         address = None
+        legend=''
         chat_id = chat_title = chat_type = None
         offer_id = offer_question = offer_deeplink = None
         if request.GET.get('uuid'):
@@ -1981,9 +1982,34 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 offer_dict = offer.data_dict(request=None, user_ids_only=True)
                 offer_question = offer_dict['question']
                 answers = [answer['answer'] for answer in offer_dict['answers']]
-                answers[0] = 'не ответил(а)'
+                answers[0] = 'не ответил(а) или несколько ответов' if offer.is_multi else 'не ответил(а)'
                 if bot_username:
                     offer_deeplink = 'https://t.me/%s?start=offer-%s' % (bot_username, offer.uuid)
+                frame = self.OFFER_PHOTO_FRAME * 2
+                legend = '<br><table>'
+                for i, answer in enumerate(answers):
+                    legend += (
+                        '<tr>'
+                            '<td>'
+                                '<img src="%(photo)s" width=%(width)s height=%(height)s />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'
+                            '</td>'
+                            '<td>'
+                                '<big>%(answer)s</big>'
+                            '</td>'
+                        '</tr>'
+                    ) % dict(
+                        photo=PhotoModel.image_thumb(
+                            request=request,
+                            fname=PhotoModel.DEFAULT_AVATAR_IN_MEDIA_NONE,
+                            method = 'crop-%s-frame-%s' % (
+                                settings.OFFER_ANSWER_COLOR_MAP[i], frame,
+                            )
+                        ),
+                        answer=answer,
+                        width=self.THUMB_SIZE_POPUP + frame * 2,
+                        height=self.THUMB_SIZE_POPUP + frame * 2,
+                    )
+                legend += '</table>'
             except (ValueError, Offer.DoesNotExist,):
                 qs = Profile.objects.none()
                 offer = None
@@ -2132,6 +2158,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
             chat_type=chat_type,
             offer_question=offer_question,
             offer_deeplink=offer_deeplink,
+            legend=legend,
         )
         return Response(data=data, status=200)
 

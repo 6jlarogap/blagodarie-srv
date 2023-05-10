@@ -1001,7 +1001,6 @@ class Offer(BaseModelInsertTimestamp):
         user_answered = dict()
         for answer in queryset:
             answer_dict = answer.data_dict()
-            print(answer_dict)
             users = []
             for profile in answer.profile_set.all():
                 user_id = profile.user.pk
