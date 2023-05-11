@@ -1,5 +1,4 @@
 from django.conf import settings
-from django.core.files.storage import get_storage_class
 from importlib import import_module
 
 import os
@@ -83,7 +82,7 @@ def source_storage_backend():
         'THUMBNAILS_SOURCE_ROOT',
         settings.MEDIA_ROOT)
 
-    return get_storage_class(SOURCE_STORAGE_BACKEND)(
+    return import_from_path(SOURCE_STORAGE_BACKEND)(
         location=SOURCE_STORAGE_LOCATION)
 
 
@@ -100,6 +99,6 @@ def storage_backend():
         'THUMBNAILS_STORAGE_BASE_PATH',
         '/thumbnails/')
 
-    return get_storage_class(STORAGE_BACKEND)(
+    return import_from_path(STORAGE_BACKEND)(
         location=STORAGE_LOCATION,
         base_url=STORAGE_BASE_PATH)
