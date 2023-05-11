@@ -1902,6 +1902,9 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                                                 // группа или канал
             "offer_question": null,             // вопрос телеграм опроса- предложения (offer)
             "offer_deeplink": null,             // ссылка на опроса- предложение (offer) в телеграме
+            "legend": "строка",                 // html таблица легенды для цветов ответов, две колонки:
+                                                //  - фото неизвестного в рамке цвета
+                                                //  - ответ, соответствующий цвету
 
             "points": [
                 {
@@ -1982,7 +1985,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 offer_dict = offer.data_dict(request=None, user_ids_only=True)
                 offer_question = offer_dict['question']
                 answers = [answer['answer'] for answer in offer_dict['answers']]
-                answers[0] = 'не ответил(а) или несколько ответов' if offer.is_multi else 'не ответил(а)'
+                answers[0] = 'не ответил(а)'
                 if bot_username:
                     offer_deeplink = 'https://t.me/%s?start=offer-%s' % (bot_username, offer.uuid)
                 frame = self.OFFER_PHOTO_FRAME * 2
@@ -2005,7 +2008,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                                 settings.OFFER_ANSWER_COLOR_MAP[i], frame,
                             )
                         ),
-                        answer=answer,
+                        answer=answer if i > 0 else 'не ответил(а) или несколько ответов' if offer.is_multi else 'не ответил(а)',
                         width=self.THUMB_SIZE_POPUP + frame * 2,
                         height=self.THUMB_SIZE_POPUP + frame * 2,
                     )
