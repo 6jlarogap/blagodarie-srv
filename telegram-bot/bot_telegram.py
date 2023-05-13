@@ -3793,162 +3793,141 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         elif message_text in ('/ya', '/я'):
             state_ = 'ya'
 
-        else:
-            m = re.search(
+        elif m := re.search(
                 r'^\/start\s+setplace$',
                 message_text,
                 flags=re.I,
-            )
-            if m:
-                state_ = 'start_setplace'
-            else:
-                m = re.search(
-                    (
-                        r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\=setplace'
-                    ) % re.escape(bot_data['username']),
-                    message_text,
-                    flags=re.I,
+          ):
+            state_ = 'start_setplace'
+        elif m := re.search(
+                (
+                    r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\=setplace'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            state_ = 'start_setplace'
+
+        elif m := re.search(
+                r'^\/start\s+offer\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
+                message_text,
+                flags=re.I,
+          ):
+            offer_to_search = m.group(1).lower()
+            state_ = 'start_offer'
+        elif m := re.search(
+                (
+                    r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\=offer\-'
+                    '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            offer_to_search = m.group(1).lower()
+            state_ = 'start_offer'
+
+        elif m := re.search(
+                r'^\/start\s+([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
+                message_text,
+                flags=re.I,
+          ):
+            uuid_to_search = m.group(1).lower()
+            state_ = 'start_uuid'
+        elif m := re.search(
+                (
+                    r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\='
+                    '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            uuid_to_search = m.group(1).lower()
+            state_ = 'start_uuid'
+
+        elif m := re.search(
+                r'^\/start\s+(\w{5,})$',
+                message_text,
+                flags=re.I,
+          ):
+            username_to_search = m.group(1)
+            state_ = 'start_username'
+        elif m := re.search(
+                (
+                    r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\='
+                    '(\w{5,})$'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            username_to_search = m.group(1)
+            state_ = 'start_username'
+
+        elif m := re.search(
+                (
+                    r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\=poll\-'
+                    '(\d{3,})$'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            # https://t.me/doverabot?start=poll
+            poll_to_search = m.group(1)
+            state_ = 'start_poll'
+        elif m := re.search(
+                r'^\/start\s+poll-(\d{3,})$',
+                message_text,
+                flags=re.I,
+          ):
+            # /start poll:
+            poll_to_search = m.group(1)
+            state_ = 'start_poll'
+
+        elif len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
+            state_ = 'invalid_message_text'
+            reply = Misc.invalid_search_text()
+        else:
+            search_phrase = ''
+            usernames, text_stripped = Misc.get_text_usernames(message_text)
+            if text_stripped:
+                search_phrase = Misc.text_search_phrase(
+                    text_stripped,
+                    MorphAnalyzer,
                 )
-                if m:
-                    state_ = 'start_setplace'
+                if not search_phrase and not usernames:
+                    state_ = 'invalid_message_text'
+                    reply = Misc.PROMPT_SEARCH_PHRASE_TOO_SHORT
 
+            if usernames:
+                logging.debug('@usernames found in message text\n')
+                payload_username = dict(tg_username=','.join(usernames),)
+                status, response = await Misc.api_request(
+                    path='/api/profile',
+                    method='get',
+                    params=payload_username,
+                )
+                logging.debug('get by username, status: %s' % status)
+                logging.debug('get by username, response: %s' % response)
+                if status == 200 and response:
+                    a_found += response
+                    state_ = 'found_username'
                 else:
-                    m = re.search(
-                        r'^\/start\s+offer\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
-                        message_text,
-                        flags=re.I,
-                    )
-                    if m:
-                        offer_to_search = m.group(1).lower()
-                        state_ = 'start_offer'
-                    else:
-                        m = re.search(
-                            (
-                                r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\=offer\-'
-                                '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
-                            ) % re.escape(bot_data['username']),
-                            message_text,
-                            flags=re.I,
-                        )
-                        if m:
-                            offer_to_search = m.group(1).lower()
-                            state_ = 'start_offer'
+                    state_ = 'not_found'
 
-                        else:
-                            m = re.search(
-                                r'^\/start\s+([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
-                                message_text,
-                                flags=re.I,
-                            )
-                            if m:
-                                uuid_to_search = m.group(1).lower()
-                                state_ = 'start_uuid'
-                            else:
-                                m = re.search(
-                                    (
-                                        r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\='
-                                        '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
-                                    ) % re.escape(bot_data['username']),
-                                    message_text,
-                                    flags=re.I,
-                                )
-                                if m:
-                                    uuid_to_search = m.group(1).lower()
-                                    state_ = 'start_uuid'
-
-                                else:
-                                    m = re.search(
-                                        r'^\/start\s+(\w{5,})$',
-                                        message_text,
-                                        flags=re.I,
-                                    )
-                                    if m:
-                                        username_to_search = m.group(1)
-                                        state_ = 'start_username'
-                                    else:
-                                        m = re.search(
-                                            (
-                                                r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\='
-                                                '(\w{5,})$'
-                                            ) % re.escape(bot_data['username']),
-                                            message_text,
-                                            flags=re.I,
-                                        )
-                                        if m:
-                                            username_to_search = m.group(1)
-                                            state_ = 'start_username'
-
-                                        else:
-                                            m = re.search(
-                                                (
-                                                    r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\=poll\-'
-                                                    '(\d{3,})$'
-                                                ) % re.escape(bot_data['username']),
-                                                message_text,
-                                                flags=re.I,
-                                            )
-                                            if m:
-                                                # https://t.me/doverabot?start=poll
-                                                poll_to_search = m.group(1)
-                                                state_ = 'start_poll'
-                                            else:
-                                                m = re.search(
-                                                    r'^\/start\s+poll-(\d{3,})$',
-                                                    message_text,
-                                                    flags=re.I,
-                                                )
-                                                if m:
-                                                    # /start poll:
-                                                    poll_to_search = m.group(1)
-                                                    state_ = 'start_poll'
-
-                                                else:
-                                                    if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
-                                                        state_ = 'invalid_message_text'
-                                                        reply = Misc.invalid_search_text()
-                                                    else:
-                                                        search_phrase = ''
-                                                        usernames, text_stripped = Misc.get_text_usernames(message_text)
-                                                        if text_stripped:
-                                                            search_phrase = Misc.text_search_phrase(
-                                                                text_stripped,
-                                                                MorphAnalyzer,
-                                                            )
-                                                            if not search_phrase and not usernames:
-                                                                state_ = 'invalid_message_text'
-                                                                reply = Misc.PROMPT_SEARCH_PHRASE_TOO_SHORT
-
-                                                        if usernames:
-                                                            logging.debug('@usernames found in message text\n')
-                                                            payload_username = dict(tg_username=','.join(usernames),)
-                                                            status, response = await Misc.api_request(
-                                                                path='/api/profile',
-                                                                method='get',
-                                                                params=payload_username,
-                                                            )
-                                                            logging.debug('get by username, status: %s' % status)
-                                                            logging.debug('get by username, response: %s' % response)
-                                                            if status == 200 and response:
-                                                                a_found += response
-                                                                state_ = 'found_username'
-                                                            else:
-                                                                state_ = 'not_found'
-
-                                                        if search_phrase:
-                                                            status, response = await Misc.search_users('query', search_phrase)
-                                                            if status == 400 and response.get('code') and response['code'] == 'programming_error':
-                                                                if state_ != 'found_username':
-                                                                    state_ = 'not_found'
-                                                                    reply = 'Ошибка доступа к данных. Получили отказ по такой строке в поиске'
-                                                            elif status == 200:
-                                                                if response:
-                                                                    a_found += response
-                                                                    state_ = 'found_in_search'
-                                                                elif state_ != 'found_username':
-                                                                    state_ = 'not_found'
-                                                            else:
-                                                                state_ = 'not_found'
-                                                                reply = Misc.MSG_ERROR_API
+            if search_phrase:
+                status, response = await Misc.search_users('query', search_phrase)
+                if status == 400 and response.get('code') and response['code'] == 'programming_error':
+                    if state_ != 'found_username':
+                        state_ = 'not_found'
+                        reply = 'Ошибка доступа к данных. Получили отказ по такой строке в поиске'
+                elif status == 200:
+                    if response:
+                        a_found += response
+                        state_ = 'found_in_search'
+                    elif state_ != 'found_username':
+                        state_ = 'not_found'
+                else:
+                    state_ = 'not_found'
+                    reply = Misc.MSG_ERROR_API
 
     if state_ == 'not_found' and not reply:
         reply = Misc.PROMPT_NOTHING_FOUND
