@@ -3801,7 +3801,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             state_ = 'start_setplace'
         elif m := re.search(
                 (
-                    r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\=setplace'
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=setplace'
                 ) % re.escape(bot_data['username']),
                 message_text,
                 flags=re.I,
@@ -3817,7 +3817,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             state_ = 'start_offer'
         elif m := re.search(
                 (
-                    r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\=offer\-'
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=offer\-'
                     '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
                 ) % re.escape(bot_data['username']),
                 message_text,
@@ -3835,7 +3835,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             state_ = 'start_uuid'
         elif m := re.search(
                 (
-                    r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\='
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\='
                     '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
                 ) % re.escape(bot_data['username']),
                 message_text,
@@ -3853,7 +3853,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             state_ = 'start_username'
         elif m := re.search(
                 (
-                    r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\='
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\='
                     '(\w{5,})$'
                 ) % re.escape(bot_data['username']),
                 message_text,
@@ -3864,7 +3864,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
         elif m := re.search(
                 (
-                    r'^(?:http[s]?\:\/\/)?t\.me\/%s\?start\=poll\-'
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=poll\-'
                     '(\d{3,})$'
                 ) % re.escape(bot_data['username']),
                 message_text,
@@ -3874,13 +3874,32 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             poll_to_search = m.group(1)
             state_ = 'start_poll'
         elif m := re.search(
-                r'^\/start\s+poll-(\d{3,})$',
+                r'^\/start\s+poll\-(\d{3,})$',
                 message_text,
                 flags=re.I,
           ):
             # /start poll:
             poll_to_search = m.group(1)
             state_ = 'start_poll'
+
+        elif m := re.search(
+                (
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=auth_redirect\-(https?\:\/\/\S+)$'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            # /start auth_redirect-https://...
+            page_to_redirect = m.group(1)
+            state_ = 'start_auth_redirect'
+        elif m := re.search(
+                r'^\/start\s+auth_redirect\-(https?\:\/\/\S+)$',
+                message_text,
+                flags=re.I,
+          ):
+            # /start auth_redirect-https://...
+            page_to_redirect = m.group(1)
+            state_ = 'start_auth_redirect'
 
         elif len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
             state_ = 'invalid_message_text'
@@ -3939,7 +3958,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             user_from_id = response_from.get('user_id')
             if state_ in ('ya', 'forwarded_from_me', 'start', ) or \
                state_ in (
-                    'start_uuid', 'start_username', 'start_setplace', 'start_poll', 'start_offer'
+                    'start_uuid', 'start_username', 'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',
                ) and response_from.get('created'):
                 a_response_to += [response_from, ]
 
@@ -3994,7 +4013,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
 
     if state_ and state_ not in (
-        'not_found', 'invalid_message_text', 'start_setplace', 'start_poll', 'start_offer',
+        'not_found', 'invalid_message_text', 'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',
        ) and user_from_id and a_response_to:
         if state_ == 'start':
             await message.reply(await Misc.rules_text(), disable_web_page_preview=True)
@@ -4015,7 +4034,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
     elif reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
-    if state_ not in ('start_setplace', 'start_poll', 'start_offer',):
+    if state_ not in ('start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',):
         await Misc.show_deeplinks(a_found, message, bot_data)
 
     if user_from_id:
@@ -4032,7 +4051,10 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         if state_ == 'start_setplace':
             await geo(message, state_to_set=FSMgeo.geo)
             return
-        if state_ == 'start_poll':
+        elif state_ == 'start_auth_redirect':
+            await message.reply(f'Переходим на страницу: {page_to_redirect}')
+            return
+        elif state_ == 'start_poll':
             params = dict(tg_poll_id=poll_to_search)
             logging.debug('get_poll, params: %s' % params)
             status_poll, response_poll = await Misc.api_request(
@@ -4054,7 +4076,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             else:
                 await message.reply('Опрос не найден')
             return
-        if state_ == 'start_offer':
+        elif state_ == 'start_offer':
             status_offer, response_offer = await post_offer_answer(offer_to_search, response_from, [-1])
             if status_offer == 200:
                 await show_offer(response_from, response_offer, message, bot_data)
