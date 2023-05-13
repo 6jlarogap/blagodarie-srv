@@ -629,22 +629,20 @@ class Misc(object):
         Сформировать ссылку, которая будет открываться авторизованным пользователем
 
         Пример результата:
-        https://dev.blagoroda.org/auth/telegram/?redirect_path=/profile/?id=...
+        https://blagoroda.org/auth/telegram/?redirect_path=https://blagoroda.org/profile/?id=...
 
         где /profile/?id=... - путь на фронте, куда после авторизации уходим
         """
         redirect_path = urlencode(dict(
             redirect_path=redirect_path
         ))
-        return (
-            '%(frontend_host)s'
-            '%(frontend_auth_path)s'
-            '?%(redirect_path)s'
+        frontend_auth_path = settings.FRONTEND_AUTH_PATH.strip('/')
+        return LoginUrl(('%(frontend_host)s/%(frontend_auth_path)s/?%(redirect_path)s'
         ) % dict(
             frontend_host=settings.FRONTEND_HOST,
-            frontend_auth_path=settings.FRONTEND_AUTH_PATH,
+            frontend_auth_path=frontend_auth_path,
             redirect_path=redirect_path,
-        )
+        ))
 
     @classmethod
     async def post_tg_user(cls, tg_user_sender, activate=False, did_bot_start=True):
@@ -871,8 +869,6 @@ class Misc(object):
                 # 3djs links
                 #path = "/profile/?id=%s" % response_to['uuid']
                 #url = settings.FRONTEND_HOST + path
-                ## не реализовано в 3djs front-end
-                ## login_url = LoginUrl(url=cls.make_login_url(path))
                 path = "/?user_uuid_trusts=%s" % response_to['uuid']
                 url = settings.GRAPH_HOST + path
                 reply += Misc.get_html_a(href=url, text='Доверия') +'\n'
@@ -881,8 +877,6 @@ class Misc(object):
                     # 3djs links
                     #path = "/trust/?id=%s,%s&d=10" % (response_from['uuid'], response_to['uuid'],)
                     #url = settings.FRONTEND_HOST + path
-                    ## не реализовано в 3djs front-end
-                    # login_url = LoginUrl(url=cls.make_login_url(path))
                     path = "/?user_uuid_trust_path=%s,%s" % (response_from['uuid'], response_to['uuid'],)
                     url = settings.GRAPH_HOST + path
                     reply += Misc.get_html_a(href=url, text='Путь (доверия)') +'\n'
@@ -891,8 +885,6 @@ class Misc(object):
                     # 3djs links
                     #path = "/?id=%s&depth=3" % response_to['uuid']
                     #url = settings.??? + path
-                    ## не реализовано в 3djs front-end
-                    # login_url = LoginUrl(url=cls.make_login_url(path))
                     path = "/?user_uuid_genesis_tree=%s&depth=3&up=&down=" % response_to['uuid']
                     url = settings.GRAPH_HOST + path
                     reply += Misc.get_html_a(href=url, text='Род') +'\n'
@@ -901,8 +893,6 @@ class Misc(object):
                     # 3djs links
                     #path = "/?id=%s,%s&depth=10" % (response_from['uuid'], response_to['uuid'],)
                     #url = settings.??? + path
-                    ## не реализовано в 3djs front-end
-                    # login_url = LoginUrl(url=cls.make_login_url(path))
                     path = "/?user_uuid_genesis_path=%s,%s&depth=10" % (response_from['uuid'], response_to['uuid'],)
                     url = settings.GRAPH_HOST + path
                     reply += Misc.get_html_a(href=url, text='Путь ( род)') +'\n'

@@ -7,7 +7,6 @@ from utils import Misc, OperationType, KeyboardType, TgGroup, TgGroupMember
 
 from aiogram import Bot, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ContentType
-from aiogram.types.login_url import LoginUrl
 from aiogram.dispatcher import Dispatcher, FSMContext
 from aiogram.dispatcher.filters import ChatTypeFilter, Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
@@ -3890,7 +3889,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 flags=re.I,
           ):
             # /start auth_redirect-https://...
-            page_to_redirect = m.group(1)
+            redirect_path = m.group(1)
             state_ = 'start_auth_redirect'
         elif m := re.search(
                 r'^\/start\s+auth_redirect\-(https?\:\/\/\S+)$',
@@ -3898,7 +3897,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 flags=re.I,
           ):
             # /start auth_redirect-https://...
-            page_to_redirect = m.group(1)
+            redirect_path = m.group(1)
             state_ = 'start_auth_redirect'
 
         elif len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
@@ -4052,7 +4051,17 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             await geo(message, state_to_set=FSMgeo.geo)
             return
         elif state_ == 'start_auth_redirect':
-            await message.reply(f'Переходим на страницу: {page_to_redirect}')
+            reply_markup = InlineKeyboardMarkup()
+            inline_btn_redirect = InlineKeyboardButton(
+                'Продолжить',
+                login_url=Misc.make_login_url(redirect_path=redirect_path),
+            )
+            reply_markup.row(inline_btn_redirect)
+            await message.reply(
+                f'Для доступа к {redirect_path} требуется авторизация',
+                reply_markup=reply_markup,
+                disable_web_page_preview=True
+            )
             return
         elif state_ == 'start_poll':
             params = dict(tg_poll_id=poll_to_search)
