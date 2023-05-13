@@ -49,10 +49,6 @@ GROUP_HOST = 'https://group.blagoroda.org'
 #
 GRAPH_HOST = 'https://graph.blagoroda.org'
 
-# Ссылка на свзи в роду
-#
-GENESIS_HOST = 'https://genesis.blagoroda.org'
-
 # Ссылка на фронте, которая будет открываться там под авторизованным
 # пользователем:
 # <FRONTEND_HOST><FRONTEND_AUTH_PATH>?redirect_path=<frontend_path>

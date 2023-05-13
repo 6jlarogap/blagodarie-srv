@@ -890,7 +890,7 @@ class Misc(object):
                 if is_own_account or is_owned_account:
                     # 3djs links
                     #path = "/?id=%s&depth=3" % response_to['uuid']
-                    #url = settings.GENESIS_HOST + path
+                    #url = settings.??? + path
                     ## не реализовано в 3djs front-end
                     # login_url = LoginUrl(url=cls.make_login_url(path))
                     path = "/?user_uuid_genesis_tree=%s&depth=3&up=&down=" % response_to['uuid']
@@ -900,7 +900,7 @@ class Misc(object):
                 if response_from.get('uuid') and not is_own_account:
                     # 3djs links
                     #path = "/?id=%s,%s&depth=10" % (response_from['uuid'], response_to['uuid'],)
-                    #url = settings.GENESIS_HOST + path
+                    #url = settings.??? + path
                     ## не реализовано в 3djs front-end
                     # login_url = LoginUrl(url=cls.make_login_url(path))
                     path = "/?user_uuid_genesis_path=%s,%s&depth=10" % (response_from['uuid'], response_to['uuid'],)
