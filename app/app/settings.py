@@ -432,6 +432,20 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_USE_SSL = False
 
+# Параметры для redis кэша, где храним временные токены
+# token: url
+#
+REDIS_URLTOKEN_CONNECT =dict(
+    # Параметры инициализации redis connection,
+    # те же, что в redis.Redis()
+    # https://redis-py.readthedocs.io/en/stable/connections.html
+    #
+    host='127.0.0.1',
+    port=6379,
+    db=2,
+    decode_responses=False,
+)
+
 from app.logging import skip_ioerror_post
 LOGGING = {
     'version': 1,

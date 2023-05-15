@@ -69,7 +69,9 @@ install-readme.txt
             sudo apt install apache2  apache2-utils
 
          - redis-server:
-            для кэшировния запросов к апи
+             (Обязательно!)
+                *   для кэша ключей token:url   (для этого обязателен redis)
+                *   для кэшировния запросов к апи
 
          -git
             sudo apt install git

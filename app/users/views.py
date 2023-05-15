@@ -1,4 +1,5 @@
 import os, re, hmac, hashlib, json, time
+import uuid, redis
 import urllib.request, urllib.error, urllib.parse
 
 from ged4py.parser import GedcomReader
@@ -12,6 +13,7 @@ from django.db.models import Prefetch
 from django.http import Http404
 from django.contrib.postgres.search import SearchQuery, SearchVector
 from django.db.utils import ProgrammingError
+from django.core.validators import URLValidator
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -2628,7 +2630,7 @@ class ApiVotedTgUsers(APIView):
 
     def get(self, request):
         """
-        Получить проголосовавших в опросе-предложении телеграм- пользователй
+        Получить проголосовавших в опросе-предложении телеграм- пользователей
 
         Владелец опроса не включается
         Не включаются пользователи, которые не доверяют юзеру
@@ -2698,3 +2700,78 @@ class ApiVotedTgUsers(APIView):
         return Response(data=data, status=status_code)
 
 api_offer_voted_tg_users = ApiVotedTgUsers.as_view()
+
+class ApiUrlToken(APIView):
+    """
+    Зашить url в токене. Получить url из token
+
+    Используем кэш redis!
+    Token кодируется как uuid
+    """
+
+    # Сколько времени хранить token, в секундах
+    #
+    URLTOKEN_EXPIRE = 300
+
+    # Префикс и разделитель полей для ключа
+    #
+    URLTOKEN_PREFIX = 'urltoken'
+    URLTOKEN_SEP = '~'
+
+    def post(self, request):
+        """
+        Зашить url в токене.
+
+        На входе:
+            {
+                "url": "<url>"
+            }
+        На выходе:
+            {
+                "url": "<url>",
+                "token": "<url>"
+            }
+        """
+        validate = URLValidator()
+        try:
+            try:
+                url = request.data.get('url')
+                validate(url)
+            except ValidationError:
+                raise ServiceException('Неверный URL')
+            token = str(uuid.uuid4())
+            data = dict(
+                url=request.data['url'],
+                token=token,
+            )
+            if r := redis.Redis(**settings.REDIS_URLTOKEN_CONNECT):
+                r.set(
+                    name=self.URLTOKEN_PREFIX + self.URLTOKEN_SEP + token,
+                    value=url,
+                    ex=self.URLTOKEN_EXPIRE,
+                )
+            else:
+                raise ServiceException('Не удалось подключиться к хранилищу токенов (redis cache)')
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+    def get(self, request):
+        """
+        Получить url из token
+
+        """
+        data = dict()
+        status_code = status.HTTP_404_NOT_FOUND
+        token = str(request.GET.get('token'))
+        token_in_redis = self.URLTOKEN_PREFIX + self.URLTOKEN_SEP + token
+        if r := redis.Redis(**settings.REDIS_URLTOKEN_CONNECT):
+            if url := r.get(token_in_redis):
+                data = dict(token=token, url=url)
+                status_code = status.HTTP_200_OK
+        return Response(data=data, status=status_code)
+
+
+api_url_token = ApiUrlToken.as_view()
