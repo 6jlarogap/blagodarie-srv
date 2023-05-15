@@ -1423,4 +1423,3 @@ class TgGroupMember(object):
         logging.debug('delete group member, status: %s' % status)
         logging.debug('delete group member, response: %s' % response)
         return status, response
-

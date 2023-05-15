@@ -3883,21 +3883,25 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
         elif m := re.search(
                 (
-                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=auth_redirect\-(https?\:\/\/\S+)$'
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=auth_redirect\-'
+                    '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
                 ) % re.escape(bot_data['username']),
                 message_text,
                 flags=re.I,
           ):
-            # /start auth_redirect-https://...
-            redirect_path = m.group(1)
+            # /start auth_redirect-<token, в котором зашит url для авторизации>
+            redirect_token = m.group(1)
             state_ = 'start_auth_redirect'
         elif m := re.search(
-                r'^\/start\s+auth_redirect\-(https?\:\/\/\S+)$',
+                (
+                r'^\/start\s+auth_redirect\-'
+                    '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
+                ),
                 message_text,
                 flags=re.I,
           ):
-            # /start auth_redirect-https://...
-            redirect_path = m.group(1)
+            # /start auth_redirect-<token, в котором зашит url для авторизации>
+            redirect_token = m.group(1)
             state_ = 'start_auth_redirect'
 
         elif len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
@@ -4051,17 +4055,25 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             await geo(message, state_to_set=FSMgeo.geo)
             return
         elif state_ == 'start_auth_redirect':
-            reply_markup = InlineKeyboardMarkup()
-            inline_btn_redirect = InlineKeyboardButton(
-                'Продолжить',
-                login_url=Misc.make_login_url(redirect_path=redirect_path),
+            status_token, response_token = await Misc.api_request(
+                path='/api/url/token',
+                params=dict(token=redirect_token)
             )
-            reply_markup.row(inline_btn_redirect)
-            await message.reply(
-                f'Для доступа к {redirect_path} требуется авторизация',
-                reply_markup=reply_markup,
-                disable_web_page_preview=True
-            )
+            if status_token == 200:
+                redirect_path = response_token['url']
+                reply_markup = InlineKeyboardMarkup()
+                inline_btn_redirect = InlineKeyboardButton(
+                    'Продолжить',
+                    login_url=Misc.make_login_url(redirect_path=redirect_path),
+                )
+                reply_markup.row(inline_btn_redirect)
+                await message.reply(
+                    f'Для доступа к <pre>{redirect_path}</pre> требуется авторизация',
+                    reply_markup=reply_markup,
+                    disable_web_page_preview=True
+                )
+            else:
+                await message.reply('Ссылка устарела или не найдена')
             return
         elif state_ == 'start_poll':
             params = dict(tg_poll_id=poll_to_search)

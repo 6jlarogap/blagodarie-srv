@@ -443,8 +443,11 @@ REDIS_URLTOKEN_CONNECT =dict(
     host='127.0.0.1',
     port=6379,
     db=2,
-    decode_responses=False,
+    decode_responses=True,
 )
+# Сколько времени хранить token, в секундах
+#
+REDIS_URLTOKEN_EXPIRE = 300
 
 from app.logging import skip_ioerror_post
 LOGGING = {

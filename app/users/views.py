@@ -2709,9 +2709,6 @@ class ApiUrlToken(APIView):
     Token кодируется как uuid
     """
 
-    # Сколько времени хранить token, в секундах
-    #
-    URLTOKEN_EXPIRE = 300
 
     # Префикс и разделитель полей для ключа
     #
@@ -2748,7 +2745,7 @@ class ApiUrlToken(APIView):
                 r.set(
                     name=self.URLTOKEN_PREFIX + self.URLTOKEN_SEP + token,
                     value=url,
-                    ex=self.URLTOKEN_EXPIRE,
+                    ex=settings.REDIS_URLTOKEN_EXPIRE,
                 )
             else:
                 raise ServiceException('Не удалось подключиться к хранилищу токенов (redis cache)')
