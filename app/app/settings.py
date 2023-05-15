@@ -447,7 +447,7 @@ REDIS_URLTOKEN_CONNECT =dict(
 )
 # Сколько времени хранить token, в секундах
 #
-REDIS_URLTOKEN_EXPIRE = 300
+REDIS_URLTOKEN_EXPIRE = 60
 
 from app.logging import skip_ioerror_post
 LOGGING = {

@@ -379,17 +379,28 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, APIView)
                 "user_uuid": <uuid пользователеля>,
                 "auth_token": <его токен авторизации>,
             }
-        при наличиии redirect_path:
-            перенаправляет на <frontend>/<redirect_path>, с аналогичной кукой:
+        при наличиии дополнительного параметра redirect_path, который подставляет не телеграм,
+        а фронт, который может вызывать этот метод:
+            перенаправляет на:
+                <frontend>/<redirect_path>, если redirect_path не начинается с http,
+                redirect_path, если это https://...,
+            с аналогичной кукой:
                 key='auth_data',
                 value=json.dumps({
                     provider=provider,
                     user_uuid=<uuid пользователеля>,
                     auth_token=<его токен авторизации>
                 }),
-                max_age=600,
+                max_age=14*86400,
                 path='/',
                 domain=<frontend domain>,
+        при наличиии дополнительного параметра keep_user_data, который подставляет не телеграм,
+        а фронт, который может вызывать этот метод:
+            данные пользователя (фио, фото) не меняются в профиле (Profile, User) пользователя.
+            Это требуется, когда метод вызывается при авторизации, иницированной login url
+            из бота телеграма. В боте пользователь может изменить и своё фио в таблице User,
+            и свое фото в таблице Profile, зачем же здесь переписывать его сведения.
+            Некоторое исключение для фото: если фото не было задано в Profile, оно таки заносится.
     """
 
     def check_input(self, request):
@@ -410,13 +421,14 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, APIView)
         unix_time_now = int(time.time())
         unix_time_auth_date = int(rd['auth_date'])
         if unix_time_now - unix_time_auth_date > settings.TELEGRAM_AUTH_DATA_OUTDATED:
-            raise ServiceException('Неверный запрос, данные устарели')
+            raise ServiceException('Неверный запрос, данные авторизации устарели')
 
         request_data.pop("hash", None)
-        try:
-            request_data.pop("redirect_path", None)
-        except KeyError:
-            pass
+        for parm in ('redirect_path', 'keep_user_data',):
+            try:
+                request_data.pop(parm, None)
+            except KeyError:
+                pass
         request_data_alphabetical_order = sorted(request_data.items(), key=lambda x: x[0])
         data_check_string = []
         for data_pair in request_data_alphabetical_order:
@@ -444,6 +456,7 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, APIView)
             #
             user = oauth.user
             profile = user.profile
+            keep_user_data = rd.get('keep_user_data')
 
             oauth_tg_field_map = dict(
                 last_name='last_name',
@@ -465,10 +478,11 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, APIView)
             if user.last_name != '':
                 user.last_name = ''
                 changed = True
-            first_name = Profile.make_first_name(rd['last_name'], rd['first_name'])
-            if user.first_name != first_name:
-                user.first_name = first_name
-                changed = True
+            if not keep_user_data:
+                first_name = Profile.make_first_name(rd['last_name'], rd['first_name'])
+                if user.first_name != first_name:
+                    user.first_name = first_name
+                    changed = True
             was_not_active = False
             if not user.is_active:
                 changed = True
@@ -489,6 +503,7 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, APIView)
                 last_name=last_name,
                 first_name=first_name,
             )
+            profile = user.profile
             oauth = Oauth.objects.create(
                 provider = Oauth.PROVIDER_TELEGRAM,
                 uid=rd['id'],
@@ -500,8 +515,14 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, APIView)
             )
         token, created_token = Token.objects.get_or_create(user=user)
 
-        if photo_url and oauth.photo != photo_url:
-            user.profile.put_photo_from_url(photo_url)
+        if photo_url:
+            put_photo_from_url = False
+            if not profile.photo:
+                put_photo_from_url = True
+            elif not keep_user_data and oauth.photo != photo_url:
+                put_photo_from_url = True
+            if put_photo_from_url:
+                profile.put_photo_from_url(photo_url)
         return dict(
             user_uuid=str(user.profile.uuid),
             auth_token=token.key,
@@ -510,16 +531,20 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, APIView)
     def do_redirect(self, request, rd, data):
         redirect_path = rd.get('redirect_path')
         if redirect_path:
-            response = redirect(self.get_frontend_url(
+            if redirect_path.lower().startswith('http'):
+                redirect_to = redirect_path
+            else:
+                redirect_to = self.get_frontend_url(
                 request=request,
                 path=redirect_path,
-            ))
+            )
+            response = redirect(redirect_to)
             to_cookie = dict(provider=Oauth.PROVIDER_TELEGRAM, )
             to_cookie.update(data)
             response.set_cookie(
                 key='auth_data',
                 value=json.dumps(to_cookie),
-                max_age=600,
+                max_age=86400*14,
                 path='/',
                 domain=self.get_frontend_name(request),
             )
@@ -2701,7 +2726,7 @@ class ApiVotedTgUsers(APIView):
 
 api_offer_voted_tg_users = ApiVotedTgUsers.as_view()
 
-class ApiUrlToken(APIView):
+class ApiUrlToken(TelegramApiMixin, APIView):
     """
     Зашить url в токене. Получить url из token
 
@@ -2726,7 +2751,10 @@ class ApiUrlToken(APIView):
         На выходе:
             {
                 "url": "<url>",
-                "token": "<url>"
+                "token": "<url>",
+                // Это требуется для формирования ссылки login url
+                // к нопке телеграма
+                "bot_username": "<bot_username>"
             }
         """
         validate = URLValidator()
@@ -2740,6 +2768,7 @@ class ApiUrlToken(APIView):
             data = dict(
                 url=request.data['url'],
                 token=token,
+                bot_username=self.get_bot_username(),
             )
             if r := redis.Redis(**settings.REDIS_URLTOKEN_CONNECT):
                 r.set(
@@ -2759,6 +2788,14 @@ class ApiUrlToken(APIView):
         """
         Получить url из token
 
+        На входе:
+            https:/.../path/to/?token=<token>
+        На выходе:
+            {
+                "url": "<url>",
+                "token": "<url>"
+            }
+            или HTTP_404_NOT_FOUND
         """
         data = dict()
         status_code = status.HTTP_404_NOT_FOUND
