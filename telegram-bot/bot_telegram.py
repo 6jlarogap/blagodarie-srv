@@ -4064,7 +4064,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 reply_markup = InlineKeyboardMarkup()
                 inline_btn_redirect = InlineKeyboardButton(
                     'Продолжить',
-                    login_url=Misc.make_login_url(redirect_path=redirect_path),
+                    login_url=Misc.make_login_url(redirect_path=redirect_path, keep_user_data='on'),
                 )
                 reply_markup.row(inline_btn_redirect)
                 await message.reply(

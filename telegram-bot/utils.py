@@ -624,25 +624,33 @@ class Misc(object):
         return result
 
     @classmethod
-    def make_login_url(cls, redirect_path):
+    def make_login_url(cls, redirect_path, **kwargs):
         """
         Сформировать ссылку, которая будет открываться авторизованным пользователем
 
         Пример результата:
-        https://blagoroda.org/auth/telegram/?redirect_path=https://blagoroda.org/profile/?id=...
+        https://blagoroda.org/auth/telegram/?redirect_path=https%3A%2F%2Fblagoroda.org%2F%3Ff%3D0%26q%3D25
 
-        где /profile/?id=... - путь на фронте, куда после авторизации уходим
+        где:
+            https://blagoroda.org/ (в начале)
+                прописан /setdomain в боте
+            redirect_path
+                куда после авторизации уходим. В этом примере, после расшифровки,
+                это https://blagoroda.org/f=0&q=50
+
+        kwargs:
+            дополнительные параметры, которые могут быть добавлены в результат
         """
-        redirect_path = urlencode(dict(
-            redirect_path=redirect_path
-        ))
+        parms = dict(redirect_path=redirect_path)
+        parms.update(**kwargs)
+        parms = urlencode(parms)
         frontend_auth_path = settings.FRONTEND_AUTH_PATH.strip('/')
-        return LoginUrl(('%(frontend_host)s/%(frontend_auth_path)s/?%(redirect_path)s'
-        ) % dict(
+        return LoginUrl('%(frontend_host)s/%(frontend_auth_path)s/?%(parms)s' % dict(
             frontend_host=settings.FRONTEND_HOST,
             frontend_auth_path=frontend_auth_path,
-            redirect_path=redirect_path,
+            parms=parms,
         ))
+
 
     @classmethod
     async def post_tg_user(cls, tg_user_sender, activate=False, did_bot_start=True):
