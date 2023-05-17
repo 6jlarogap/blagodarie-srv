@@ -2840,6 +2840,8 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
                     Если заданы from и/или number, по полагается withalone=on
 
     """
+    permission_classes = (IsAuthenticated,)
+
     def get(self, request):
         fmt = request.GET.get('fmt', 'd3js')
         withalone = request.GET.get('withalone')
@@ -2996,6 +2998,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
         users = []
         connections = []
         trust_connections = []
+        participants_on_page = 0
         try:
             tggroup = TgGroup.objects.get(chat_id=chat_id)
         except (ValueError, TgGroup.DoesNotExist,):
@@ -3067,7 +3070,6 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     user = request.user
                     user_pks.add(int(request.user.pk))
 
-                participants_on_page = 0
                 for p in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
                     d = p.data_dict(request)
                     d.update(
