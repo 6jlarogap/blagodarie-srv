@@ -24,6 +24,7 @@ urlpatterns = [
     re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
     path('', include('contact.urls')),
     path('', include('users.urls')),
+    path('', include('wote.urls')),
 ]
 
 if settings.ADMIN_ENABLED:

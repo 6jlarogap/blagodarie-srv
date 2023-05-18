@@ -80,6 +80,7 @@ INSTALLED_APPS = [
 
     'contact',
     'users',
+    'wote',
 ]
 
 MIDDLEWARE = [
