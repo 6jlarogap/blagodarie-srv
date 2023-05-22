@@ -63,9 +63,12 @@ class ApiWoteVideo(ApiWoteVideoMixin, APIView):
             "created": true
         }
         Если видео с переданными source, videoid существует, то created = False
+        Возможна ситуация, когда юзер пытается создать видео, уже созданное другим,
+        ответ будет 200 OK, но в данных ответа created = false и другой owner
 
+        Если запрос анонимный, то статус ответа HTTP_401_UNAUTHORIZED
         Если ошибка в переданных параметрах source, videoid,
-        то 400, { "message": "<сообщение об ошибке>" }
+        то HTTP_400_BAD_REQUEST, { "message": "<сообщение об ошибке>" }
         """
         if not request.user.is_authenticated:
             raise NotAuthenticated
@@ -144,8 +147,9 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
         Но юзер может поменять или подтвердить свой голос. Тогда голос
         записывается новый или подтвердается старый и изменяется update_timestamp.
 
+        Если запрос анонимный, то статус ответа HTTP_401_UNAUTHORIZED
         Если ошибка в переданных параметрах source, videoid,
-        то 400, { "message": "<сообщение об ошибке>" }
+        то HTTP_400_BAD_REQUEST, { "message": "<сообщение об ошибке>" }
         """
         if not request.user.is_authenticated:
             raise NotAuthenticated
@@ -178,6 +182,52 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
+    def delete(self, request):
+        """
+        Удалить голос для видео. Требует аутентификации.
+
+        Аутентификация достигается передачей вместе с запросом
+        заголовка Authorization: Token <auth_token из куки auth_datа>
+
+        http(s)://<api-host>/api/wote/vote/
+        Delete запрос. На входе json. Например:
+        {
+            // video source: возможны yt, rt, vk, bn.
+            // И ничто другое, кроме как в ./models.py:Video.VIDEO_SOURCES
+            "source": "yt",
+            "videoid": "Ac5cEy5llr4",
+            
+            // Время от старта видео
+            "time": 50,
+        }
+        Возвращает json: {}
+
+        Если запрос анонимный, то статус ответа HTTP_401_UNAUTHORIZED
+        Если не найдено видео или не найден такой голос этого юзера или
+        если ошибка в переданных параметрах source, videoid, time
+        то статус ответа HTTP_400_BAD_REQUEST, { "message": "<сообщение об ошибке>" }
+        """
+        if not request.user.is_authenticated:
+            raise NotAuthenticated
+        try:
+            self.check_input_video(request)
+            try:
+                vote = Vote.objects.get(
+                    video__source=request.data.get('source'),
+                    video__videoid=request.data.get('videoid'),
+                    user=request.user,
+                    time=int(request.data.get('time')),
+                )
+            except (TypeError, ValueError, Vote.DoesNotExist, ):
+                raise ServiceException('Не найдено видео или голос')
+            vote.delete()
+            data = {}
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
     def get(self, request):
         """
         Показать все голоса по видео.
@@ -198,6 +248,7 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
                 "insert_timestamp": 1684415509
             },
             "votes": [
+                // голоса сотртированы по возрастанию времени time
                 {
                     "user": {
                         "uuid": "8f686101-c5a2-46d0-a5ee-ffffffffffff",
@@ -232,7 +283,7 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
                 vote.data_dict(request, put_video=False) \
                     for vote in Vote.objects.select_related(
                         'user', 'user__profile'
-                    ).filter(video=video)
+                    ).filter(video=video).order_by('time')
             ]
             status_code = status.HTTP_200_OK
         data = dict(video=video_dict, votes=votes)
