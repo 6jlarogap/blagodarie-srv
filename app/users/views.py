@@ -2804,6 +2804,8 @@ class ApiUrlToken(TelegramApiMixin, APIView):
         if r := redis.Redis(**settings.REDIS_URLTOKEN_CONNECT):
             if url := r.get(token_in_redis):
                 data = dict(token=token, url=url)
+                # Так быстрее, чем delete, redis в фоне удалит через секунду
+                r.expire(token_in_redis, 1)
                 status_code = status.HTTP_200_OK
         return Response(data=data, status=status_code)
 
