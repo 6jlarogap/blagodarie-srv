@@ -17,7 +17,7 @@ class Video(BaseModelInsertTimestamp):
         (SOURCE_BASTYON, 'Bastyon'),
     )
 
-    owner = models.ForeignKey('auth.User', verbose_name='Владелец', on_delete=models.CASCADE,)
+    creator = models.ForeignKey('auth.User', verbose_name='Владелец', on_delete=models.CASCADE,)
     source = models.CharField('Источник', max_length=2, choices=VIDEO_SOURCES)
     # Ссылка для авторизации через tg bot имеет вид:
     # start=wote-rt-<videoid>, не длинне 64 символов,
@@ -31,16 +31,11 @@ class Video(BaseModelInsertTimestamp):
         return dict(
             source=self.source,
             videoid=self.videoid,
-            owner=dict(
-                uuid=self.owner.profile.uuid,
-                first_name=self.owner.first_name,
-                photo=self.owner.profile.choose_photo(request) if request else '',
-            ),
             insert_timestamp=self.insert_timestamp,
         )
 
     def __str__(self):
-        return '%s-%s (от %s)' % (self.source, self.videoid, self.owner.first_name)
+        return '%s-%s' % (self.source, self.videoid,)
 
 class Vote(BaseModelInsertUpdateTimestamp):
 
@@ -62,7 +57,7 @@ class Vote(BaseModelInsertUpdateTimestamp):
     class Meta:
         unique_together = ('user', 'video', 'time', )
 
-    def data_dict(self, request=None, put_video=True):
+    def data_dict(self, request=None, put_video=False):
         result = dict(
             user=dict(
                 uuid=self.user.profile.uuid,

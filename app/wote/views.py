@@ -20,75 +20,6 @@ class ApiWoteVideoMixin(object):
             not request.data.get('videoid'):
             raise ServiceException('Не задан(ы) или не верн(ы) параметры source, videoid')
 
-    def check_input_vote(self, request):
-        if not request.data.get('button') or \
-            request.data['button'] not in dict(Vote.VOTES):
-            raise ServiceException('Не задан или не верен параметры button')
-        err_mes_time = 'Не задан или не верен параметр time'
-        try:
-            int(request.data.get('time'))
-        except (TypeError, ValueError):
-            raise ServiceException(err_mes_time)
-        if request.data['time'] < 0:
-            raise ServiceException(err_mes_time)
-
-
-class ApiWoteVideo(ApiWoteVideoMixin, APIView):
-
-    def post(self, request):
-        """
-        Внести видео. Требует аутентификации.
-
-        Аутентификация достигается передачей вместе с запросом
-        заголовка Authorization: Token <auth_token из куки auth_datа>
-
-        http(s)://<api-host>/api/wote/video/
-        Post запрос. На входе json. Например:
-        {
-            // source: возможны yt, rt, vk, bn.
-            // И ничто другое, кроме как в ./models.py:Video.VIDEO_SOURCES
-            "source": "yt",
-            "videoid": "Ac5cEy5llr4"
-        }
-        Возвращает json (пример):
-        {
-            "source": "yt",
-            "videoid": "Ac5cEy5llr4",
-            "owner": {
-                "uuid": "8f686101-c5a2-46d0-a5ee-ffffffffffff",
-                "first_name": "Иван Петров"
-                "photo": "http(s)://<api.url>/media/profile-photo/2023/05/15/326/photo.jpg"
-            },
-            insert_timestamp=1684413021,
-            "created": true
-        }
-        Если видео с переданными source, videoid существует, то created = False
-        Возможна ситуация, когда юзер пытается создать видео, уже созданное другим,
-        ответ будет 200 OK, но в данных ответа created = false и другой owner
-
-        Если запрос анонимный, то статус ответа HTTP_401_UNAUTHORIZED
-        Если ошибка в переданных параметрах source, videoid,
-        то HTTP_400_BAD_REQUEST, { "message": "<сообщение об ошибке>" }
-        """
-        if not request.user.is_authenticated:
-            raise NotAuthenticated
-        try:
-            self.check_input_video(request)
-            video, created = Video.objects.get_or_create(
-                source=request.data['source'],
-                videoid=request.data['videoid'],
-                defaults=dict(owner=request.user)
-            )
-            data = video.data_dict(request)
-            data.update(created=created)
-            status_code = status.HTTP_200_OK
-        except ServiceException as excpt:
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
-
-api_wote_video = ApiWoteVideo.as_view()
-
 
 class ApiWoteVote(ApiWoteVideoMixin, APIView):
 
@@ -115,66 +46,46 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
             // Время от старта видео
             "time": 50,
         }
-        Возвращает json (пример):
-        {
-            "user": {
-                "uuid": "8f686101-c5a2-46d0-a5ee-ffffffffffff",
-                "first_name": "Иван Петров",
-                "photo": "http(s)://<api-host>/media/profile-photo/2023/05/15/326/photo.jpg"
-            },
-            "video": {
-                "source": "yt",
-                "videoid": "Ac5cEy5llr4",
-                "owner": {
-                    "uuid": "8f686101-c5a2-46d0-a5ee-ffffffffffff",
-                    "first_name": "Иван Петров",
-                    "photo": "http(s)://<api-host>/media/profile-photo/2023/05/15/326/photo.jpg"
-                },
-                "insert_timestamp": 1684415509
-            },
-            "time": 40,
-            "button": "not",
-
-            // Если авторизованный пользователь раньше голосовал
-            // за то же видео за то же время,
-            // то insert_timestamp == update_timestamp
-            insert_timestamp=1684413021,
-            update_timestamp=1684413021,
-            "created": true
-        }
-        Если имеется голос (кнопка) с переданными video source, videoid от того же
-        пользователя в то же время, то created = false.
-        Но юзер может поменять или подтвердить свой голос. Тогда голос
-        записывается новый или подтвердается старый и изменяется update_timestamp.
+        Если видео с source, videoid не существует, то создается.
+        Если успешно, возвращает json {}, статус: HTTP_200_OK
 
         Если запрос анонимный, то статус ответа HTTP_401_UNAUTHORIZED
-        Если ошибка в переданных параметрах source, videoid,
-        то HTTP_400_BAD_REQUEST, { "message": "<сообщение об ошибке>" }
+        Если ошибка в переданных параметрах source, videoid, time,
+        то статус HTTP_400_BAD_REQUEST,
+        текст json: { "message": "<сообщение об ошибке>" }
         """
         if not request.user.is_authenticated:
             raise NotAuthenticated
         try:
             self.check_input_video(request)
-            self.check_input_vote(request)
+
+            if not (button :=  request.data.get('button')) or \
+               button not in dict(Vote.VOTES):
+                raise ServiceException('Не задан или не верен параметры button')
+            err_mes_time = 'Не задан или не верен параметр time'
             try:
-                video = Video.objects.select_related('owner', 'owner__profile').get(
-                    source=request.data['source'],
-                    videoid=request.data['videoid'],
-                )
-            except Video.DoesNotExist:
-                raise ServiceException('Не найдено видео')
-            vote, created = Vote.objects.select_for_update().get_or_create(
+                time_ = int(request.data.get('time'))
+            except (TypeError, ValueError):
+                raise ServiceException(err_mes_time)
+            if time_ < 0:
+                raise ServiceException(err_mes_time)
+
+            video, created_video = Video.objects.get_or_create(
+                source=request.data['source'],
+                videoid=request.data['videoid'],
+                defaults=dict(creator=request.user),
+            )
+            vote, created_vote = Vote.objects.select_for_update().get_or_create(
                 user=request.user,
                 video=video,
-                time=int(request.data['time']),
-                defaults=dict(button=request.data['button'])
+                time=time_,
+                defaults=dict(button=button)
             )
-            if not created:
+            if not created_vote:
                 vote.update_timestamp = int(time.time())
-                vote.button = request.data['button']
+                vote.button = button
                 vote.save(update_fields=('update_timestamp', 'button',))
-            data = vote.data_dict(request)
-            data.update(created=created)
+            data = {}
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             transaction.set_rollback(True)
@@ -200,12 +111,13 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
             // Время от старта видео
             "time": 50,
         }
-        Возвращает json: {}
+        Если успешно, возвращает json {}, статус: HTTP_200_OK
 
         Если запрос анонимный, то статус ответа HTTP_401_UNAUTHORIZED
         Если не найдено видео или не найден такой голос этого юзера или
-        если ошибка в переданных параметрах source, videoid, time
-        то статус ответа HTTP_400_BAD_REQUEST, { "message": "<сообщение об ошибке>" }
+        если ошибка в переданных параметрах source, videoid, time,
+        то статус HTTP_400_BAD_REQUEST,
+        текст json: { "message": "<сообщение об ошибке>" }
         """
         if not request.user.is_authenticated:
             raise NotAuthenticated
@@ -213,12 +125,12 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
             self.check_input_video(request)
             try:
                 vote = Vote.objects.get(
-                    video__source=request.data.get('source'),
-                    video__videoid=request.data.get('videoid'),
                     user=request.user,
-                    time=int(request.data.get('time')),
+                    video__source=request.data['source'],
+                    video__videoid=request.data['videoid'],
+                    time=int(request.data['time']),
                 )
-            except (TypeError, ValueError, Vote.DoesNotExist, ):
+            except (TypeError, ValueError, KeyError, Vote.DoesNotExist, ):
                 raise ServiceException('Не найдено видео или голос')
             vote.delete()
             data = {}
@@ -240,15 +152,10 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
             "video": {
                 "source": "yt",
                 "videoid": "Ac5cEy5llr4",
-                "owner": {
-                    "uuid": "8f686101-c5a2-46d0-a5ee-ffffffffffff",
-                    "first_name": "Иван Петров",
-                    "photo": "http(s)://<api-host>/media/profile-photo/2023/05/15/326/photo.jpg"
-                },
                 "insert_timestamp": 1684415509
             },
             "votes": [
-                // голоса сотртированы по возрастанию времени time
+                // голоса сортированы по возрастанию времени time
                 {
                     "user": {
                         "uuid": "8f686101-c5a2-46d0-a5ee-ffffffffffff",
@@ -269,7 +176,7 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
         """
         
         try:
-            video = Video.objects.select_related('owner', 'owner__profile').get(
+            video = Video.objects.get(
                 source=request.GET.get('source', ''),
                 videoid=request.GET.get('videoid', ''),
             )
