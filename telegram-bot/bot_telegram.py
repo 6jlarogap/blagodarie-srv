@@ -445,12 +445,25 @@ async def echo_getowned_to_bot(message: types.Message, state: FSMContext):
     state=None,
 )
 async def echo_graph_to_bot(message: types.Message, state: FSMContext):
+    reply_markup = InlineKeyboardMarkup()
+    inline_btn_all_users = InlineKeyboardButton(
+        'Отношения участников',
+        login_url=Misc.make_login_url(
+            redirect_path=settings.GRAPH_HOST + '/?rod=on&dover=on&withalone=on',
+            keep_user_data='on'
+    ))
+    inline_btn_recent = InlineKeyboardButton(
+        'Недавно добавленные',
+        login_url=Misc.make_login_url(
+            redirect_path=settings.FRONTEND_HOST + '/?f=0&q=50',
+            keep_user_data='on'
+    ))
+    reply_markup.row(inline_btn_all_users)
+    reply_markup.row(inline_btn_recent)
     await message.reply(
-        '%s\n\n%s' % (
-            Misc.get_html_a(settings.GRAPH_HOST + '/?rod=on&dover=on&withalone=on', 'Отношения участников'),
-            Misc.get_html_a(settings.FRONTEND_HOST + '/?f=0&q=50', 'Недавно добавленные'),
-        ),
+        'Выберите тип графика',
         disable_web_page_preview=True,
+        reply_markup=reply_markup
     )
 
 
