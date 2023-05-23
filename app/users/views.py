@@ -39,6 +39,21 @@ class ApiTokenAuthDataMixin(object):
     TOKEN_AUTHDATA_PREFIX = 'authdatatoken'
     TOKEN_AUTHDATA_SEP = '~'
 
+    def make_authdata_token(self, auth_data):
+        """
+        Сделать токен из куки авторизации
+        """
+        token = None
+        if r := redis.Redis(**settings.REDIS_TOKEN_CONNECT):
+            token = str(uuid.uuid4())
+            r.set(
+                name=self.TOKEN_AUTHDATA_PREFIX + self.TOKEN_AUTHDATA_SEP + token,
+                value=json.dumps(auth_data),
+                ex=settings.TOKEN_URL_EXPIRE,
+            )
+        return token
+
+
 class ApiGetProfileInfo(UuidMixin, APIView):
 
     def get(self, request):
@@ -359,7 +374,7 @@ class ApiAuthSignUpIncognito(APIView):
 
 api_auth_signup_incognito = ApiAuthSignUpIncognito.as_view()
 
-class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, APIView):
+class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, ApiTokenAuthDataMixin, APIView):
     """
     Callback функция авторизации через telegram
 
@@ -391,16 +406,9 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, APIView)
             перенаправляет на:
                 <frontend>/<redirect_path>, если redirect_path не начинается с http,
                 redirect_path, если это https://...,
-            с аналогичной кукой:
-                key='auth_data',
-                value=json.dumps({
-                    provider=provider,
-                    user_uuid=<uuid пользователеля>,
-                    auth_token=<его токен авторизации>
-                }),
-                max_age=14*86400,
-                path='/',
-                domain=<frontend domain>,
+            подставляя в redirect_path дополнительно параметр:
+                authdata_token=....,
+                в котором зашита кука авторизации
         при наличиии дополнительного параметра keep_user_data, который подставляет не телеграм,
         а фронт, который может вызывать этот метод:
             данные пользователя (фио, фото) не меняются в профиле (Profile, User) пользователя.
@@ -545,16 +553,15 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, APIView)
                 request=request,
                 path=redirect_path,
             )
+            auth_data = dict(provider=Oauth.PROVIDER_TELEGRAM, )
+            auth_data.update(data)
+            token = self.make_authdata_token(auth_data)
+            if re.search(r'\?\w+\=', redirect_to):
+                redirect_to += '&authdata_token=' + token
+            else:
+                redirect_to += '?authdata_token=' + token
+            print(redirect_to)
             response = redirect(redirect_to)
-            to_cookie = dict(provider=Oauth.PROVIDER_TELEGRAM, )
-            to_cookie.update(data)
-            response.set_cookie(
-                key='auth_data',
-                value=json.dumps(to_cookie),
-                max_age=86400*14,
-                path='/',
-                domain=self.get_frontend_name(request),
-            )
             return response
         else:
             return None
@@ -2856,7 +2863,7 @@ class ApiTokenAuthData(ApiTokenAuthDataMixin, APIView):
                 except ValueError:
                     pass
                 # Так быстрее, чем delete, redis в фоне удалит через секунду
-                # r.expire(token_in_redis, 1)
+                r.expire(token_in_redis, 1)
         return Response(data=data, status=status_code)
 
 api_token_authdata = ApiTokenAuthData.as_view()
