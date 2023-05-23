@@ -4069,7 +4069,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             return
         elif state_ == 'start_auth_redirect':
             status_token, response_token = await Misc.api_request(
-                path='/api/url/token',
+                path='/api/token/url/',
                 params=dict(token=redirect_token)
             )
             if status_token == 200:
