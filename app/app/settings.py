@@ -434,9 +434,10 @@ EMAIL_USE_TLS = True
 EMAIL_USE_SSL = False
 
 # Параметры для redis кэша, где храним временные токены
-# token: url
+#   -   token: url
+#   -   token: авторизационная кука
 #
-REDIS_URLTOKEN_CONNECT =dict(
+REDIS_TOKEN_CONNECT =dict(
     # Параметры инициализации redis connection,
     # те же, что в redis.Redis()
     # https://redis-py.readthedocs.io/en/stable/connections.html
@@ -446,9 +447,9 @@ REDIS_URLTOKEN_CONNECT =dict(
     db=2,
     decode_responses=True,
 )
-# Сколько времени хранить token, в секундах
+# Сколько времени хранить url token, в секундах
 #
-REDIS_URLTOKEN_EXPIRE = 60
+TOKEN_URL_EXPIRE = 60
 
 from app.logging import skip_ioerror_post
 LOGGING = {
