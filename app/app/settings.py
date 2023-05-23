@@ -451,6 +451,10 @@ REDIS_TOKEN_CONNECT =dict(
 #
 TOKEN_URL_EXPIRE = 60
 
+# Сколько времени хранить token с авторизационной кукой, в секундах
+#
+TOKEN_AUTHDATA_EXPIRE = 60
+
 from app.logging import skip_ioerror_post
 LOGGING = {
     'version': 1,

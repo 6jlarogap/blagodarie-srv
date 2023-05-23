@@ -36,6 +36,8 @@ class ApiTokenAuthDataMixin(object):
     """
     Константы, используемые при создании 
     """
+    TOKEN_AUTHDATA_PREFIX = 'authdatatoken'
+    TOKEN_AUTHDATA_SEP = '~'
 
 class ApiGetProfileInfo(UuidMixin, APIView):
 
@@ -2824,58 +2826,14 @@ class ApiTokenAuthData(ApiTokenAuthDataMixin, APIView):
     Token кодируется как uuid
     """
 
-    # Префикс и разделитель полей для ключа
+    # Префикс и разделитель полей для ключа: см ApiTokenAuthDataMixin
     #
-    TOKEN_URL_PREFIX = 'urltoken'
-    TOKEN_URL_SEP = '~'
-
-    def post(self, request):
-        """
-        Зашить url в токене.
-
-        На входе:
-            {
-                "url": "<url>"
-            }
-        На выходе:
-            {
-                "url": "<url>",
-                "token": "<url>",
-                // Это требуется для формирования ссылки login url
-                // к нопке телеграма
-                "bot_username": "<bot_username>"
-            }
-        """
-        validate = URLValidator()
-        try:
-            try:
-                url = request.data.get('url')
-                validate(url)
-            except ValidationError:
-                raise ServiceException('Неверный URL')
-            token = str(uuid.uuid4())
-            data = dict(
-                url=request.data['url'],
-                token=token,
-                bot_username=self.get_bot_username(),
-            )
-            if r := redis.Redis(**settings.REDIS_TOKEN_CONNECT):
-                r.set(
-                    name=self.TOKEN_URL_PREFIX + self.TOKEN_URL_SEP + token,
-                    value=url,
-                    ex=settings.TOKEN_URL_EXPIRE,
-                )
-            else:
-                raise ServiceException('Не удалось подключиться к хранилищу токенов (redis cache)')
-            status_code = status.HTTP_200_OK
-        except ServiceException as excpt:
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
+    # TOKEN_AUTHDATA_PREFIX =
+    # TOKEN_AUTHDATA_SEP
 
     def get(self, request):
         """
-        Получить url из token
+        Получить данные авторизационной куки из token
 
         На входе:
             https:/.../path/to/?token=<token>
@@ -2889,14 +2847,16 @@ class ApiTokenAuthData(ApiTokenAuthDataMixin, APIView):
         data = dict()
         status_code = status.HTTP_404_NOT_FOUND
         token = str(request.GET.get('token'))
-        token_in_redis = self.TOKEN_URL_PREFIX + self.TOKEN_URL_SEP + token
+        token_in_redis = self.TOKEN_AUTHDATA_PREFIX + self.TOKEN_AUTHDATA_SEP + token
         if r := redis.Redis(**settings.REDIS_TOKEN_CONNECT):
-            if url := r.get(token_in_redis):
-                data = dict(token=token, url=url)
+            if auth_str := r.get(token_in_redis):
+                try:
+                    data = json.loads(auth_str)
+                    status_code = status.HTTP_200_OK
+                except ValueError:
+                    pass
                 # Так быстрее, чем delete, redis в фоне удалит через секунду
-                r.expire(token_in_redis, 1)
-                status_code = status.HTTP_200_OK
+                # r.expire(token_in_redis, 1)
         return Response(data=data, status=status_code)
 
-
-api_token_url = ApiTokenUrl.as_view()
+api_token_authdata = ApiTokenAuthData.as_view()
