@@ -24,7 +24,42 @@ WEBAPP_HOST = '127.0.0.1'
 WEBAPP_PORT = 3001
 
 import logging
-LOG_LEVEL = logging.WARNING
+LOG_CONFIG = dict(
+    level = logging.INFO,
+
+    # Могут быть и другие параметры для журнала,
+    # например, для журнала в файл:
+    #
+    # filename='/path/to/file.log',
+    # filemode='a',
+    # format='%(asctime)s %(levelname)s %(message)s',
+    # datefmt='%d.%m.%y %H:%M:%S',
+    #
+    #
+)
+
+LOG_CONFIG = dict(
+    level = logging.INFO,
+
+    # Могут быть и другие параметры для журнала,
+    # например, для ротируемого журнала в файл
+    #
+    #handlers=[
+        #RotatingFileHandler(
+            #filename='/path/to/bot.log',
+            #maxBytes=10*1024*1024,
+            #backupCount=10,
+    #)],
+    #format='%(asctime)s %(levelname)s %(message)s',
+    #datefmt='%d.%m.%y %H:%M:%S',
+
+    # Тогда надо переопределить LOG_CONFIG в
+    # local_settings.py.
+    # И если применяется RotatingFileHandler,
+    # то определить его:
+    # from logging.handlers import RotatingFileHandler
+)
+
 
 # secs
 #
@@ -87,6 +122,6 @@ try:
     from local_settings import *
 except ModuleNotFoundError:
     pass
-logging.basicConfig(level=LOG_LEVEL)
+logging.basicConfig(**LOG_CONFIG)
 
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
