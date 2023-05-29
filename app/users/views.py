@@ -1900,6 +1900,14 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
     #
     OFFER_PHOTO_FRAME = 5
 
+    # Ширина рамки для фото умершего
+    #
+    DEAD_PHOTO_FRAME = 5
+
+    # Ширина рамки для найденного пользователя
+    #
+    FOUND_USER_PHOTO_FRAME = 3
+
     # В каком формате и куда выводим профиль пользователя
     #
     FMT = '3d-force-graph'
@@ -2112,8 +2120,15 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 )
             else:
                 offer_reply_html = ''
-                frame = 0
-                method = 'crop-blue-frame-3' if found_coordinates and profile == found_profile else 'crop'
+                if profile.is_dead or profile.dod:
+                    frame = self.DEAD_PHOTO_FRAME
+                    method = f'crop-black-frame-{frame}'
+                elif found_coordinates and profile == found_profile:
+                    frame = self.FOUND_USER_PHOTO_FRAME
+                    method = f'crop-blue-frame-{frame}'
+                else:
+                    frame = 0
+                    method = 'crop'
                 answer_text=''
                 title_template = '(%(trust_count)s) %(full_name)s'
             dict_user = dict(
