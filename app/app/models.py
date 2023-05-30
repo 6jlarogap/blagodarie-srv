@@ -746,7 +746,7 @@ class PhotoModel(FilesMixin, models.Model):
         if fname:
             if mark_dead:
                 # Если отметить как умершего, то в рамке размером 1/16 ребра прямоугольника,
-                method='crop-darkred-frame-%s' % int((width + height)/2/16)
+                method='crop-black-frame-%s' % int((width + height)/2/16)
             path = '%(path_to_media)s%(fname)s/%(width)sx%(height)s~%(method)s~12.jpg'  % dict(
                     path_to_media=settings.THUMBNAILS_STORAGE_BASE_PATH,
                     fname=fname,
