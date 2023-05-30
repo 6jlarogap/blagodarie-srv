@@ -385,17 +385,26 @@ class Profile(PhotoModel, GeoPointAddressModel):
     def __str__(self):
         return self.user.first_name or str(self.pk)
 
-    def data_dict(self, request=None, short=False, fmt='d3js'):
+    def data_dict(self, request=None, short=False, fmt='d3js', mark_dead=False):
         user = self.user
         result = dict()
         if short:
             if fmt == '3d-force-graph':
+                mark_dead = mark_dead and self.is_dead
+                # Если задано отметить умершего и если умер, то фото в рамке
                 result.update(
                     id=user.pk,
                     uuid=self.uuid,
                     first_name=user.first_name,
-                    photo=self.choose_thumb(request, width=64, height=64, put_default_avatar=False) if request else '',
+                    photo=self.choose_thumb(
+                        request,
+                        width=128,
+                        height=128,
+                        put_default_avatar=False,
+                        mark_dead=mark_dead,
+                    ) if request else '',
                     gender=self.gender,
+                    is_dead = self.is_dead,
                 )
             else:
                 result.update(

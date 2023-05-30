@@ -739,10 +739,14 @@ class PhotoModel(FilesMixin, models.Model):
             method=THUMB_METHOD,
             put_default_avatar=False,
             default_avatar_in_media=DEFAULT_AVATAR_IN_MEDIA,
+            mark_dead=False,
         ):
         if not fname and put_default_avatar:
             fname = default_avatar_in_media
         if fname:
+            if mark_dead:
+                # Если отметить как умершего, то в рамке размером 1/16 ребра прямоугольника,
+                method='crop-darkred-frame-%s' % int((width + height)/2/16)
             path = '%(path_to_media)s%(fname)s/%(width)sx%(height)s~%(method)s~12.jpg'  % dict(
                     path_to_media=settings.THUMBNAILS_STORAGE_BASE_PATH,
                     fname=fname,
@@ -759,12 +763,14 @@ class PhotoModel(FilesMixin, models.Model):
         method=THUMB_METHOD,
         put_default_avatar=False,
         default_avatar_in_media=DEFAULT_AVATAR_IN_MEDIA,
+        mark_dead=False,
     ):
         fname = self.photo.name if self.photo else ''
         return PhotoModel.image_thumb(request, fname,
             width=width, height=height, method=method,
             put_default_avatar=put_default_avatar,
             default_avatar_in_media=default_avatar_in_media,
+            mark_dead=mark_dead,
         )
 
 

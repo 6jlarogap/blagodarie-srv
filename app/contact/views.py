@@ -2152,7 +2152,8 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                         auth_user.first_name,
                         users_profile.uuid,
                         users_profile.photo,
-                        users_profile.gender
+                        users_profile.gender,
+                        users_profile.is_dead
                     FROM
                         auth_user
                     %(outer_joins)s
@@ -2177,9 +2178,10 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     first_name=user_q.first_name,
                     photo=Profile.image_thumb(
                         request, user_q.profile.photo,
-                        method='crop-green-frame-3',
+                        method='crop-green-frame-4',
                         put_default_avatar=True,
-                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(user_q.profile.gender)
+                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(user_q.profile.gender),
+                        mark_dead=user_q.profile.is_dead,
                     ),
                 ))
                 user_pks.append(user_q.pk)
@@ -2189,8 +2191,9 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                             id=rec['id'],
                             uuid=rec['uuid'],
                             first_name=rec['first_name'],
-                            photo=Profile.image_thumb(request, rec['photo']),
+                            photo=Profile.image_thumb(request, rec['photo'], mark_dead=rec['is_dead']),
                             gender=rec['gender'],
+                            is_dead=rec['is_dead'],
                         ))
                         user_pks.append(rec['id'])
                 links = []
@@ -3136,7 +3139,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 connections.append(cs.data_dict(show_parent=True, fmt=fmt))
 
         users = [
-            p.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt) for p in \
+            p.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt, mark_dead=True) for p in \
             Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability')
         ]
         if fmt == '3d-force-graph':
@@ -3214,12 +3217,13 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     first_name=user_q.first_name,
                     photo=Profile.image_thumb(
                         request, profile_q.photo,
-                        method='crop-green-frame-3',
+                        method='crop-green-frame-4',
                         put_default_avatar=True,
-                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile_q.gender)
+                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile_q.gender),
+                        mark_dead=profile_q.is_dead,
                 )))
             else:
-                users.append(p.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt))
+                users.append(p.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt, mark_dead=p.is_dead))
 
         connections = []
         q_connections = Q(is_child=True)
@@ -3332,7 +3336,7 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
         user_pks.add(user_to_id)
         users = []
         for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
-            users.append(profile.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt))
+            users.append(profile.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt, mark_dead=True))
 
         if fmt == '3d-force-graph':
             bot_username = self.get_bot_username()
