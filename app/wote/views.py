@@ -214,7 +214,7 @@ class ApiWoteVoteSums(ApiWoteVideoMixin, APIView):
 
     def get(self, request):
         '''
-        Показать суммы голосов по видео по каждой кнопке.
+        Показать суммы голосов по видео по каждой кнопке по времени ее нажатия.
 
         Get запрос. Например:
         http(s)://<api-host>/api/wote/vote/sums/?source=yt&videoid=Ac5cEy5llr4
