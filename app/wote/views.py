@@ -233,6 +233,8 @@ class ApiWoteVoteSums(ApiWoteVideoMixin, APIView):
                 { "time": 20, "count": 3 }
             ]
         }
+        Если видео не найдено, или нет голосов по существующему видео,
+        то результат: { "yes": [], "no": [], "not": [] }
         '''
 
         data = dict()
