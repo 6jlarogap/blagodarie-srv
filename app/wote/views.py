@@ -1,6 +1,7 @@
 import time
 
 from django.db import transaction
+from django.db.models import Count
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -141,7 +142,7 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
         return Response(data=data, status=status_code)
 
     def get(self, request):
-        """
+        '''
         Показать все голоса по видео.
 
         Get запрос. Например:
@@ -152,29 +153,35 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
             "video": {
                 "source": "yt",
                 "videoid": "Ac5cEy5llr4",
-                "insert_timestamp": 1684415509
+                "insert_timestamp": 1684751776
             },
             "votes": [
-                // голоса сортированы по возрастанию времени time
                 {
                     "user": {
-                        "uuid": "8f686101-c5a2-46d0-a5ee-ffffffffffff",
-                        "first_name": "Иван Петров",
-                        "photo": "http(s)://<api-host>/media/profile-photo/2023/05/15/326/photo.jpg"
+                        "uuid": "8f686101-c5a2-46d0-a5ee-ffffffffffff"
                     },
                     "time": 40,
-                    "button": "not",
-                    insert_timestamp=1684413021,
-                    update_timestamp=1684413021,
+                    "button": "no",
+                    "insert_timestamp": 1684751776,
+                    "update_timestamp": 1685527009
                 },
                 ...
+            ],
+            "users": [
+                {
+                    "uuid": "8f686101-c5a2-46d0-a5ee-ffffffffffff",
+                    "first_name": "Иван Иванов",
+                    "photo": "https://path/to/photo.jpg"
+                }
             ]
         }
-        Возвратит json { video = null, votes = [] } со статусом 404,
+        Возвратит json { "video": null, "votes": [], "users": [] } со статусом 404,
         если не заданы или заданы неверные source, videoid,
         или не найдено видео с source, videoid.
-        """
+        '''
         
+        votes = []
+        users = []
         try:
             video = Video.objects.get(
                 source=request.GET.get('source', ''),
@@ -183,17 +190,70 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
         except Video.DoesNotExist:
             status_code = status.HTTP_404_NOT_FOUND
             video_dict = None
-            votes = []
         else:
             video_dict = video.data_dict(request)
-            votes = [
-                vote.data_dict(request, put_video=False) \
-                    for vote in Vote.objects.select_related(
-                        'user', 'user__profile'
-                    ).filter(video=video).order_by('time')
-            ]
+            user_pks = []
+            for vote in Vote.objects.select_related(
+                    'user', 'user__profile'
+                ).filter(video=video).order_by('time'):
+                votes.append(vote.data_dict(request, put_video=False))
+                if vote.user.pk not in user_pks:
+                    user_pks.append(vote.user.pk)
+                    users.append(dict(
+                        uuid=vote.user.profile.uuid,
+                        first_name=vote.user.first_name,
+                        photo=vote.user.profile.choose_photo(request) if request else '',
+                    ))
             status_code = status.HTTP_200_OK
-        data = dict(video=video_dict, votes=votes)
+        data = dict(video=video_dict, votes=votes, users=users)
         return Response(data=data, status=status_code)
 
 api_wote_vote = ApiWoteVote.as_view()
+
+class ApiWoteVoteSums(ApiWoteVideoMixin, APIView):
+
+    def get(self, request):
+        '''
+        Показать суммы голосов по видео по каждой кнопке.
+
+        Get запрос. Например:
+        http(s)://<api-host>/api/wote/vote/sums/?source=yt&videoid=Ac5cEy5llr4
+
+        Возвращает json (пример):
+        {
+            // Обозначения кнопок
+            "yes": [
+                { "time": 42, "count": 1 },
+                { "time": 50, "count": 2 }
+            ],
+            "no": [
+                { "time": 10, "count": 2 }
+            ],
+            "not": [
+                { "time": 20, "count": 3 }
+            ]
+        }
+        '''
+
+        data = dict()
+        for button in dict(Vote.VOTES):
+            data[button] = []
+        # В Django annotate + distinct not implemented.
+        # Так что такой ход. Это один запрос в базу
+        distinct_votes = Vote.objects.filter(
+                video__source=request.GET.get('source', ''),
+                video__videoid=request.GET.get('videoid', '')
+            ).distinct('user', 'time', 'button')
+        for rec in Vote.objects.values(
+                'time', 'button'
+           ).annotate(count=Count('id')
+           ).filter(id__in=distinct_votes
+           ).order_by('time'):
+            try:
+                data[rec['button']].append(dict(time=rec['time'], count=rec['count']))
+            except KeyError:
+                # fool proof: вдруг какие кнопки будут удалены из системы?
+                pass
+        return Response(data=data, status=status.HTTP_200_OK)
+
+api_wote_vote_sums = ApiWoteVoteSums.as_view()

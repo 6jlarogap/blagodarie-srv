@@ -61,8 +61,6 @@ class Vote(BaseModelInsertUpdateTimestamp):
         result = dict(
             user=dict(
                 uuid=self.user.profile.uuid,
-                first_name=self.user.first_name,
-                photo=self.user.profile.choose_photo(request) if request else '',
             ),
             time=self.time,
             button=self.button,
