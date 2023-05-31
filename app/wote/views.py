@@ -240,16 +240,12 @@ class ApiWoteVoteSums(APIView):
         data = dict()
         for button in dict(Vote.VOTES):
             data[button] = []
-        # В Django annotate + distinct not implemented.
-        # Так что такой ход. Это один запрос в базу
-        distinct_votes = Vote.objects.filter(
-                video__source=request.GET.get('source', ''),
-                video__videoid=request.GET.get('videoid', '')
-            ).distinct('user', 'time', 'button')
         for rec in Vote.objects.values(
                 'time', 'button'
+           ).filter(
+                video__source=request.GET.get('source', ''),
+                video__videoid=request.GET.get('videoid', '')
            ).annotate(count=Count('id')
-           ).filter(id__in=distinct_votes
            ).order_by('time'):
             try:
                 data[rec['button']].append(dict(time=rec['time'], count=rec['count']))
