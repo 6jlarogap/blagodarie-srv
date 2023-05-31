@@ -210,7 +210,7 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
 
 api_wote_vote = ApiWoteVote.as_view()
 
-class ApiWoteVoteSums(ApiWoteVideoMixin, APIView):
+class ApiWoteVoteSums(APIView):
 
     def get(self, request):
         '''
