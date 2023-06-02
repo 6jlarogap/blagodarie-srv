@@ -1,6 +1,7 @@
 import os, re, hmac, hashlib, json, time
 import uuid, redis
 import urllib.request, urllib.error, urllib.parse
+from urllib.parse import urlparse
 
 from ged4py.parser import GedcomReader
 
@@ -49,7 +50,7 @@ class ApiTokenAuthDataMixin(object):
             r.set(
                 name=self.TOKEN_AUTHDATA_PREFIX + self.TOKEN_AUTHDATA_SEP + token,
                 value=json.dumps(auth_data),
-                ex=settings.TOKEN_URL_EXPIRE,
+                ex=settings.TOKEN_AUTHDATA_EXPIRE,
             )
         return token
 
@@ -556,11 +557,13 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, ApiToken
             auth_data = dict(provider=Oauth.PROVIDER_TELEGRAM, )
             auth_data.update(data)
             token = self.make_authdata_token(auth_data)
-            if re.search(r'\?\w+\=', redirect_to):
-                redirect_to += '&authdata_token=' + token
+            urlparse_result = urlparse(redirect_to)
+            if urlparse_result.query:
+                query_new = urlparse_result.query + '&authdata_token=' + token
             else:
-                redirect_to += '?authdata_token=' + token
-            print(redirect_to)
+                query_new = 'authdata_token=' + token
+            urlparse_result = urlparse_result._replace(query=query_new)
+            redirect_to = urlparse_result.geturl()
             response = redirect(redirect_to)
             return response
         else:
