@@ -1,5 +1,6 @@
 import base64, re, hashlib
 from io import BytesIO
+from urllib.parse import urlparse
 
 import settings
 from settings import logging
@@ -4080,8 +4081,15 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                     login_url=Misc.make_login_url(redirect_path=redirect_path, keep_user_data='on'),
                 )
                 reply_markup.row(inline_btn_redirect)
+                auth_text = f'Для доступа к <pre>{redirect_path}</pre> требуется авторизация'
+                auth_url_parse = urlparse(redirect_path)
+                if auth_url_parse.hostname:
+                    for auth_domain in settings.AUTH_PROMPT_FOR_DOMAIN:
+                        if re.search(re.escape(auth_domain) + '$', auth_url_parse.hostname):
+                            auth_text = settings.AUTH_PROMPT_FOR_DOMAIN[auth_domain]
+                            break
                 await message.reply(
-                    f'Для доступа к <pre>{redirect_path}</pre> требуется авторизация',
+                    auth_text,
                     reply_markup=reply_markup,
                     disable_web_page_preview=True
                 )

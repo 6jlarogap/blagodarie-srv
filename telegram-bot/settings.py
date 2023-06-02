@@ -118,6 +118,12 @@ TRIP_DATA = dict(
 
 OFFER_MAX_NUM_ANSWERS = 9
 
+# Подсказки в сообщении о необходимости авторизации для доменов
+#
+AUTH_PROMPT_FOR_DOMAIN = {
+    'blagoroda.org': 'Для доступа к пространству Доверия требуется авторизация',
+}
+
 try:
     from local_settings import *
 except ModuleNotFoundError:
