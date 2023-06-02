@@ -78,6 +78,8 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'restthumbnails',
 
+    'corsheaders',
+
     'contact',
     'users',
     'wote',
@@ -86,13 +88,13 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     ### 'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'debug_toolbar.middleware.DebugToolbarMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
 ]
 
 ROOT_URLCONF = 'app.urls'
@@ -142,17 +144,7 @@ REST_FRAMEWORK = {
 
 # CORS:
 #
-# Переопределить в False в local_settings.py на production server
-#
-CORS_ORIGIN_ALLOW_ALL = True
-#
-# Задать в local_settings.py на production server:
-#
-# CORS_ORIGIN_REGEX_WHITELIST = (r'^(https?://)?(\w+\.)?EXAMPLE\.\COM$', )
-#
-# Может быть authentication cookies, при доступе к апи из множества
-# доменов *.EXAMPLE.COM, посему:
-#
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
 # Webhook ключ от github репозитория приложения Благодария.
