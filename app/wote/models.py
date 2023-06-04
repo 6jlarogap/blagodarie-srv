@@ -55,7 +55,7 @@ class Vote(BaseModelInsertUpdateTimestamp):
     button = models.CharField('Кнопка', max_length=10, choices=VOTES)
 
     class Meta:
-        unique_together = ('user', 'video', 'time', 'button')
+        unique_together = ('user', 'video', 'time',)
 
     def data_dict(self, request=None, put_video=False):
         result = dict(
