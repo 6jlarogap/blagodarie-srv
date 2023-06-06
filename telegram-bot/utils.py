@@ -505,14 +505,6 @@ class Misc(object):
 
 
     @classmethod
-    def url_user_on_map(cls, response):
-        return '%(map_host)s/?uuid=%(user_uuid)s' % dict(
-            map_host=settings.MAP_HOST,
-            user_uuid=response['uuid'],
-        )
-
-
-    @classmethod
     def reply_user_card(cls, response, bot_data, show_parents=True):
         """
         Карточка пользователя, каким он на сайте
@@ -532,8 +524,6 @@ class Misc(object):
         Возможности: водитель Камаз шашлык виноград курага изюм
 
         Потребности: не задано
-
-        Местоположение: не задано/ссылка на карту
 
         Контакты:
         @username
@@ -570,12 +560,6 @@ class Misc(object):
                 wish['text'] for wish in response['wishes']
             ) if response.get('wishes') else 'не задано'
             reply += ('Потребности: %s' % wishes_text) + '\n\n'
-
-            map_text = (
-                cls.get_html_a(cls.url_user_on_map(response), response.get('address') or 'тут')
-            ) if response.get('latitude') is not None and response.get('longitude') is not None \
-                else  'не задано'
-            reply += ('Местоположение: %s' % map_text) + '\n\n'
 
             if show_parents:
                 papa = response.get('father') and \
@@ -872,40 +856,29 @@ class Misc(object):
                 bot_data=bot_data,
             )
 
+            reply_markup = InlineKeyboardMarkup()
             if response_to['is_active'] or response_to['owner_id']:
-                reply += 'Схемы:\n'
-                # 3djs links
-                #path = "/profile/?id=%s" % response_to['uuid']
-                #url = settings.FRONTEND_HOST + path
-                path = "/?user_uuid_trusts=%s" % response_to['uuid']
-                url = settings.GRAPH_HOST + path
-                reply += Misc.get_html_a(href=url, text='Доверия') +'\n'
+                inline_btn_trusts = InlineKeyboardButton(
+                    'Доверия',
+                    login_url=cls.make_login_url(
+                        redirect_path='%(graph_host)s/?user_uuid_trusts=%(user_uuid)s' % dict(
+                            graph_host=settings.GRAPH_HOST,
+                            user_uuid=response_to['uuid'],
+                        ), keep_user_data='on',
+                    ))
+                login_url_buttons = [inline_btn_trusts, ]
 
-                if response_from.get('uuid') and not is_own_account:
-                    # 3djs links
-                    #path = "/trust/?id=%s,%s&d=10" % (response_from['uuid'], response_to['uuid'],)
-                    #url = settings.FRONTEND_HOST + path
-                    path = "/?user_uuid_trust_path=%s,%s" % (response_from['uuid'], response_to['uuid'],)
-                    url = settings.GRAPH_HOST + path
-                    reply += Misc.get_html_a(href=url, text='Путь (доверия)') +'\n'
-
-                if is_own_account or is_owned_account:
-                    # 3djs links
-                    #path = "/?id=%s&depth=3" % response_to['uuid']
-                    #url = settings.??? + path
-                    path = "/?user_uuid_genesis_tree=%s&depth=3&up=&down=" % response_to['uuid']
-                    url = settings.GRAPH_HOST + path
-                    reply += Misc.get_html_a(href=url, text='Род') +'\n'
-
-                if response_from.get('uuid') and not is_own_account:
-                    # 3djs links
-                    #path = "/?id=%s,%s&depth=10" % (response_from['uuid'], response_to['uuid'],)
-                    #url = settings.??? + path
-                    path = "/?user_uuid_genesis_path=%s,%s&depth=10" % (response_from['uuid'], response_to['uuid'],)
-                    url = settings.GRAPH_HOST + path
-                    reply += Misc.get_html_a(href=url, text='Путь ( род)') +'\n'
-
-                reply += '\n'
+                if response_to.get('latitude') is not None and response_to.get('longitude') is not None:
+                    inline_btn_map = InlineKeyboardButton(
+                        'Карта',
+                        login_url=cls.make_login_url(
+                            redirect_path='%(map_host)s/?uuid=%(user_uuid)s' % dict(
+                                map_host=settings.MAP_HOST,
+                                user_uuid=response_to['uuid'],
+                            ), keep_user_data='on',
+                        ))
+                    login_url_buttons.append(inline_btn_map)
+                reply_markup.row(*login_url_buttons)
 
             response_relations = {}
             if user_from_id and user_from_id != response_to['user_id']:
@@ -913,7 +886,6 @@ class Misc(object):
                 if response_relations:
                     reply += cls.reply_relations(response_relations)
 
-            reply_markup = InlineKeyboardMarkup()
             if user_from_id != response_to['user_id'] and bot_data.id != tg_user_from_id:
                 dict_reply = dict(
                     keyboard_type=KeyboardType.TRUST_THANK,

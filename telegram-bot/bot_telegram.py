@@ -4731,7 +4731,7 @@ async def process_callback_chat_join_refuse(callback_query: types.CallbackQuery,
 )
 async def echo_my_chat_member_for_bot(chat_member: types.ChatMemberUpdated):
     """
-    Для формирования ссылки на доверия среди участников канала
+    Для формирования ссылки на доверия и карту среди участников канала
 
     Реакция на подключение к каналу бота
     """
@@ -4750,29 +4750,28 @@ async def echo_my_chat_member_for_bot(chat_member: types.ChatMemberUpdated):
             return
     if bot_.is_bot and new_chat_member.status == 'administrator' and bot_.first_name:
         reply_markup = InlineKeyboardMarkup()
+        bot_data = await bot.get_me()
+        reply = '@' + bot_data['username']
+        inline_btn_map = InlineKeyboardButton(
+            'Карта',
+            login_url=Misc.make_login_url(
+                redirect_path='%(map_host)s/?chat_id=%(chat_id)s' % dict(
+                    map_host=settings.MAP_HOST,
+                    chat_id=chat_member.chat.id,
+                ), keep_user_data='on',
+            ))
         inline_btn_trusts = InlineKeyboardButton(
-            'Доверия',
-            url='%(group_host)s/?tg_group_chat_id=%(chat_id)s' % dict(
-                group_host=settings.GROUP_HOST,
-                chat_id=chat_member.chat.id,
-        ))
-        reply_markup.row(
-            inline_btn_trusts,
-        )
+            'Схема',
+            login_url=Misc.make_login_url(
+                redirect_path='%(graph_host)s/?tg_group_chat_id=%(chat_id)s' % dict(
+                    graph_host=settings.GRAPH_HOST,
+                    chat_id=chat_member.chat.id,
+                ), keep_user_data='on',
+            ))
+        reply_markup.row(inline_btn_map, inline_btn_trusts,)
         await bot.send_message(
             chat_id=chat_member.chat.id,
-            text= \
-                Misc.get_html_a(
-                    href='%s/?chat_id=%s' % (settings.MAP_HOST, chat_member.chat.id),
-                    text='Карта',
-                ) + ' \n' + \
-                Misc.get_html_a(
-                    href='%s/?tg_group_chat_id=%s' % (
-                        settings.GRAPH_HOST,
-                        chat_member.chat.id,
-                    ),
-                    text='Схема'
-                ),
+            text= reply,
             reply_markup=reply_markup,
             disable_web_page_preview=True,
         )
@@ -4910,26 +4909,26 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
         reply = ''
         if not is_previous_his and not tg_user_left:
             if is_this_bot:
-                # ЭТОТ бот подключился. Достаточно его full name и ссылку на доверия в группе
+                # ЭТОТ бот подключился.
                 #
-                reply = Misc.get_html_a(
-                    href='%s/?chat_id=%s' % (settings.MAP_HOST, message.chat.id),
-                    text='Карта',
-                ) + ' \n' + \
-                Misc.get_html_a(
-                    href='%s/?tg_group_chat_id=%s' % (
-                        settings.GRAPH_HOST,
-                        message.chat.id,
-                    ),
-                    text='Схема'
-                )
+                reply = '@' + bot_data['username']
+                inline_btn_map = InlineKeyboardButton(
+                    'Карта',
+                    login_url=Misc.make_login_url(
+                        redirect_path='%(map_host)s/?chat_id=%(chat_id)s' % dict(
+                            map_host=settings.MAP_HOST,
+                            chat_id=message.chat.id,
+                        ), keep_user_data='on',
+                    ))
                 inline_btn_trusts = InlineKeyboardButton(
-                    'Доверия',
-                    url='%(group_host)s/?tg_group_chat_id=%(chat_id)s' % dict(
-                        group_host=settings.GROUP_HOST,
-                        chat_id=message.chat.id,
-                ))
-                buttons = [inline_btn_trusts]
+                    'Схема',
+                    login_url=Misc.make_login_url(
+                        redirect_path='%(graph_host)s/?tg_group_chat_id=%(chat_id)s' % dict(
+                            graph_host=settings.GRAPH_HOST,
+                            chat_id=message.chat.id,
+                        ), keep_user_data='on',
+                    ))
+                buttons = (inline_btn_map, inline_btn_trusts,)
             #else:
                 #reply = '<b>%(deeplink_with_name)s</b> (%(trust_count)s)' % dict(
                     #deeplink_with_name=Misc.get_deeplink_with_name(response_from, bot_data),

@@ -76,11 +76,7 @@ FRONTEND_HOST_TITLE = 'БлагоРода'
 #
 MAP_HOST = 'https://map.blagoroda.org'
 
-# Ссылка на отношения в группе
-#
-GROUP_HOST = 'https://group.blagoroda.org'
-
-# Ссылка на отношения в группе
+# Ссылка на пространстсво доверия
 #
 GRAPH_HOST = 'https://graph.blagoroda.org'
 
