@@ -4290,8 +4290,8 @@ async def got_message_to_send_to_offer(message: types.Message, state: FSMContext
                 logging.debug('/api/offer/voted/tg_users %s' % payload )
                 status, response = await Misc.api_request(
                     path='/api/offer/voted/tg_users',
-                    method='get',
-                    params=payload,
+                    method='post',
+                    json=payload,
                 )
                 logging.debug('/api/offer/voted/tg_users, status: %s' % status)
                 logging.debug('/api/offer/voted/tg_users: %s' % response)

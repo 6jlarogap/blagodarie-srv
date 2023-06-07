@@ -2690,19 +2690,18 @@ api_offer_results = ApiOfferResults.as_view()
 
 class ApiVotedTgUsers(APIView):
 
-    # TODO
-    #       Сделать это здесь методом post, с параметром bot token
-    #       В боте переписать вызов с get на post
-    #       (кроме бота, это нигде не применяется)
-
-    def get(self, request):
+    def post(self, request):
         """
         Получить проголосовавших в опросе-предложении телеграм- пользователей
 
         Владелец опроса не включается
         Не включаются пользователи, которые не доверяют юзеру
         На входе:
-            offer_uuid, user_uuid
+        {
+            "tg_token": <settings.TELEGRAM_BOT_TOKEN>,
+             "offer_uuid": <offer_uuid>,
+             "user_uuid": <uuid пользователя, из чата которого отправлен запрос>
+        }
         Если не найден опрос или владелец опроса имеет иной user_uuid, HTTP_404_NOT_FOUND
         Результат:
         {
@@ -2728,12 +2727,12 @@ class ApiVotedTgUsers(APIView):
         data = dict()
         status_code = status.HTTP_404_NOT_FOUND
         try:
-            offer_uuid = request.GET.get('offer_uuid')
+            offer_uuid = request.data.get('offer_uuid')
             offer = Offer.objects.select_related('owner','owner__profile').get(uuid=offer_uuid)
         except (TypeError, ValueError, ValidationError, Offer.DoesNotExist,):
             pass
         else:
-            user_uuid = request.GET.get('user_uuid')
+            user_uuid = request.data.get('user_uuid')
             if str(user_uuid) != str(offer.owner.profile.uuid):
                 pass
             else:
