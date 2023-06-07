@@ -856,6 +856,9 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
 
         if kwargs.get('only') == 'user_connections_graph':
 
+            if not request.user.is_authenticated:
+                raise NotAuthenticated
+
             # Возвращает:
             #  список пользователей, которые выполнили логин в систему
             #  (т.е. все, кроме родственников)
@@ -1987,6 +1990,7 @@ api_delete_key = ApiDeleteKeyView.as_view()
 
 
 class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, TelegramApiMixin, APIView):
+    permission_classes = (IsAuthenticated, )
 
     def get(self, request, *args, **kwargs):
         """
@@ -2996,6 +3000,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             сколько показывать участников группы в очередной странице,
             по умолчанию settings.MAX_RECURSION_COUNT_IN_GROUP
     """
+    permission_classes = (IsAuthenticated,)
 
     def get_chat_mesh(self, request, chat_id, recursion_depth):
         users = []
