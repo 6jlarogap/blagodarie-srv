@@ -2432,6 +2432,10 @@ api_bot_poll_answer = ApiBotPollAnswer.as_view()
 
 class ApiBotPollResults(TelegramApiMixin, APIView):
 
+    # TODO
+    #   Сделать get запрос авторизованным,
+    #   а из бота выполнять post с токеном бота
+
     def get(self, request):
         """
         Получить результаты опроса в пригодном для отображения всех связей пользователь - ответ
@@ -2633,6 +2637,7 @@ api_offer_answer = ApiOfferAnswer.as_view()
 
 
 class ApiOfferResults(TelegramApiMixin, APIView):
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         """
@@ -2684,6 +2689,11 @@ class ApiOfferResults(TelegramApiMixin, APIView):
 api_offer_results = ApiOfferResults.as_view()
 
 class ApiVotedTgUsers(APIView):
+
+    # TODO
+    #       Сделать это здесь методом post, с параметром bot token
+    #       В боте переписать вызов с get на post
+    #       (кроме бота, это нигде не применяется)
 
     def get(self, request):
         """
