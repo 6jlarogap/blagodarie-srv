@@ -3253,6 +3253,8 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
     """
     Дерево доверия пользователя или путь доверий между пользователями
 
+    Требует авторизацию
+
     Если задан параметр chat_id, то показ связей доверия между участниками
     телеграм группы/канала, возможно опосредованный через иных пользователей
     ПОКА НЕ РЕАЛИЗОВАНО, точнее не востребовано
@@ -3279,6 +3281,7 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
             1 или более:
                 показать в рекурсии связи не дальше указанной глубины рекурсии
     """
+    permission_classes = (IsAuthenticated,)
 
     def get_chat_mesh(self, request, chat_id, recursion_depth):
         raise ServiceException('Не реализовано, ибо не востребовано')
