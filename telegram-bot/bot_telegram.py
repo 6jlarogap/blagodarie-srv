@@ -4097,12 +4097,12 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 await message.reply('Ссылка устарела или не найдена')
             return
         elif state_ == 'start_poll':
-            params = dict(tg_poll_id=poll_to_search)
+            params = dict(tg_token=settings.TOKEN, tg_poll_id=poll_to_search)
             logging.debug('get_poll, params: %s' % params)
             status_poll, response_poll = await Misc.api_request(
                 path='/api/bot/poll/results',
-                method='get',
-                params=params,
+                method='post',
+                json=params,
             )
             logging.debug('get_poll, params, status: %s' % status_poll)
             logging.debug('get_poll, params, response: %s' % response_poll)
@@ -4284,6 +4284,7 @@ async def got_message_to_send_to_offer(message: types.Message, state: FSMContext
             status_sender, response_sender = await Misc.post_tg_user(message.from_user)
             if status_sender == 200 and response_sender.get('uuid') == data['uuid']:
                 payload = dict(
+                    tg_token=settings.TOKEN,
                     user_uuid=data['uuid'],
                     offer_uuid=data['offer_uuid']
                 )

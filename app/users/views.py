@@ -2431,19 +2431,83 @@ api_bot_poll_answer = ApiBotPollAnswer.as_view()
 
 
 class ApiBotPollResults(TelegramApiMixin, APIView):
+    """
+    Получить результаты "родного" телеграм- опроса и отношения межлу участниками опроса
 
-    # TODO
-    #   Сделать get запрос авторизованным,
-    #   а из бота выполнять post с токеном бота
+    Возможно полчение результата методом get или post
+    с одним и тем же параметром tg_poll_id, id запроса
+    в телеграме
 
-    def get(self, request):
-        """
-        Получить результаты опроса в пригодном для отображения всех связей пользователь - ответ
+    GET:
+        требует авторизации
+    POST
+        требует наличия токена бота (tg_token)
 
-        Включая связи доверия
-        """
+    На выходе (например):
+    {
+        "question": "Как дела",
+        "message_id": 15026,
+        "chat_id": 1109405488,
+        "bot_username": "DevBlagoBot",
+        "nodes": [
+            {
+                "id": 0,
+                "first_name": "Без ответа",
+                "photo": "http://api.blagoroda.bsuir.by/thumb/images/poll_answer_0.jpg/128x128~crop-white-frame-10~12.jpg"
+            },
+            {
+                "id": -1,
+                "first_name": "Отлично",
+                "photo": "http://api.blagoroda.bsuir.by/thumb/images/poll_answer_1.jpg/128x128~crop-red-frame-10~12.jpg"
+            },
+            {
+                "id": -2,
+                "first_name": "Хорошо",
+                "photo": "http://api.blagoroda.bsuir.by/thumb/images/poll_answer_2.jpg/128x128~crop-purple-frame-10~12.jpg"
+            },
+            {
+                "id": -3,
+                "first_name": "Плохо",
+                "photo": "http://api.blagoroda.bsuir.by/thumb/images/poll_answer_3.jpg/128x128~crop-orange-frame-10~12.jpg"
+            },
+            {
+                "id": 1506,
+                "uuid": "6fb2699e-e105-4f62-b2c5-aaaaaaaaaaaa',
+                "first_name": "Иван",
+                "photo": "http://api.blagoroda.bsuir.by/thumb/profile-photo/2023/05/16/1506/photo.jpg/128x128~crop~12.jpg",
+            },
+            {
+                "id": 326,
+                "uuid": "8f686101-c5a2-46d0-a5ee-bbbbbbbbbbbb"
+                "first_name": "Петр",
+                "photo": "http://api.blagoroda.bsuir.by/thumb/profile-photo/2023/05/15/326/photo.jpg/128x128~crop~12.jpg",
+            }
+        ],
+        "links": [
+            {
+                "source": 1506,
+                "target": -1,
+                "is_poll": true
+            },
+            {
+                "source": 326,
+                "target": -2,
+                "is_poll": true
+            },
+            {
+                "source": 326,
+                "target": 1506,
+                "is_trust": false
+            }
+        ]
+    }
+
+    Если опрос не найден или не задан tg_poll_id, то HTTP_404_NOT_FOUND
+    Если в методе post не задан или неверный tg_token, то HTTP_400_BAD_REQUEST
+    """
+
+    def do_it(self, request, poll_id):
         try:
-            poll_id = int(request.GET.get('tg_poll_id'))
             tgpoll = TgPoll.objects.get(poll_id=poll_id)
             nodes = []
             links = []
@@ -2489,6 +2553,17 @@ class ApiBotPollResults(TelegramApiMixin, APIView):
             data = {}
             status_code = status.HTTP_404_NOT_FOUND
         return Response(data=data, status=status_code)
+
+    def get(self, request):
+        if not request.user.is_authenticated:
+            raise NotAuthenticated
+        return self.do_it(request, request.GET.get('tg_poll_id'))
+
+    def post(self, request):
+        if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+            data = dict(message='Неверный токен телеграм бота')
+            return Response(data=data, status=status.HTTP_400_BAD_REQUEST)
+        return self.do_it(request, request.data.get('tg_poll_id'))
 
 api_bot_poll_results = ApiBotPollResults.as_view()
 
@@ -2726,43 +2801,44 @@ class ApiVotedTgUsers(APIView):
         """
         data = dict()
         status_code = status.HTTP_404_NOT_FOUND
-        try:
-            offer_uuid = request.data.get('offer_uuid')
-            offer = Offer.objects.select_related('owner','owner__profile').get(uuid=offer_uuid)
-        except (TypeError, ValueError, ValidationError, Offer.DoesNotExist,):
-            pass
-        else:
-            user_uuid = request.data.get('user_uuid')
-            if str(user_uuid) != str(offer.owner.profile.uuid):
+        if request.data.get('tg_token') == settings.TELEGRAM_BOT_TOKEN:
+            try:
+                offer_uuid = request.data.get('offer_uuid')
+                offer = Offer.objects.select_related('owner','owner__profile').get(uuid=offer_uuid)
+            except (TypeError, ValueError, ValidationError, Offer.DoesNotExist,):
                 pass
             else:
-                data = dict(
-                    question=offer.question,
-                )
-                q = Q(
-                    provider=Oauth.PROVIDER_TELEGRAM,
-                )
-                q &= Q(
-                    user__profile__offer_answers__offer__uuid=offer_uuid,
-                    user__profile__offer_answers__number__gt=0,
-                ) & ~Q(user__profile__uuid=user_uuid)
-                users = dict()
-                for oauth in Oauth.objects.select_related('user', 'user__profile').filter(q).distinct():
-                    if users.get(oauth.user.pk):
-                        users[oauth.user.pk]['tg_data'].append(dict(tg_uid=oauth.uid))
-                    else:
-                        users[oauth.user.pk] = dict(
-                            tg_data=[dict(tg_uid=oauth.uid)]
-                        )
-                for cs in CurrentState.objects.filter(
-                    is_reverse=False,
-                    is_trust=False,
-                    user_from__pk__in=users.keys(),
-                    user_to__profile__uuid=user_uuid,
-                    ).distinct():
-                    del users[cs.user_from.pk]
-                data.update(users=users.values())
-                status_code = status.HTTP_200_OK
+                user_uuid = request.data.get('user_uuid')
+                if str(user_uuid) != str(offer.owner.profile.uuid):
+                    pass
+                else:
+                    data = dict(
+                        question=offer.question,
+                    )
+                    q = Q(
+                        provider=Oauth.PROVIDER_TELEGRAM,
+                    )
+                    q &= Q(
+                        user__profile__offer_answers__offer__uuid=offer_uuid,
+                        user__profile__offer_answers__number__gt=0,
+                    ) & ~Q(user__profile__uuid=user_uuid)
+                    users = dict()
+                    for oauth in Oauth.objects.select_related('user', 'user__profile').filter(q).distinct():
+                        if users.get(oauth.user.pk):
+                            users[oauth.user.pk]['tg_data'].append(dict(tg_uid=oauth.uid))
+                        else:
+                            users[oauth.user.pk] = dict(
+                                tg_data=[dict(tg_uid=oauth.uid)]
+                            )
+                    for cs in CurrentState.objects.filter(
+                        is_reverse=False,
+                        is_trust=False,
+                        user_from__pk__in=users.keys(),
+                        user_to__profile__uuid=user_uuid,
+                        ).distinct():
+                        del users[cs.user_from.pk]
+                    data.update(users=users.values())
+                    status_code = status.HTTP_200_OK
         return Response(data=data, status=status_code)
 
 api_offer_voted_tg_users = ApiVotedTgUsers.as_view()
