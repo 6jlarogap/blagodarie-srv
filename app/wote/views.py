@@ -221,25 +221,26 @@ class ApiWoteVoteSums(APIView):
 
         Возвращает json (пример):
         {
-            // Обозначения кнопок
-            "yes": [
-                { "time": 42, "count": 1 },
-                { "time": 50, "count": 2 }
-            ],
-            "no": [
-                { "time": 10, "count": 2 }
-            ],
-            "not": [
-                { "time": 20, "count": 3 }
-            ]
+            buttons {
+                // Обозначения кнопок
+                "yes": [
+                    { "time": 42, "count": 1 },
+                    { "time": 50, "count": 2 }
+                ],
+                "no": [
+                    { "time": 10, "count": 2 }
+                ],
+                "not": [
+                    { "time": 20, "count": 3 }
+                ]
+            }
         }
         Если видео не найдено, или нет голосов по существующему видео,
-        то результат: { "yes": [], "no": [], "not": [] }
+        то результат: { {"buttons": "yes": [], "no": [], "not": [] }
         '''
-
-        data = dict()
+        buttons = dict()
         for button in dict(Vote.VOTES):
-            data[button] = []
+            buttons[button] = []
         for rec in Vote.objects.values(
                 'time', 'button'
            ).filter(
@@ -248,10 +249,11 @@ class ApiWoteVoteSums(APIView):
            ).annotate(count=Count('id')
            ).order_by('time'):
             try:
-                data[rec['button']].append(dict(time=rec['time'], count=rec['count']))
+                buttons[rec['button']].append(dict(time=rec['time'], count=rec['count']))
             except KeyError:
                 # fool proof: вдруг какие кнопки будут удалены из системы?
                 pass
+            data = dict(buttons=buttons)
         return Response(data=data, status=status.HTTP_200_OK)
 
 api_wote_vote_sums = ApiWoteVoteSums.as_view()
