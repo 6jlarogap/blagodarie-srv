@@ -236,7 +236,7 @@ class ApiWoteVoteSums(APIView):
             }
         }
         Если видео не найдено, или нет голосов по существующему видео,
-        то результат: { {"buttons": "yes": [], "no": [], "not": [] }
+        то результат: { {"buttons": "yes": [], "no": [], "not": [] } }
         '''
         buttons = dict()
         for button in dict(Vote.VOTES):
