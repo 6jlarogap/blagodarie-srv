@@ -27,7 +27,7 @@ class Video(BaseModelInsertTimestamp):
     class Meta:
         unique_together = ('source', 'videoid',)
 
-    def data_dict(self, request=None):
+    def data_dict(self):
         return dict(
             source=self.source,
             videoid=self.videoid,
@@ -77,18 +77,14 @@ class Vote(BaseModelInsertUpdateTimestamp):
     class Meta:
         unique_together = ('user', 'video', 'time',)
 
-    def data_dict(self, request=None, put_video=False):
+    def data_dict(self, put_user=False):
         result = dict(
-            user=dict(
-                uuid=self.user.profile.uuid,
-            ),
             time=self.time,
             button=self.button,
-            insert_timestamp=self.insert_timestamp,
             update_timestamp=self.update_timestamp,
         )
-        if put_video:    
-            result.update(video=self.video.data_dict(request))
+        if put_user:
+            result.update(user=dict(uuid=self.user.profile.uuid)),
         return result
 
     def __str__(self):

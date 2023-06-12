@@ -187,19 +187,19 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
         users = []
         try:
             video = Video.objects.get(
-                source=request.GET.get('source', ''),
+                source=request.GET.get('source', 'yt'),
                 videoid=request.GET.get('videoid', ''),
             )
         except Video.DoesNotExist:
             status_code = status.HTTP_404_NOT_FOUND
             video_dict = None
         else:
-            video_dict = video.data_dict(request)
+            video_dict = video.data_dict()
             user_pks = []
             for vote in Vote.objects.select_related(
                     'user', 'user__profile'
                 ).filter(video=video).order_by('time'):
-                votes.append(vote.data_dict(request, put_video=False))
+                votes.append(vote.data_dict(put_user=True))
                 if vote.user.pk not in user_pks:
                     user_pks.append(vote.user.pk)
                     users.append(dict(
@@ -247,7 +247,7 @@ class ApiWoteVoteSums(APIView):
         for rec in Vote.objects.values(
                 'time', 'button'
            ).filter(
-                video__source=request.GET.get('source', ''),
+                video__source=request.GET.get('source', 'yt'),
                 video__videoid=request.GET.get('videoid', '')
            ).annotate(count=Count('id')
            ).order_by('time'):
@@ -407,7 +407,7 @@ class ApiVoteMy(TelegramApiMixin, APIView):
         Получить нажатия кнопок авторизованного пользователя по видео
 
         Get запрос. Например:
-        http(s)://<api-host>/api/wote/vote/?source=yt&videoid=Ac5cEy5llr4
+        http(s)://<api-host>/api/wote/vote/my/?source=yt&videoid=Ac5cEy5llr4
 
         Возвращает json (пример):
         {
@@ -424,30 +424,24 @@ class ApiVoteMy(TelegramApiMixin, APIView):
         или не найдено видео с source, videoid.
         """
         votes = []
-        users = []
         try:
             video = Video.objects.get(
-                source=request.GET.get('source', ''),
+                source=request.GET.get('source', 'yt'),
                 videoid=request.GET.get('videoid', ''),
             )
         except Video.DoesNotExist:
             status_code = status.HTTP_404_NOT_FOUND
-            video_dict = None
         else:
-            video_dict = video.data_dict(request)
-            user_pks = []
-            for vote in Vote.objects.select_related(
+            votes = [
+                vote.data_dict() for vote in Vote.objects.select_related(
                     'user', 'user__profile'
-                ).filter(video=video).order_by('time'):
-                votes.append(vote.data_dict(request, put_video=False))
-                if vote.user.pk not in user_pks:
-                    user_pks.append(vote.user.pk)
-                    users.append(dict(
-                        uuid=vote.user.profile.uuid,
-                        first_name=vote.user.first_name,
-                        photo=vote.user.profile.choose_photo(request) if request else '',
-                    ))
+                ).filter(
+                    video=video,
+                    user=request.user,
+                ).order_by('time')
+            ]
             status_code = status.HTTP_200_OK
-        data = dict(video=video_dict, votes=votes, users=users)
+        data = dict(votes=votes,)
+        return Response(data=data, status=status.HTTP_200_OK)
 
 api_wote_vote_my = ApiVoteMy.as_view()
