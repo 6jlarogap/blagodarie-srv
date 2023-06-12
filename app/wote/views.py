@@ -271,7 +271,7 @@ class ApiVoteGraph(TelegramApiMixin, APIView):
 
         Включая связи доверия
         """
-        source = request.GET.get('source', '')
+        source = request.GET.get('source', 'yt')
         videoid = request.GET.get('videoid', '')
         nodes = []
         links = []
