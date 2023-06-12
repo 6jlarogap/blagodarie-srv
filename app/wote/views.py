@@ -433,9 +433,7 @@ class ApiVoteMy(TelegramApiMixin, APIView):
             status_code = status.HTTP_404_NOT_FOUND
         else:
             votes = [
-                vote.data_dict() for vote in Vote.objects.select_related(
-                    'user', 'user__profile'
-                ).filter(
+                vote.data_dict() for vote in Vote.objects.filter(
                     video=video,
                     user=request.user,
                 ).order_by('time')
