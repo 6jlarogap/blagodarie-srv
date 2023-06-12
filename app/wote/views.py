@@ -270,6 +270,65 @@ class ApiVoteGraph(TelegramApiMixin, APIView):
         Получить результаты голосования по видео для представления в 3d-force-graph
 
         Включая связи доверия
+
+        Get запрос. Например:
+        http(s)://<api-host>/api/wote/vote/graph/?source=yt&videoid=Ac5cEy5llr4
+
+        Возвращает json (пример):
+        {
+            "title": "yt-Ac5cEy5llr4",
+            "bot_username": "DevBlagoBot",
+            "nodes": [
+                // Варианты кнопок
+                {
+                    "id": -1,
+                    "first_name": "Да",
+                    "photo": "https://<api-host>/thumb/images/poll_answer_1.jpg/128x128~crop-green-frame-10~12.jpg"
+                },
+                {
+                    "id": -2,
+                    "first_name": "Нет",
+                    "photo": "https://<api-host>/thumb/images/poll_answer_2.jpg/128x128~crop-red-frame-10~12.jpg"
+                },
+                {
+                    "id": -3,
+                    "first_name": "Не ясно",
+                    "photo": "https://<api-host>/thumb/images/poll_answer_3.jpg/128x128~crop-yellow-frame-10~12.jpg"
+                },
+                // пользователи
+                {
+                    "id": 326,
+                    "first_name": "Иван",
+                    "photo": "https://<api-host>/thumb/profile-photo/2023/05/15/326/photo.jpg/64x64~crop~12.jpg",
+                    "gender": "m"
+                },
+                {
+                    "id": 1506,
+                    "first_name": "Марья",
+                    "photo": "https://<api-host>/thumb/profile-photo/2023/05/16/1506/photo.jpg/64x64~crop~12.jpg",
+                    "gender": "m"
+                }
+            ],
+            "links": [
+                // Нажатьые пользователем (source) кнопки (target)
+                {
+                    "source": 326,
+                    "target": -2,
+                    "is_video_vote": true
+                },
+                {
+                    "source": 1506,
+                    "target": -3,
+                    "is_video_vote": true
+                },
+                // Доверия, недоверия от пользователя (source) к пользователю (target)
+                {
+                    "source": 326,
+                    "target": 1506,
+                    "is_trust": false
+                }
+            ]
+        }
         """
         source = request.GET.get('source', 'yt')
         videoid = request.GET.get('videoid', '')
@@ -309,12 +368,14 @@ class ApiVoteGraph(TelegramApiMixin, APIView):
             ).values(
                 'user__id', 'user__first_name',
                 'user__profile__gender','user__profile__photo',
+                'user__profile__uuid',
                 'button'
             ).distinct('user', 'button'):
             if rec['user__id'] not in user_pks:
                 nodes.append({
                     'id': rec['user__id'],
                     'first_name': rec['user__first_name'],
+                    'uuid': rec['user__profile__uuid'],
                     'photo': Profile.image_thumb(request, rec['user__profile__photo']),
                     'gender': rec['user__profile__gender'],
                 })
@@ -337,3 +398,56 @@ class ApiVoteGraph(TelegramApiMixin, APIView):
         return Response(data=data, status=status.HTTP_200_OK)
 
 api_wote_vote_graph = ApiVoteGraph.as_view()
+
+class ApiVoteMy(TelegramApiMixin, APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        """
+        Получить нажатия кнопок авторизованного пользователя по видео
+
+        Get запрос. Например:
+        http(s)://<api-host>/api/wote/vote/?source=yt&videoid=Ac5cEy5llr4
+
+        Возвращает json (пример):
+        {
+            "votes": [
+                    "time": 40,
+                    "button": "no",
+                    "update_timestamp": 1685527009
+                },
+                ...
+            ],
+        }
+        Возвратит json { "votes": [], } со статусом 404,
+        если не заданы или заданы неверные source, videoid,
+        или не найдено видео с source, videoid.
+        """
+        votes = []
+        users = []
+        try:
+            video = Video.objects.get(
+                source=request.GET.get('source', ''),
+                videoid=request.GET.get('videoid', ''),
+            )
+        except Video.DoesNotExist:
+            status_code = status.HTTP_404_NOT_FOUND
+            video_dict = None
+        else:
+            video_dict = video.data_dict(request)
+            user_pks = []
+            for vote in Vote.objects.select_related(
+                    'user', 'user__profile'
+                ).filter(video=video).order_by('time'):
+                votes.append(vote.data_dict(request, put_video=False))
+                if vote.user.pk not in user_pks:
+                    user_pks.append(vote.user.pk)
+                    users.append(dict(
+                        uuid=vote.user.profile.uuid,
+                        first_name=vote.user.first_name,
+                        photo=vote.user.profile.choose_photo(request) if request else '',
+                    ))
+            status_code = status.HTTP_200_OK
+        data = dict(video=video_dict, votes=votes, users=users)
+
+api_wote_vote_my = ApiVoteMy.as_view()
