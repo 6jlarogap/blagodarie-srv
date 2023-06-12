@@ -412,13 +412,21 @@ class ApiVoteMy(TelegramApiMixin, APIView):
         Возвращает json (пример):
         {
             "votes": [
+                {
                     "time": 40,
                     "button": "no",
                     "update_timestamp": 1685527009
                 },
+                {
+                    "time": 45,
+                    "button": "yes",
+                    "update_timestamp": 1685527209
+                },
                 ...
             ],
         }
+        Голоса выводятся по возрастанию времени на видео
+
         Возвратит json { "votes": [], } со статусом 404,
         если не заданы или заданы неверные source, videoid,
         или не найдено видео с source, videoid.
