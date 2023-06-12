@@ -263,6 +263,7 @@ api_wote_vote_sums = ApiWoteVoteSums.as_view()
 
 
 class ApiVoteGraph(TelegramApiMixin, APIView):
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         """
@@ -307,16 +308,15 @@ class ApiVoteGraph(TelegramApiMixin, APIView):
                 'user', 'user__profile'
             ).values(
                 'user__id', 'user__first_name',
-                'user__profile__gender','user__profile__photo', 'user__profile__is_dead',
+                'user__profile__gender','user__profile__photo',
                 'button'
             ).distinct('user', 'button'):
             if rec['user__id'] not in user_pks:
                 nodes.append({
                     'id': rec['user__id'],
                     'first_name': rec['user__first_name'],
-                    'photo': rec['user__profile__photo'],
+                    'photo': Profile.image_thumb(request, rec['user__profile__photo']),
                     'gender': rec['user__profile__gender'],
-                    'is_dead': rec['user__profile__is_dead'],
                 })
                 user_pks.append(rec['user__id'])
             links.append(dict(
