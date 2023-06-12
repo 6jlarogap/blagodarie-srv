@@ -2,6 +2,7 @@ import time
 
 from django.db import transaction
 from django.db.models import Count
+from django.db.models.query_utils import Q
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -11,6 +12,8 @@ from rest_framework.exceptions import NotAuthenticated
 
 from app.utils import ServiceException
 
+from users.models import Profile, TelegramApiMixin
+from contact.models import CurrentState
 from wote.models import Video, Vote
 
 class ApiWoteVideoMixin(object):
@@ -257,3 +260,80 @@ class ApiWoteVoteSums(APIView):
         return Response(data=data, status=status.HTTP_200_OK)
 
 api_wote_vote_sums = ApiWoteVoteSums.as_view()
+
+
+class ApiVoteGraph(TelegramApiMixin, APIView):
+
+    def get(self, request):
+        """
+        Получить результаты голосования по видео для представления в 3d-force-graph
+
+        Включая связи доверия
+        """
+        source = request.GET.get('source', '')
+        videoid = request.GET.get('videoid', '')
+        nodes = []
+        links = []
+        votes_names = dict(Vote.VOTES)
+        votes_image = Vote.VOTES_IMAGE.copy()
+        n = 0
+        for button in votes_image:
+            n -= 1
+            votes_image[button]['number'] = n
+        # Узлы для нажатых кнопок:
+        # id: yes: -1, no: -2, not: -3
+        # first_name: Да, Нет, Не ясно
+        # photo: для каждой своя картинка
+        #
+        for button in Vote.VOTES_IMAGE:
+            nodes.append({
+                'id': votes_image[button]['number'],
+                'first_name': votes_names[button],
+                'photo': Profile.image_thumb(
+                    request, votes_image[button]['image'],
+                    width=128, height=128,
+                    method='crop-%s-frame-%s' % (votes_image[button]['color'], 10,),
+                ),
+            })
+        data = dict(
+            title='%(source)s-%(videoid)s' % dict(
+                source = source if source else '<неизвестно>',
+                videoid = videoid if videoid else '<неизвестно>',
+        ))
+        user_pks = []
+        for rec in Vote.objects.filter(
+                video__source=source, video__videoid=videoid
+            ).select_related(
+                'user', 'user__profile'
+            ).values(
+                'user__id', 'user__first_name',
+                'user__profile__gender','user__profile__photo', 'user__profile__is_dead',
+                'button'
+            ).distinct('user', 'button'):
+            if rec['user__id'] not in user_pks:
+                nodes.append({
+                    'id': rec['user__id'],
+                    'first_name': rec['user__first_name'],
+                    'photo': rec['user__profile__photo'],
+                    'gender': rec['user__profile__gender'],
+                    'is_dead': rec['user__profile__is_dead'],
+                })
+                user_pks.append(rec['user__id'])
+            links.append(dict(
+                source=rec['user__id'],
+                target=votes_image[rec['button']]['number'],
+                is_video_vote=True,
+            ))
+        q_connections = Q(
+            is_trust__isnull=False, is_reverse=False,
+            user_from__in=user_pks, user_to__in=user_pks
+        )
+        for cs in CurrentState.objects.filter(q_connections).select_related(
+                    'user_from__profile', 'user_to__profile',).distinct():
+            links.append(dict(source=cs.user_from.pk, target=cs.user_to.pk, is_trust=cs.is_trust))
+
+        bot_username = self.get_bot_username()
+        data.update(bot_username=bot_username, nodes=nodes, links=links)
+        return Response(data=data, status=status.HTTP_200_OK)
+
+api_wote_vote_graph = ApiVoteGraph.as_view()

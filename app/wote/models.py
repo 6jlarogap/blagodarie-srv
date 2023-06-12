@@ -49,6 +49,26 @@ class Vote(BaseModelInsertUpdateTimestamp):
         (VOTE_NOT, 'Не ясно'),
     )
 
+    #   Под каждый из голосов (кнопок)
+    #       - какая картинка
+    #       - какой цвет для обрамления юзера на карте, если
+    #         он выбрал такой голос (кнопку)
+
+    VOTES_IMAGE = {
+        VOTE_YES: dict (
+            image='images/poll_answer_1.jpg',
+            color='green',
+        ),
+        VOTE_NO: dict (
+            image='images/poll_answer_2.jpg',
+            color='red',
+        ),
+        VOTE_NOT: dict (
+            image='images/poll_answer_3.jpg',
+            color='yellow',
+        ),
+    }
+
     user = models.ForeignKey('auth.User', verbose_name='Пользователь', on_delete=models.CASCADE,)
     video = models.ForeignKey(Video, verbose_name='Видео', on_delete=models.CASCADE,)
     time = models.PositiveIntegerField('Время', default=0)
