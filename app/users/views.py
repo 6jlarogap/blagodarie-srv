@@ -32,6 +32,7 @@ from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TgGroup
     TempToken, UuidMixin, TelegramApiMixin, \
     TgPoll, TgPollAnswer, Offer, OfferAnswer
 from contact.models import Key, KeyType, CurrentState, OperationType, Wish, Ability, ApiAddOperationMixin
+from wote.models import Video, Vote
 
 class ApiTokenAuthDataMixin(object):
     """
@@ -1886,7 +1887,8 @@ class ApiBotGroupMember(ApiBotGroupMixin, APIView):
 api_bot_groupmember = ApiBotGroupMember.as_view()
 
 class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
-    permission_classes = (IsAuthenticated,)
+    #TODO убрать здесь коммент
+    # permission_classes = (IsAuthenticated,)
 
     # Фото пользователя, когда в карте щелкаешь на балун
     #
@@ -1903,6 +1905,10 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
     # Ширина рамки для фоток, где ответ на опрос
     #
     OFFER_PHOTO_FRAME = 5
+
+    # Ширина рамки для фоток, где ответ на видео
+    #
+    VOTE_PHOTO_FRAME = 5
 
     # Ширина рамки для фото умершего
     #
@@ -1932,7 +1938,15 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
             offer_id        ид опроса- предложения в телеграме,
                             показать участников опроса, как они голосовали,
                             каждый из участников на карте будет в рамке цвета,
-                            назначенного опросу (settings.OFFER_ANSWER_COLOR_MAP)
+                            назначенного ответу (settings.OFFER_ANSWER_COLOR_MAP).
+                            Если подал несколько ответов, то без рамки
+            videoid         ид видео, по которым голосуют
+                            показать участников голосания по видео,
+                            каждый из участников на карте будет в рамке цвета,
+                            назначенного голосу (Vote.VOTES_IMAGE[<голос>][color]).
+                            Если подал несколько голосов, то без рамки
+                Вместе с videoid может прийти:
+                    source, по умолчанию 'yt' (youtube)
             uuid            показать координаты пользователя с этим uuid.
                             Вместе с этим в выводе могут быть, при наличии параметров
                             participants и/или owned и другие пользователи
@@ -1957,9 +1971,14 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                                                 // группа или канал
             "offer_question": null,             // вопрос телеграм опроса- предложения (offer)
             "offer_deeplink": null,             // ссылка на опроса- предложение (offer) в телеграме
-            "legend": "строка",                 // html таблица легенды для цветов ответов, две колонки:
-                                                //  - фото неизвестного в рамке цвета
-                                                //  - ответ, соответствующий цвету
+            "legend": "строка",                 // если задан offer_id:
+                                                //      html таблица легенды для цветов ответов, две колонки:
+                                                //          - фото неизвестного в рамке цвета
+                                                //          - ответ, соответствующий цвету
+                                                // если задан videoid:
+                                                //      html таблица легенды для цветов голосов, две колонки:
+                                                //          - фото неизвестного в рамке цвета
+                                                //          - голос, соответствующий цвету
 
             "points": [
                 {
@@ -1998,6 +2017,27 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
         legend=''
         chat_id = chat_title = chat_type = None
         offer_id = offer_question = offer_deeplink = None
+        videoid = source = None
+        video_title = ''
+        offer_reply_html = video_reply_html = ''
+        qs = None
+        popup = (
+            '<table>'
+            '<tr>'
+                '<td>'
+                    '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
+                '</td>'
+                '<td>'
+                    ' %(full_name)s (%(trust_count)s)'
+                    '<br />'
+                    ' <a href="%(url_deeplink)s" target="_blank">Профиль</a>'
+                    '<br /><br />'
+                    ' <a href="%(url_profile)s" target="_blank">Доверия</a>'
+                '</td>'
+            '</tr>'
+            '%(offer_reply_html)s%(video_reply_html)s'
+            '</table>'
+        )
         if request.GET.get('uuid'):
             try:
                 found_user, found_profile = self.check_user_uuid(request.GET['uuid'], related=('user',))
@@ -2013,6 +2053,9 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
             chat_id = request.GET['chat_id']
         elif request.GET.get('offer_id'):
             offer_id = request.GET['offer_id']
+        elif request.GET.get('videoid'):
+            videoid = request.GET['videoid']
+            source = request.GET.get('source', 'yt')
         bot_username = self.get_bot_username()
         lat_sum = lng_sum = 0
         points = []
@@ -2028,10 +2071,9 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 q &= Q(user__oauth__groups__chat_id=chat_id)
             except (ValueError, TgGroup.DoesNotExist,):
                 pass
-        if chat_id and not chat_title:
-            qs = Profile.objects.none()
-        elif chat_id:
+        if chat_id and chat_title:
             qs = Profile.objects.filter(q).select_related('user').distinct()
+
         elif offer_id:
             try:
                 offer = Offer.objects.select_related('owner', 'owner__profile').get(uuid=offer_id)
@@ -2069,8 +2111,150 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                     )
                 legend += '</table>'
             except (ValueError, Offer.DoesNotExist,):
-                qs = Profile.objects.none()
-                offer = None
+                qs = offer = None
+
+        elif videoid:
+            votes_names = dict(Vote.VOTES)
+            user_pks = []
+            user_datas = []
+            video_title = Video.video_vote_url(source, videoid)
+            if video_title.lower().startswith('http'):
+                video_title = '<a href="%s" target="_blank">Голосование по видео</a>' % video_title
+            else:
+                video_title = 'Голосование по видео: <i>%s</i>' % video_title
+            for rec in Vote.objects.filter(
+                    video__source=source,
+                    video__videoid=videoid,
+                    user__profile__latitude__isnull=False,
+                    user__profile__longitude__isnull=False,
+                ).select_related(
+                    'user', 'user__profile'
+                ).values(
+                    'user__id', 'user__first_name',
+                    'user__profile__photo',
+                    'user__profile__gender',
+                    'user__profile__uuid',
+                    'user__profile__trust_count',
+                    'user__profile__latitude', 'user__profile__longitude',
+                    'button'
+                ).distinct('user', 'button'):
+                try:
+                    ind = user_pks.index(rec['user__id'])
+                    user_datas[ind]['votes'].append(rec['button'])
+                except ValueError:
+                    user_datas.append(dict(
+                        full_name = rec['user__first_name'],
+                        photo=rec['user__profile__photo'],
+                        gender=rec['user__profile__gender'],
+                        trust_count=rec['user__profile__trust_count'],
+                        uuid=rec['user__profile__uuid'],
+                        latitude=rec['user__profile__latitude'],
+                        longitude=rec['user__profile__latitude'],
+                        votes=[rec['button']]
+                    ))
+                    user_pks.append(rec['user__id'])
+            for user_data in user_datas:
+                url_profile = self.profile_url_by_uuid(request, rec['user__profile__uuid'], fmt=self.FMT)
+                if bot_username:
+                    url_deeplink = self.get_deeplink_by_uuid(rec['user__profile__uuid'], bot_username)
+                else:
+                    url_deeplink = url_profile
+                votes = user_data['votes']
+                if len(votes) == 1:
+                    vote = votes[0]
+                    vote_color = Vote.VOTES_IMAGE[vote]['color']
+                    frame = self.VOTE_PHOTO_FRAME
+                    method = 'crop-%s-frame-%s' % (vote_color, frame, )
+                    votes_text = '<span style="color:' + vote_color + '">' + votes_names[vote] + '</span>'
+                    title = '%s: %s' % (user_data['full_name'], votes_text)
+                else:
+                    votes.sort(key=lambda v: Vote.VOTES_IMAGE[v]['sort_order'])
+                    frame = 0
+                    method = 'crop'
+                    votes_text = '<br />' + '<br />'.join(
+                        [
+                            ' &nbsp;&nbsp;' + \
+                            '<span style="color:' + \
+                            Vote.VOTES_IMAGE[vote]['color'] + \
+                            '">' + \
+                            votes_names[vote] + \
+                            '</span>' \
+                            for vote in votes
+                        ]
+                    )
+                    title = user_data['full_name']
+                video_reply_html = (
+                    '<tr>'
+                        '<td colspan=2>'
+                        'Голос%s: %s'
+                        '</td>'
+                    '</tr>'
+                ) % (
+                    'а' if len(votes) > 1 else '',
+                    votes_text
+                )
+                popup_ = popup % dict(
+                    full_name = user_data['full_name'],
+                    trust_count=user_data['trust_count'],
+                    url_deeplink=url_deeplink,
+                    url_profile=url_profile,
+                    url_photo_popup=Profile.image_thumb(
+                        request, user_data['photo'],
+                        method=method,
+                        width=self.THUMB_SIZE_POPUP + frame * 2,
+                        height=self.THUMB_SIZE_POPUP + frame * 2,
+                        put_default_avatar=True,
+                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(user_data['gender'])
+                    ),
+                    thumb_size_popup = self.THUMB_SIZE_POPUP,
+                    offer_reply_html=offer_reply_html,
+                    video_reply_html=video_reply_html,
+                )
+                points.append(dict(
+                    latitude=user_data['latitude'],
+                    longitude=user_data['longitude'],
+                    title=title,
+                    is_of_found_user=False,
+                    icon=Profile.image_thumb(
+                        request, user_data['photo'],
+                        method=method,
+                        width=self.THUMB_SIZE_ICON + frame * 2,
+                        height=self.THUMB_SIZE_ICON + frame * 2,
+                        put_default_avatar=True,
+                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(user_data['gender'])
+                    ),
+                    size_icon=self.THUMB_SIZE_ICON + frame * 2,
+                    popup=popup_,
+                ))
+            frame = self.VOTE_PHOTO_FRAME * 2
+            legend = '<br><table>'
+            vote_ts = [('', 'подал(а) несколько голосов')] + list(Vote.VOTES)
+            for vote_t in vote_ts:
+                vote, vote_name = vote_t
+                legend += (
+                    '<tr>'
+                        '<td>'
+                            '<img src="%(photo)s" width=%(width)s height=%(height)s />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'
+                        '</td>'
+                        '<td>'
+                            '<big>%(vote_name)s</big>'
+                        '</td>'
+                    '</tr>'
+                ) % dict(
+                    photo=PhotoModel.image_thumb(
+                        request=request,
+                        fname=PhotoModel.DEFAULT_AVATAR_IN_MEDIA_NONE,
+                        method = 'crop-%s-frame-%s' % (
+                            Vote.VOTES_IMAGE[vote]['color'] if vote else 'white',
+                            frame,
+                        )
+                    ),
+                    vote_name=vote_name,
+                    width=self.THUMB_SIZE_POPUP + frame * 2,
+                    height=self.THUMB_SIZE_POPUP + frame * 2,
+                )
+            legend += '</table>'
+
         else:
             # Или задан uuid, или ничего
             qq_or = []
@@ -2091,9 +2275,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
             else:
                 if found_coordinates:
                     qs = Profile.objects.filter(pk=found_profile.pk).select_related('user').distinct()
-                else:
-                    qs = Profile.objects.none()
-        for profile in qs:
+        for profile in (qs if qs else []):
             url_profile = self.profile_url(request, profile, fmt=self.FMT)
             if bot_username:
                 url_deeplink = self.get_deeplink(profile, bot_username)
@@ -2125,7 +2307,6 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                     answer_text
                 )
             else:
-                offer_reply_html = ''
                 if profile.is_dead or profile.dod:
                     frame = self.DEAD_PHOTO_FRAME
                     method = f'crop-black-frame-{frame}'
@@ -2154,29 +2335,13 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 offer_reply_html=offer_reply_html,
                 answer_text=answer_text,
                 title_template=title_template,
+                video_reply_html=video_reply_html,
             )
-            popup = (
-                '<table>'
-                '<tr>'
-                    '<td>'
-                       '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
-                    '</td>'
-                    '<td>'
-                        ' %(full_name)s (%(trust_count)s)'
-                        '<br />'
-                        ' <a href="%(url_deeplink)s" target="_blank">Профиль</a>'
-                        '<br /><br />'
-                        ' <a href="%(url_profile)s" target="_blank">Доверия</a>'
-                    '</td>'
-                '</tr>'
-                '%(offer_reply_html)s'
-                '</table>'
-            ) % dict_user
             point = dict(
                 latitude=profile.latitude,
                 longitude=profile.longitude,
                 title=title_template % dict_user,
-                popup=popup,
+                popup=popup % dict_user,
             )
             if (found_coordinates and profile == found_profile) or \
                (offer_question and offer_dict['owner']['id'] == profile.user.pk):
@@ -2224,6 +2389,9 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
             offer_question=offer_question,
             offer_deeplink=offer_deeplink,
             legend=legend,
+            videoid=videoid,
+            source=source,
+            video_title=video_title,
         )
         return Response(data=data, status=200)
 

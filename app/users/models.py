@@ -907,13 +907,16 @@ class TelegramApiMixin(object):
         else:
             return None
 
-    def get_deeplink(self, profile, bot_username=None):
+    def get_deeplink_by_uuid(self, uuid, bot_username=None):
         result = ''
         if not bot_username:
             bot_username = self.get_bot_username()
         if bot_username:
-            result = 'https://t.me/%s?start=%s' % (bot_username, profile.uuid)
+            result = 'https://t.me/%s?start=%s' % (bot_username, uuid)
         return result
+
+    def get_deeplink(self, profile, bot_username=None):
+        return self.get_deeplink_by_uuid(profile.uuid, bot_username)
 
     def get_deeplink_name(self, profile, bot_username=None, target_blank=False):
         result = ''

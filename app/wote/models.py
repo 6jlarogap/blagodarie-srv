@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 
 from app.models import BaseModelInsertUpdateTimestamp, BaseModelInsertTimestamp
 
@@ -34,6 +35,14 @@ class Video(BaseModelInsertTimestamp):
             insert_timestamp=self.insert_timestamp,
         )
 
+    @classmethod
+    def video_vote_url(cls, source, videoid):
+        if source == cls.SOURCE_YOUTUBE:
+            result = settings.VIDEO_VOTE_URL + '#https://www.youtube.com/watch?v=' + videoid
+        else:
+            result = '%s-%s' % (source, videoid)
+        return result
+
     def __str__(self):
         return '%s-%s' % (self.source, self.videoid,)
 
@@ -58,14 +67,17 @@ class Vote(BaseModelInsertUpdateTimestamp):
         VOTE_YES: dict (
             image='images/poll_answer_1.jpg',
             color='green',
+            sort_order=0,
         ),
         VOTE_NO: dict (
             image='images/poll_answer_2.jpg',
             color='red',
+            sort_order=1,
         ),
         VOTE_NOT: dict (
             image='images/poll_answer_3.jpg',
             color='yellow',
+            sort_order=2,
         ),
     }
 

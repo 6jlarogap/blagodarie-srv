@@ -488,6 +488,8 @@ LOGGING = {
     }
 }
 
+VIDEO_VOTE_URL = 'https://6jlarogap.github.io/razum/'
+
 try:
     from app.local_settings import *
 except ModuleNotFoundError:

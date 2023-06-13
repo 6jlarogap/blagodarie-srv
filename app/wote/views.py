@@ -367,7 +367,7 @@ class ApiVoteGraph(TelegramApiMixin, APIView):
                 'user', 'user__profile'
             ).values(
                 'user__id', 'user__first_name',
-                'user__profile__gender','user__profile__photo',
+                'user__profile__gender', 'user__profile__photo',
                 'user__profile__uuid',
                 'button'
             ).distinct('user', 'button'):
