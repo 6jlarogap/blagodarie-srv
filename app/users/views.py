@@ -2165,23 +2165,13 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                     vote_color = Vote.VOTES_IMAGE[vote]['color']
                     frame = self.VOTE_PHOTO_FRAME
                     method = 'crop-%s-frame-%s' % (vote_color, frame, )
-                    votes_text = '<span style="color:' + vote_color + '">' + votes_names[vote] + '</span>'
+                    votes_text = votes_names[vote]
                     title = '%s: %s' % (user_data['full_name'], votes_text)
                 else:
                     votes.sort(key=lambda v: Vote.VOTES_IMAGE[v]['sort_order'])
                     frame = 0
                     method = 'crop'
-                    votes_text = '<br />' + '<br />'.join(
-                        [
-                            ' &nbsp;&nbsp;' + \
-                            '<span style="color:' + \
-                            Vote.VOTES_IMAGE[vote]['color'] + \
-                            '">' + \
-                            votes_names[vote] + \
-                            '</span>' \
-                            for vote in votes
-                        ]
-                    )
+                    votes_text = '<br />' + '<br />'.join([votes_names[vote] for vote in votes])
                     title = user_data['full_name']
                 video_reply_html = (
                     '<tr>'
