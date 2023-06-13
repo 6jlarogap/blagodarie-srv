@@ -2148,7 +2148,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                         trust_count=rec['user__profile__trust_count'],
                         uuid=rec['user__profile__uuid'],
                         latitude=rec['user__profile__latitude'],
-                        longitude=rec['user__profile__latitude'],
+                        longitude=rec['user__profile__longitude'],
                         votes=[rec['button']]
                     ))
                     user_pks.append(rec['user__id'])
