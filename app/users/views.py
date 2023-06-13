@@ -1978,6 +1978,7 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                                                 //      html таблица легенды для цветов голосов, две колонки:
                                                 //          - фото неизвестного в рамке цвета
                                                 //          - голос, соответствующий цвету
+            "video_title",                      // заголовок видео: ссылка на голосование по видео
 
             "points": [
                 {
@@ -2378,8 +2379,6 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
             offer_question=offer_question,
             offer_deeplink=offer_deeplink,
             legend=legend,
-            videoid=videoid,
-            source=source,
             video_title=video_title,
         )
         return Response(data=data, status=200)
