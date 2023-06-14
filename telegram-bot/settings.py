@@ -120,6 +120,10 @@ AUTH_PROMPT_FOR_DOMAIN = {
     'blagoroda.org': 'Для доступа к пространству Доверия требуется авторизация',
 }
 
+# Страница голосования по видео
+#
+VOTE_URL = 'https://6jlarogap.github.io/razum/'
+
 try:
     from local_settings import *
 except ModuleNotFoundError:

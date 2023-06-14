@@ -3918,6 +3918,10 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             redirect_token = m.group(1)
             state_ = 'start_auth_redirect'
 
+        elif m := Misc.get_youtube_id(message_text):
+            youtube_id, youtube_link = m
+            state_ = 'youtube_link'
+
         elif len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
             state_ = 'invalid_message_text'
             reply = Misc.invalid_search_text()
@@ -4030,7 +4034,9 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
 
     if state_ and state_ not in (
-        'not_found', 'invalid_message_text', 'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',
+        'not_found', 'invalid_message_text',
+        'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',
+        'youtube_link',
        ) and user_from_id and a_response_to:
         if state_ == 'start':
             await message.reply(await Misc.rules_text(), disable_web_page_preview=True)
@@ -4051,7 +4057,10 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
     elif reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
-    if state_ not in ('start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',):
+    if state_ not in (
+        'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',
+        'youtube_link'
+       ):
         await Misc.show_deeplinks(a_found, message, bot_data)
 
     if user_from_id:
@@ -4067,7 +4076,6 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 #)
         if state_ == 'start_setplace':
             await geo(message, state_to_set=FSMgeo.geo)
-            return
         elif state_ == 'start_auth_redirect':
             status_token, response_token = await Misc.api_request(
                 path='/api/token/url/',
@@ -4095,7 +4103,6 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 )
             else:
                 await message.reply('Ссылка устарела или не найдена')
-            return
         elif state_ == 'start_poll':
             params = dict(tg_token=settings.TOKEN, tg_poll_id=poll_to_search)
             logging.debug('get_poll, params: %s' % params)
@@ -4117,18 +4124,31 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                     await message.reply('Не удалось отобразить опрос. Уже не действует?')
             else:
                 await message.reply('Опрос не найден')
-            return
         elif state_ == 'start_offer':
             status_offer, response_offer = await post_offer_answer(offer_to_search, response_from, [-1])
             if status_offer == 200:
                 await show_offer(response_from, response_offer, message, bot_data)
             else:
                 await message.reply('Опрос-предложение не найдено')
-            return
+        elif state_ == 'youtube_link':
+            await answer_youtube_message(message, youtube_id, youtube_link)
+        elif state_ == 'forwarded_from_other' and a_response_to and a_response_to[0].get('created'):
+            await Misc.update_user_photo(bot, tg_user_forwarded, response_to)
 
-    if state_ == 'forwarded_from_other' and a_response_to and a_response_to[0].get('created'):
-        await Misc.update_user_photo(bot, tg_user_forwarded, response_to)
 
+async def answer_youtube_message(message, youtube_id, youtube_link):
+    """
+    На запрос авторизации на сайт голосования или в ответ на youtube ссылку в бот
+    """
+    reply = 'Коллективный разум:\n' + youtube_link
+    redirect_path = settings.VOTE_URL + '#' + youtube_link
+    reply_markup = InlineKeyboardMarkup()
+    inline_btn_redirect = InlineKeyboardButton(
+        'Продолжить',
+        login_url=Misc.make_login_url(redirect_path=redirect_path, keep_user_data='on'),
+    )
+    reply_markup.row(inline_btn_redirect)
+    await message.reply(reply, reply_markup=reply_markup,)
 
 async def post_offer_answer(offer_uuid, user_from, answers):
     payload = dict(

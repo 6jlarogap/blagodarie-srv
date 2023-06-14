@@ -1313,6 +1313,27 @@ class Misc(object):
             logging.debug('get users by %s, a_found: %s' % (what, a_found, ))
         return status, a_found
 
+    @classmethod
+    def get_youtube_id(cls, link):
+        """
+        Получить  youtube id из ссылки
+
+        Например,
+        link = youtube.com/watch?v=J0dGoFsO_j4
+        результат: J0dGoFsO_j4
+
+        Если это не youtube ссылка, то возвращает пустоту
+        """
+        rr = (
+                r'^(?:http[s]?\:\/\/)?(?:www\.)?youtube\.com/watch\/?\?v=(\w{11,11})',
+                r'^(?:http[s]?\:\/\/)?youtu\.be/(\w{11,11})',
+        )
+        for r in rr:
+            if m := re.search(r, link, flags=re.I):
+                return m.group(1), m.group(0)
+        return None
+
+
 class TgGroup(object):
     """
     Список групп, где бот: внесение, удаление
