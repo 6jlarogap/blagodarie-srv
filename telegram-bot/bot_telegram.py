@@ -4154,6 +4154,23 @@ async def answer_youtube_message(message, youtube_id, youtube_link):
         login_url=Misc.make_login_url(redirect_path=redirect_path, keep_user_data='on'),
     )
     reply_markup.row(inline_btn_redirect)
+    inline_btn_scheme = InlineKeyboardButton(
+        'Схема',
+        login_url=Misc.make_login_url(
+            redirect_path='%(graph_host)s/?videoid=%(youtube_id)s&source=yt' % dict(
+                graph_host=settings.GRAPH_HOST,
+                youtube_id=youtube_id,
+            ), keep_user_data='on',
+        ))
+    inline_btn_map = InlineKeyboardButton(
+        'Карта',
+        login_url=Misc.make_login_url(
+            redirect_path='%(map_host)s/?videoid=%(youtube_id)s&source=yt' % dict(
+                map_host=settings.MAP_HOST,
+                youtube_id=youtube_id,
+            ), keep_user_data='on',
+        ))
+    reply_markup.row(inline_btn_scheme, inline_btn_map)
     await message.reply(reply, reply_markup=reply_markup,)
 
 async def post_offer_answer(offer_uuid, user_from, answers):
