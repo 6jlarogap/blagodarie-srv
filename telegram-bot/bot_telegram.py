@@ -4090,7 +4090,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 )
                 reply_markup.row(inline_btn_redirect)
                 if redirect_path.lower().startswith(settings.VOTE_URL):
-                    if m := re.search(r'\#(\S+)$'):
+                    if m := re.search(r'\#(\S+)$', redirect_path):
                         if m := Misc.get_youtube_id(m.group(1)):
                             youtube_id, youtube_link = m
                             await answer_youtube_message(message, youtube_id, youtube_link)
