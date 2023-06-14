@@ -1,8 +1,10 @@
-import time
+import os, time
 
 from django.db import transaction
 from django.db.models import Count
 from django.db.models.query_utils import Q
+
+from django.conf import settings
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -349,10 +351,8 @@ class ApiVoteGraph(TelegramApiMixin, APIView):
             nodes.append({
                 'id': votes_image[button]['number'],
                 'first_name': votes_names[button],
-                'photo': Profile.image_thumb(
-                    request, votes_image[button]['image'],
-                    width=128, height=128,
-                    method='crop-%s-frame-%s' % (votes_image[button]['color'], 10,),
+                'photo': request.build_absolute_uri(
+                    os.path.join(settings.MEDIA_URL, votes_image[button]['image']),
                 ),
             })
         data = dict(

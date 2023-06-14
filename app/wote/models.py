@@ -65,18 +65,18 @@ class Vote(BaseModelInsertUpdateTimestamp):
 
     VOTES_IMAGE = {
         VOTE_YES: dict (
-            image='images/poll_answer_1.jpg',
+            image='images/vote-yes.jpg',
             color='green',
             sort_order=0,
         ),
         VOTE_NO: dict (
-            image='images/poll_answer_2.jpg',
+            image='images/vote-no.jpg',
             color='red',
             sort_order=1,
         ),
         VOTE_NOT: dict (
-            image='images/poll_answer_3.jpg',
-            color='yellow',
+            image='images/vote-not.jpg',
+            color='blue',
             sort_order=2,
         ),
     }
