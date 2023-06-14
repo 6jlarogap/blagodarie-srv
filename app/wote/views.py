@@ -265,7 +265,7 @@ api_wote_vote_sums = ApiWoteVoteSums.as_view()
 
 
 class ApiVoteGraph(TelegramApiMixin, APIView):
-    permission_classes = (IsAuthenticated,)
+    # permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         """
@@ -348,6 +348,16 @@ class ApiVoteGraph(TelegramApiMixin, APIView):
         # photo: для каждой своя картинка
         #
         for button in Vote.VOTES_IMAGE:
+            nodes.append({
+                'id': votes_image[button]['number'],
+                'first_name': votes_names[button],
+                'photo': Profile.image_thumb(
+                    request,
+                    os.path.join(settings.MEDIA_URL, votes_image[button]['image']),
+                    width=512, height=512,
+                ),
+            })
+
             nodes.append({
                 'id': votes_image[button]['number'],
                 'first_name': votes_names[button],
