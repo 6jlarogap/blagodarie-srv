@@ -353,16 +353,8 @@ class ApiVoteGraph(TelegramApiMixin, APIView):
                 'first_name': votes_names[button],
                 'photo': Profile.image_thumb(
                     request,
-                    os.path.join(settings.MEDIA_URL, votes_image[button]['image']),
+                    votes_image[button]['image'],
                     width=512, height=512,
-                ),
-            })
-
-            nodes.append({
-                'id': votes_image[button]['number'],
-                'first_name': votes_names[button],
-                'photo': request.build_absolute_uri(
-                    os.path.join(settings.MEDIA_URL, votes_image[button]['image']),
                 ),
             })
         data = dict(
