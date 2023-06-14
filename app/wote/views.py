@@ -12,7 +12,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from rest_framework.exceptions import NotAuthenticated
 
-from app.utils import ServiceException
+from app.utils import ServiceException, FromToCountMixin
 
 from users.models import Profile, TelegramApiMixin
 from contact.models import CurrentState
@@ -215,7 +215,8 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
 
 api_wote_vote = ApiWoteVote.as_view()
 
-class ApiWoteVoteSums(APIView):
+class ApiWoteVoteSums(FromToCountMixin, APIView):
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         '''
@@ -223,6 +224,10 @@ class ApiWoteVoteSums(APIView):
 
         Get запрос. Например:
         http(s)://<api-host>/api/wote/vote/sums/?source=yt&videoid=Ac5cEy5llr4
+
+        Возможны еще параметры:
+            from:   с такой секунды видео начинать
+            to:     по какую секунду видео показывать
 
         Возвращает json (пример):
         {
@@ -246,11 +251,18 @@ class ApiWoteVoteSums(APIView):
         buttons = dict()
         for button in dict(Vote.VOTES):
             buttons[button] = []
+        q = Q(
+            video__source=request.GET.get('source', 'yt'),
+            video__videoid=request.GET.get('videoid', '')
+        )
+        from_, to_ = self.get_from_to(request.GET, 'from', 'to')
+        if from_ is not None:
+            q &= Q(time__gte=from_)
+        if to_ is not None:
+            q &= Q(time__lte=to_)
         for rec in Vote.objects.values(
                 'time', 'button'
-           ).filter(
-                video__source=request.GET.get('source', 'yt'),
-                video__videoid=request.GET.get('videoid', '')
+           ).filter(q
            ).annotate(count=Count('id')
            ).order_by('time'):
             try:
@@ -264,8 +276,8 @@ class ApiWoteVoteSums(APIView):
 api_wote_vote_sums = ApiWoteVoteSums.as_view()
 
 
-class ApiVoteGraph(TelegramApiMixin, APIView):
-    # permission_classes = (IsAuthenticated,)
+class ApiVoteGraph(FromToCountMixin, TelegramApiMixin, APIView):
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         """
@@ -275,6 +287,10 @@ class ApiVoteGraph(TelegramApiMixin, APIView):
 
         Get запрос. Например:
         http(s)://<api-host>/api/wote/vote/graph/?source=yt&videoid=Ac5cEy5llr4
+
+        Возможны еще параметры:
+            from:   с такой секунды видео начинать
+            to:     по какую секунду видео показывать
 
         Возвращает json (пример):
         {
@@ -363,8 +379,13 @@ class ApiVoteGraph(TelegramApiMixin, APIView):
                 videoid = videoid if videoid else '<неизвестно>',
         ))
         user_pks = []
-        for rec in Vote.objects.filter(
-                video__source=source, video__videoid=videoid
+        q = Q(video__source=source, video__videoid=videoid)
+        from_, to_ = self.get_from_to(request.GET, 'from', 'to')
+        if from_ is not None:
+            q &= Q(time__gte=from_)
+        if to_ is not None:
+            q &= Q(time__lte=to_)
+        for rec in Vote.objects.filter(q
             ).select_related(
                 'user', 'user__profile'
             ).values(
@@ -401,7 +422,7 @@ class ApiVoteGraph(TelegramApiMixin, APIView):
 
 api_wote_vote_graph = ApiVoteGraph.as_view()
 
-class ApiVoteMy(TelegramApiMixin, APIView):
+class ApiVoteMy(FromToCountMixin, TelegramApiMixin, APIView):
     permission_classes = (IsAuthenticated,)
 
     def get(self, request):
@@ -410,6 +431,10 @@ class ApiVoteMy(TelegramApiMixin, APIView):
 
         Get запрос. Например:
         http(s)://<api-host>/api/wote/vote/my/?source=yt&videoid=Ac5cEy5llr4
+
+        Возможны еще параметры:
+            from:   с такой секунды видео начинать
+            to:     по какую секунду видео показывать
 
         Возвращает json (пример):
         {
@@ -443,11 +468,14 @@ class ApiVoteMy(TelegramApiMixin, APIView):
         except Video.DoesNotExist:
             status_code = status.HTTP_404_NOT_FOUND
         else:
+            q = Q(video=video, user=request.user,)
+            from_, to_ = self.get_from_to(request.GET, 'from', 'to')
+            if from_ is not None:
+                q &= Q(time__gte=from_)
+            if to_ is not None:
+                q &= Q(time__lte=to_)
             votes = [
-                vote.data_dict() for vote in Vote.objects.filter(
-                    video=video,
-                    user=request.user,
-                ).order_by('time')
+                vote.data_dict() for vote in Vote.objects.filter(q).order_by('time')
             ]
             status_code = status.HTTP_200_OK
         data = dict(votes=votes,)

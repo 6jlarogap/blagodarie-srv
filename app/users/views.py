@@ -24,7 +24,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import status
 from rest_framework.exceptions import NotAuthenticated
 
-from app.utils import ServiceException, SkipException, FrontendMixin
+from app.utils import ServiceException, SkipException, FrontendMixin, FromToCountMixin
 from app.models import UnclearDate, PhotoModel, GenderMixin
 
 from django.contrib.auth.models import User
@@ -1886,7 +1886,7 @@ class ApiBotGroupMember(ApiBotGroupMixin, APIView):
 
 api_bot_groupmember = ApiBotGroupMember.as_view()
 
-class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
+class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
     permission_classes = (IsAuthenticated,)
 
     # Фото пользователя, когда в карте щелкаешь на балун
@@ -1979,6 +1979,9 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                                                 //          - фото неизвестного в рамке цвета
                                                 //          - голос, соответствующий цвету
             "video_title",                      // заголовок видео: ссылка на голосование по видео
+                    Возможны еще параметры:
+                        from:   с такой секунды видео начинать
+                        to:     по какую секунду видео показывать
 
             "points": [
                 {
@@ -2122,11 +2125,18 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                 video_title = '<a href="%s" target="_blank">Голосование по видео</a>' % video_title
             else:
                 video_title = 'Голосование по видео: <i>%s</i>' % video_title
-            for rec in Vote.objects.filter(
-                    video__source=source,
-                    video__videoid=videoid,
-                    user__profile__latitude__isnull=False,
-                    user__profile__longitude__isnull=False,
+            q_video = Q(
+                video__source=source,
+                video__videoid=videoid,
+                user__profile__latitude__isnull=False,
+                user__profile__longitude__isnull=False,
+            )
+            from_, to_ = self.get_from_to(request.GET, 'from', 'to')
+            if from_ is not None:
+                q_video &= Q(time__gte=from_)
+            if to_ is not None:
+                q_video &= Q(time__lte=to_)
+            for rec in Vote.objects.filter(q_video
                 ).select_related(
                     'user', 'user__profile'
                 ).values(
@@ -2154,9 +2164,11 @@ class ApiUserPoints(FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
                     ))
                     user_pks.append(rec['user__id'])
             for user_data in user_datas:
-                url_profile = self.profile_url_by_uuid(request, rec['user__profile__uuid'], fmt=self.FMT)
+                lat_sum += user_data['latitude']
+                lng_sum += user_data['longitude']
+                url_profile = self.profile_url_by_uuid(request, user_data['uuid'], fmt=self.FMT)
                 if bot_username:
-                    url_deeplink = self.get_deeplink_by_uuid(rec['user__profile__uuid'], bot_username)
+                    url_deeplink = self.get_deeplink_by_uuid(user_data['uuid'], bot_username)
                 else:
                     url_deeplink = url_profile
                 votes = user_data['votes']

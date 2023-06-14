@@ -146,3 +146,27 @@ class FrontendMixin(object):
         return re.sub(r'\:\d+$', '',
             re.sub(r'^https?://', '', self.get_frontend_url(request).rstrip('/'))
         )
+
+class FromToCountMixin(object):
+
+    def get_from_to(self, data, from_, to_):
+        """
+        Вернуть валидные целые числа от и до
+
+        data в вызывающем методе или request.GET или request.data
+        """
+        try:
+            from_ = int(data.get(from_))
+            if from_ < 0:
+                from_ = None
+        except (TypeError, ValueError,):
+            from_ = None
+        try:
+            to_ = int(data.get(to_))
+            if to_ < 0:
+                to_ = None
+            elif from_ is not None and to_ < from_:
+                to_ = from_
+        except (TypeError, ValueError,):
+            to_ = None
+        return from_, to_
