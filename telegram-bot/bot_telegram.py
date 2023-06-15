@@ -4095,7 +4095,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                             youtube_id, youtube_link = m
                             await answer_youtube_message(message, youtube_id, youtube_link)
                             return
-                auth_text = f'Для доступа к <pre>{redirect_path}</pre> требуется авторизация'
+                auth_text = f'Для доступа к <pre>{redirect_path}</pre> нажмите Продолжить'
                 auth_url_parse = urlparse(redirect_path)
                 if auth_url_parse.hostname:
                     for auth_domain in settings.AUTH_PROMPT_FOR_DOMAIN:
@@ -4108,7 +4108,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                     disable_web_page_preview=True
                 )
             else:
-                await message.reply('Ссылка устарела или не найдена')
+                await message.reply('Ссылка устарела или не найдена. Получите новую.')
         elif state_ == 'start_poll':
             params = dict(tg_token=settings.TOKEN, tg_poll_id=poll_to_search)
             logging.debug('get_poll, params: %s' % params)
