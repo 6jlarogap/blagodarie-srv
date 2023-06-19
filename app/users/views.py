@@ -2122,9 +2122,9 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             user_datas = []
             video_title = Video.video_vote_url(source, videoid)
             if video_title.lower().startswith('http'):
-                video_title = '<a href="%s" target="_blank">Голосование по видео</a>' % video_title
+                video_title = '<a href="%s" target="_blank">Коллективный разум</a>' % video_title
             else:
-                video_title = 'Голосование по видео: <i>%s</i>' % video_title
+                video_title = 'Коллективный разум: <i>%s</i>' % video_title
             q_video = Q(
                 video__source=source,
                 video__videoid=videoid,
