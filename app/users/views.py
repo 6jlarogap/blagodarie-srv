@@ -2230,7 +2230,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 ))
             frame = self.VOTE_PHOTO_FRAME * 2
             legend = '<br><table>'
-            vote_ts = [('', 'подал(а) несколько голосов')] + list(Vote.VOTES)
+            vote_ts = [('', 'Несколько голосов')] + list(Vote.VOTES)
             for vote_t in vote_ts:
                 vote, vote_name = vote_t
                 legend += (
