@@ -270,7 +270,7 @@ class ApiWoteVoteSums(FromToCountMixin, APIView):
             except KeyError:
                 # fool proof: вдруг какие кнопки будут удалены из системы?
                 pass
-            data = dict(buttons=buttons)
+        data = dict(buttons=buttons)
         return Response(data=data, status=status.HTTP_200_OK)
 
 api_wote_vote_sums = ApiWoteVoteSums.as_view()
