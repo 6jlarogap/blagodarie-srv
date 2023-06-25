@@ -2877,7 +2877,7 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
         if rod:
             q_connections = Q(is_child=True)
         if dover:
-            q_connections |= Q(is_trust=True, user_to__isnull=False, is_reverse=False)
+            q_connections |= Q(is_trust__isnull=False, user_to__isnull=False, is_reverse=False)
         if withalone:
             if from_ is None:
                 users = [
