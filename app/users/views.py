@@ -2118,6 +2118,9 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
 
         elif videoid:
             votes_names = dict(Vote.VOTES)
+            button_to_users = {'': set()}
+            for vote in votes_names:
+                button_to_users[vote] = set()
             user_pks = []
             user_datas = []
             video_title = Video.video_vote_url(source, videoid)
@@ -2128,14 +2131,13 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             q_video = Q(
                 video__source=source,
                 video__videoid=videoid,
-                user__profile__latitude__isnull=False,
-                user__profile__longitude__isnull=False,
             )
             from_, to_ = self.get_from_to(request.GET, 'from', 'to')
             if from_ is not None:
                 q_video &= Q(time__gte=from_)
             if to_ is not None:
                 q_video &= Q(time__lte=to_)
+            n_ind = 0
             for rec in Vote.objects.filter(q_video
                 ).select_related(
                     'user', 'user__profile'
@@ -2151,6 +2153,12 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 try:
                     ind = user_pks.index(rec['user__id'])
                     user_datas[ind]['votes'].append(rec['button'])
+                    button_to_users[''].add(ind)
+                    for btn in votes_names:
+                        try:
+                            button_to_users[btn].remove(ind)
+                        except KeyError:
+                            pass
                 except ValueError:
                     user_datas.append(dict(
                         full_name = rec['user__first_name'],
@@ -2163,85 +2171,103 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         votes=[rec['button']]
                     ))
                     user_pks.append(rec['user__id'])
+                    button_to_users[rec['button']].add(n_ind)
+                    n_ind += 1
             for user_data in user_datas:
-                lat_sum += user_data['latitude']
-                lng_sum += user_data['longitude']
-                url_profile = self.profile_url_by_uuid(request, user_data['uuid'], fmt=self.FMT)
-                if bot_username:
-                    url_deeplink = self.get_deeplink_by_uuid(user_data['uuid'], bot_username)
-                else:
-                    url_deeplink = url_profile
-                votes = user_data['votes']
-                if len(votes) == 1:
-                    vote = votes[0]
-                    vote_color = Vote.VOTES_IMAGE[vote]['color']
-                    frame = self.VOTE_PHOTO_FRAME
-                    method = 'crop-%s-frame-%s' % (vote_color, frame, )
-                    votes_text = votes_names[vote]
-                    title = '%s: %s' % (user_data['full_name'], votes_text)
-                else:
-                    votes.sort(key=lambda v: Vote.VOTES_IMAGE[v]['sort_order'])
-                    frame = 0
-                    method = 'crop'
-                    votes_text = '<br />' + '<br />'.join([votes_names[vote] for vote in votes])
-                    title = user_data['full_name']
-                video_reply_html = (
-                    '<tr>'
-                        '<td colspan=2>'
-                        'Голос%s: %s'
-                        '</td>'
-                    '</tr>'
-                ) % (
-                    'а' if len(votes) > 1 else '',
-                    votes_text
-                )
-                popup_ = popup % dict(
-                    full_name = user_data['full_name'],
-                    trust_count=user_data['trust_count'],
-                    url_deeplink=url_deeplink,
-                    url_profile=url_profile,
-                    url_photo_popup=Profile.image_thumb(
-                        request, user_data['photo'],
-                        method=method,
-                        width=self.THUMB_SIZE_POPUP + frame * 2,
-                        height=self.THUMB_SIZE_POPUP + frame * 2,
-                        put_default_avatar=True,
-                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(user_data['gender'])
-                    ),
-                    thumb_size_popup = self.THUMB_SIZE_POPUP,
-                    offer_reply_html=offer_reply_html,
-                    video_reply_html=video_reply_html,
-                )
-                points.append(dict(
-                    latitude=user_data['latitude'],
-                    longitude=user_data['longitude'],
-                    title=title,
-                    is_of_found_user=False,
-                    icon=Profile.image_thumb(
-                        request, user_data['photo'],
-                        method=method,
-                        width=self.THUMB_SIZE_ICON + frame * 2,
-                        height=self.THUMB_SIZE_ICON + frame * 2,
-                        put_default_avatar=True,
-                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(user_data['gender'])
-                    ),
-                    size_icon=self.THUMB_SIZE_ICON + frame * 2,
-                    popup=popup_,
-                ))
+                if user_data['latitude'] is not None and user_data['longitude'] is not None:
+                    lat_sum += user_data['latitude']
+                    lng_sum += user_data['longitude']
+                    url_profile = self.profile_url_by_uuid(request, user_data['uuid'], fmt=self.FMT)
+                    if bot_username:
+                        url_deeplink = self.get_deeplink_by_uuid(user_data['uuid'], bot_username)
+                    else:
+                        url_deeplink = url_profile
+                    votes = user_data['votes']
+                    if len(votes) == 1:
+                        vote = votes[0]
+                        vote_color = Vote.VOTES_IMAGE[vote]['color']
+                        frame = self.VOTE_PHOTO_FRAME
+                        method = 'crop-%s-frame-%s' % (vote_color, frame, )
+                        votes_text = votes_names[vote]
+                        title = '%s: %s' % (user_data['full_name'], votes_text)
+                    else:
+                        votes.sort(key=lambda v: Vote.VOTES_IMAGE[v]['sort_order'])
+                        frame = 0
+                        method = 'crop'
+                        votes_text = ', '.join([votes_names[vote] for vote in votes])
+                        title = user_data['full_name']
+                    video_reply_html = (
+                        '<tr>'
+                            '<td colspan=2>'
+                            'Голос%s: %s'
+                            '</td>'
+                        '</tr>'
+                    ) % (
+                        'а' if len(votes) > 1 else '',
+                        votes_text
+                    )
+                    popup_ = popup % dict(
+                        full_name = user_data['full_name'],
+                        trust_count=user_data['trust_count'],
+                        url_deeplink=url_deeplink,
+                        url_profile=url_profile,
+                        url_photo_popup=Profile.image_thumb(
+                            request, user_data['photo'],
+                            method=method,
+                            width=self.THUMB_SIZE_POPUP + frame * 2,
+                            height=self.THUMB_SIZE_POPUP + frame * 2,
+                            put_default_avatar=True,
+                            default_avatar_in_media=PhotoModel.get_gendered_default_avatar(user_data['gender'])
+                        ),
+                        thumb_size_popup = self.THUMB_SIZE_POPUP,
+                        video_reply_html=video_reply_html,
+                        offer_reply_html=offer_reply_html,
+                    )
+                    points.append(dict(
+                        latitude=user_data['latitude'],
+                        longitude=user_data['longitude'],
+                        title=title,
+                        is_of_found_user=False,
+                        icon=Profile.image_thumb(
+                            request, user_data['photo'],
+                            method=method,
+                            width=self.THUMB_SIZE_ICON + frame * 2,
+                            height=self.THUMB_SIZE_ICON + frame * 2,
+                            put_default_avatar=True,
+                            default_avatar_in_media=PhotoModel.get_gendered_default_avatar(user_data['gender'])
+                        ),
+                        size_icon=self.THUMB_SIZE_ICON + frame * 2,
+                        popup=popup_,
+                    ))
             frame = self.VOTE_PHOTO_FRAME * 2
-            legend = '<br><table>'
-            vote_ts = [('', 'подал(а) несколько голосов')] + list(Vote.VOTES)
+            legend = '<br><table style="border-spacing: 0;border-bottom: 2px solid black;">'
+            vote_ts = [('', 'подал(а)<br/>несколько голосов')] + list(Vote.VOTES)
+            popup_legend = (
+                '<table>'
+                '<tr>'
+                    '<td valign=top>'
+                        '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
+                    '</td>'
+                    '<td valign=top>'
+                        ' %(full_name)s (%(trust_count)s)<br />'
+                        ' <a href="%(url_deeplink)s" target="_blank">Профиль</a><br />'
+                        '%(link_on_map)s'
+                        ' <a href="%(url_profile)s" target="_blank">Доверия</a>'
+                    '</td>'
+                '</tr>'
+                '%(video_reply_html)s'
+                '</table>'
+            )
             for vote_t in vote_ts:
                 vote, vote_name = vote_t
                 legend += (
                     '<tr>'
-                        '<td>'
-                            '<img src="%(photo)s" width=%(width)s height=%(height)s />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'
+                        '<td valign=top style="border-top: 2px solid black; padding: 4px;">'
+                            '<img src="%(photo)s" width=%(width)s height=%(height)s />'
                         '</td>'
-                        '<td>'
+                        '<td valign=top style="border-top: 2px solid black; padding: 4px;">'
                             '<big>%(vote_name)s</big>'
                         '</td>'
-                    '</tr>'
                 ) % dict(
                     photo=PhotoModel.image_thumb(
                         request=request,
@@ -2255,7 +2281,59 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     width=self.THUMB_SIZE_POPUP + frame * 2,
                     height=self.THUMB_SIZE_POPUP + frame * 2,
                 )
-            legend += '</table>'
+                legend += '<td style="border-top: 2px solid black; padding: 4px;">'
+                for ind in button_to_users[vote]:
+                    user_data = user_datas[ind]
+                    url_profile = self.profile_url_by_uuid(request, user_data['uuid'], fmt=self.FMT)
+                    if bot_username:
+                        url_deeplink = self.get_deeplink_by_uuid(user_data['uuid'], bot_username)
+                    else:
+                        url_deeplink = url_profile
+                    votes = user_data['votes']
+                    if len(votes) == 1:
+                        vote_ = votes[0]
+                        vote_color = Vote.VOTES_IMAGE[vote_]['color']
+                        frame_ = self.VOTE_PHOTO_FRAME
+                        method_ = 'crop-%s-frame-%s' % (vote_color, frame, )
+                        video_reply_html = ''
+                    else:
+                        votes.sort(key=lambda v: Vote.VOTES_IMAGE[v]['sort_order'])
+                        frame_ = 0
+                        method_ = 'crop'
+                        title = user_data['full_name']
+                        video_reply_html = (
+                            '<tr>'
+                                '<td colspan=2>'
+                                'Голоса: %s'
+                                '</td>'
+                            '</tr>'
+                        ) % ', '.join([votes_names[vote_] for vote_ in votes])
+                    if user_data['latitude'] and user_data['longitude']:
+                        link_on_map = '<a href="%s/?uuid=%s" target="_blank">На карте</a><br />' % (
+                            settings.MAP_URL, user_data['uuid']
+                        )
+                    else:
+                        link_on_map = ''
+                    popup_ = popup_legend % dict(
+                        full_name = user_data['full_name'],
+                        trust_count=user_data['trust_count'],
+                        url_deeplink=url_deeplink,
+                        url_profile=url_profile,
+                        url_photo_popup=Profile.image_thumb(
+                            request, user_data['photo'],
+                            method=method_,
+                            width=self.THUMB_SIZE_POPUP + frame_ * 2,
+                            height=self.THUMB_SIZE_POPUP + frame_ * 2,
+                            put_default_avatar=True,
+                            default_avatar_in_media=PhotoModel.get_gendered_default_avatar(user_data['gender'])
+                        ),
+                        thumb_size_popup = self.THUMB_SIZE_POPUP,
+                        video_reply_html=video_reply_html,
+                        link_on_map=link_on_map,
+                    )
+                    legend += popup_
+                legend += '</td></tr>'
+            legend += '</table><br /><br />'
 
         else:
             # Или задан uuid, или ничего

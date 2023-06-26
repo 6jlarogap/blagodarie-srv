@@ -325,6 +325,10 @@ REDIRECT_FROM_CALLBACK = 'oauth-landing'
 #
 GRAPH_URL = 'https://graph.blagoroda.org'
 
+# Рисуем карту в формате здесь
+#
+MAP_URL = 'https://map.blagoroda.org'
+
 # ------------------------------------------------
 
 # Это надо полностью переписать в local_settings.py:
