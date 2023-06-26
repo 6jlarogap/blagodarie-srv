@@ -939,7 +939,7 @@ class TgPoll(BaseModelInsertTimestamp):
     """
 
     poll_id = models.BigIntegerField(_("Poll Id"), unique=True, db_index=True)
-    question = models.CharField(_("Вопрос"), max_length=256)
+    question = models.CharField(_("Вопрос"), max_length=2048)
     # Сообщение с опросом и где это сообщение
     message_id = models.BigIntegerField(_("Message Id"))
     chat_id = models.BigIntegerField(_("Chat Id"))
@@ -990,7 +990,7 @@ class Offer(BaseModelInsertTimestamp):
 
     owner = models.ForeignKey('auth.User', verbose_name=_("Владелец"), on_delete=models.CASCADE)
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
-    question = models.CharField(_("Вопрос"), max_length=256)
+    question = models.CharField(_("Вопрос"), max_length=2048)
     closed_timestamp = models.PositiveIntegerField(_("Приостановлен"), null=True, default=None)
     is_multi = models.BooleanField(_("Множественный выбор"), default=False)
 
