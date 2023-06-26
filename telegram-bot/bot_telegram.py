@@ -3484,6 +3484,32 @@ async def process_callback_thank_wo_comment(callback_query: types.CallbackQuery,
 
 
 async def geo(message, state_to_set, uuid=None):
+    await state_to_set.set()
+    state = dp.current_state()
+    if uuid:
+        async with state.proxy() as data:
+            data['uuid'] = uuid
+    msg_location = (
+        'Пожалуйста, отправьте мне координаты вида \'74.188586, 95.790195\' '
+        '(широта,долгота - удобно скопировать из приложения карт Яндекса/Гугла) '
+        'или нажмите Отмена. ВНИМАНИЕ! Отправленные координаты будут опубликованы!\n'
+        '\n'
+        'Отправленное местоположение будет использовано для отображение профиля '
+        'на картах участников голосований, опросов и на общей карте участников проекта '
+        '- точное местоположение не требуется - '
+        'можно выбрать ближнюю/дальнюю остановку транспорта, рынок или парк.'
+    )
+    await bot.send_message(
+        message.chat.id,
+        msg_location,
+        reply_markup=Misc.reply_markup_cancel_row(),
+    )
+
+async def geo_with_location(message, state_to_set, uuid=None):
+
+    # Старая функция geo(), в которой заточено получение координат
+    # от мобильного устройства
+
     # Здесь вынужден отказаться от параметра , one_time_keyboard=True
     # Не убирает телеграм "нижнюю" клавиатуру в мобильных клиентах!
     # Убираю "вручную", потом: собщением с reply_markup=types.reply_keyboard.ReplyKeyboardRemove()
