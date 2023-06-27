@@ -2080,7 +2080,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         elif offer_id:
             try:
                 offer = Offer.objects.select_related('owner', 'owner__profile').get(uuid=offer_id)
-                q &= Q(offer_answers__offer__uuid=offer_id)
+                q = Q(offer_answers__offer__uuid=offer_id)
                 qs = Profile.objects.filter(q).select_related('user').distinct()
                 offer_dict = offer.data_dict(request=None, user_ids_only=True)
                 offer_question = offer_dict['question']
@@ -2355,6 +2355,16 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             else:
                 if found_coordinates:
                     qs = Profile.objects.filter(pk=found_profile.pk).select_related('user').distinct()
+        if offer_question:
+            answer_to_users = {
+                # не ответили
+                -1: [],
+                # ответили на несколько
+                0: [],
+                # Дальше ответы от 1 до числа ответов
+            }
+            for i in range(1, len(offer_dict['answers'])):
+                answer_to_users[i] = []
         for profile in (qs if qs else []):
             url_profile = self.profile_url(request, profile, fmt=self.FMT)
             if bot_username:
@@ -2363,12 +2373,27 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 url_deeplink = url_profile
             if offer_question:
                 answer_numbers = offer_dict['user_answered'].get(profile.user.pk, dict(answers=[0]))['answers']
+                if profile.latitude is not None and profile.longitude is not None:
+                    link_on_map = '<a href="%s/?uuid=%s" target="_blank">На карте</a><br />' % (
+                        settings.MAP_URL, profile.uuid
+                    )
+                else:
+                    link_on_map = ''
+                user_data = dict(
+                    full_name = profile.user.first_name,
+                    url_deeplink=url_deeplink,
+                    link_on_map=link_on_map
+                )
                 if len(answer_numbers) == 1:
                     answer_color = settings.OFFER_ANSWER_COLOR_MAP[answer_numbers[0]]
                     frame = self.OFFER_PHOTO_FRAME
                     method = 'crop-%s-frame-%s' % (answer_color, frame, )
                     answer_text = answers[answer_numbers[0]]
                     title_template = '%(full_name)s: %(answer_text)s'
+                    if answer_numbers[0]:
+                        answer_to_users[answer_numbers[0]].append(user_data)
+                    else:
+                        answer_to_users[-1].append(user_data)
                 else:
                     frame = 0
                     method = 'crop'
@@ -2376,6 +2401,16 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         [' &nbsp;&nbsp;' + offer_dict['answers'][n]['answer'] for n in answer_numbers]
                     )
                     title_template = '%(full_name)s'
+                    if len(answer_numbers) > 1:
+                        answer_to_users[0].append(user_data)
+                user_data['photo'] = profile.choose_thumb(
+                        request,
+                        method=method,
+                        width=self.THUMB_SIZE_POPUP + frame * 2,
+                        height=self.THUMB_SIZE_POPUP + frame * 2,
+                        put_default_avatar=True,
+                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
+                )
                 offer_reply_html = (
                     '<tr>'
                         '<td colspan=2>'
@@ -2386,6 +2421,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     'ы' if len(answer_numbers) > 1 else '',
                     answer_text
                 )
+                user_data['offer_reply_html'] = offer_reply_html if len(answer_numbers) > 1 else ''
             else:
                 if profile.is_dead or profile.dod:
                     frame = self.DEAD_PHOTO_FRAME
@@ -2398,62 +2434,63 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     method = 'crop'
                 answer_text=''
                 title_template = '(%(trust_count)s) %(full_name)s'
-            dict_user = dict(
-                full_name = profile.user.first_name,
-                trust_count=profile.trust_count,
-                url_deeplink=url_deeplink,
-                url_profile=url_profile,
-                url_photo_popup=profile.choose_thumb(
-                    request,
-                    method=method,
-                    width=self.THUMB_SIZE_POPUP + frame * 2,
-                    height=self.THUMB_SIZE_POPUP + frame * 2,
-                    put_default_avatar=True,
-                    default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
-                ),
-                thumb_size_popup = self.THUMB_SIZE_POPUP,
-                offer_reply_html=offer_reply_html,
-                answer_text=answer_text,
-                title_template=title_template,
-                video_reply_html=video_reply_html,
-            )
-            point = dict(
-                latitude=profile.latitude,
-                longitude=profile.longitude,
-                title=title_template % dict_user,
-                popup=popup % dict_user,
-            )
-            if (found_coordinates and profile == found_profile) or \
-               (offer_question and offer_dict['owner']['id'] == profile.user.pk):
-                point.update(
-                    is_of_found_user=True,
-                    icon=profile.choose_thumb(
+            if profile.latitude is not None and profile.longitude is not None:
+                dict_user = dict(
+                    full_name = profile.user.first_name,
+                    trust_count=profile.trust_count,
+                    url_deeplink=url_deeplink,
+                    url_profile=url_profile,
+                    url_photo_popup=profile.choose_thumb(
                         request,
                         method=method,
-                        width=self.THUMB_SIZE_ICON_FOUND + frame * 2,
-                        height=self.THUMB_SIZE_ICON_FOUND + frame * 2,
+                        width=self.THUMB_SIZE_POPUP + frame * 2,
+                        height=self.THUMB_SIZE_POPUP + frame * 2,
                         put_default_avatar=True,
                         default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
                     ),
-                    size_icon=self.THUMB_SIZE_ICON_FOUND + frame * 2,
+                    thumb_size_popup = self.THUMB_SIZE_POPUP,
+                    offer_reply_html=offer_reply_html,
+                    answer_text=answer_text,
+                    title_template=title_template,
+                    video_reply_html=video_reply_html,
                 )
-            else:
-                point.update(
-                    is_of_found_user=False,
-                    icon=profile.choose_thumb(
-                        request,
-                        method=method,
-                        width=self.THUMB_SIZE_ICON + frame * 2,
-                        height=self.THUMB_SIZE_ICON + frame * 2,
-                        put_default_avatar=True,
-                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
-                    ),
-                    size_icon=self.THUMB_SIZE_ICON + frame * 2,
+                point = dict(
+                    latitude=profile.latitude,
+                    longitude=profile.longitude,
+                    title=title_template % dict_user,
+                    popup=popup % dict_user,
                 )
-            points.append(point)
-            if not found_coordinates:
-                lat_sum += profile.latitude
-                lng_sum += profile.longitude
+                if (found_coordinates and profile == found_profile) or \
+                (offer_question and offer_dict['owner']['id'] == profile.user.pk):
+                    point.update(
+                        is_of_found_user=True,
+                        icon=profile.choose_thumb(
+                            request,
+                            method=method,
+                            width=self.THUMB_SIZE_ICON_FOUND + frame * 2,
+                            height=self.THUMB_SIZE_ICON_FOUND + frame * 2,
+                            put_default_avatar=True,
+                            default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
+                        ),
+                        size_icon=self.THUMB_SIZE_ICON_FOUND + frame * 2,
+                    )
+                else:
+                    point.update(
+                        is_of_found_user=False,
+                        icon=profile.choose_thumb(
+                            request,
+                            method=method,
+                            width=self.THUMB_SIZE_ICON + frame * 2,
+                            height=self.THUMB_SIZE_ICON + frame * 2,
+                            put_default_avatar=True,
+                            default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
+                        ),
+                        size_icon=self.THUMB_SIZE_ICON + frame * 2,
+                    )
+                points.append(point)
+                if not found_coordinates:
+                    lat_sum += profile.latitude
+                    lng_sum += profile.longitude
         if points and not found_coordinates:
             lat_avg = lat_sum / len(points)
             lng_avg = lng_sum / len(points)
