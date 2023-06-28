@@ -2088,31 +2088,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 answers[0] = 'не ответил(а)'
                 if bot_username:
                     offer_deeplink = 'https://t.me/%s?start=offer-%s' % (bot_username, offer.uuid)
-                frame = self.OFFER_PHOTO_FRAME * 2
-                legend = '<br><table>'
-                for i, answer in enumerate(answers):
-                    legend += (
-                        '<tr>'
-                            '<td>'
-                                '<img src="%(photo)s" width=%(width)s height=%(height)s />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'
-                            '</td>'
-                            '<td>'
-                                '<big>%(answer)s</big>'
-                            '</td>'
-                        '</tr>'
-                    ) % dict(
-                        photo=PhotoModel.image_thumb(
-                            request=request,
-                            fname=PhotoModel.DEFAULT_AVATAR_IN_MEDIA_NONE,
-                            method = 'crop-%s-frame-%s' % (
-                                settings.OFFER_ANSWER_COLOR_MAP[i], frame,
-                            )
-                        ),
-                        answer=answer if i > 0 else 'не ответил(а) или несколько ответов' if offer.is_multi else 'не ответил(а)',
-                        width=self.THUMB_SIZE_POPUP + frame * 2,
-                        height=self.THUMB_SIZE_POPUP + frame * 2,
-                    )
-                legend += '</table>'
             except (ValueError, Offer.DoesNotExist,):
                 qs = offer = None
 
@@ -2281,7 +2256,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     width=self.THUMB_SIZE_POPUP + frame * 2,
                     height=self.THUMB_SIZE_POPUP + frame * 2,
                 )
-                legend += '<td style="border-top: 2px solid black; padding: 4px;">'
+                legend += '<td valign=top style="border-top: 2px solid black; padding: 4px;">'
                 for ind in button_to_users[vote]:
                     user_data = user_datas[ind]
                     url_profile = self.profile_url_by_uuid(request, user_data['uuid'], fmt=self.FMT)
@@ -2381,12 +2356,14 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     link_on_map = ''
                 user_data = dict(
                     full_name = profile.user.first_name,
+                    trust_count=profile.trust_count,
                     url_deeplink=url_deeplink,
+                    url_profile=url_profile,
                     link_on_map=link_on_map
                 )
+                frame = self.OFFER_PHOTO_FRAME
                 if len(answer_numbers) == 1:
                     answer_color = settings.OFFER_ANSWER_COLOR_MAP[answer_numbers[0]]
-                    frame = self.OFFER_PHOTO_FRAME
                     method = 'crop-%s-frame-%s' % (answer_color, frame, )
                     answer_text = answers[answer_numbers[0]]
                     title_template = '%(full_name)s: %(answer_text)s'
@@ -2395,14 +2372,13 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     else:
                         answer_to_users[-1].append(user_data)
                 else:
-                    frame = 0
-                    method = 'crop'
+                    # Здесь только много ответов
+                    method = 'crop-%s-frame-%s' % ('gray', frame, )
                     answer_text = '<br />' + '<br />'.join(
                         [' &nbsp;&nbsp;' + offer_dict['answers'][n]['answer'] for n in answer_numbers]
                     )
                     title_template = '%(full_name)s'
-                    if len(answer_numbers) > 1:
-                        answer_to_users[0].append(user_data)
+                    answer_to_users[0].append(user_data)
                 user_data['photo'] = profile.choose_thumb(
                         request,
                         method=method,
@@ -2491,6 +2467,73 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 if not found_coordinates:
                     lat_sum += profile.latitude
                     lng_sum += profile.longitude
+
+        if offer_question:
+            print(answer_to_users)
+            legend = '<br><table style="border-spacing: 0;border-bottom: 2px solid black;">'
+            popup_legend = (
+                '<table>'
+                '<tr>'
+                    '<td valign=top>'
+                        '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
+                    '</td>'
+                    '<td valign=top>'
+                        ' %(full_name)s (%(trust_count)s)<br />'
+                        ' <a href="%(url_deeplink)s" target="_blank">Профиль</a><br />'
+                        '%(link_on_map)s'
+                        ' <a href="%(url_profile)s" target="_blank">Доверия</a>'
+                    '</td>'
+                '</tr>'
+                '%(offer_reply_html)s'
+                '</table>'
+            )
+            frame = self.OFFER_PHOTO_FRAME * 2
+            for i in range(-1, len(offer_dict['answers'])):
+                if i == 0 and not offer.is_multi:
+                    continue
+                if i < 0:
+                    answer = 'Не ответили'
+                    frame_color = settings.OFFER_ANSWER_COLOR_MAP[0]
+                elif i == 0:
+                    answer = 'Несколько ответов'
+                    frame_color = 'gray'
+                else:
+                    answer = offer_dict['answers'][i]['answer']
+                    frame_color = settings.OFFER_ANSWER_COLOR_MAP[i]
+                legend += (
+                    '<tr>'
+                        '<td valign=top style="border-top: 2px solid black; padding: 4px;">'
+                            '<img src="%(photo)s" width=%(width)s height=%(height)s />'
+                        '</td>'
+                        '<td valign=top style="border-top: 2px solid black; padding: 4px;">'
+                            '<big>%(answer)s</big>'
+                        '</td>'
+                ) % dict(
+                    photo=PhotoModel.image_thumb(
+                        request=request,
+                        fname=PhotoModel.DEFAULT_AVATAR_IN_MEDIA_NONE,
+                        method = 'crop-%s-frame-%s' % (frame_color, frame),
+                    ),
+                    answer=answer,
+                    width=self.THUMB_SIZE_POPUP + frame * 2,
+                    height=self.THUMB_SIZE_POPUP + frame * 2,
+                )
+                legend += '<td valign=top style="border-top: 2px solid black; padding: 4px;">'
+                for user_data in answer_to_users[i]:
+                    popup_ = popup_legend % dict(
+                        full_name=user_data['full_name'],
+                        trust_count=user_data['trust_count'],
+                        url_deeplink=user_data['url_deeplink'],
+                        url_profile=user_data['url_profile'],
+                        offer_reply_html=user_data['offer_reply_html'],
+                        url_photo_popup=user_data['photo'],
+                        link_on_map=user_data['link_on_map'],
+                        thumb_size_popup = self.THUMB_SIZE_POPUP,
+                    )
+                    legend += popup_
+                legend += '</td></tr>'
+            legend += '</table><br /><br />'
+
         if points and not found_coordinates:
             lat_avg = lat_sum / len(points)
             lng_avg = lng_sum / len(points)
