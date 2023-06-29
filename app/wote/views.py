@@ -408,6 +408,10 @@ class ApiVoteGraph(FromToCountMixin, TelegramApiMixin, APIView):
                 target=votes_image[rec['button']]['number'],
                 is_video_vote=True,
             ))
+        if request.user.is_authenticated and request.user.id not in user_pks:
+            user_pks.append(request.user.id)
+            nodes.append(request.user.profile.data_dict(request=request, short=True, fmt='3d-force-graph'))
+
         q_connections = Q(
             is_trust__isnull=False, is_reverse=False,
             user_from__in=user_pks, user_to__in=user_pks
