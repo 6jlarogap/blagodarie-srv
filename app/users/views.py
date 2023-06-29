@@ -2469,7 +2469,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     lng_sum += profile.longitude
 
         if offer_question:
-            print(answer_to_users)
             legend = '<br><table style="border-spacing: 0;border-bottom: 2px solid black;">'
             popup_legend = (
                 '<table>'
@@ -3259,7 +3258,7 @@ api_token_url = ApiTokenUrl.as_view()
 
 class ApiTokenAuthData(ApiTokenAuthDataMixin, APIView):
     """
-    Получить зашитый в токене данные авторизационной куки
+    Создать или получить зашитый в токене данные авторизационной куки
 
     Используем кэш redis!
     Token кодируется как uuid
@@ -3270,12 +3269,50 @@ class ApiTokenAuthData(ApiTokenAuthDataMixin, APIView):
     # TOKEN_AUTHDATA_PREFIX =
     # TOKEN_AUTHDATA_SEP
 
+    def post(self, request):
+        """
+        Получить токен с зашитыми в нем данными авторизационной куки
+
+        Post запрос.
+        http(s)://<api-host>/api/token/authdata/
+        Требует авторизации.
+        На входе json, c собственно объектом авторизационной куки:
+        {
+            "auth_data": {
+                "provider": "telegram",
+                "user_uuid": <uuid>,
+                "auth_token": <auth_token>
+            }
+        }
+        Возвращает зашитое в токене содержимое request.data['auth_data']
+        {
+            "authdata_token": <токен>
+        }
+        """
+
+        #   Требование к методу: максимально быстро. Посему:
+        #       -   проверки почти нет
+        #       -   обращения к б.д. за user_uuid и auth_token тоже нет
+
+        if not request.user.is_authenticated:
+            raise NotAuthenticated
+        try:
+            auth_data = request.data.get('auth_data')
+            if not isinstance(auth_data, dict):
+                raise ServiceException("Неверные данные")
+            data = self.make_authdata_token(auth_data)
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
     def get(self, request):
         """
         Получить данные авторизационной куки из token
 
         На входе:
-            https:/.../path/to/?token=<token>
+            http(s)://<api-host>/api/token/authdata/?token=<token>
         На выходе:
             {
                 "url": "<url>",
