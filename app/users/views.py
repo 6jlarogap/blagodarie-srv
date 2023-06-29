@@ -3300,7 +3300,7 @@ class ApiTokenAuthData(ApiTokenAuthDataMixin, APIView):
             auth_data = request.data.get('auth_data')
             if not isinstance(auth_data, dict):
                 raise ServiceException("Неверные данные")
-            data = self.make_authdata_token(auth_data)
+            data = dict(authdata_token=self.make_authdata_token(auth_data))
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
