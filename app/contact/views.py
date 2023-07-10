@@ -65,7 +65,25 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin,
                 user_uuid_to
                     Это uuid, к кому
 
-            Тип операции, обязательно, operation_type_id, см. таблицу: models.py/OperationType
+            Тип операции, обязательно, operation_type_id:
+                THANK = 1
+                MISTRUST = 2
+                TRUST = 3
+                NULLIFY_TRUST = 4
+                TRUST_AND_THANK = 5
+                FATHER = 6
+                NOT_PARENT = 7
+                MOTHER = 8
+                SET_FATHER = 9
+                SET_MOTHER = 10
+
+                В операциях доверия, недоверия реально используются TRUST_AND_THANK, NULLIFY_TRUST, MISTRUST,
+                но отработаны также и TRUST, THANK
+
+                SET_FATHER, SET_MOTHER, отличие от FATHER, MOTHER:
+                    При SET_FATHER, если у человека уже есть другой папа, заменяем папу.
+                    При SET_MOTHER, если у человека уже есть другая мама, заменяем маму.
+                    В аналогичных случаях для операций FATHER, MOTHER будет ошибка.
 
             tg_from_chat_id (необязательно):
                 id пользователя (1) телеграма, который составил сообщение, что перенаправил другой пользователь (2).
@@ -75,11 +93,46 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin,
             тип операции может быть любой, кроме назначения/снятия родственников
             тип операции, operation_type_id, см. таблицу: models.py/OperationType
 
-        Иначе требует авторизации. На входе (json или form data), всё обязательно:
+        Иначе требует авторизации. На входе (json или form data):
 
-            * operation_type_id, тип операции, см. таблицу: models.py/OperationType
-            * user_id_from, от кого, uuid
-            * user_id_to, к кому, uuid
+            * operation_type_id, тип операции, обязательно:
+                THANK = 1
+                MISTRUST = 2
+                TRUST = 3
+                NULLIFY_TRUST = 4
+                TRUST_AND_THANK = 5
+                FATHER = 6
+                NOT_PARENT = 7
+                MOTHER = 8
+                SET_FATHER = 9
+                SET_MOTHER = 10
+
+                В операциях доверия, недоверия реально используются TRUST_AND_THANK, NULLIFY_TRUST, MISTRUST,
+                но отработаны также и TRUST, THANK
+
+                SET_FATHER, SET_MOTHER, отличие от FATHER, MOTHER:
+                    При SET_FATHER, если у человека уже есть другой папа, заменяем папу.
+                    При SET_MOTHER, если у человека уже есть другая мама, заменяем маму.
+                    В аналогичных случаях для операций FATHER, MOTHER будет ошибка.
+
+            * user_id_from, от кого, uuid:
+                Необязательно.
+                    Если не задан, полагается uuid авторизованного юзера
+                    Если задан,
+                        -   то в операциях доверия, недоверия
+                            (THANK, MISTRUST, TRUST, NULLIFY_TRUST, TRUST_AND_THANK)
+                            должен быть равен uuid авторизованного юзера
+                        -   в операциях родства ((SET_)FATHER, (SET_)MOTHER, NOT_PARENT)
+                            user_id_from может быть uuid собственного пользователя
+                            авторизованного юзера.
+
+            * user_id_to, к кому, uuid, обязательно
+
+            Пример исходных данных:
+            {
+                "user_id_to": "825b031e-95a2-4fdd-a70b-b446a52c4498",
+                "operation_type_id": 1
+            }
 
         - если user_id_from == user_id_to, то вернуть ошибку (нельзя добавить операцию себе);
         - иначе:
@@ -160,13 +213,6 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin,
                 - иначе вернуть ошибку, не был родителем, нечего еще раз говорить, что не родитель,
                   при этом кроме message, еще передается code='already'
                 - если нет ошибок, то записать данные в таблицу tbl_journal
-
-        Пример исходных данных:
-        {
-            "user_id_to": "825b031e-95a2-4fdd-a70b-b446a52c4498",
-            "operation_type_id": 1,
-            "timestamp": 1593527855
-        }
         """
         try:
             try:
