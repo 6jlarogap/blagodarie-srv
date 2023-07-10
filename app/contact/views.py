@@ -123,8 +123,10 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin,
                             (THANK, MISTRUST, TRUST, NULLIFY_TRUST, TRUST_AND_THANK)
                             должен быть равен uuid авторизованного юзера
                         -   в операциях родства ((SET_)FATHER, (SET_)MOTHER, NOT_PARENT)
-                            user_id_from может быть uuid собственного пользователя
-                            авторизованного юзера.
+                            user_id_from может быть:
+                                *   или uuid авторизованного юзера
+                                *   или uuid собственного пользователя авторизованного юзера
+                                !   иначе ошибка
 
             * user_id_to, к кому, uuid, обязательно
 
