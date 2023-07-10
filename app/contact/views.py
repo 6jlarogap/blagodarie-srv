@@ -42,16 +42,11 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin,
         """
         Добавление операции
 
-        На входе json или form data
-
-        Обязательно:
-            тип операции, operation_type_id, см. таблицу OperationType
-
-        Если запрос приходит из телеграм бота:
+        Если запрос приходит из телеграм бота, то на входе (json или form data):
             tg_token
                 токен бота, должен соответствовать тому, что в api local_settings
 
-            ИЛИ
+            От кого (обязательно):
                 user_id_from
                     (не uuid!) пользователя от кого
                         NB! при передаче данных по кнопке есть ограничение, строка не больше 64 символов, uuid не подходит
@@ -62,7 +57,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin,
                 user_uuid_from
                     Это uuid, от кого
 
-            ИЛИ
+            К кому (обязательно)
                 user_id_to
                     (не uuid!) пользователя к кому
                         NB! при передаче данных по кнопке есть ограничение, строка не больше 64 символов, uuid не подходит
@@ -70,14 +65,22 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin,
                 user_uuid_to
                     Это uuid, к кому
 
+            Тип операции, обязательно, operation_type_id, см. таблицу: models.py/OperationType
+
             tg_from_chat_id (необязательно):
                 id пользователя (1) телеграма, который составил сообщение, что перенаправил другой пользователь (2).
                 Пользователь (2) отправил благодарность к (1) или выполнил другое действие
             tg_message_id (необязательно):
                 Ид того сообщения
             тип операции может быть любой, кроме назначения/снятия родственников
+            тип операции, operation_type_id, см. таблицу: models.py/OperationType
 
-        Иначе требует авторизации
+        Иначе требует авторизации. На входе (json или form data), всё обязательно:
+
+            * operation_type_id, тип операции, см. таблицу: models.py/OperationType
+            * user_id_from, от кого, uuid
+            * user_id_to, к кому, uuid
+
         - если user_id_from == user_id_to, то вернуть ошибку (нельзя добавить операцию себе);
         - иначе:
             - если тип операции THANK:
