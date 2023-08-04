@@ -2899,7 +2899,7 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
 
     Также отдается профиль авторизованного пользователя, даже если его нет в выборке.
     """
-    permission_classes = (IsAuthenticated,)
+    # permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         fmt = request.GET.get('fmt', 'd3js')
@@ -2988,10 +2988,10 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
                         show_trust=bool(dover),
                         fmt=fmt
                     ))
-                    if cs.user_from.pk not in users_pks:
+                    if cs.user_from.pk not in user_pks:
                         user_pks.add(cs.user_from.pk)
                         users.append(cs.user_from.profile.data_dict(request=request, short=True, fmt=fmt))
-                    if cs.user_to.pk not in users_pks:
+                    if cs.user_to.pk not in user_pks:
                         user_pks.add(cs.user_to.pk)
                         users.append(cs.user_to.profile.data_dict(request=request, short=True, fmt=fmt))
 
