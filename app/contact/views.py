@@ -2926,7 +2926,6 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
 
         connections = []
         user_pks = set()
-        check_is_authenticated = False
         q_connections = Q(pk=0)
         if rod:
             q_connections = Q(is_child=True)
@@ -2953,7 +2952,6 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
             else:
                 users = []
                 connections = []
-                check_is_authenticated = True
                 if rod or dover:
                     for profile in Profile.objects.select_related('user').filter(
                             user__is_superuser=False,
@@ -2962,6 +2960,11 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
                         ).distinct()[from_: from_ + number_]:
                         users.append(profile.data_dict(request=request, short=True, fmt=fmt))
                         user_pks.add(profile.user.pk)
+
+                    if request.user.is_authenticated and request.user.pk not in user_pks:
+                        user_pks.add(request.user.pk)
+                        users.append(request.user.profile.data_dict(request=request, short=True, fmt=fmt))
+
                     connections = [
                         cs.data_dict(
                             show_child=rod and fmt=='3d-force-graph',
@@ -2978,7 +2981,6 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
                     ]
         else:
             users = []
-            check_is_authenticated = True
             if rod or dover:
                 for cs in CurrentState.objects.filter(q_connections).select_related(
                             'user_from__profile', 'user_to__profile',).distinct():
@@ -2994,9 +2996,6 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
                     if cs.user_to.pk not in user_pks:
                         user_pks.add(cs.user_to.pk)
                         users.append(cs.user_to.profile.data_dict(request=request, short=True, fmt=fmt))
-
-        if check_is_authenticated and request.user.is_authenticated and request.user.pk not in user_pks:
-            users.append(request.user.profile.data_dict(request=request, short=True, fmt=fmt))
 
         if fmt == '3d-force-graph':
             bot_username = self.get_bot_username()
