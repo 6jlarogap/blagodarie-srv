@@ -2899,7 +2899,7 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
 
     Также отдается профиль авторизованного пользователя, даже если его нет в выборке.
     """
-    # permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         fmt = request.GET.get('fmt', 'd3js')
