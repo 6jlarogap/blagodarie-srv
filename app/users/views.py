@@ -1791,10 +1791,55 @@ class ApiBotGroup(ApiBotGroupMixin, APIView):
             tg_group, created_ = self.group_post(request.data)
             data = tg_group.data_dict()
             data.update(created=created_)
-            status_code = 200
+            status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
-            status_code = 400
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+    def put(self, request):
+        """
+        Изменить группу канал
+        На входе: {
+            "old_chat_id"=...       эту группу/канал изменяем,
+            "chat_id"=...,          возможно новый ид
+            "type"=...,             может и не быть
+            "title"=...             может и не быть
+        }
+        Возвращает: {
+            "chat_id"=...,
+            "type"=...,
+            "title"=...
+        }
+        или HTTP_400_BAD_REQUEST при неверных входных данных
+        или HTTP_404_NOT_FOUND, если не найдена группа/канал
+        """
+        try:
+            status_code = None
+            self.check_data(request)
+            try:
+                old_chat_id = int(request.data.get('old_chat_id'))
+            except (ValueError, TypeError,):
+                raise ServiceException('Не верный old_chat_id')
+            try:
+                tg_group = TgGroup.objects.get(chat_id=old_chat_id)
+            except TgGroup.DoesNotExist:
+                status_code = status.HTTP_404_NOT_FOUND
+                raise ServiceException('Не найдена группа/канал')
+            do_save = False
+            for f in ('chat_id', 'title', 'type',):
+                if v := request.data.get(f):
+                    if v != getattr(tg_group, f):
+                        do_save = True
+                        setattr(tg_group, f, v)
+                if do_save:
+                    tg_group.save()
+            data = tg_group.data_dict()
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            if status_code is None:
+                status_code = status.HTTP_404_NOT_FOUND
         return Response(data=data, status=status_code)
 
     def delete(self, request):
@@ -1809,7 +1854,7 @@ class ApiBotGroup(ApiBotGroupMixin, APIView):
             data = {}
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
-            status_code = 400
+            status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
 api_bot_group = ApiBotGroup.as_view()

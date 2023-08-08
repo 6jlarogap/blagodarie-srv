@@ -1366,6 +1366,23 @@ class TgGroup(object):
         return status, response
 
     @classmethod
+    async def put(cls, old_chat_id, chat_id, title, type_):
+        payload = {
+            'tg_token': settings.TOKEN,
+            'old_chat_id': old_chat_id,
+            'chat_id': chat_id, 'title': title, 'type': type_,
+        }
+        logging.debug('modify group, payload: %s' % payload)
+        status, response = await Misc.api_request(
+            path='/api/bot/group',
+            method='put',
+            json=payload,
+        )
+        logging.debug('modify group, status: %s' % status)
+        logging.debug('modify group, response: %s' % response)
+        return status, response
+
+    @classmethod
     async def delete(cls, chat_id):
         payload = {'tg_token': settings.TOKEN, 'chat_id': chat_id,}
         logging.debug('delete group id, payload: %s' % payload)

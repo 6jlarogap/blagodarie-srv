@@ -4885,6 +4885,68 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
     if await offer_forwarded_in_group_or_channel(message, state):
         return
 
+    # При преобразовании группы в супергруппу сообщения:
+    #   Это если юзер сделал из частной группы публичную:
+    # {
+    #     "update_id":178689763,
+    #     \n"message":{
+    #         "message_id":15251,
+    #         "from":{
+    #             "id":1109405488,"is_bot":false,"first_name":"...","last_name":"...",
+    #             "username":"...","language_code":"ru"
+    #         },
+    #         "chat":{
+    #             "id":-989004337,"title":"SevGroupTest","type":"group","all_members_are_administrators":false
+    #         },
+    #         "date":1691488438,
+    #         "migrate_to_chat_id":-1001962534553
+    #     }
+    # },
+    #   Это вслед за тем как юзер сделал из частной группы публичную,
+    #   Надеюсь, что и при других случаях, когда телеграм сам преобразует
+    #   группу в публичную, будет то же самое
+    # {
+    #     "update_id":178689764,
+    #     \n"message":{
+    #         "message_id":1,
+    #         "from":{
+    #             "id":1087968824,"is_bot":true,"first_name":"Group","username":"GroupAnonymousBot"
+    #         },
+    #         "sender_chat":{
+    #             "id":-1001962534553,"title":"SevGroupTest","type":"supergroup"
+    #         },
+    #         "chat":{
+    #             "id":-1001962534553,"title":"SevGroupTest","type":"supergroup"
+    #         },
+    #         "date":1691488438,
+    #         "migrate_from_chat_id":-989004337
+    #     }
+    # }
+    try:
+        if message.migrate_to_chat_id:
+            # Это сообщение может быть обработано позже чем
+            # сообщение с migrate_from_chat_id и еще со старым chat_id,
+            # и будет воссоздана старая группа в апи
+            return
+    except (TypeError, AttributeError,):
+        pass
+    try:
+        if message.migrate_from_chat_id:
+            status, response = await TgGroup.put(
+                old_chat_id=message.migrate_from_chat_id,
+                chat_id=message.chat.id,
+                title=message.chat.title,
+                type_=message.chat.type,
+            )
+            if status == 200 and message.chat.type == types.ChatType.SUPERGROUP:
+                await bot.send_message(
+                    message.chat.id,
+                    'Ура! Группа стала супергруппой',
+                )
+            return
+    except (TypeError, AttributeError,):
+        pass
+
     global last_user_in_group
 
     # Данные из телеграма пользователя /пользователей/, данные которых надо выводить при поступлении
@@ -4900,16 +4962,16 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
     a_users_in = [ tg_user_sender ]
     try:
         tg_user_left = message.left_chat_member
-    except  (TypeError, ):
+    except (TypeError, AttributeError,):
         tg_user_left = None
     if tg_user_left:
         a_users_in = [ tg_user_left ]
     try:
         tg_users_new = message.new_chat_members
-    except (TypeError, ):
+    except (TypeError, AttributeError,):
         tg_users_new = []
     if tg_users_new:
-        a_users_in = tg_users_new
+        a_users_in += tg_users_new
 
     if not tg_users_new and not tg_user_left and tg_user_sender.is_bot:
         # tg_user_sender.is_bot:
@@ -4932,62 +4994,60 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
     for user_in in a_users_in:
         reply_markup = None
-        status, response_from = await Misc.post_tg_user(user_in)
-        if status != 200:
+        response_from = {}
+        if user_in.is_bot:
             a_users_out.append({})
-            continue
-        a_users_out.append(response_from)
-
-        is_this_bot = bot_data.id == user_in.id
-        if tg_user_left:
-            # Ушел пользователь, убираем его из группы
-            await TgGroupMember.remove(
-                group_chat_id=message.chat.id,
-                group_title=message.chat.title,
-                group_type=message.chat.type,
-                user_tg_uid=user_in.id
-            )
-        elif not is_this_bot:
-            # Добавить в группу в апи, если его там нет и если это не бот-обработчик
-            await TgGroupMember.add(
-                group_chat_id=message.chat.id,
-                group_title=message.chat.title,
-                group_type=message.chat.type,
-                user_tg_uid=user_in.id
-            )
-
-        if tg_users_new and \
-           tg_user_sender.id != user_in.id:
-            # Сразу доверие c благодарностью добавляемому пользователю
-            post_op = dict(
-                tg_token=settings.TOKEN,
-                operation_type_id=OperationType.TRUST_AND_THANK,
-                tg_user_id_from=tg_user_sender.id,
-                user_uuid_to=response_from['uuid'],
-            )
-            logging.debug('post operation, payload: %s' % post_op)
-            status, response = await Misc.api_request(
-                path='/api/addoperation',
-                method='post',
-                data=post_op,
-            )
-            logging.debug('post operation, status: %s' % status)
-            logging.debug('post operation, response: %s' % response)
-            if status == 200:
-                # Обновить, ибо уже на доверие больше у него может быть
-                response_from['trust_count'] = response['profile_to']['trust_count']
-            #else:
-                #   status == 400:
-                #   response == {'message': 'Не найден пользователь с этим ид телеграма'}
-                #       Возможно, что это не пользователь-администратор, а
-                #       некий @GroupAnonymousBot добавляет юзера. Такое возможно
-                #       с группами, подключенными к каналу
-
+        else:
+            status, response_from = await Misc.post_tg_user(user_in)
+            if status != 200:
+                a_users_out.append({})
+                continue
+            a_users_out.append(response_from)
+            if tg_user_left:
+                await TgGroupMember.remove(
+                    group_chat_id=message.chat.id,
+                    group_title=message.chat.title,
+                    group_type=message.chat.type,
+                    user_tg_uid=user_in.id
+                )
+            else:
+                await TgGroupMember.add(
+                    group_chat_id=message.chat.id,
+                    group_title=message.chat.title,
+                    group_type=message.chat.type,
+                    user_tg_uid=user_in.id
+                )
+            if tg_users_new and \
+               tg_user_sender.id != user_in.id:
+                # Сразу доверие c благодарностью добавляемому пользователю
+                post_op = dict(
+                    tg_token=settings.TOKEN,
+                    operation_type_id=OperationType.TRUST_AND_THANK,
+                    tg_user_id_from=tg_user_sender.id,
+                    user_uuid_to=response_from['uuid'],
+                )
+                logging.debug('post operation, payload: %s' % post_op)
+                status, response = await Misc.api_request(
+                    path='/api/addoperation',
+                    method='post',
+                    data=post_op,
+                )
+                logging.debug('post operation, status: %s' % status)
+                logging.debug('post operation, response: %s' % response)
+                if status == 200:
+                    # Обновить, ибо уже на доверие больше у него может быть
+                    response_from['trust_count'] = response['profile_to']['trust_count']
+                #else:
+                    #   status == 400:
+                    #   response == {'message': 'Не найден пользователь с этим ид телеграма'}
+                    #       Возможно, что это не пользователь-администратор, а
+                    #       некий @GroupAnonymousBot добавляет юзера. Такое возможно
+                    #       с группами, подключенными к каналу
 
         buttons = []
         reply = ''
         if not is_previous_his and not tg_user_left:
-            if is_this_bot:
+            if bot_data.id == user_in.id:
                 # ЭТОТ бот подключился.
                 #
                 reply = '@' + bot_data['username']
