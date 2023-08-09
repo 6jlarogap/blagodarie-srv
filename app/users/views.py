@@ -1938,6 +1938,10 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
     #
     THUMB_SIZE_POPUP = 64
 
+    # Фото пользователя в легенде
+    #
+    THUMB_SIZE_LEGEND = 80
+
     # Фото пользователя, по которому есть параметр uuid
     #
     THUMB_SIZE_ICON_FOUND = 48
@@ -1962,6 +1966,14 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
     #
     FOUND_USER_PHOTO_FRAME = 3
 
+    # Ширина рамки для пользователя uuid_trustees или в легенде для всех
+    #
+    USER_TRUSTEEE_FRAME_LEGEND = 5
+
+    # Ширина рамки для тех, кто довереют, не доверяют uuid_trustees
+    #
+    USER_TRUSTEE_FRAME_MAP = 3
+
     # В каком формате и куда выводим профиль пользователя
     #
     FMT = '3d-force-graph'
@@ -1979,11 +1991,16 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         (в порядке их анализа):
             chat_id         ид группы/канала в телеграме,
                             показать участников этой группы/канала
+
             offer_id        ид опроса- предложения в телеграме,
                             показать участников опроса, как они голосовали,
                             каждый из участников на карте будет в рамке цвета,
                             назначенного ответу (settings.OFFER_ANSWER_COLOR_MAP).
                             Если подал несколько ответов, то без рамки
+
+            uuid_trustees   uuid пользователя. Показать тех, кто ему доверяет
+                            или не доверяет
+
             videoid         ид видео, по которым голосуют
                             показать участников голосания по видео,
                             каждый из участников на карте будет в рамке цвета,
@@ -1991,6 +2008,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                             Если подал несколько голосов, то без рамки
                 Вместе с videoid может прийти:
                     source, по умолчанию 'yt' (youtube)
+
             uuid            показать координаты пользователя с этим uuid.
                             Вместе с этим в выводе могут быть, при наличии параметров
                             participants и/или owned и другие пользователи
@@ -2004,8 +2022,11 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         Пример выходных данных:
         {
             "first_name": "",                   // имя запрошенного пользователя, при параметре uuid
+                                                // или uuid_trustees
             "found_coordinates": false,         // нашелся ли пользователь, при параметре uuid
+                                                // или uuid_trustees
             "address": null,                    // текстовый адрес пользователя, при параметре uuid
+                                                // или uuid_trustees
             "lat_avg": 50.94895896995098,       // где центрировать карту. При параметре uuid это
             "lng_avg": 33.90609824676903,       // адрес найденного с координатами пользователя с uuid,
                                                 // иначе центр относительно всех найденных
@@ -2019,6 +2040,12 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                                                 //      html таблица легенды для цветов ответов, две колонки:
                                                 //          - фото неизвестного в рамке цвета
                                                 //          - ответ, соответствующий цвету
+                                                // если задан uuid_trustees:
+                                                //      пользователи:
+                                                //          - опрашиваемый пользователь
+                                                //          - те, кто ему доверяет
+                                                //          - те, кто ему не доверяет
+            "video_title",                      // заголовок видео: ссылка на голосование по видео
                                                 // если задан videoid:
                                                 //      html таблица легенды для цветов голосов, две колонки:
                                                 //          - фото неизвестного в рамке цвета
@@ -2061,6 +2088,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         found_coordinates = False
 
         first_name = ''
+        gender = ''
         address = None
         legend=''
         chat_id = chat_title = chat_type = None
@@ -2068,6 +2096,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         videoid = source = None
         video_title = ''
         offer_reply_html = video_reply_html = ''
+        uuid_trustees = None
         qs = None
         popup = (
             '<table>'
@@ -2086,10 +2115,27 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             '%(offer_reply_html)s%(video_reply_html)s'
             '</table>'
         )
+        popup_legend = (
+            '<table>'
+            '<tr>'
+                '<td valign=top>'
+                    '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
+                '</td>'
+                '<td valign=top>'
+                    ' %(full_name)s (%(trust_count)s)<br />'
+                    ' <a href="%(url_deeplink)s" target="_blank">Профиль</a><br />'
+                    '%(link_on_map)s'
+                    ' <a href="%(url_profile)s" target="_blank">Доверия</a>'
+                '</td>'
+            '</tr>'
+            '%(offer_reply_html)s%(video_reply_html)s'
+            '</table>'
+        )
         if request.GET.get('uuid'):
             try:
                 found_user, found_profile = self.check_user_uuid(request.GET['uuid'], related=('user',))
                 first_name = found_user.first_name
+                gender = found_profile.gender
                 found_coordinates = bool(found_profile.latitude and found_profile.longitude)
                 if found_coordinates:
                     lat_avg = found_profile.latitude
@@ -2101,6 +2147,8 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             chat_id = request.GET['chat_id']
         elif request.GET.get('offer_id'):
             offer_id = request.GET['offer_id']
+        elif request.GET.get('uuid_trustees'):
+            uuid_trustees = request.GET['uuid_trustees']
         elif request.GET.get('videoid'):
             videoid = request.GET['videoid']
             source = request.GET.get('source', 'yt')
@@ -2135,6 +2183,86 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     offer_deeplink = 'https://t.me/%s?start=offer-%s' % (bot_username, offer.uuid)
             except (ValueError, Offer.DoesNotExist,):
                 qs = offer = None
+
+        elif uuid_trustees:
+            def popup_data(profile, color, frame, thumb_size):
+                url_profile = self.profile_url_by_uuid(request, profile.uuid, fmt=self.FMT)
+                url_deeplink = self.get_deeplink_by_uuid(profile.uuid, bot_username) if bot_username else url_profile
+                if profile.latitude and profile.longitude:
+                    link_on_map = '<a href="%s/?uuid_trustees=%s" target="_blank">На карте</a><br />' % (
+                        settings.MAP_URL, profile.uuid,
+                    )
+                else:
+                    link_on_map = ''
+                return dict(
+                    full_name = profile.user.first_name,
+                    trust_count=profile.trust_count,
+                    url_profile = url_profile,
+                    url_deeplink=url_deeplink,
+                    url_photo_popup=Profile.image_thumb(
+                        request, profile.photo,
+                        method='crop-%s-frame-%s' % (color, frame, ),
+                        width=thumb_size + frame * 2,
+                        height=thumb_size + frame * 2,
+                        put_default_avatar=True,
+                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
+                    ),
+                    thumb_size_popup = thumb_size,
+                    video_reply_html='',
+                    offer_reply_html='',
+                    link_on_map=link_on_map,
+                )
+            try:
+                try:
+                    found_user, found_profile = self.check_user_uuid(uuid_trustees, related=('user',))
+                except ServiceException:
+                    raise SkipException
+                first_name = found_user.first_name
+                gender = found_profile.gender
+                title_template = '(%(trust_count)s) %(full_name)s'
+                found_coordinates = bool(found_profile.latitude and found_profile.longitude)
+                if found_coordinates:
+                    lat_avg = found_profile.latitude
+                    lng_avg = found_profile.longitude
+                    address = found_profile.address
+                legend = '<br><table style="border-spacing: 0;border: 2px solid blue;">'
+                legend += '<tr><td>'
+                color = 'black' if found_profile.is_dead or found_profile.dod else 'blue'
+                dict_user = popup_data(
+                    found_profile,
+                    color,
+                    self.USER_TRUSTEEE_FRAME_LEGEND,
+                    self.THUMB_SIZE_LEGEND,
+                )
+                legend += popup_legend % dict_user
+                legend += '</td></tr>'
+                legend += '</table><br /><br />'
+                if found_coordinates:
+                    frame = self.USER_TRUSTEE_FRAME_MAP
+                    dict_user = popup_data(
+                        found_profile,
+                        color,
+                        frame,
+                        self.THUMB_SIZE_POPUP,
+                    )
+                    points.append(dict(
+                        latitude=found_profile.latitude,
+                        longitude=found_profile.longitude,
+                        title=title_template % dict_user,
+                        popup=popup % dict_user,
+                        is_of_found_user=True,
+                        icon=found_profile.choose_thumb(
+                            request,
+                            method=f'crop-{color}-frame-{frame}',
+                            width=self.THUMB_SIZE_ICON_FOUND + frame * 2,
+                            height=self.THUMB_SIZE_ICON_FOUND + frame * 2,
+                            put_default_avatar=True,
+                            default_avatar_in_media=PhotoModel.get_gendered_default_avatar(gender)
+                        ),
+                        size_icon=self.THUMB_SIZE_ICON_FOUND + frame * 2,
+                    ))
+            except SkipException:
+                pass
 
         elif videoid:
             votes_names = dict(Vote.VOTES)
@@ -2262,22 +2390,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             frame = self.VOTE_PHOTO_FRAME * 2
             legend = '<br><table style="border-spacing: 0;border-bottom: 2px solid black;">'
             vote_ts = [('', 'подал(а)<br/>несколько голосов')] + list(Vote.VOTES)
-            popup_legend = (
-                '<table>'
-                '<tr>'
-                    '<td valign=top>'
-                        '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
-                    '</td>'
-                    '<td valign=top>'
-                        ' %(full_name)s (%(trust_count)s)<br />'
-                        ' <a href="%(url_deeplink)s" target="_blank">Профиль</a><br />'
-                        '%(link_on_map)s'
-                        ' <a href="%(url_profile)s" target="_blank">Доверия</a>'
-                    '</td>'
-                '</tr>'
-                '%(video_reply_html)s'
-                '</table>'
-            )
             for vote_t in vote_ts:
                 vote, vote_name = vote_t
                 legend += (
@@ -2342,13 +2454,14 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         url_photo_popup=Profile.image_thumb(
                             request, user_data['photo'],
                             method=method_,
-                            width=self.THUMB_SIZE_POPUP + frame_ * 2,
-                            height=self.THUMB_SIZE_POPUP + frame_ * 2,
+                            width=self.THUMB_SIZE_LEGEND + frame_ * 2,
+                            height=self.THUMB_SIZE_LEGEND + frame_ * 2,
                             put_default_avatar=True,
                             default_avatar_in_media=PhotoModel.get_gendered_default_avatar(user_data['gender'])
                         ),
-                        thumb_size_popup = self.THUMB_SIZE_POPUP,
+                        thumb_size_popup = self.THUMB_SIZE_LEGEND,
                         video_reply_html=video_reply_html,
+                        offer_reply_html=offer_reply_html,
                         link_on_map=link_on_map,
                     )
                     legend += popup_
@@ -2515,22 +2628,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
 
         if offer_question:
             legend = '<br><table style="border-spacing: 0;border-bottom: 2px solid black;">'
-            popup_legend = (
-                '<table>'
-                '<tr>'
-                    '<td valign=top>'
-                        '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
-                    '</td>'
-                    '<td valign=top>'
-                        ' %(full_name)s (%(trust_count)s)<br />'
-                        ' <a href="%(url_deeplink)s" target="_blank">Профиль</a><br />'
-                        '%(link_on_map)s'
-                        ' <a href="%(url_profile)s" target="_blank">Доверия</a>'
-                    '</td>'
-                '</tr>'
-                '%(offer_reply_html)s'
-                '</table>'
-            )
             frame = self.OFFER_PHOTO_FRAME * 2
             for i in range(-1, len(offer_dict['answers'])):
                 if i == 0 and not offer.is_multi:
@@ -2570,9 +2667,10 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         url_deeplink=user_data['url_deeplink'],
                         url_profile=user_data['url_profile'],
                         offer_reply_html=user_data['offer_reply_html'],
+                        video_reply_html=video_reply_html,
                         url_photo_popup=user_data['photo'],
                         link_on_map=user_data['link_on_map'],
-                        thumb_size_popup = self.THUMB_SIZE_POPUP,
+                        thumb_size_popup = self.THUMB_SIZE_LEGEND,
                     )
                     legend += popup_
                 legend += '</td></tr>'
@@ -2585,6 +2683,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             first_name=first_name,
             found_coordinates=found_coordinates,
             address=address,
+            gender=gender,
             lat_avg=lat_avg,
             lng_avg=lng_avg,
             points=points,
