@@ -872,7 +872,7 @@ class Misc(object):
                     inline_btn_map = InlineKeyboardButton(
                         'Карта',
                         login_url=cls.make_login_url(
-                            redirect_path='%(map_host)s/?uuid=%(user_uuid)s' % dict(
+                            redirect_path='%(map_host)s/?uuid_trustees=%(user_uuid)s' % dict(
                                 map_host=settings.MAP_HOST,
                                 user_uuid=response_to['uuid'],
                             ), keep_user_data='on',

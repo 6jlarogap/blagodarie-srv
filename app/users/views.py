@@ -1936,7 +1936,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
 
     # Фото пользователя, когда в карте щелкаешь на балун
     #
-    THUMB_SIZE_POPUP = 64
+    THUMB_SIZE_POPUP = 72
 
     # Фото пользователя в легенде
     #
@@ -2101,23 +2101,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         popup = (
             '<table>'
             '<tr>'
-                '<td>'
-                    '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
-                '</td>'
-                '<td>'
-                    ' %(full_name)s (%(trust_count)s)'
-                    '<br />'
-                    ' <a href="%(url_deeplink)s" target="_blank">Профиль</a>'
-                    '<br /><br />'
-                    ' <a href="%(url_profile)s" target="_blank">Доверия</a>'
-                '</td>'
-            '</tr>'
-            '%(offer_reply_html)s%(video_reply_html)s'
-            '</table>'
-        )
-        popup_legend = (
-            '<table>'
-            '<tr>'
                 '<td valign=top>'
                     '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
                 '</td>'
@@ -2185,6 +2168,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 qs = offer = None
 
         elif uuid_trustees:
+            num_trusts_true = num_trusts_false = 0
             def popup_data(profile, color, frame, thumb_size):
                 url_profile = self.profile_url_by_uuid(request, profile.uuid, fmt=self.FMT)
                 url_deeplink = self.get_deeplink_by_uuid(profile.uuid, bot_username) if bot_username else url_profile
@@ -2225,18 +2209,18 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     lat_avg = found_profile.latitude
                     lng_avg = found_profile.longitude
                     address = found_profile.address
-                legend = '<br><table style="border-spacing: 0;border: 2px solid blue;">'
-                legend += '<tr><td>'
                 color = 'black' if found_profile.is_dead or found_profile.dod else 'blue'
+                legend = f'<br><table style="border-spacing: 0;border-top: 2px solid {color};border-bottom: 2px solid {color};">'
+                legend += '<tr><td>'
                 dict_user = popup_data(
                     found_profile,
                     color,
                     self.USER_TRUSTEEE_FRAME_LEGEND,
                     self.THUMB_SIZE_LEGEND,
                 )
-                legend += popup_legend % dict_user
+                legend += popup % dict_user
                 legend += '</td></tr>'
-                legend += '</table><br /><br />'
+                legend += '</table><br />'
                 if found_coordinates:
                     frame = self.USER_TRUSTEE_FRAME_MAP
                     dict_user = popup_data(
@@ -2261,6 +2245,94 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         ),
                         size_icon=self.THUMB_SIZE_ICON_FOUND + frame * 2,
                     ))
+                legend_trust_true = legend_trust_false = ''
+                if found_profile.gender == GenderMixin.GENDER_FEMALE:
+                    legend_trust_true_title = 'Ей доверяют:'
+                elif found_profile.gender == GenderMixin.GENDER_MALE:
+                    legend_trust_true_title = 'Ему доверяют:'
+                else:
+                    legend_trust_true_title = 'Доверяют:'
+                if found_profile.gender == GenderMixin.GENDER_FEMALE:
+                    legend_trust_false_title = 'Ей не доверяют:'
+                elif found_profile.gender == GenderMixin.GENDER_MALE:
+                    legend_trust_false_title = 'Ему не доверяют:'
+                else:
+                    legend_trust_false_title = 'Не доверяют:'
+                title_template = '%(full_name)s (%(trust_count)s)'
+                for cs in CurrentState.objects.filter(
+                            user_to=found_profile.user,
+                            is_reverse=False,
+                            is_trust__isnull=False,
+                          ).select_related(
+                              'user_from', 'user_from__profile'
+                          ).order_by(
+                              'user_from__first_name'
+                          ):
+                    color = 'green' if cs.is_trust else 'red'
+                    legend_tempo= f'<table style="border-spacing: 0;border-top: 2px solid {color};">'
+                    if cs.is_trust and not legend_trust_true:
+                        legend_trust_true = (
+                            f'{legend_trust_true_title}'
+                            '<br /><br />'
+                            f'{legend_tempo}'
+                        )
+                    if not cs.is_trust and not legend_trust_false:
+                        legend_trust_false = (
+                            f'{legend_trust_false_title}'
+                            '<br /><br />'
+                            f'{legend_tempo}'
+                        )
+                    dict_user = popup_data(
+                        cs.user_from.profile,
+                        color,
+                        self.USER_TRUSTEEE_FRAME_LEGEND,
+                        self.THUMB_SIZE_LEGEND,
+                    )
+                    legend_tempo = f'<tr><td style="border-bottom: 2px solid {color};">' + (popup % dict_user) + '</td></tr>'
+                    if cs.is_trust:
+                        num_trusts_true += 1
+                        legend_trust_true += legend_tempo
+                    else:
+                        num_trusts_false += 1
+                        legend_trust_false += legend_tempo
+                    if cs.user_from.profile.latitude and cs.user_from.profile.longitude:
+                        if not found_coordinates:
+                            lat_sum += cs.user_from.profile.latitude
+                            lng_sum += cs.user_from.profile.longitude
+                        frame = self.USER_TRUSTEE_FRAME_MAP
+                        dict_user = popup_data(
+                            cs.user_from.profile,
+                            color,
+                            frame,
+                            self.THUMB_SIZE_POPUP,
+                        )
+                        points.append(dict(
+                            latitude=cs.user_from.profile.latitude,
+                            longitude=cs.user_from.profile.longitude,
+                            title=title_template % dict_user,
+                            popup=popup % dict_user,
+                            is_of_found_user=False,
+                            icon=cs.user_from.profile.choose_thumb(
+                                request,
+                                method=f'crop-{color}-frame-{frame}',
+                                width=self.THUMB_SIZE_ICON_FOUND + frame * 2,
+                                height=self.THUMB_SIZE_ICON_FOUND + frame * 2,
+                                put_default_avatar=True,
+                                default_avatar_in_media=PhotoModel.get_gendered_default_avatar(cs.user_from.profile.gender)
+                            ),
+                            size_icon=self.THUMB_SIZE_ICON_FOUND + frame * 2,
+                        ))
+
+                if legend_trust_true:
+                    legend_trust_true += '</table><br />'
+                else:
+                    legend_trust_true += 'Кто доверяет: не найдены<br /><br />'
+                if legend_trust_false:
+                    legend_trust_false += '</table><br /><br />'
+                else:
+                    legend_trust_false += 'Кто не доверяет: не найдены<br /><br />'
+                legend += legend_trust_true + legend_trust_false
+
             except SkipException:
                 pass
 
@@ -2354,6 +2426,12 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         'а' if len(votes) > 1 else '',
                         votes_text
                     )
+                    if user_data['latitude'] and user_data['longitude']:
+                        link_on_map = '<a href="%s/?uuid_trustees=%s" target="_blank">На карте</a><br />' % (
+                            settings.MAP_URL, user_data['uuid']
+                        )
+                    else:
+                        link_on_map = ''
                     popup_ = popup % dict(
                         full_name = user_data['full_name'],
                         trust_count=user_data['trust_count'],
@@ -2370,6 +2448,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         thumb_size_popup = self.THUMB_SIZE_POPUP,
                         video_reply_html=video_reply_html,
                         offer_reply_html=offer_reply_html,
+                        link_on_map=link_on_map,
                     )
                     points.append(dict(
                         latitude=user_data['latitude'],
@@ -2441,12 +2520,12 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                             '</tr>'
                         ) % ', '.join([votes_names[vote_] for vote_ in votes])
                     if user_data['latitude'] and user_data['longitude']:
-                        link_on_map = '<a href="%s/?uuid=%s" target="_blank">На карте</a><br />' % (
+                        link_on_map = '<a href="%s/?uuid_trustees=%s" target="_blank">На карте</a><br />' % (
                             settings.MAP_URL, user_data['uuid']
                         )
                     else:
                         link_on_map = ''
-                    popup_ = popup_legend % dict(
+                    popup_ = popup % dict(
                         full_name = user_data['full_name'],
                         trust_count=user_data['trust_count'],
                         url_deeplink=url_deeplink,
@@ -2504,14 +2583,16 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 url_deeplink = self.get_deeplink(profile, bot_username)
             else:
                 url_deeplink = url_profile
+            if profile.latitude is not None and profile.longitude is not None:
+                link_on_map = '<a href="%s/?%s=%s" target="_blank">На карте</a><br />' % (
+                    settings.MAP_URL,
+                    'uuid_trustees' if offer_question or chat_id else 'uuid',
+                    profile.uuid,
+                )
+            else:
+                link_on_map = ''
             if offer_question:
                 answer_numbers = offer_dict['user_answered'].get(profile.user.pk, dict(answers=[0]))['answers']
-                if profile.latitude is not None and profile.longitude is not None:
-                    link_on_map = '<a href="%s/?uuid=%s" target="_blank">На карте</a><br />' % (
-                        settings.MAP_URL, profile.uuid
-                    )
-                else:
-                    link_on_map = ''
                 user_data = dict(
                     full_name = profile.user.first_name,
                     trust_count=profile.trust_count,
@@ -2587,6 +2668,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     answer_text=answer_text,
                     title_template=title_template,
                     video_reply_html=video_reply_html,
+                    link_on_map=link_on_map,
                 )
                 point = dict(
                     latitude=profile.latitude,
@@ -2661,7 +2743,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 )
                 legend += '<td valign=top style="border-top: 2px solid black; padding: 4px;">'
                 for user_data in answer_to_users[i]:
-                    popup_ = popup_legend % dict(
+                    popup_ = popup % dict(
                         full_name=user_data['full_name'],
                         trust_count=user_data['trust_count'],
                         url_deeplink=user_data['url_deeplink'],
@@ -2694,6 +2776,11 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             legend=legend,
             video_title=video_title,
         )
+        if uuid_trustees:
+            data.update(
+                num_trusts_false=num_trusts_false,
+                num_trusts_true=num_trusts_true,
+            )
         return Response(data=data, status=200)
 
 api_user_points = ApiUserPoints.as_view()
