@@ -1334,6 +1334,40 @@ class Misc(object):
         return None
 
 
+    @classmethod
+    async def pin_group_message(cls, chat, bot, bot_data):
+        """
+        Отправить сообщение для последующего закрепления с группе/канале
+
+        Обычно такое сообщение формируется, когда администратор группы/канала
+        добавляет бота к числу участников
+        """
+        text = '@' + bot_data['username']
+        inline_btn_map = InlineKeyboardButton(
+            'Карта',
+            login_url=cls.make_login_url(
+                redirect_path='%(map_host)s/?chat_id=%(chat_id)s' % dict(
+                    map_host=settings.MAP_HOST,
+                    chat_id=chat.id,
+                ), keep_user_data='on',
+            ))
+        inline_btn_trusts = InlineKeyboardButton(
+            'Схема',
+            login_url=cls.make_login_url(
+                redirect_path='%(graph_host)s/?tg_group_chat_id=%(chat_id)s' % dict(
+                    graph_host=settings.GRAPH_HOST,
+                    chat_id=chat.id,
+                ), keep_user_data='on',
+            ))
+        reply_markup = InlineKeyboardMarkup()
+        reply_markup.row(inline_btn_map, inline_btn_trusts,)
+        await bot.send_message(
+            chat_id=chat.id,
+            text=text,
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
+        )
+
 class TgGroup(object):
     """
     Список групп, где бот: внесение, удаление

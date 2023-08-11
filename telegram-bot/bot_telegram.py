@@ -5044,50 +5044,9 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                     #       некий @GroupAnonymousBot добавляет юзера. Такое возможно
                     #       с группами, подключенными к каналу
 
-        buttons = []
-        reply = ''
-        if not is_previous_his and not tg_user_left:
-            if bot_data.id == user_in.id:
-                # ЭТОТ бот подключился.
-                #
-                reply = '@' + bot_data['username']
-                inline_btn_map = InlineKeyboardButton(
-                    'Карта',
-                    login_url=Misc.make_login_url(
-                        redirect_path='%(map_host)s/?chat_id=%(chat_id)s' % dict(
-                            map_host=settings.MAP_HOST,
-                            chat_id=message.chat.id,
-                        ), keep_user_data='on',
-                    ))
-                inline_btn_trusts = InlineKeyboardButton(
-                    'Схема',
-                    login_url=Misc.make_login_url(
-                        redirect_path='%(graph_host)s/?tg_group_chat_id=%(chat_id)s' % dict(
-                            graph_host=settings.GRAPH_HOST,
-                            chat_id=message.chat.id,
-                        ), keep_user_data='on',
-                    ))
-                buttons = (inline_btn_map, inline_btn_trusts,)
-            #else:
-                #reply = '<b>%(deeplink_with_name)s</b> (%(trust_count)s)' % dict(
-                    #deeplink_with_name=Misc.get_deeplink_with_name(response_from, bot_data),
-                    #trust_count=response_from['trust_count'],
-                #)
-                #inline_btn_thank = InlineKeyboardButton(
-                    #'+Доверие',
-                    #callback_data=OperationType.CALLBACK_DATA_TEMPLATE % dict(
-                    #operation=OperationType.TRUST_AND_THANK,
-                    #keyboard_type=KeyboardType.TRUST_THANK,
-                    #sep=KeyboardType.SEP,
-                    #user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
-                    #message_to_forward_id='',
-               #))
-                #buttons = [inline_btn_thank]
-            if buttons:
-                reply_markup = InlineKeyboardMarkup()
-                reply_markup.row(*buttons)
-            if reply:
-                await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+        if not is_previous_his and not tg_user_left and bot_data.id == user_in.id:
+            # ЭТОТ бот подключился.
+            await Misc.pin_group_message(message.chat, bot, bot_data)
 
     for i, response_from in enumerate(a_users_out):
         if response_from.get('created'):
