@@ -1333,14 +1333,15 @@ class Misc(object):
                 return m.group(1), m.group(0)
         return None
 
-
     @classmethod
-    async def pin_group_message(cls, chat, bot, bot_data):
+    def make_pin_group_message(cls, chat, bot, bot_data):
         """
-        Отправить сообщение для последующего закрепления с группе/канале
+        Сделать сообщение для последующего закрепления с группе/канале
 
         Обычно такое сообщение формируется, когда администратор группы/канала
         добавляет бота к числу участников
+
+        Возвращает текст и разметку сообщения
         """
         text = '@' + bot_data['username']
         inline_btn_map = InlineKeyboardButton(
@@ -1361,12 +1362,33 @@ class Misc(object):
             ))
         reply_markup = InlineKeyboardMarkup()
         reply_markup.row(inline_btn_map, inline_btn_trusts,)
-        await bot.send_message(
-            chat_id=chat.id,
-            text=text,
-            reply_markup=reply_markup,
-            disable_web_page_preview=True,
-        )
+        return text, reply_markup
+
+    @classmethod
+    async def send_pin_group_message(cls, chat, bot, bot_data):
+        """
+        Отправить сообщение для последующего закрепления с группе/канале
+
+        Обычно такое сообщение формируется, когда администратор группы/канала
+        добавляет бота к числу участников
+
+        Ид группы изменяется, когда просто группа становится супергруппой,
+        а в закрепленном сообщении будет висеть ид просто группы.
+        Посему ид группы запоминаем в апи, чтоб когда поймаем
+        изменение группа -> супергруппа, изменить ранее закрепленное
+        сообщение по его ид функцией bot.edit_message_text
+        """
+        text, reply_markup = cls.make_pin_group_message(chat, bot, bot_data)
+        try:
+            messsage_for_pin = await bot.send_message(
+                chat_id=chat.id,
+                text=text,
+                reply_markup=reply_markup,
+                disable_web_page_preview=True,
+            )
+        except:
+            messsage_for_pin = None
+        return messsage_for_pin
 
 class TgGroup(object):
     """

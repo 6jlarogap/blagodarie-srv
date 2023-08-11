@@ -4829,7 +4829,7 @@ async def echo_my_chat_member_for_bot(chat_member: types.ChatMemberUpdated):
             return
     if bot_.is_bot and new_chat_member.status == 'administrator':
         bot_data = await bot.get_me()
-        await Misc.pin_group_message(chat_member.chat, bot, bot_data)
+        await Misc.send_pin_group_message(chat_member.chat, bot, bot_data)
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=(types.ChatType.GROUP, types.ChatType.SUPERGROUP)),
@@ -5021,7 +5021,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
         if not is_previous_his and not tg_user_left and bot_data.id == user_in.id:
             # ЭТОТ бот подключился.
-            await Misc.pin_group_message(message.chat, bot, bot_data)
+            await Misc.send_pin_group_message(message.chat, bot, bot_data)
 
     for i, response_from in enumerate(a_users_out):
         if response_from.get('created'):
