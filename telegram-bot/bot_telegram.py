@@ -4611,11 +4611,14 @@ async def do_chat_join(
         if callback_query:
             await callback_query.message.reply(msg, disable_web_page_preview=True,)
         else:
-            await bot.send_message(
-                chat_id=tg_subscriber.id,
-                text=msg,
-                disable_web_page_preview=True
-            )
+            try:
+                await bot.send_message(
+                    chat_id=tg_subscriber.id,
+                    text=msg,
+                    disable_web_page_preview=True
+                )
+            except CantInitiateConversation:
+                pass
         return
 
     tc_inviter = 0
@@ -4664,11 +4667,14 @@ async def do_chat_join(
     if callback_query:
         await callback_query.message.reply(msg, disable_web_page_preview=True,)
     else:
-        await bot.send_message(
-            chat_id=tg_subscriber.id,
-            text=msg,
-            disable_web_page_preview=True
-        )
+        try:
+            await bot.send_message(
+                chat_id=tg_subscriber.id,
+                text=msg,
+                disable_web_page_preview=True
+            )
+        except CantInitiateConversation:
+            pass
     if is_channel:
         reply = '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а)' % msg_dict
         await bot.send_message(
