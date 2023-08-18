@@ -32,7 +32,7 @@ class TgGroup(BaseModelInsertTimestamp):
     title = models.CharField(_("Имя"), max_length=256)
     type = models.CharField(_("Тип"), max_length=50)
     # Сообщение для прикрепления к группе/каналу
-    # pin_message_id = models.BigIntegerField(_("Message for Pin Id"))
+    # pin_message_id = models.BigIntegerField(_("Message for Pin Id"), null=True)
 
     def data_dict(self):
         return {

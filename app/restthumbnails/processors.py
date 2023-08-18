@@ -149,7 +149,7 @@ def get_image(source, exif_orientation=True, **options):
 
     try:
         exif_dict = piexif.load(image.info["exif"])
-    except (KeyError, AttributeError,):
+    except (KeyError, AttributeError, ValueError,):
         exif_dict = None
     if exif_dict:
         try:
