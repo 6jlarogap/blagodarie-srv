@@ -1805,11 +1805,13 @@ class ApiBotGroup(ApiBotGroupMixin, APIView):
             "chat_id"=...,          возможно новый ид
             "type"=...,             может и не быть
             "title"=...             может и не быть
+            "pin_message_id"=...    может и не быть
         }
         Возвращает: {
             "chat_id"=...,
             "type"=...,
             "title"=...
+            "pin_message_id"=...
         }
         или HTTP_400_BAD_REQUEST при неверных входных данных
         или HTTP_404_NOT_FOUND, если не найдена группа/канал
@@ -1827,7 +1829,7 @@ class ApiBotGroup(ApiBotGroupMixin, APIView):
                 status_code = status.HTTP_404_NOT_FOUND
                 raise ServiceException('Не найдена группа/канал')
             do_save = False
-            for f in ('chat_id', 'title', 'type',):
+            for f in ('chat_id', 'title', 'type', 'pin_message_id',):
                 if v := request.data.get(f):
                     if v != getattr(tg_group, f):
                         do_save = True

@@ -2,6 +2,7 @@ import base64, re, datetime
 from urllib.parse import urlencode
 from uuid import UUID
 
+from aiogram import types
 from aiogram.types.login_url import LoginUrl
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.types.input_file import InputFile
@@ -1376,9 +1377,11 @@ class Misc(object):
 
         Ид группы изменяется, когда просто группа становится супергруппой,
         а в закрепленном сообщении будет висеть ид просто группы.
-        Посему ид группы запоминаем в апи, чтоб когда поймаем
+        Посему ид сообщения запоминаем в апи, чтоб когда поймаем
         изменение группа -> супергруппа, изменить ранее закрепленное
         сообщение по его ид функцией bot.edit_message_text
+        Возможно ли переход супергруппа -> группа? Не изестно, но учитываем
+        возможность. Для канала изменение ид не замечено.
         """
         text, reply_markup = cls.make_pin_group_message(chat, bot, bot_data)
         try:
@@ -1390,13 +1393,24 @@ class Misc(object):
             )
         except:
             messsage_for_pin = None
+        if messsage_for_pin and \
+           chat.type in (types.ChatType.GROUP, types.ChatType.SUPERGROUP,) :
+            payload = {
+                # 'tg_token': settings.TOKEN,
+                'old_chat_id': chat.id,
+                'chat_id': chat.id, 'title': chat.title, 'type': chat.type,
+                'pin_message_id' : messsage_for_pin.message_id,
+            }
+            await TgGroup.put(
+                old_chat_id=chat.id, chat_id=chat.id, title=chat.title, type_=chat.type,
+                pin_message_id=messsage_for_pin.message_id,
+            )
         return messsage_for_pin
 
 class TgGroup(object):
     """
     Список групп, где бот: внесение, удаление
     """
-
     @classmethod
     async def get(cls, chat_id):
         payload = dict(chat_id=chat_id)
@@ -1424,11 +1438,12 @@ class TgGroup(object):
         return status, response
 
     @classmethod
-    async def put(cls, old_chat_id, chat_id, title, type_):
+    async def put(cls, old_chat_id, chat_id, title, type_, pin_message_id=None):
         payload = {
             'tg_token': settings.TOKEN,
             'old_chat_id': old_chat_id,
             'chat_id': chat_id, 'title': title, 'type': type_,
+            'pin_message_id' : pin_message_id,
         }
         logging.debug('modify group, payload: %s' % payload)
         status, response = await Misc.api_request(

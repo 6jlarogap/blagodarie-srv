@@ -14,7 +14,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_polling, start_webhook
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation, CantTalkWithBots, \
-    BadRequest, MessageNotModified, MessageCantBeDeleted
+    BadRequest, MessageNotModified, MessageCantBeDeleted, MessageToEditNotFound
 from aiogram.types.message_entity import MessageEntityType
 
 import pymorphy2
@@ -4974,11 +4974,27 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 title=message.chat.title,
                 type_=message.chat.type,
             )
-            if status == 200 and message.chat.type == types.ChatType.SUPERGROUP:
-                await bot.send_message(
-                    message.chat.id,
-                    'Ура! Группа стала супергруппой',
-                )
+            if status == 200:
+                if message.chat.type == types.ChatType.SUPERGROUP:
+                    msg_failover = 'Ура! Группа стала супергруппой'
+                else:
+                    # Если что-то случится при понижении статуса, то зачем об этом говорить?
+                    msg_failover = ''
+                if response['pin_message_id']:
+                    bot_data = await bot.get_me()
+                    text, reply_markup = Misc.make_pin_group_message(message.chat, bot, bot_data)
+                    try:
+                        await bot.edit_message_text(
+                            chat_id=message.migrate_from_chat_id,
+                            message_id=response['pin_message_id'],
+                            text=text,
+                            reply_markup=reply_markup,
+                        )
+                    except MessageToEditNotFound:
+                        if msg_failover:
+                            await bot.send_message(message.chat.id, msg_failover)
+                elif msg_failover:
+                    await bot.send_message(message.chat.id, msg_failover)
             return
     except (TypeError, AttributeError,):
         pass
