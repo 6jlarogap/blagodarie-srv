@@ -109,6 +109,9 @@ class KeyboardType(object):
     # Ребёнок вносится как новый
     #
     NEW_CHILD = 22
+    # см. ниже
+    # NEW_CHILD_GENDER_MALE = 45
+    # NEW_CHILD_GENDER_FEMALE = 46
 
     # У ребёнка родитель папа или мама?
     #
@@ -155,6 +158,11 @@ class KeyboardType(object):
 
     OFFER_ANSWER = 44
 
+    # Ребёнок вносится как новый, его пол
+    #
+    NEW_CHILD_GENDER_MALE = 45
+    NEW_CHILD_GENDER_FEMALE = 46
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -197,12 +205,6 @@ class Misc(object):
 
     PROMPT_PAPA_MAMA_OF_CHILD = (
         'Укажите пол %(name)s'
-    )
-    PROMPT_NEW_CHILD = (
-        'Укажите имя отчество и фамилию человека - в одной строке, '
-        "например: 'Иван Иванович Иванов'. "
-        'Он (она) <u>добавится</u> к вашим родственникам и станет сыном (дочерью) для:\n'
-        '%(name)s.\n'
     )
 
     PROMPT_PAPA_MAMA_SET = (

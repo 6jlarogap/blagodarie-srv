@@ -1533,23 +1533,26 @@ async def put_child_by_uuid(message: types.Message, state: FSMContext):
     state=FSMchild.new,
 )
 async def put_new_child(message: types.Message, state: FSMContext):
-    if message.content_type != ContentType.TEXT:
-        await message.reply(
-            Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + Misc.MSG_REPEATE_PLEASE,
-            reply_markup=Misc.reply_markup_cancel_row()
-        )
-        return
     if await is_it_command(message, state):
-        return
-    first_name = Misc.strip_text(message.text)
-    if re.search(Misc.RE_UUID, first_name):
-        await message.reply(
-            Misc.PROMPT_IOF_INCORRECT,
-            reply_markup=Misc.reply_markup_cancel_row(),
-        )
         return
     async with state.proxy() as data:
         if data.get('uuid') and data.get('parent_gender'):
+            if not data.get('new_child_gender'):
+                await prompt_new_child_gender(message, state)
+                return
+            if message.content_type != ContentType.TEXT:
+                await message.reply(
+                    Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + Misc.MSG_REPEATE_PLEASE,
+                    reply_markup=Misc.reply_markup_cancel_row()
+                )
+                return
+            first_name = Misc.strip_text(message.text)
+            if re.search(Misc.RE_UUID, first_name):
+                await message.reply(
+                    Misc.PROMPT_IOF_INCORRECT,
+                    reply_markup=Misc.reply_markup_cancel_row(),
+                )
+                return
             response_sender = await Misc.check_owner(owner_tg_user=message.from_user, uuid=data['uuid'])
             if response_sender:
                 response_parent = response_sender['response_uuid']
@@ -1564,6 +1567,7 @@ async def put_new_child(message: types.Message, state: FSMContext):
                     link_uuid=data['uuid'],
                     link_relation='link_is_father' if data['parent_gender'] == 'm' else 'link_is_mother',
                     owner_id=response_sender['user_id'],
+                    gender=data['new_child_gender']
                 )
                 logging.debug('post new child, payload: %s' % post_new_link)
                 status_child, response_child = await Misc.api_request(
@@ -1706,6 +1710,60 @@ async def process_callback_child_unknown_parent_gender(callback_query: types.Cal
             await ask_child(callback_query.message, state, data, children=response_sender['response_uuid']['children'])
 
 
+async def prompt_new_child_gender(message: types.Message, state: FSMContext):
+    async with state.proxy() as data:
+        # fool proof
+        if data.get('uuid') and data.get('parent_gender'):
+            callback_data_template = '%(keyboard_type)s%(sep)s'
+            callback_data_male = callback_data_template % dict(
+                keyboard_type=KeyboardType.NEW_CHILD_GENDER_MALE,
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_male = InlineKeyboardButton('Муж', callback_data=callback_data_male)
+            callback_data_female = callback_data_template % dict(
+                keyboard_type=KeyboardType.NEW_CHILD_GENDER_FEMALE,
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_female = InlineKeyboardButton('Жен', callback_data=callback_data_female)
+            reply_markup = InlineKeyboardMarkup()
+            reply_markup.row(inline_btn_male, inline_btn_female, Misc.inline_button_cancel())
+            await message.reply(
+                'Укажите пол ребенка',
+                reply_markup=reply_markup,
+                disable_web_page_preview=True,
+            )
+        else:
+            await Misc.state_finish(state)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s|%s)%s$' % (
+        KeyboardType.NEW_CHILD_GENDER_MALE, KeyboardType.NEW_CHILD_GENDER_FEMALE,
+        KeyboardType.SEP,
+    ), c.data),
+    state = FSMchild.new,
+    )
+async def process_callback_new_child_gender(callback_query: types.CallbackQuery, state: FSMContext):
+    if callback_query.message:
+        async with state.proxy() as data:
+            for key in ('name', 'uuid', 'parent_gender',):
+                if not data.get(key):
+                    await Misc.state_finish(state)
+                    return
+            data['new_child_gender'] = 'm' \
+                if callback_query.data.split(KeyboardType.SEP)[0] == str(KeyboardType.NEW_CHILD_GENDER_MALE) \
+                else 'f'
+            await callback_query.message.reply(
+                (
+                    f'Укажите ФИО {"СЫНА" if data["new_child_gender"] == "m" else "ДОЧЕРИ"} для:\n'
+                    f'{data["name"]}\nНапример, "Иван Иванович Иванов"'
+                ),
+                reply_markup=Misc.reply_markup_cancel_row(),
+            )
+    else:
+        await Misc.state_finish(state)
+
+
 @dp.callback_query_handler(
     lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.NEW_CHILD,
@@ -1729,11 +1787,8 @@ async def process_callback_new_child(callback_query: types.CallbackQuery, state:
         response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
         if not response_sender:
             return
-        await FSMchild.next()
-        await callback_query.message.reply(
-            Misc.PROMPT_NEW_CHILD % dict(name=response_sender['response_uuid']['first_name']),
-            reply_markup=Misc.reply_markup_cancel_row(),
-        )
+        await FSMchild.new.set()
+        await prompt_new_child_gender(callback_query.message, state)
 
 
 @dp.callback_query_handler(
