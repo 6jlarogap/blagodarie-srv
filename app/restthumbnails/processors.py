@@ -321,7 +321,7 @@ def scale_and_crop(
         # boundary sizes to avoid floating point errors.
         im = im.resize((int(round(source_x * scale)),
                         int(round(source_y * scale))),
-                       resample=Image.ANTIALIAS)
+                       resample=Image.LANCZOS)
 
     if crop:
         # Use integer values now.
