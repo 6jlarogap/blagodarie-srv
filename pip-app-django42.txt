@@ -1,4 +1,4 @@
-Django==4.2.1
+Django
 django-debug-toolbar
 
 djangorestframework
