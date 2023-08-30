@@ -30,6 +30,7 @@ class FSMwish(StatesGroup):
 
 class FSMnewIOF(StatesGroup):
     ask = State()
+    ask_gender = State()
 
 class FSMexistingIOF(StatesGroup):
     ask = State()
@@ -1714,7 +1715,7 @@ async def prompt_new_child_gender(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         # fool proof
         if data.get('uuid') and data.get('parent_gender'):
-            callback_data_template = '%(keyboard_type)s%(sep)s'
+            callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
             callback_data_male = callback_data_template % dict(
                 keyboard_type=KeyboardType.NEW_CHILD_GENDER_MALE,
                 sep=KeyboardType.SEP,
@@ -2213,7 +2214,7 @@ async def process_callback_other(callback_query: types.CallbackQuery, state: FSM
             keyboard_type=KeyboardType.OTHER_MALE,
             sep=KeyboardType.SEP,
         )
-        callback_data_template = '%(keyboard_type)s%(sep)s'
+        callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
         inline_button_male = InlineKeyboardButton('Муж', callback_data=callback_data_template % dict_gender)
         dict_gender.update(keyboard_type=KeyboardType.OTHER_FEMALE)
         inline_button_female = InlineKeyboardButton('Жен', callback_data=callback_data_template % dict_gender)
@@ -2275,7 +2276,7 @@ async def process_callback_other_gender(callback_query: types.CallbackQuery, sta
                     keyboard_type=KeyboardType.OTHER_DOB_UNKNOWN,
                     sep=KeyboardType.SEP,
                 )
-                callback_data_template = '%(keyboard_type)s%(sep)s'
+                callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
                 inline_button_dob_unknown = InlineKeyboardButton(
                     'Не знаю', callback_data=callback_data_template % dict_dob_unknown
                 )
@@ -2333,7 +2334,7 @@ async def draw_dod(message, state, data):
         keyboard_type=KeyboardType.OTHER_DOD_UNKNOWN,
         sep=KeyboardType.SEP,
     )
-    callback_data_template = '%(keyboard_type)s%(sep)s'
+    callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
     inline_button_dod_unknown = InlineKeyboardButton(
         '%s или не знаю' % ('Жив' if data['is_male'] else 'Жива'),
         callback_data=callback_data_template % dict_dod
@@ -3095,12 +3096,53 @@ async def process_callback_photo_remove_confirmed(callback_query: types.Callback
     await Misc.state_finish(state)
 
 
+async def new_iof_ask_gender(message: types.Message, state: FSMContext):
+    async with state.proxy() as data:
+        if data.get('first_name'):
+            callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
+            callback_data_male = callback_data_template % dict(
+                keyboard_type=KeyboardType.NEW_IOF_GENDER_MALE,
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_male = InlineKeyboardButton('Муж', callback_data=callback_data_male)
+            callback_data_female = callback_data_template % dict(
+                keyboard_type=KeyboardType.NEW_IOF_GENDER_FEMALE,
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_female = InlineKeyboardButton('Жен', callback_data=callback_data_female)
+            reply_markup = InlineKeyboardMarkup()
+            reply_markup.row(inline_btn_male, inline_btn_female, Misc.inline_button_cancel())
+            await message.reply(
+                '<u>' + data['first_name'] + '</u>:\n\n' + 'Укажите пол',
+                reply_markup=reply_markup,
+                disable_web_page_preview=True,
+            )
+        else:
+            await Misc.state_finish(state)
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMnewIOF.ask_gender,
+)
+async def new_iof_ask_gender_if_message(message: types.Message, state: FSMContext):
+    '''
+    Если после запроса пола нового приходит сообщение
+
+    Снова надо попросить пол
+    '''
+    if await is_it_command(message, state):
+        return
+    async with state.proxy() as data:
+        await new_iof_ask_gender(message, state)
+
+
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     content_types=ContentType.all(),
     state=FSMnewIOF.ask,
 )
-async def put_new_iof(message: types.Message, state: FSMContext):
+async def new_iof_ask_fio(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         await message.reply(
             Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + \
@@ -3117,36 +3159,61 @@ async def put_new_iof(message: types.Message, state: FSMContext):
         return
     if await is_it_command(message, state):
         return
-    logging.debug('put_new_iof: post tg_user data')
-    tg_user_sender = message.from_user
-    status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
-    if status_sender == 200 and response_sender and response_sender.get('user_id'):
-        payload_iof = dict(
-            tg_token=settings.TOKEN,
-            owner_id=response_sender['user_id'],
-            first_name=first_name,
-        )
-        logging.debug('post iof, payload: %s' % payload_iof)
-        status, response = await Misc.api_request(
-            path='/api/profile',
-            method='post',
-            data=payload_iof,
-        )
-        logging.debug('post iof, status: %s' % status)
-        logging.debug('post iof, response: %s' % response)
-        if status == 200:
-            await message.reply('Добавлен(а)')
-            try:
-                status, response = await Misc.get_user_by_uuid(response['uuid'])
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender == 200:
+        state = dp.current_state()
+        async with state.proxy() as data:
+            await FSMnewIOF.ask_gender.set()
+            data['uuid'] = response_sender['uuid']
+            data['first_name'] = first_name
+        await new_iof_ask_gender(message, state)
+    else:
+         await Misc.state_finish(state)
+         await message.reply(Misc.MSG_ERROR_API)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s|%s)%s$' % (
+        KeyboardType.NEW_IOF_GENDER_MALE, KeyboardType.NEW_IOF_GENDER_FEMALE,
+        KeyboardType.SEP,
+    ), c.data),
+    state = FSMnewIOF.ask_gender,
+    )
+async def process_callback_new_iof_gender(callback_query: types.CallbackQuery, state: FSMContext):
+    if callback_query.message:
+        gender = 'm' if callback_query.data.split(KeyboardType.SEP)[0] == str(KeyboardType.NEW_IOF_GENDER_MALE) else 'f'
+        status_sender, response_sender = await Misc.post_tg_user(callback_query.from_user)
+        async with state.proxy() as data:
+            if status_sender == 200 and \
+               response_sender['uuid'] == data.get('uuid') and \
+               data.get('first_name'):
+                payload_iof = dict(
+                    tg_token=settings.TOKEN,
+                    owner_id=response_sender['user_id'],
+                    first_name=data['first_name'],
+                    gender=gender,
+                )
+                logging.debug('post iof, payload: %s' % payload_iof)
+                status, response = await Misc.api_request(
+                    path='/api/profile',
+                    method='post',
+                    data=payload_iof,
+                )
+                logging.debug('post iof, status: %s' % status)
+                logging.debug('post iof, response: %s' % response)
                 if status == 200:
-                    await Misc.show_cards(
-                        [response],
-                        message,
-                        bot,
-                        response_from=response_sender,
-                    )
-            except:
-                pass
+                    await callback_query.message.reply('Добавлен' if gender == 'm' else 'Добавлена')
+                    try:
+                        status, response = await Misc.get_user_by_uuid(response['uuid'])
+                        if status == 200:
+                            await Misc.show_cards(
+                                [response],
+                                callback_query.message,
+                                bot,
+                                response_from=response_sender,
+                            )
+                    except:
+                        pass
     await Misc.state_finish(state)
 
 

@@ -164,6 +164,9 @@ class KeyboardType(object):
     NEW_CHILD_GENDER_MALE = 45
     NEW_CHILD_GENDER_FEMALE = 46
 
+    NEW_IOF_GENDER_MALE = 47
+    NEW_IOF_GENDER_FEMALE = 48
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -264,6 +267,7 @@ class Misc(object):
     RE_KEY_SEP = r'^%s%s'
 
     CALLBACK_DATA_UUID_TEMPLATE = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s'
+    CALLBACK_DATA_KEY_TEMPLATE = '%(keyboard_type)s%(sep)s'
 
     MSG_ERROR_UUID_NOT_VALID = (
         'Профиль не найден - попробуйте скопировать и '
@@ -1406,6 +1410,7 @@ class Misc(object):
                 pin_message_id=messsage_for_pin.message_id,
             )
         return messsage_for_pin
+
 
 class TgGroup(object):
     """
