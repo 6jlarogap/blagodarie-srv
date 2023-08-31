@@ -51,6 +51,10 @@ class FSMchild(StatesGroup):
     choose = State()
     confirm_clear = State()
 
+class FSMbroSis(StatesGroup):
+    ask = State()
+    new = State()
+
 class FSMother(StatesGroup):
     gender = State()
     dob = State()
@@ -1525,6 +1529,13 @@ async def put_child_by_uuid(message: types.Message, state: FSMContext):
                         ))
                     else:
                         await message.reply('Родитель внесен в данные')
+            else:
+                # Не имеет права
+                await message.reply((
+                    'Нельзя назначать ребенка, если это активный пользователь или профиль, '
+                    'которым владеете не Вы.\n\n'
+                    'Назначайте ребёнка по новой'
+                ))
         await Misc.state_finish(state)
 
 
@@ -1790,6 +1801,74 @@ async def process_callback_new_child(callback_query: types.CallbackQuery, state:
             return
         await FSMchild.new.set()
         await prompt_new_child_gender(callback_query.message, state)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.BRO_SIS,
+        KeyboardType.SEP,
+        # uuid человека из карточки          # 1
+        # KeyboardType.SEP,
+    ), c.data),
+    state = None,
+    )
+async def process_callback_bro_sis(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Действия по заданию брата или сестры
+    """
+    if callback_query.message:
+        code = callback_query.data.split(KeyboardType.SEP)
+        uuid = None
+        try:
+            uuid = code[1]
+        except IndexError:
+            pass
+        if not uuid:
+            return
+        response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+        if not response_sender:
+            return
+        response_uuid = response_sender['response_uuid']
+        state = dp.current_state()
+        reply_markup = None
+        async with state.proxy() as data:
+            data['uuid'] = uuid
+            bot_data = await bot.get_me()
+            prompt_bro_sis = (
+                '<b>%(name)s</b>.\n'
+                'Отправьте мне <u><b>ссылку на профиль %(his_her)s брата или сестры</b></u> '
+                'вида t.me/%(bot_data_username)s?start=...\n'
+                '\n'
+                'Или нажмите <b><u>Новый брат</u></b> или <b><u>Новая сестра</u></b> для ввода нового родственника, '
+                'который станет %(his_her)s братом или сестрой\n'
+            )
+            prompt_bro_sis = prompt_bro_sis % dict(
+                bot_data_username=bot_data['username'],
+                name=response_uuid['first_name'],
+                his_her=Misc.his_her(response_uuid),
+            )
+            new_bro_sis_dict = dict(
+                keyboard_type=KeyboardType.NEW_BRO,
+                uuid=data['uuid'],
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_new_bro = InlineKeyboardButton(
+                'Новый брат',
+                callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % new_bro_sis_dict,
+            )
+            new_bro_sis_dict.update(keyboard_type=KeyboardType.NEW_SIS)
+            inline_btn_new_sis = InlineKeyboardButton(
+                'Новая сестра',
+                callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % new_bro_sis_dict,
+            )
+            reply_markup = InlineKeyboardMarkup()
+            reply_markup.row(inline_btn_new_bro, inline_btn_new_sis, Misc.inline_button_cancel())
+            await FSMbroSis.ask.set()
+            await callback_query.message.reply(
+                prompt_bro_sis,
+                reply_markup=reply_markup,
+                disable_web_page_preview=True,
+            )
 
 
 @dp.callback_query_handler(

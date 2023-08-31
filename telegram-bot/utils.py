@@ -159,13 +159,21 @@ class KeyboardType(object):
 
     OFFER_ANSWER = 44
 
-    # Ребёнок вносится как новый, его пол
+    # Ребёнок вносится как новый, его/её пол
     #
     NEW_CHILD_GENDER_MALE = 45
     NEW_CHILD_GENDER_FEMALE = 46
 
+    # Новый собственный, его/её пол
+    #
     NEW_IOF_GENDER_MALE = 47
     NEW_IOF_GENDER_FEMALE = 48
+
+    # Брат/сестра
+    #
+    BRO_SIS = 49
+    NEW_BRO = 50
+    NEW_SIS = 51
 
     # Разделитель данных в call back data
     #
@@ -862,7 +870,6 @@ class Misc(object):
                 response_to,
                 bot_data=bot_data,
             )
-
             reply_markup = InlineKeyboardMarkup()
             if response_to['is_active'] or response_to['owner_id']:
                 inline_btn_trusts = InlineKeyboardButton(
@@ -996,6 +1003,17 @@ class Misc(object):
                         callback_data=callback_data_template % dict_child,
                     )
                     args_papa_mama_owner = [inline_btn_papa, inline_btn_mama, inline_btn_child, ]
+                    if response_to.get('father') or response_to.get('mother'):
+                        dict_bro_sis = dict(
+                            keyboard_type=KeyboardType.BRO_SIS,
+                            uuid=response_to['uuid'],
+                            sep=KeyboardType.SEP,
+                        )
+                        inline_btn_bro_sis = InlineKeyboardButton(
+                            'Брат/сестра',
+                            callback_data=callback_data_template % dict_bro_sis,
+                        )
+                        # args_papa_mama_owner.append(inline_btn_bro_sis)
                     if is_owned_account:
                         dict_change_owner = dict(
                             keyboard_type=KeyboardType.CHANGE_OWNER,
