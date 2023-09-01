@@ -1013,7 +1013,7 @@ class Misc(object):
                             'Брат/сестра',
                             callback_data=callback_data_template % dict_bro_sis,
                         )
-                        # args_papa_mama_owner.append(inline_btn_bro_sis)
+                        args_papa_mama_owner.append(inline_btn_bro_sis)
                     if is_owned_account:
                         dict_change_owner = dict(
                             keyboard_type=KeyboardType.CHANGE_OWNER,

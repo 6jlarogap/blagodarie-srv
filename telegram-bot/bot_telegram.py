@@ -1558,7 +1558,7 @@ async def put_new_child(message: types.Message, state: FSMContext):
                 )
                 return
             first_name = Misc.strip_text(message.text)
-            if re.search(Misc.RE_UUID, first_name):
+            if not first_name or re.search(Misc.RE_UUID, first_name):
                 await message.reply(
                     Misc.PROMPT_IOF_INCORRECT,
                     reply_markup=Misc.reply_markup_cancel_row(),
@@ -1591,7 +1591,7 @@ async def put_new_child(message: types.Message, state: FSMContext):
                 if status_child != 200:
                     if status_child == 400  and response_child.get('message'):
                         await message.reply(
-                            'Ошибка!\n%s\n\nНазначайте ребёнка по новой' % response['message']
+                            'Ошибка!\n%s\n\nНазначайте ребёнка по новой' % response_child['message']
                         )
                     else:
                         await message.reply(Misc.MSG_ERROR_API)
@@ -1952,7 +1952,7 @@ async def put_bro_sys_by_uuid(message: types.Message, state: FSMContext):
                         else:
                             is_father_set = True
                     if (data_whose.get('father') and is_father_set or not data_whose.get('father')) and \
-                       data_whose.get('mother') :
+                       data_whose.get('mother'):
                         post_op = dict(
                             tg_token=settings.TOKEN,
                             operation_type_id=OperationType.SET_MOTHER,
@@ -1983,16 +1983,212 @@ async def put_bro_sys_by_uuid(message: types.Message, state: FSMContext):
                                 )
                         else:
                             is_mother_set = True
-                    if is_father_set or is_mother_set:
+                    if is_father_set or data_whose.get('mother') and is_mother_set:
                         status, response = await Misc.get_user_by_uuid(uuid=data_bro_sis['uuid'])
                         if status == 200:
-                            await message.reply(f'{dl_whose} и {dl_bro_sis} сейчас имеют одних и тех же родителей')
+                            await message.reply(f'{dl_bro_sis} имеет тех же родителей, что и {dl_whose}')
                             await Misc.show_cards([response], message, bot, response_from=response_whose)
             else:
                 await message.reply((
                     'Можно назначать брата или сестру только между Вами '
                     'или профилями, которыми Вы владеете.\n\n'
                     'Назначайте брата или сестру по новой'
+                ))
+    await Misc.state_finish(state)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s|%s)%s' % (
+        KeyboardType.NEW_BRO, KeyboardType.NEW_SIS,
+        KeyboardType.SEP,
+        # uuid потомка папы или мамы           # 1
+        # KeyboardType.SEP,
+    ), c.data),
+    state = FSMbroSis.ask,
+    )
+async def process_callback_new_bro_sis_gender(callback_query: types.CallbackQuery, state: FSMContext):
+    if callback_query.message:
+        code = callback_query.data.split(KeyboardType.SEP)
+        uuid = None
+        try:
+            uuid = code[1]
+        except IndexError:
+            pass
+        if not uuid:
+            await Misc.state_finish(state)
+            return
+        async with state.proxy() as data:
+            if not data.get('uuid') or data['uuid'] != uuid:
+                await Misc.state_finish(state)
+                return
+            data['gender'] = 'm' \
+                if callback_query.data.split(KeyboardType.SEP)[0] == str(KeyboardType.NEW_BRO) \
+                else 'f'
+            brata_sestru = "брата" if data["gender"] == "m" else "сестру"
+            response = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+            if not response:
+                await callback_query.message.reply((
+                    f'Можно назначить {brata_sestru} только Вам '
+                    f'или профилю, которым Вы владеете.\n\n'
+                    f'Назначайте {brata_sestru} по новой'
+                ))
+                await Misc.state_finish(state)
+                return
+            data_whose = response['response_uuid']
+            if not data_whose.get('father') and not data_whose.get('mother'):
+                await message.reply((
+                    f'Назначить {brata_sestru} для <b>{data_whose["first_name"]}</b> - '
+                    f'это внести профиль с теми же родителям. '
+                    f'Но у <b>{data_whose["first_name"]}</b> не заданы родители!\n\n'
+                    f'Назначайте {brata_sestru} по новой'
+                ))
+                await Misc.state_finish(state)
+                return
+            await FSMbroSis.new.set()
+            await callback_query.message.reply((
+                    f'Укажите ФИО {"БРАТА" if data["gender"] == "m" else "СЕСТРЫ"} для:\n'
+                    f'{data_whose["first_name"]}\n'
+                    f'Например, {"Иван Иванович Иванов" if data["gender"] == "m" else "Мария Ивановна Иванова"} '
+                ),
+                reply_markup=Misc.reply_markup_cancel_row())
+    else:
+        await Misc.state_finish(state)
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMbroSis.new,
+)
+async def put_new_bro_sis(message: types.Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    async with state.proxy() as data:
+        if data.get('uuid') and data.get('gender'):
+            if message.content_type != ContentType.TEXT:
+                await message.reply(
+                    Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + Misc.MSG_REPEATE_PLEASE,
+                    reply_markup=Misc.reply_markup_cancel_row()
+                )
+                return
+            first_name = Misc.strip_text(message.text)
+            if not first_name or re.search(Misc.RE_UUID, first_name):
+                await message.reply(
+                    Misc.PROMPT_IOF_INCORRECT,
+                    reply_markup=Misc.reply_markup_cancel_row(),
+                )
+                return
+            brata_sestru = "брата" if data["gender"] == "m" else "сестру"
+            response_whose = await Misc.check_owner(owner_tg_user=message.from_user, uuid=data['uuid'])
+            if response_whose:
+                data_whose = response_whose['response_uuid']
+                bot_data = await bot.get_me()
+                dl_whose = Misc.get_deeplink_with_name(data_whose, bot_data)
+                if not data_whose.get('father') and not data_whose.get('mother'):
+                    await message.reply((
+                        f'Назначить {brata_sestru} - это задать для <u>{first_name}</u> родителей {dl_whose}. '
+                        f'Но у {dl_whose} не заданы родители!\n\n'
+                        f'Назначайте {brata_sestru} по новой'
+                    ))
+                else:
+                    is_father_set = is_mother_set = False
+                    data_bro_sis = None
+                    payload_post = dict(
+                        tg_token=settings.TOKEN,
+                        first_name=first_name,
+                        gender=data['gender'],
+                        owner_id=response_whose['user_id'],
+                    )
+                    if data_whose.get('father'):
+                        payload_post.update(
+                            link_uuid=data_whose['father']['uuid'],
+                            link_relation='link_is_father',
+                        )
+                        logging.debug('post new brother or sister & set father payload: %s' % payload_post)
+                        status, data_bro_sis = await Misc.api_request(
+                            path='/api/profile',
+                            method='post',
+                            data=payload_post,
+                        )
+                        logging.debug('post new brother or sister & set father, status: %s' % status)
+                        logging.debug('post new brother or sister & set father, response: %s' % data_bro_sis)
+                        if status == 200:
+                            is_father_set = True
+                            dl_bro_sis = Misc.get_deeplink_with_name(data_bro_sis, bot_data)
+                        else:
+                            if status == 400  and data_bro_sis.get('message'):
+                                await message.reply(
+                                    f'Ошибка!\n{data_bro_sis["message"]}\n\nНазначайте {brata_sestru} по новой'
+                                )
+                            else:
+                                await message.reply(Misc.MSG_ERROR_API)
+                    if (data_whose.get('father') and is_father_set or not data_whose.get('father')) and \
+                       data_whose.get('mother'):
+                        if is_father_set:
+                            # когда связывали с папой, уже появился профиль в системе: data_bro_sis
+                            payload_op = dict(
+                                tg_token=settings.TOKEN,
+                                operation_type_id=OperationType.SET_MOTHER,
+                                user_uuid_from=data_bro_sis['uuid'],
+                                user_uuid_to=data_whose['mother']['uuid'],
+                            )
+                            logging.debug('post operation, payload: %s' % payload_op)
+                            status, response = await Misc.api_request(
+                                path='/api/addoperation',
+                                method='post',
+                                data=payload_op,
+                            )
+                            logging.debug('post operation, status: %s' % status)
+                            logging.debug('post operation, response: %s' % response)
+                            if not (status == 200 or \
+                               status == 400 and response.get('code') == 'already'):
+                                repr_bro_sis = dl_bro_sis if is_father_set else first_name
+                                if status == 400  and response.get('message'):
+                                    await message.reply(
+                                        f'Ошибка назначения мамы для {repr_bro_sis}!\n' + \
+                                        f'{response["message"]}\n\n' + \
+                                        '' if is_father_set else 'Назначайте {brata_sestru} по новой' 
+                                    )
+                                else:
+                                    await message.reply(
+                                        Misc.MSG_ERROR_API + \
+                                        '\nпри назначении мамы для ' + repr_bro_sis + \
+                                        '' if is_father_set else '\nНазначайте {brata_sestru} по новой'
+                                    )
+                            if status == 200:
+                                is_mother_set = True
+                        else:
+                            payload_post.update(
+                                link_uuid=data_whose['mother']['uuid'],
+                                link_relation='link_is_mother',
+                            )
+                            logging.debug('post new brother or sister & set mother payload: %s' % payload_post)
+                            status, data_bro_sis = await Misc.api_request(
+                                path='/api/profile',
+                                method='post',
+                                data=payload_post,
+                            )
+                            logging.debug('post new brother or sister & set mother, status: %s' % status)
+                            logging.debug('post new brother or sister & set father, response: %s' % data_bro_sis)
+                            if status == 200:
+                                is_mother_set = True
+                                dl_bro_sis = Misc.get_deeplink_with_name(data_bro_sis, bot_data)
+                            else:
+                                if status == 400  and data_bro_sis.get('message'):
+                                    await message.reply(
+                                        f'Ошибка!\n{data_bro_sis["message"]}\n\nНазначайте {brata_sestru} по новой'
+                                    )
+                                else:
+                                    await message.reply(Misc.MSG_ERROR_API)
+                    if is_father_set or data_whose.get('mother') and is_mother_set:
+                        status, response = await Misc.get_user_by_uuid(uuid=data_bro_sis['uuid'])
+                        if status == 200:
+                            await message.reply(f'{dl_bro_sis} имеет тех же родителей, что и {dl_whose}')
+                            await Misc.show_cards([response], message, bot, response_from=response_whose)
+            else:
+                await message.reply((
+                    f'Можно назначить {brata_sestru} только Вам '
+                    f'или профилю, которым Вы владеете.\n\n'
+                    f'Назначайте {brata_sestru} по новой'
                 ))
     await Misc.state_finish(state)
 
@@ -2358,7 +2554,7 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
     if await is_it_command(message, state):
         return
     first_name = Misc.strip_text(message.text)
-    if re.search(Misc.RE_UUID, first_name):
+    if not first_name or re.search(Misc.RE_UUID, first_name):
         await message.reply(
             Misc.PROMPT_IOF_INCORRECT,
             reply_markup=Misc.reply_markup_cancel_row(),
@@ -3356,7 +3552,7 @@ async def new_iof_ask_fio(message: types.Message, state: FSMContext):
         )
         return
     first_name = Misc.strip_text(message.text)
-    if re.search(Misc.RE_UUID, first_name):
+    if not first_name or re.search(Misc.RE_UUID, first_name):
         await message.reply(
             Misc.PROMPT_IOF_INCORRECT,
             reply_markup=Misc.reply_markup_cancel_row(),
