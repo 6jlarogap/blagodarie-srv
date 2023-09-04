@@ -932,7 +932,6 @@ async def process_callback_papa_mama(callback_query: types.CallbackQuery, state:
     Действия по заданию папы, мамы
     """
     if callback_query.message:
-        tg_user_sender = callback_query.from_user
         code = callback_query.data.split(KeyboardType.SEP)
         uuid = None
         try:
@@ -941,6 +940,7 @@ async def process_callback_papa_mama(callback_query: types.CallbackQuery, state:
             pass
         if not uuid:
             return
+        tg_user_sender = callback_query.from_user
         response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
         if not response_sender:
             return
@@ -1024,60 +1024,50 @@ async def process_callback_clear_parent(callback_query: types.CallbackQuery, sta
     """
     Действия по обнулению папы, мамы
     """
-    if callback_query.message:
-        tg_user_sender = callback_query.from_user
-        code = callback_query.data.split(KeyboardType.SEP)
-        uuid = None
-        try:
-            uuid = code[1]
-        except IndexError:
-            pass
-        if not uuid:
-            await Misc.state_finish(state)
-            return
-        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
-        if not response_sender:
-            await Misc.state_finish(state)
-            return
-        async with state.proxy() as data:
-            if not data or \
-               not data.get('existing_parent_uuid') or \
-               ('is_father' not in data) or \
-               not data.get('existing_parent_name') or \
-               data.get('uuid') != uuid \
-               :
-                await Misc.state_finish(state)
-                return
-            existing_parent_name = data['existing_parent_name']
-            is_father = data['is_father']
-        prompt = (
-            'Вы уверены, что хотите очистить родственную связь: '
-            '<b>%(existing_parent_name)s</b> - %(papa_or_mama)s для <b>%(response_uuid_name)s</b>?\n\n'
-            'Если уверены, нажмите <b><u>Очистить</u></b>'
-            ) % dict(
-            papa_or_mama='папа' if is_father else 'мама',
-            response_uuid_name=response_sender['response_uuid']['first_name'],
-            existing_parent_name=existing_parent_name,
-        )
-        callback_data_clear_parent_confirm = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
-            keyboard_type=KeyboardType.CLEAR_PARENT_CONFIRM,
-            uuid=uuid,
-            sep=KeyboardType.SEP,
-        )
-        inline_btn_clear_parent_confirm = InlineKeyboardButton(
-            'Очистить',
-            callback_data=callback_data_clear_parent_confirm,
-        )
-        reply_markup = InlineKeyboardMarkup()
-        reply_markup.row(inline_btn_clear_parent_confirm, Misc.inline_button_cancel())
-        await FSMpapaMama.confirm_clear.set()
-        await callback_query.message.reply(
-            prompt,
-            reply_markup=reply_markup,
-            disable_web_page_preview=True,
-        )
-    else:
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
         await Misc.state_finish(state)
+        return
+    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    if not response_sender:
+        await Misc.state_finish(state)
+        return
+    async with state.proxy() as data:
+        if not data or \
+            not data.get('existing_parent_uuid') or \
+            ('is_father' not in data) or \
+            not data.get('existing_parent_name') or \
+            data.get('uuid') != uuid \
+            :
+            await Misc.state_finish(state)
+            return
+        existing_parent_name = data['existing_parent_name']
+        is_father = data['is_father']
+    prompt = (
+        'Вы уверены, что хотите очистить родственную связь: '
+        '<b>%(existing_parent_name)s</b> - %(papa_or_mama)s для <b>%(response_uuid_name)s</b>?\n\n'
+        'Если уверены, нажмите <b><u>Очистить</u></b>'
+        ) % dict(
+        papa_or_mama='папа' if is_father else 'мама',
+        response_uuid_name=response_sender['response_uuid']['first_name'],
+        existing_parent_name=existing_parent_name,
+    )
+    callback_data_clear_parent_confirm = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+        keyboard_type=KeyboardType.CLEAR_PARENT_CONFIRM,
+        uuid=uuid,
+        sep=KeyboardType.SEP,
+    )
+    inline_btn_clear_parent_confirm = InlineKeyboardButton(
+        'Очистить',
+        callback_data=callback_data_clear_parent_confirm,
+    )
+    reply_markup = InlineKeyboardMarkup()
+    reply_markup.row(inline_btn_clear_parent_confirm, Misc.inline_button_cancel())
+    await FSMpapaMama.confirm_clear.set()
+    await callback_query.message.reply(
+        prompt,
+        reply_markup=reply_markup,
+        disable_web_page_preview=True,
+    )
 
 
 @dp.callback_query_handler(
@@ -1091,69 +1081,61 @@ async def process_callback_clear_parent_confirmed(callback_query: types.Callback
     """
     Действия по обнулению папы, мамы
     """
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+        await Misc.state_finish(state)
+        return
     message = callback_query.message
-    if message:
-        tg_user_sender = callback_query.from_user
-        code = callback_query.data.split(KeyboardType.SEP)
-        uuid = None
-        try:
-            uuid = code[1]
-        except IndexError:
-            pass
-        if not uuid:
+    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    if not response_sender:
+        await Misc.state_finish(state)
+        return
+    async with state.proxy() as data:
+        if not data or \
+            not data.get('existing_parent_uuid') or \
+            ('is_father' not in data) or \
+            not data.get('existing_parent_name') or \
+            data.get('uuid') != uuid \
+            :
             await Misc.state_finish(state)
             return
-        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
-        if not response_sender:
-            await Misc.state_finish(state)
-            return
-        async with state.proxy() as data:
-            if not data or \
-               not data.get('existing_parent_uuid') or \
-               ('is_father' not in data) or \
-               not data.get('existing_parent_name') or \
-               data.get('uuid') != uuid \
-               :
-                await Misc.state_finish(state)
-                return
-            existing_parent_uuid = data['existing_parent_uuid']
-            is_father = data['is_father']
-        post_op = dict(
-            tg_token=settings.TOKEN,
-            operation_type_id=OperationType.NOT_PARENT,
-            user_uuid_from=response_sender['response_uuid']['uuid'],
-            user_uuid_to=existing_parent_uuid,
-        )
-        logging.debug('post operation, payload: %s' % post_op)
-        status, response = await Misc.api_request(
-            path='/api/addoperation',
-            method='post',
-            data=post_op,
-        )
-        logging.debug('post operation, status: %s' % status)
-        logging.debug('post operation, response: %s' % response)
-        if not (status == 200 or \
-           status == 400 and response.get('code') == 'already'):
-            if status == 400  and response.get('message'):
-                await message.reply(
-                    'Ошибка!\n%s\n\nОчищайте родителя по новой' % response['message']
-                )
-            else:
-                await message.reply(Misc.MSG_ERROR_API)
+        existing_parent_uuid = data['existing_parent_uuid']
+        is_father = data['is_father']
+    post_op = dict(
+        tg_token=settings.TOKEN,
+        operation_type_id=OperationType.NOT_PARENT,
+        user_uuid_from=response_sender['response_uuid']['uuid'],
+        user_uuid_to=existing_parent_uuid,
+    )
+    logging.debug('post operation, payload: %s' % post_op)
+    status, response = await Misc.api_request(
+        path='/api/addoperation',
+        method='post',
+        data=post_op,
+    )
+    logging.debug('post operation, status: %s' % status)
+    logging.debug('post operation, response: %s' % response)
+    if not (status == 200 or \
+        status == 400 and response.get('code') == 'already'):
+        if status == 400  and response.get('message'):
+            await message.reply(
+                'Ошибка!\n%s\n\nОчищайте родителя по новой' % response['message']
+            )
         else:
-            if response and response.get('profile_from') and response.get('profile_to'):
-                bot_data = await bot.get_me()
-                await bot.send_message(
-                    callback_query.from_user.id,
-                    Misc.PROMPT_PAPA_MAMA_CLEARED % dict(
-                        iof_from = Misc.get_deeplink_with_name(response['profile_from'], bot_data, plus_trusts=True),
-                        iof_to = Misc.get_deeplink_with_name(response['profile_to'], bot_data, plus_trusts=True),
-                        papa_or_mama='папа' if is_father else 'мама',
-                    ),
-                    disable_web_page_preview=True,
-                )
-            else:
-                await message.reply('Связь Ребенок - Родитель очищена')
+            await message.reply(Misc.MSG_ERROR_API)
+    else:
+        if response and response.get('profile_from') and response.get('profile_to'):
+            bot_data = await bot.get_me()
+            await bot.send_message(
+                callback_query.from_user.id,
+                Misc.PROMPT_PAPA_MAMA_CLEARED % dict(
+                    iof_from = Misc.get_deeplink_with_name(response['profile_from'], bot_data, plus_trusts=True),
+                    iof_to = Misc.get_deeplink_with_name(response['profile_to'], bot_data, plus_trusts=True),
+                    papa_or_mama='папа' if is_father else 'мама',
+                ),
+                disable_web_page_preview=True,
+            )
+        else:
+            await message.reply('Связь Ребенок - Родитель очищена')
     await Misc.state_finish(state)
 
 
@@ -1266,74 +1248,67 @@ async def process_callback_clear_child_confirmed(callback_query: types.CallbackQ
     """
     Действия по вопросу об обнулении ребенка
     """
+    if not (parent_uuid := Misc.getuuid_from_callback(callback_query)):
+        await Misc.state_finish(state)
+        return
     message = callback_query.message
-    if message:
-        tg_user_sender = callback_query.from_user
-        code = callback_query.data.split(KeyboardType.SEP)
-        parent_uuid = None
-        try:
-            parent_uuid = code[1]
-        except IndexError:
-            pass
-        if not parent_uuid:
+    tg_user_sender = callback_query.from_user
+    response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=parent_uuid)
+    if not response_sender or \
+        not response_sender.get('response_uuid') or \
+        not response_sender['response_uuid'].get('children'):
+        await Misc.state_finish(state)
+        return
+    async with state.proxy() as data:
+        if not data or \
+            not data.get('parent_gender') or \
+            data.get('uuid') != parent_uuid or \
+            not data.get('child_uuid'):
             await Misc.state_finish(state)
             return
-        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=parent_uuid)
-        if not response_sender or \
-           not response_sender.get('response_uuid') or \
-           not response_sender['response_uuid'].get('children'):
-            await Misc.state_finish(state)
-            return
-        async with state.proxy() as data:
-            if not data or \
-               not data.get('parent_gender') or \
-               data.get('uuid') != parent_uuid or \
-               not data.get('child_uuid'):
-                await Misc.state_finish(state)
-                return
-            is_father = data['parent_gender'] == 'm'
-            post_op = dict(
-                tg_token=settings.TOKEN,
-                operation_type_id=OperationType.NOT_PARENT,
-                user_uuid_from=data['child_uuid'],
-                user_uuid_to=parent_uuid,
-            )
-            logging.debug('post operation, payload: %s' % post_op)
-            status, response = await Misc.api_request(
-                path='/api/addoperation',
-                method='post',
-                data=post_op,
-            )
-            logging.debug('post operation, status: %s' % status)
-            logging.debug('post operation, response: %s' % response)
-            if not (status == 200 or \
-               status == 400 and response.get('code') == 'already'):
-                if status == 400  and response.get('message'):
-                    await message.reply(
-                        'Ошибка!\n%s\n\nОчищайте ребенка по новой' % response['message']
-                    )
-                else:
-                    await message.reply(Misc.MSG_ERROR_API)
+        is_father = data['parent_gender'] == 'm'
+        post_op = dict(
+            tg_token=settings.TOKEN,
+            operation_type_id=OperationType.NOT_PARENT,
+            user_uuid_from=data['child_uuid'],
+            user_uuid_to=parent_uuid,
+        )
+        logging.debug('post operation, payload: %s' % post_op)
+        status, response = await Misc.api_request(
+            path='/api/addoperation',
+            method='post',
+            data=post_op,
+        )
+        logging.debug('post operation, status: %s' % status)
+        logging.debug('post operation, response: %s' % response)
+        if not (status == 200 or \
+            status == 400 and response.get('code') == 'already'):
+            if status == 400  and response.get('message'):
+                await message.reply(
+                    'Ошибка!\n%s\n\nОчищайте ребенка по новой' % response['message']
+                )
             else:
-                if response and response.get('profile_from') and response.get('profile_to'):
-                    if not response['profile_to']['gender']:
-                        await Misc.put_user_properties(
-                            uuid=response['profile_to']['uuid'],
-                            gender='m' if is_father else 'f',
-                        )
-                    bot_data = await bot.get_me()
-                    await bot.send_message(
-                        tg_user_sender.id,
-                        Misc.PROMPT_PAPA_MAMA_CLEARED % dict(
-                            iof_from = Misc.get_deeplink_with_name(response['profile_from'], bot_data, plus_trusts=True),
-                            iof_to = Misc.get_deeplink_with_name(response['profile_to'], bot_data, plus_trusts=True),
-                            papa_or_mama='папа' if is_father else 'мама',
-                        ),
-                        disable_web_page_preview=True,
+                await message.reply(Misc.MSG_ERROR_API)
+        else:
+            if response and response.get('profile_from') and response.get('profile_to'):
+                if not response['profile_to']['gender']:
+                    await Misc.put_user_properties(
+                        uuid=response['profile_to']['uuid'],
+                        gender='m' if is_father else 'f',
                     )
-                else:
-                    await message.reply('Связь Родитель - Ребенок очищена')
-    await Misc.state_finish(state)        
+                bot_data = await bot.get_me()
+                await bot.send_message(
+                    tg_user_sender.id,
+                    Misc.PROMPT_PAPA_MAMA_CLEARED % dict(
+                        iof_from = Misc.get_deeplink_with_name(response['profile_from'], bot_data, plus_trusts=True),
+                        iof_to = Misc.get_deeplink_with_name(response['profile_to'], bot_data, plus_trusts=True),
+                        papa_or_mama='папа' if is_father else 'мама',
+                    ),
+                    disable_web_page_preview=True,
+                )
+            else:
+                await message.reply('Связь Родитель - Ребенок очищена')
+    await Misc.state_finish(state)
 
 
 @dp.callback_query_handler(
@@ -1347,58 +1322,47 @@ async def process_callback_clear_child(callback_query: types.CallbackQuery, stat
     """
     Действия по вопросу об обнулении ребенка
     """
-    message = callback_query.message
-    if message:
-        # Если у него/неё одни ребенок, сразу вопрос
-        tg_user_sender = callback_query.from_user
-        code = callback_query.data.split(KeyboardType.SEP)
-        uuid = None
-        try:
-            uuid = code[1]
-        except IndexError:
-            pass
-        if not uuid:
-            await Misc.state_finish(state)
-            return
-        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
-        if not response_sender or \
-           not response_sender.get('response_uuid') or \
-           not response_sender['response_uuid'].get('children'):
-            await Misc.state_finish(state)
-            return
-        async with state.proxy() as data:
-            if not data or \
-               not data.get('parent_gender') or \
-               data.get('uuid') != uuid:
-                await Misc.state_finish(state)
-                return
-        parent = response_sender['response_uuid']
-        children = parent['children']
-        if len(children) == 1:
-            await clear_child_confirm(children[0], parent, callback_query.message, state)
-        else:
-            bot_data = await bot.get_me()
-            prompt = (
-                'У <b>%(parent_name)s</b> несколько детей. Нажмите на ссылку того, '
-                'с кем собираетесь разорвать %(his_her)s родственную связь\n\n'
-            )
-            prompt = prompt % dict(
-                parent_name=parent['first_name'],
-                his_her='его' if data['parent_gender'] == 'm' else 'её',
-            )
-            for child in children:
-                prompt += Misc.get_deeplink_with_name(child, bot_data, plus_trusts=True) + '\n'
-            prompt += "\nПосле надо будет нажать внизу 'Запустить' ('Start')\n"
-            reply_markup = InlineKeyboardMarkup()
-            reply_markup.row(Misc.inline_button_cancel())
-            await FSMchild.choose.set()
-            await callback_query.message.reply(
-                prompt,
-                reply_markup=reply_markup,
-                disable_web_page_preview=True,
-            )
-    else:
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
         await Misc.state_finish(state)
+        return
+    message = callback_query.message
+    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    if not response_sender or \
+        not response_sender.get('response_uuid') or \
+        not response_sender['response_uuid'].get('children'):
+        await Misc.state_finish(state)
+        return
+    async with state.proxy() as data:
+        if not data or \
+            not data.get('parent_gender') or \
+            data.get('uuid') != uuid:
+            await Misc.state_finish(state)
+            return
+    parent = response_sender['response_uuid']
+    children = parent['children']
+    if len(children) == 1:
+        await clear_child_confirm(children[0], parent, callback_query.message, state)
+    else:
+        bot_data = await bot.get_me()
+        prompt = (
+            'У <b>%(parent_name)s</b> несколько детей. Нажмите на ссылку того, '
+            'с кем собираетесь разорвать %(his_her)s родственную связь\n\n'
+        )
+        prompt = prompt % dict(
+            parent_name=parent['first_name'],
+            his_her='его' if data['parent_gender'] == 'm' else 'её',
+        )
+        for child in children:
+            prompt += Misc.get_deeplink_with_name(child, bot_data, plus_trusts=True) + '\n'
+        prompt += "\nПосле надо будет нажать внизу 'Запустить' ('Start')\n"
+        reply_markup = InlineKeyboardMarkup()
+        reply_markup.row(Misc.inline_button_cancel())
+        await FSMchild.choose.set()
+        await callback_query.message.reply(
+            prompt,
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
+        )
 
 
 @dp.message_handler(
@@ -1633,60 +1597,52 @@ async def process_callback_child(callback_query: types.CallbackQuery, state: FSM
     """
     Действия по заданию папы, мамы для ребенка
     """
-    if callback_query.message:
-        tg_user_sender = callback_query.from_user
-        code = callback_query.data.split(KeyboardType.SEP)
-        uuid = None
-        try:
-            uuid = code[1]
-        except IndexError:
-            pass
-        if not uuid:
-            return
-        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
-        if not response_sender:
-            return
-        response_uuid = response_sender['response_uuid']
-        state = dp.current_state()
-        reply_markup = None
-        async with state.proxy() as data:
-            data['uuid'] = uuid
-            data['name'] = response_uuid['first_name']
-            if response_uuid['gender']:
-                data['parent_gender'] = response_uuid['gender']
-                await ask_child(callback_query.message, state, data, children=response_sender['response_uuid']['children'])
-            else:
-                data['parent_gender'] = None
-                callback_data = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
-                    keyboard_type=KeyboardType.FATHER_OF_CHILD,
-                    uuid=uuid,
-                    sep=KeyboardType.SEP,
-                )
-                inline_btn_papa_of_child = InlineKeyboardButton(
-                    'Муж',
-                    callback_data=callback_data,
-                )
-                callback_data = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
-                    keyboard_type=KeyboardType.MOTHER_OF_CHILD,
-                    uuid=uuid,
-                    sep=KeyboardType.SEP,
-                )
-                inline_btn_mama_of_child = InlineKeyboardButton(
-                    'Жен',
-                    callback_data=callback_data,
-                )
-                inline_button_cancel = Misc.inline_button_cancel()
-                reply_markup = InlineKeyboardMarkup()
-                reply_markup.row(inline_btn_papa_of_child, inline_btn_mama_of_child, inline_button_cancel)
-                prompt_papa_mama_of_child = Misc.PROMPT_PAPA_MAMA_OF_CHILD % dict(
-                    name=response_uuid['first_name'],
-                )
-                await FSMchild.parent_gender.set()
-                await callback_query.message.reply(
-                    prompt_papa_mama_of_child,
-                    reply_markup=reply_markup,
-                    disable_web_page_preview=True,
-                )
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+        return
+    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    if not response_sender:
+        return
+    response_uuid = response_sender['response_uuid']
+    state = dp.current_state()
+    reply_markup = None
+    async with state.proxy() as data:
+        data['uuid'] = uuid
+        data['name'] = response_uuid['first_name']
+        if response_uuid['gender']:
+            data['parent_gender'] = response_uuid['gender']
+            await ask_child(callback_query.message, state, data, children=response_sender['response_uuid']['children'])
+        else:
+            data['parent_gender'] = None
+            callback_data = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+                keyboard_type=KeyboardType.FATHER_OF_CHILD,
+                uuid=uuid,
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_papa_of_child = InlineKeyboardButton(
+                'Муж',
+                callback_data=callback_data,
+            )
+            callback_data = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+                keyboard_type=KeyboardType.MOTHER_OF_CHILD,
+                uuid=uuid,
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_mama_of_child = InlineKeyboardButton(
+                'Жен',
+                callback_data=callback_data,
+            )
+            inline_button_cancel = Misc.inline_button_cancel()
+            reply_markup = InlineKeyboardMarkup()
+            reply_markup.row(inline_btn_papa_of_child, inline_btn_mama_of_child, inline_button_cancel)
+            prompt_papa_mama_of_child = Misc.PROMPT_PAPA_MAMA_OF_CHILD % dict(
+                name=response_uuid['first_name'],
+            )
+            await FSMchild.parent_gender.set()
+            await callback_query.message.reply(
+                prompt_papa_mama_of_child,
+                reply_markup=reply_markup,
+                disable_web_page_preview=True,
+            )
 
 
 @dp.callback_query_handler(
@@ -1788,21 +1744,12 @@ async def process_callback_new_child_gender(callback_query: types.CallbackQuery,
     state = FSMchild.ask,
     )
 async def process_callback_new_child(callback_query: types.CallbackQuery, state: FSMContext):
-    if callback_query.message:
-        tg_user_sender = callback_query.from_user
-        code = callback_query.data.split(KeyboardType.SEP)
-        uuid = None
-        try:
-            uuid = code[1]
-        except IndexError:
-            pass
-        if not uuid:
-            return
-        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
-        if not response_sender:
-            return
-        await FSMchild.new.set()
-        await prompt_new_child_gender(callback_query.message, state)
+    if not (uuid := Misc.getuuid_from_callback(callback_query)) or \
+       not await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid):
+        await Misc.state_finish(state)
+        return
+    await FSMchild.new.set()
+    await prompt_new_child_gender(callback_query.message, state)
 
 
 @dp.callback_query_handler(
@@ -1818,59 +1765,52 @@ async def process_callback_bro_sis(callback_query: types.CallbackQuery, state: F
     """
     Действия по заданию брата или сестры
     """
-    if callback_query.message:
-        code = callback_query.data.split(KeyboardType.SEP)
-        uuid = None
-        try:
-            uuid = code[1]
-        except IndexError:
-            pass
-        if not uuid:
-            return
-        response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
-        if not response_sender:
-            return
-        response_uuid = response_sender['response_uuid']
-        state = dp.current_state()
-        reply_markup = None
-        async with state.proxy() as data:
-            data['uuid'] = uuid
-            bot_data = await bot.get_me()
-            prompt_bro_sis = (
-                '<b>%(name)s</b>.\n'
-                'Отправьте мне <u><b>ссылку на профиль %(his_her)s брата или сестры</b></u> '
-                'вида t.me/%(bot_data_username)s?start=...\n'
-                '\n'
-                'Или нажмите <b><u>Новый брат</u></b> или <b><u>Новая сестра</u></b> для ввода нового родственника, '
-                'который станет %(his_her)s братом или сестрой\n'
-            )
-            prompt_bro_sis = prompt_bro_sis % dict(
-                bot_data_username=bot_data['username'],
-                name=response_uuid['first_name'],
-                his_her=Misc.his_her(response_uuid),
-            )
-            new_bro_sis_dict = dict(
-                keyboard_type=KeyboardType.NEW_BRO,
-                uuid=data['uuid'],
-                sep=KeyboardType.SEP,
-            )
-            inline_btn_new_bro = InlineKeyboardButton(
-                'Новый брат',
-                callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % new_bro_sis_dict,
-            )
-            new_bro_sis_dict.update(keyboard_type=KeyboardType.NEW_SIS)
-            inline_btn_new_sis = InlineKeyboardButton(
-                'Новая сестра',
-                callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % new_bro_sis_dict,
-            )
-            reply_markup = InlineKeyboardMarkup()
-            reply_markup.row(inline_btn_new_bro, inline_btn_new_sis, Misc.inline_button_cancel())
-            await FSMbroSis.ask.set()
-            await callback_query.message.reply(
-                prompt_bro_sis,
-                reply_markup=reply_markup,
-                disable_web_page_preview=True,
-            )
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+        return
+    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    if not response_sender:
+        return
+    response_uuid = response_sender['response_uuid']
+    state = dp.current_state()
+    reply_markup = None
+    async with state.proxy() as data:
+        data['uuid'] = uuid
+        bot_data = await bot.get_me()
+        prompt_bro_sis = (
+            '<b>%(name)s</b>.\n'
+            'Отправьте мне <u><b>ссылку на профиль %(his_her)s брата или сестры</b></u> '
+            'вида t.me/%(bot_data_username)s?start=...\n'
+            '\n'
+            'Или нажмите <b><u>Новый брат</u></b> или <b><u>Новая сестра</u></b> для ввода нового родственника, '
+            'который станет %(his_her)s братом или сестрой\n'
+        )
+        prompt_bro_sis = prompt_bro_sis % dict(
+            bot_data_username=bot_data['username'],
+            name=response_uuid['first_name'],
+            his_her=Misc.his_her(response_uuid),
+        )
+        new_bro_sis_dict = dict(
+            keyboard_type=KeyboardType.NEW_BRO,
+            uuid=data['uuid'],
+            sep=KeyboardType.SEP,
+        )
+        inline_btn_new_bro = InlineKeyboardButton(
+            'Новый брат',
+            callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % new_bro_sis_dict,
+        )
+        new_bro_sis_dict.update(keyboard_type=KeyboardType.NEW_SIS)
+        inline_btn_new_sis = InlineKeyboardButton(
+            'Новая сестра',
+            callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % new_bro_sis_dict,
+        )
+        reply_markup = InlineKeyboardMarkup()
+        reply_markup.row(inline_btn_new_bro, inline_btn_new_sis, Misc.inline_button_cancel())
+        await FSMbroSis.ask.set()
+        await callback_query.message.reply(
+            prompt_bro_sis,
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
+        )
 
 
 @dp.message_handler(
@@ -2010,52 +1950,43 @@ async def put_bro_sys_by_uuid(message: types.Message, state: FSMContext):
     state = FSMbroSis.ask,
     )
 async def process_callback_new_bro_sis_gender(callback_query: types.CallbackQuery, state: FSMContext):
-    if callback_query.message:
-        code = callback_query.data.split(KeyboardType.SEP)
-        uuid = None
-        try:
-            uuid = code[1]
-        except IndexError:
-            pass
-        if not uuid:
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+        await Misc.state_finish(state)
+        return
+    async with state.proxy() as data:
+        if not data.get('uuid') or data['uuid'] != uuid:
             await Misc.state_finish(state)
             return
-        async with state.proxy() as data:
-            if not data.get('uuid') or data['uuid'] != uuid:
-                await Misc.state_finish(state)
-                return
-            data['gender'] = 'm' \
-                if callback_query.data.split(KeyboardType.SEP)[0] == str(KeyboardType.NEW_BRO) \
-                else 'f'
-            brata_sestru = "брата" if data["gender"] == "m" else "сестру"
-            response = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
-            if not response:
-                await callback_query.message.reply((
-                    f'Можно назначить {brata_sestru} только Вам '
-                    f'или профилю, которым Вы владеете.\n\n'
-                    f'Назначайте {brata_sestru} по новой'
-                ))
-                await Misc.state_finish(state)
-                return
-            data_whose = response['response_uuid']
-            if not data_whose.get('father') and not data_whose.get('mother'):
-                await message.reply((
-                    f'Назначить {brata_sestru} для <b>{data_whose["first_name"]}</b> - '
-                    f'это внести профиль с теми же родителям. '
-                    f'Но у <b>{data_whose["first_name"]}</b> не заданы родители!\n\n'
-                    f'Назначайте {brata_sestru} по новой'
-                ))
-                await Misc.state_finish(state)
-                return
-            await FSMbroSis.new.set()
+        data['gender'] = 'm' \
+            if callback_query.data.split(KeyboardType.SEP)[0] == str(KeyboardType.NEW_BRO) \
+            else 'f'
+        brata_sestru = "брата" if data["gender"] == "m" else "сестру"
+        response = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+        if not response:
             await callback_query.message.reply((
-                    f'Укажите ФИО {"БРАТА" if data["gender"] == "m" else "СЕСТРЫ"} для:\n'
-                    f'{data_whose["first_name"]}\n'
-                    f'Например, {"Иван Иванович Иванов" if data["gender"] == "m" else "Мария Ивановна Иванова"} '
-                ),
-                reply_markup=Misc.reply_markup_cancel_row())
-    else:
-        await Misc.state_finish(state)
+                f'Можно назначить {brata_sestru} только Вам '
+                f'или профилю, которым Вы владеете.\n\n'
+                f'Назначайте {brata_sestru} по новой'
+            ))
+            await Misc.state_finish(state)
+            return
+        data_whose = response['response_uuid']
+        if not data_whose.get('father') and not data_whose.get('mother'):
+            await message.reply((
+                f'Назначить {brata_sestru} для <b>{data_whose["first_name"]}</b> - '
+                f'это внести профиль с теми же родителям. '
+                f'Но у <b>{data_whose["first_name"]}</b> не заданы родители!\n\n'
+                f'Назначайте {brata_sestru} по новой'
+            ))
+            await Misc.state_finish(state)
+            return
+        await FSMbroSis.new.set()
+        await callback_query.message.reply((
+                f'Укажите ФИО {"БРАТА" if data["gender"] == "m" else "СЕСТРЫ"} для:\n'
+                f'{data_whose["first_name"]}\n'
+                f'Например, {"Иван Иванович Иванов" if data["gender"] == "m" else "Мария Ивановна Иванова"} '
+            ),
+            reply_markup=Misc.reply_markup_cancel_row())
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
@@ -2209,34 +2140,26 @@ async def process_callback_keys(callback_query: types.CallbackQuery, state: FSMC
 
     (В апи контакты - это keys)
     """
-    if callback_query.message:
-        code = callback_query.data.split(KeyboardType.SEP)
-        uuid = None
-        try:
-            uuid = code[1]
-        except IndexError:
-            pass
-        if not uuid:
-            return
-        response_sender = await Misc.check_owner(
-            owner_tg_user=callback_query.from_user,
-            uuid=uuid,
-            check_owned_only=False
-        )
-        if not response_sender:
-            return
-        state = dp.current_state()
-        async with state.proxy() as data:
-            data['uuid'] = uuid
-        response_uuid = response_sender['response_uuid']
-        await FSMkey.ask.set()
-        await callback_query.message.reply(
-            Misc.PROMPT_KEYS % dict(
-                name=response_uuid['first_name'],
-                his_her= 'Ваши' if response_uuid['uuid'] == response_sender['uuid'] else Misc.his_her(response_uuid),
-            ),
-            reply_markup=Misc.reply_markup_cancel_row(),
-        )
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+        return
+    response_sender = await Misc.check_owner(
+        owner_tg_user=callback_query.from_user,
+        uuid=uuid,
+    )
+    if not response_sender:
+        return
+    state = dp.current_state()
+    async with state.proxy() as data:
+        data['uuid'] = uuid
+    response_uuid = response_sender['response_uuid']
+    await FSMkey.ask.set()
+    await callback_query.message.reply(
+        Misc.PROMPT_KEYS % dict(
+            name=response_uuid['first_name'],
+            his_her= 'Ваши' if response_uuid['uuid'] == response_sender['uuid'] else Misc.his_her(response_uuid),
+        ),
+        reply_markup=Misc.reply_markup_cancel_row(),
+    )
 
 
 @dp.message_handler(
@@ -2435,70 +2358,64 @@ async def get_new_owner(message: types.Message, state: FSMContext):
     )
 async def process_callback_change_owner_confirmed(callback_query: types.CallbackQuery, state: FSMContext):
     """
-    Заменить имя, фамилию, отчество
+    Заменить владельца. Подтверждение получено
     """
-    if callback_query.message:
-        code = callback_query.data.split(KeyboardType.SEP)
-        uuid = None
-        try:
-            uuid = code[1]
-        except IndexError:
-            pass
-        if not uuid:
-            return
-        response_sender = await Misc.check_owner(
-            owner_tg_user=callback_query.from_user,
-            uuid=uuid,
-            check_owned_only=True
-        )
-        if not response_sender:
-            await callback_query.message.reply('Пока Вы здесь думали, Вы же изменили владение с другого устройства')
-        else:
-            bot_data = await bot.get_me()
-            state = dp.current_state()
-            async with state.proxy() as data:
-                if data.get('uuid') != response_sender['response_uuid']['uuid'] or \
-                   not data.get('uuid_owner'):
-                    # fool proof
-                    pass
-                else:
-                    status_to, response_to = await Misc.get_user_by_uuid(data['uuid_owner'])
-                    if status_to == 400:
-                        if response_to.get('message'):
-                            reply = response_to['message']
-                        else:
-                            reply = Misc.MSG_ERROR_API
-                    elif status_to != 200 or not response_to:
-                        reply = Misc.MSG_ERROR_API
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+        await Misc.state_finish(state)
+        return
+    response_sender = await Misc.check_owner(
+        owner_tg_user=callback_query.from_user,
+        uuid=uuid,
+        check_owned_only=True
+    )
+    if not response_sender:
+        await callback_query.message.reply('Пока Вы здесь думали, Вы же изменили владение с другого устройства')
+    else:
+        bot_data = await bot.get_me()
+        state = dp.current_state()
+        async with state.proxy() as data:
+            if data.get('uuid') != response_sender['response_uuid']['uuid'] or \
+                not data.get('uuid_owner'):
+                # fool proof
+                pass
+            else:
+                status_to, response_to = await Misc.get_user_by_uuid(data['uuid_owner'])
+                if status_to == 400:
+                    if response_to.get('message'):
+                        reply = response_to['message']
                     else:
-                        status, response = await Misc.put_user_properties(
-                            uuid=uuid,
-                            owner_uuid=data['uuid_owner'],
+                        reply = Misc.MSG_ERROR_API
+                elif status_to != 200 or not response_to:
+                    reply = Misc.MSG_ERROR_API
+                else:
+                    status, response = await Misc.put_user_properties(
+                        uuid=uuid,
+                        owner_uuid=data['uuid_owner'],
+                    )
+                    if status == 200:
+                        bot_data = await bot.get_me()
+                        iof_from = Misc.get_deeplink_with_name(response_sender['response_uuid'], bot_data)
+                        iof_to = Misc.get_deeplink_with_name(response_to, bot_data)
+                        reply = Misc.PROMPT_CHANGE_OWNER_SUCCESS % dict(
+                                iof_from=iof_from, iof_to=iof_to
                         )
-                        if status == 200:
-                            bot_data = await bot.get_me()
-                            iof_from = Misc.get_deeplink_with_name(response_sender['response_uuid'], bot_data)
-                            iof_to = Misc.get_deeplink_with_name(response_to, bot_data)
-                            reply = Misc.PROMPT_CHANGE_OWNER_SUCCESS % dict(
-                                    iof_from=iof_from, iof_to=iof_to
-                            )
-                            if response_to.get('tg_data', []):
-                                iof_sender = Misc.get_deeplink_with_name(response_sender, bot_data)
-                                for tgd in response_to['tg_data']:
-                                    try:
-                                        await bot.send_message(
-                                            tgd['tg_uid'],
-                                            Misc.PROMPT_MESSAGE_TO_CHANGED_OWNER % dict(
-                                                iof_from=iof_from, iof_sender=iof_sender,
-                                            ))
-                                    except (ChatNotFound, CantInitiateConversation):
-                                        pass
+                        if response_to.get('tg_data', []):
+                            iof_sender = Misc.get_deeplink_with_name(response_sender, bot_data)
+                            for tgd in response_to['tg_data']:
+                                try:
+                                    await bot.send_message(
+                                        tgd['tg_uid'],
+                                        Misc.PROMPT_MESSAGE_TO_CHANGED_OWNER % dict(
+                                            iof_from=iof_from, iof_sender=iof_sender,
+                                        ))
+                                except (ChatNotFound, CantInitiateConversation):
+                                    pass
 
-                        elif status == 400 and response.get('message'):
-                            reply = response['message']
-                        else:
-                            reply = Misc.MSG_ERROR_API
-                    await callback_query.message.reply(reply)
+                    elif status == 400 and response.get('message'):
+                        reply = response['message']
+                    else:
+                        reply = Misc.MSG_ERROR_API
+                await callback_query.message.reply(reply)
     await Misc.state_finish(state)
 
 
@@ -2654,43 +2571,35 @@ async def process_callback_other(callback_query: types.CallbackQuery, state: FSM
     """
     Ввести другие данные человека: пол, дата рождения, дата смерти, если это родственник
     """
-    if callback_query.message:
-        tg_user_sender = callback_query.from_user
-        code = callback_query.data.split(KeyboardType.SEP)
-        uuid = None
-        try:
-            uuid = code[1]
-        except IndexError:
-            pass
-        if not uuid:
-            return
-        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
-        if not response_sender:
-            return
-        response_uuid = response_sender['response_uuid']
-        dict_gender = dict(
-            keyboard_type=KeyboardType.OTHER_MALE,
-            sep=KeyboardType.SEP,
-        )
-        callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
-        inline_button_male = InlineKeyboardButton('Муж', callback_data=callback_data_template % dict_gender)
-        dict_gender.update(keyboard_type=KeyboardType.OTHER_FEMALE)
-        inline_button_female = InlineKeyboardButton('Жен', callback_data=callback_data_template % dict_gender)
-        reply_markup = InlineKeyboardMarkup()
-        reply_markup.row(inline_button_male, inline_button_female, Misc.inline_button_cancel())
-        await FSMother.gender.set()
-        state = dp.current_state()
-        async with state.proxy() as data:
-            data['uuid'] = uuid
-            data['is_owned'] = bool(response_uuid['owner_id'])
-            data['name'] = response_uuid['first_name']
-        his_her = 'Ваш' if response_sender['uuid'] == response_uuid['uuid'] else 'его (её)'
-        await callback_query.message.reply(
-            Misc.show_other_data(response_uuid) + '\n' + \
-            Misc.PROMPT_GENDER % dict(his_her=his_her),
-            reply_markup=reply_markup,
-            disable_web_page_preview=True,
-        )
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+        return
+    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    if not response_sender:
+        return
+    response_uuid = response_sender['response_uuid']
+    dict_gender = dict(
+        keyboard_type=KeyboardType.OTHER_MALE,
+        sep=KeyboardType.SEP,
+    )
+    callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
+    inline_button_male = InlineKeyboardButton('Муж', callback_data=callback_data_template % dict_gender)
+    dict_gender.update(keyboard_type=KeyboardType.OTHER_FEMALE)
+    inline_button_female = InlineKeyboardButton('Жен', callback_data=callback_data_template % dict_gender)
+    reply_markup = InlineKeyboardMarkup()
+    reply_markup.row(inline_button_male, inline_button_female, Misc.inline_button_cancel())
+    await FSMother.gender.set()
+    state = dp.current_state()
+    async with state.proxy() as data:
+        data['uuid'] = uuid
+        data['is_owned'] = bool(response_uuid['owner_id'])
+        data['name'] = response_uuid['first_name']
+    his_her = 'Ваш' if response_sender['uuid'] == response_uuid['uuid'] else 'его (её)'
+    await callback_query.message.reply(
+        Misc.show_other_data(response_uuid) + '\n' + \
+        Misc.PROMPT_GENDER % dict(his_her=his_her),
+        reply_markup=reply_markup,
+        disable_web_page_preview=True,
+    )
 
 
 @dp.message_handler(
@@ -2926,30 +2835,23 @@ async def process_callback_send_message(callback_query: types.CallbackQuery, sta
     """
     Отправка сообщения
     """
-    if callback_query.message:
-        code = callback_query.data.split(KeyboardType.SEP)
-        uuid = None
-        try:
-            uuid = code[1]
-        except IndexError:
-            pass
-        if not uuid:
-            return
-        status_to, profile_to = await Misc.get_user_by_uuid(uuid)
-        if not (status_to == 200 and profile_to):
-            return
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+        return
+    status_to, profile_to = await Misc.get_user_by_uuid(uuid)
+    if not (status_to == 200 and profile_to):
+        return
 
-        await FSMsendMessage.ask.set()
-        state = dp.current_state()
-        async with state.proxy() as data:
-            data['uuid'] = uuid
-        bot_data = await bot.get_me()
-        iof_link = Misc.get_deeplink_with_name(profile_to, bot_data)
-        await callback_query.message.reply(
-            'Напишите или перешлите мне сообщение для отправки <b>%s</b>' % iof_link,
-            reply_markup=Misc.reply_markup_cancel_row(),
-            disable_web_page_preview=True,
-        )
+    await FSMsendMessage.ask.set()
+    state = dp.current_state()
+    async with state.proxy() as data:
+        data['uuid'] = uuid
+    bot_data = await bot.get_me()
+    iof_link = Misc.get_deeplink_with_name(profile_to, bot_data)
+    await callback_query.message.reply(
+        'Напишите или перешлите мне сообщение для отправки <b>%s</b>' % iof_link,
+        reply_markup=Misc.reply_markup_cancel_row(),
+        disable_web_page_preview=True,
+    )
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
@@ -2962,89 +2864,82 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
     """
     Показ сообщений
     """
-    if callback_query.message:
-        tg_user_sender = callback_query.from_user
-        code = callback_query.data.split(KeyboardType.SEP)
-        uuid = None
-        try:
-            uuid = code[1]
-        except IndexError:
-            pass
-        if not uuid:
-            return
-        status, response = await Misc.api_request(
-            path='/api/tg_message',
-            method='get',
-            params=dict(uuid=uuid),
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+        return
+    tg_user_sender = callback_query.from_user
+    status, response = await Misc.api_request(
+        path='/api/tg_message',
+        method='get',
+        params=dict(uuid=uuid),
+    )
+    logging.debug('get_user_messages, uuid=%s, status: %s' % (uuid, status))
+    logging.debug('get_user_messages, uuid=%s, response: %s' % (uuid, response))
+    if status != 200:
+        return
+    bot_data = await bot.get_me()
+    if response:
+        await bot.send_message(
+            tg_user_sender.id,
+            text='Ниже последние сообщения к %s ...' % \
+                Misc.get_deeplink_with_name(response[0]['user_to'], bot_data),
+            disable_web_page_preview=True,
         )
-        logging.debug('get_user_messages, uuid=%s, status: %s' % (uuid, status))
-        logging.debug('get_user_messages, uuid=%s, response: %s' % (uuid, response))
-        if status != 200:
-            return
-        bot_data = await bot.get_me()
-        if response:
-            await bot.send_message(
-                tg_user_sender.id,
-                text='Ниже последние сообщения к %s ...' % \
-                    Misc.get_deeplink_with_name(response[0]['user_to'], bot_data),
-                disable_web_page_preview=True,
+        n = 0
+        for i in range(len(response)-1, -1, -1):
+            m = response[i]
+            n += 1
+            msg = (
+                '(%(n)s) %(datetime_string)s\n'
+                'От %(user_from)s к %(user_to)s\n'
             )
-            n = 0
-            for i in range(len(response)-1, -1, -1):
-                m = response[i]
-                n += 1
-                msg = (
-                    '(%(n)s) %(datetime_string)s\n'
-                    'От %(user_from)s к %(user_to)s\n'
-                )
-                if m['operation_type_id']:
-                    if m['operation_type_id'] == OperationType.NULLIFY_TRUST:
-                        msg += 'в связи с тем что забыл(а)\n'
-                    elif m['operation_type_id'] == OperationType.MISTRUST:
-                        msg += 'в связи с утратой доверия\n'
-                    elif m['operation_type_id'] == OperationType.TRUST:
-                        msg += 'в связи с тем что доверяет\n'
-                    elif m['operation_type_id'] in (OperationType.THANK, OperationType.TRUST_AND_THANK,):
-                        msg += 'с благодарностью\n'
-                user_to_delivered = None
-                if m['user_to_delivered']:
-                    msg += 'Доставлено'
-                    if m['user_to_delivered']['id'] != m['user_to']['id']:
-                        msg += ' к %(user_to_delivered)s !!!'
-                        user_to_delivered = Misc.get_deeplink_with_name(m['user_to_delivered'], bot_data)
-                else:
-                    msg += 'Не доставлено, лишь сохранено'
-                msg += '\nНиже само сообщение:'
-                msg %= dict(
-                    n=n,
-                    datetime_string=Misc.datetime_string(m['timestamp']),
-                    user_from=Misc.get_deeplink_with_name(m['user_from'], bot_data),
-                    user_to=Misc.get_deeplink_with_name(m['user_to'], bot_data),
-                    user_to_delivered=user_to_delivered,
-                )
-                await bot.send_message(tg_user_sender.id, text=msg, disable_web_page_preview=True,)
-                try:
-                    await bot.forward_message(
-                        tg_user_sender.id,
-                        from_chat_id=m['from_chat_id'],
-                        message_id=m['message_id'],
-                    )
-                except:
-                    await bot.send_message(
-                        tg_user_sender.id,
-                        text='Не удалось отобразить сообщение!',
-                        disable_web_page_preview=True,
-                    )
-        else:
-            status_to, profile_to = await Misc.get_user_by_uuid(uuid)
-            if status_to == 200 and profile_to:
-                msg = '%(full_name)s не получал%(a)s сообщений' % dict(
-                    full_name=Misc.get_deeplink_with_name(profile_to, bot_data),
-                    a='а' if profile_to.get('gender') == 'f' else '' if profile_to.get('gender') == 'm' else '(а)',
-                )
+            if m['operation_type_id']:
+                if m['operation_type_id'] == OperationType.NULLIFY_TRUST:
+                    msg += 'в связи с тем что забыл(а)\n'
+                elif m['operation_type_id'] == OperationType.MISTRUST:
+                    msg += 'в связи с утратой доверия\n'
+                elif m['operation_type_id'] == OperationType.TRUST:
+                    msg += 'в связи с тем что доверяет\n'
+                elif m['operation_type_id'] in (OperationType.THANK, OperationType.TRUST_AND_THANK,):
+                    msg += 'с благодарностью\n'
+            user_to_delivered = None
+            if m['user_to_delivered']:
+                msg += 'Доставлено'
+                if m['user_to_delivered']['id'] != m['user_to']['id']:
+                    msg += ' к %(user_to_delivered)s !!!'
+                    user_to_delivered = Misc.get_deeplink_with_name(m['user_to_delivered'], bot_data)
             else:
-                msg = 'Сообщения не найдены'
+                msg += 'Не доставлено, лишь сохранено'
+            msg += '\nНиже само сообщение:'
+            msg %= dict(
+                n=n,
+                datetime_string=Misc.datetime_string(m['timestamp']),
+                user_from=Misc.get_deeplink_with_name(m['user_from'], bot_data),
+                user_to=Misc.get_deeplink_with_name(m['user_to'], bot_data),
+                user_to_delivered=user_to_delivered,
+            )
             await bot.send_message(tg_user_sender.id, text=msg, disable_web_page_preview=True,)
+            try:
+                await bot.forward_message(
+                    tg_user_sender.id,
+                    from_chat_id=m['from_chat_id'],
+                    message_id=m['message_id'],
+                )
+            except:
+                await bot.send_message(
+                    tg_user_sender.id,
+                    text='Не удалось отобразить сообщение!',
+                    disable_web_page_preview=True,
+                )
+    else:
+        status_to, profile_to = await Misc.get_user_by_uuid(uuid)
+        if status_to == 200 and profile_to:
+            msg = '%(full_name)s не получал%(a)s сообщений' % dict(
+                full_name=Misc.get_deeplink_with_name(profile_to, bot_data),
+                a='а' if profile_to.get('gender') == 'f' else '' if profile_to.get('gender') == 'm' else '(а)',
+            )
+        else:
+            msg = 'Сообщения не найдены'
+        await bot.send_message(tg_user_sender.id, text=msg, disable_web_page_preview=True,)
 
 
 @dp.message_handler(
@@ -3478,37 +3373,33 @@ async def process_callback_photo(callback_query: types.CallbackQuery, state: FSM
     ),
     state=FSMphoto.ask)
 async def process_callback_photo_remove(callback_query: types.CallbackQuery, state: FSMContext):
-    code = callback_query.data.split(KeyboardType.SEP)
-    try:
-        uuid = code[1]
-    except IndexError:
-        uuid = None
-    if uuid:
-        status, response = await Misc.get_user_by_uuid(uuid)
-        if status == 200 and response:
-            await FSMphoto.next()
-            inline_button_cancel = Misc.inline_button_cancel()
-            callback_data_remove = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
-                keyboard_type=KeyboardType.PHOTO_REMOVE_CONFIRMED,
-                sep=KeyboardType.SEP,
-                uuid=uuid,
-            )
-            inline_btn_remove = InlineKeyboardButton(
-                'Да, удалить',
-                callback_data=callback_data_remove,
-            )
-            reply_markup = InlineKeyboardMarkup()
-            reply_markup.row(inline_button_cancel, inline_btn_remove)
-            full_name = response['first_name']
-            prompt_photo_confirm = (
-                'Подтвердите <b>удаление фото</b> у:\n'
-                '<b>%s</b>\n' % full_name
-            )
-            await callback_query.message.reply(prompt_photo_confirm, reply_markup=reply_markup)
-        else:
-            await Misc.state_finish(state)
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+        await Misc.state_finish(state)
+    return
+    status, response = await Misc.get_user_by_uuid(uuid)
+    if status == 200 and response:
+        await FSMphoto.next()
+        inline_button_cancel = Misc.inline_button_cancel()
+        callback_data_remove = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+            keyboard_type=KeyboardType.PHOTO_REMOVE_CONFIRMED,
+            sep=KeyboardType.SEP,
+            uuid=uuid,
+        )
+        inline_btn_remove = InlineKeyboardButton(
+            'Да, удалить',
+            callback_data=callback_data_remove,
+        )
+        reply_markup = InlineKeyboardMarkup()
+        reply_markup.row(inline_button_cancel, inline_btn_remove)
+        full_name = response['first_name']
+        prompt_photo_confirm = (
+            'Подтвердите <b>удаление фото</b> у:\n'
+            '<b>%s</b>\n' % full_name
+        )
+        await callback_query.message.reply(prompt_photo_confirm, reply_markup=reply_markup)
     else:
         await Misc.state_finish(state)
+
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
@@ -3520,37 +3411,34 @@ async def process_callback_photo_remove(callback_query: types.CallbackQuery, sta
     ),
     state=FSMphoto.remove)
 async def process_callback_photo_remove_confirmed(callback_query: types.CallbackQuery, state: FSMContext):
-    code = callback_query.data.split(KeyboardType.SEP)
-    try:
-        uuid = code[1]
-    except IndexError:
-        uuid = None
-    if uuid:
-        logging.debug('put (remove) photo: post tg_user data')
-        tg_user_sender = callback_query.from_user
-        status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
-        if status_sender == 200 and response_sender:
-            status, response = await Misc.put_user_properties(
-                photo='',
-                uuid=uuid,
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+        await Misc.state_finish(state)
+        return
+    logging.debug('put (remove) photo: post tg_user data')
+    tg_user_sender = callback_query.from_user
+    status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+    if status_sender == 200 and response_sender:
+        status, response = await Misc.put_user_properties(
+            photo='',
+            uuid=uuid,
+        )
+        if status == 200:
+            await callback_query.message.reply('%s: фото удалено' % response['first_name'])
+            await Misc.show_cards(
+                [response],
+                callback_query.message,
+                bot,
+                response_from=response_sender,
             )
-            if status == 200:
-                await callback_query.message.reply('%s: фото удалено' % response['first_name'])
-                await Misc.show_cards(
-                    [response],
-                    callback_query.message,
-                    bot,
-                    response_from=response_sender,
-                )
-            elif status == 400:
-                if response.get('message'):
-                    await message.reply(response['message'])
-                else:
-                    await message.reply(Misc.MSG_ERROR_API)
+        elif status == 400:
+            if response.get('message'):
+                await message.reply(response['message'])
             else:
                 await message.reply(Misc.MSG_ERROR_API)
         else:
             await message.reply(Misc.MSG_ERROR_API)
+    else:
+        await message.reply(Misc.MSG_ERROR_API)
     await Misc.state_finish(state)
 
 
