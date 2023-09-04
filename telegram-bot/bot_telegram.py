@@ -32,6 +32,9 @@ class FSMnewIOF(StatesGroup):
     ask = State()
     ask_gender = State()
 
+class FSMcomment(StatesGroup):
+    ask = State()
+
 class FSMexistingIOF(StatesGroup):
     ask = State()
 
@@ -2512,34 +2515,24 @@ async def process_callback_iof(callback_query: types.CallbackQuery, state: FSMCo
     """
     Заменить имя, фамилию, отчество
     """
-    if callback_query.message:
-        code = callback_query.data.split(KeyboardType.SEP)
-        uuid = None
-        try:
-            uuid = code[1]
-        except IndexError:
-            pass
-        if not uuid:
-            return
-        response_sender = await Misc.check_owner(
-            owner_tg_user=callback_query.from_user,
-            uuid=uuid
-        )
-        if not response_sender:
-            return
-        response_uuid = response_sender['response_uuid']
-        state = dp.current_state()
-        async with state.proxy() as data:
-            data['uuid'] = uuid
-        prompt_iof = Misc.PROMPT_EXISTING_IOF % dict(
-            name=response_uuid['first_name'],
-        )
-        await FSMexistingIOF.ask.set()
-        await bot.send_message(
-            callback_query.from_user.id,
-            prompt_iof,
-            reply_markup=Misc.reply_markup_cancel_row(),
-        )
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+        return
+    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    if not response_sender:
+        return
+    response_uuid = response_sender['response_uuid']
+    state = dp.current_state()
+    async with state.proxy() as data:
+        data['uuid'] = uuid
+    prompt_iof = Misc.PROMPT_EXISTING_IOF % dict(
+        name=response_uuid['first_name'],
+    )
+    await FSMexistingIOF.ask.set()
+    await bot.send_message(
+        callback_query.from_user.id,
+        prompt_iof,
+        reply_markup=Misc.reply_markup_cancel_row(),
+    )
 
 
 @dp.message_handler(
@@ -2575,6 +2568,70 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
             )
             if status == 200:
                 await message.reply('Изменено')
+                await Misc.show_cards(
+                    [response],
+                    message,
+                    bot,
+                    response_from=response_sender,
+                )
+    await Misc.state_finish(state)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.COMMENT,
+        KeyboardType.SEP,
+        # uuid своё или родственника           # 1
+        # KeyboardType.SEP,
+    ), c.data,
+    ), state=None,
+    )
+async def process_callback_comment(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Заменить имя, фамилию, отчество
+    """
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+        return
+    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    if not response_sender:
+        return
+    response_uuid = response_sender['response_uuid']
+    state = dp.current_state()
+    async with state.proxy() as data:
+        data['uuid'] = uuid
+    await FSMcomment.ask.set()
+    await bot.send_message(
+        callback_query.from_user.id,
+        f'Введите комментарий для:\n{response_sender["response_uuid"]["first_name"]}',
+        reply_markup=Misc.reply_markup_cancel_row(),
+    )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMcomment.ask,
+)
+async def put_comment(message: types.Message, state: FSMContext):
+    if message.content_type != ContentType.TEXT:
+        await message.reply(Misc.MSG_ERROR_TEXT_ONLY, reply_markup=Misc.reply_markup_cancel_row())
+        return
+    if await is_it_command(message, state):
+        return
+    if not (comment := Misc.strip_text(message.text)):
+        return
+    async with state.proxy() as data:
+        uuid = data.get('uuid')
+    if uuid:
+        response_sender = await Misc.check_owner(owner_tg_user=message.from_user, uuid=uuid)
+        if response_sender:
+            status, response = await Misc.put_user_properties(
+                uuid=uuid,
+                comment=comment,
+            )
+            if status == 200:
+                await message.reply(
+                    f'{"Изменен" if response_sender["response_uuid"]["comment"] else "Добавлен"} комментарий')
                 await Misc.show_cards(
                     [response],
                     message,

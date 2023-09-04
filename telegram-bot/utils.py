@@ -175,6 +175,8 @@ class KeyboardType(object):
     NEW_BRO = 50
     NEW_SIS = 51
 
+    COMMENT = 52
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -547,21 +549,17 @@ class Misc(object):
         """
         if not response:
             return ''
-        iof = response['first_name']
+        reply = f'<b>{response["first_name"]}</b>\n'
+        if (comment := response.get('comment', '').strip()) and comment:
+            reply += f'{comment}\n'
         lifetime_str = cls.get_lifetime_str(response)
         if lifetime_str:
             lifetime_str += '\n'
-        reply = (
-                '<b>%(iof)s</b>\n'
-                '%(lifetime_str)s'
-                'Доверий: %(trust_count)s\n'
-                'Благодарностей: %(sum_thanks_count)s\n'
+        reply += (
+                f'{lifetime_str}'
+                f'Доверий: {response["trust_count"]}\n'
+                f'Благодарностей: {response["sum_thanks_count"]}\n'
                 '\n'
-            ) % dict(
-            iof=iof,
-            lifetime_str=lifetime_str,
-            trust_count=response['trust_count'],
-            sum_thanks_count=response['sum_thanks_count'],
         )
         keys = []
 
@@ -943,10 +941,24 @@ class Misc(object):
                 if is_own_account or is_owned_account:
                     # Карточка самому пользователю или его родственнику
                     #
+                    inline_btn_iof = InlineKeyboardButton(
+                        'ФИО',
+                        callback_data=callback_data_template % dict(
+                        keyboard_type=KeyboardType.IOF,
+                        uuid=response_to['uuid'],
+                        sep=KeyboardType.SEP,
+                    ))
                     inline_btn_other = InlineKeyboardButton(
                         'Пол и даты' if is_owned_account else 'Пол и дата рождения',
                         callback_data=callback_data_template % dict(
                         keyboard_type=KeyboardType.OTHER,
+                        uuid=response_to['uuid'],
+                        sep=KeyboardType.SEP,
+                    ))
+                    inline_btn_photo = InlineKeyboardButton(
+                        'Фото',
+                        callback_data=callback_data_template % dict(
+                        keyboard_type=KeyboardType.PHOTO,
                         uuid=response_to['uuid'],
                         sep=KeyboardType.SEP,
                     ))
@@ -957,18 +969,10 @@ class Misc(object):
                         uuid=response_to['uuid'] if is_owned_account else '',
                         sep=KeyboardType.SEP,
                     ))
-                    inline_btn_photo = InlineKeyboardButton(
-                        'Фото',
+                    inline_btn_comment = InlineKeyboardButton(
+                        'Коммент',
                         callback_data=callback_data_template % dict(
-                        keyboard_type=KeyboardType.PHOTO,
-                        uuid=response_to['uuid'],
-                        sep=KeyboardType.SEP,
-                    ))
-
-                    inline_btn_iof = InlineKeyboardButton(
-                        'ФИО',
-                        callback_data=callback_data_template % dict(
-                        keyboard_type=KeyboardType.IOF,
+                        keyboard_type=KeyboardType.COMMENT,
                         uuid=response_to['uuid'],
                         sep=KeyboardType.SEP,
                     ))
@@ -976,7 +980,8 @@ class Misc(object):
                         inline_btn_iof,
                         inline_btn_other,
                         inline_btn_photo,
-                        inline_btn_location
+                        inline_btn_location,
+                        inline_btn_comment,
                     )
 
                     dict_papa_mama = dict(
@@ -1428,6 +1433,21 @@ class Misc(object):
                 pin_message_id=messsage_for_pin.message_id,
             )
         return messsage_for_pin
+
+
+    @classmethod
+    def getuuid_from_callback(cls, callback_query):
+        """
+        Получить uuid из самых распространенных callback_query
+        """
+        result = None
+        if getattr(callback_query, 'message', None) and getattr(callback_query, 'data', None):
+            code = (callback_query.data or '').split(KeyboardType.SEP)
+            try:
+                result = code[1]
+            except IndexError:
+                pass
+        return result
 
 
 class TgGroup(object):
