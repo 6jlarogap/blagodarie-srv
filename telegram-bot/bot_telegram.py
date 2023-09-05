@@ -700,12 +700,15 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
             uuid = data.get('uuid')
             is_father = data.get('is_father')
             if uuid and is_father is not None:
-                msg_invalid_link_with_new = Misc.MSG_INVALID_LINK_WITH_NEW
                 if is_father:
                     prompt_new_parent = 'Новый'
                 else:
                     prompt_new_parent = 'Новая'
-                    msg_invalid_link_with_new = msg_invalid_link_with_new.replace('Новый', prompt_new_parent)
+                msg_invalid_link_with_new = (
+                    f'Профиль не найден - попробуйте скопировать и отправить ссылку '
+                    f'на существующий профиль ещё раз или создайте '
+                    f'<u>{prompt_new_parent}</u>'
+                )
                 button_new_parent = InlineKeyboardButton(
                     prompt_new_parent,
                     callback_data= Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
@@ -1146,8 +1149,8 @@ async def ask_child(message, state, data, children):
         'Отправьте мне <u><b>ссылку на профиль %(his_her)s сына (дочери)</b></u> '
         'вида t.me/%(bot_data_username)s?start=...\n'
         '\n'
-        'Или нажмите <b><u>Новый ребёнок</u></b> для ввода нового родственника, '
-        'который станет %(his_her)s сыном (дочерью)\n'
+        'Или нажмите <b><u>Новый сын</u></b> или <b><u>Новая дочь</u></b> для ввода нового родственника, '
+        'который станет %(his_her)s сыном или дочерью\n'
     )
     if children:
         if len(children) == 1:
@@ -1168,16 +1171,21 @@ async def ask_child(message, state, data, children):
         his_her='его' if data['parent_gender'] == 'm' else 'её',
         name_of_single_child=children[0]['first_name'] if children else '',
     )
-    callback_data_new_child = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
-        keyboard_type=KeyboardType.NEW_CHILD,
+    data_new_child = dict(
+        keyboard_type=KeyboardType.NEW_SON,
         uuid=data['uuid'],
         sep=KeyboardType.SEP,
     )
-    inline_btn_new_child = InlineKeyboardButton(
-        Misc.PROMPT_BUTTON_NEW_CHILD,
-        callback_data=callback_data_new_child,
+    inline_btn_new_son = InlineKeyboardButton(
+        'Новый сын',
+        callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % data_new_child,
     )
-    buttons = [inline_btn_new_child, ]
+    data_new_child.update(keyboard_type=KeyboardType.NEW_DAUGHTER)
+    inline_btn_new_daughter = InlineKeyboardButton(
+        'Новая дочь',
+        callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % data_new_child,
+    )
+    buttons = [inline_btn_new_son, inline_btn_new_daughter, ]
     if children:
         callback_data_clear_child = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
             keyboard_type=KeyboardType.CLEAR_CHILD,
@@ -1430,19 +1438,26 @@ async def put_child_by_uuid(message: types.Message, state: FSMContext):
         if await is_it_command(message, state):
             return
         async with state.proxy() as data:
-            uuid = data.get('uuid')
-            if uuid:
-                button_new_child = InlineKeyboardButton(
-                    Misc.PROMPT_BUTTON_NEW_CHILD,
-                    callback_data= Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
-                        keyboard_type=KeyboardType.NEW_CHILD,
-                        uuid=uuid,
-                        sep=KeyboardType.SEP,
-                ))
+            if uuid := data.get('uuid'):
+                data_new_child = dict(
+                    keyboard_type=KeyboardType.NEW_SON,
+                    uuid=uuid,
+                    sep=KeyboardType.SEP,
+                )
+                inline_btn_new_son = InlineKeyboardButton(
+                    'Новый сын',
+                    callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % data_new_child,
+                )
+                data_new_child.update(keyboard_type=KeyboardType.NEW_DAUGHTER)
+                inline_btn_new_daughter = InlineKeyboardButton(
+                    'Новая дочь',
+                    callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % data_new_child,
+                )
                 reply_markup = InlineKeyboardMarkup()
-                reply_markup.row(button_new_child, Misc.inline_button_cancel())
+                reply_markup.row(inline_btn_new_son, inline_btn_new_daughter, Misc.inline_button_cancel())
                 await message.reply(
-                    Misc.MSG_INVALID_LINK_WITH_NEW,
+                    'Профиль не найден - попробуйте скопировать и отправить ссылку '
+                    'на существующий профиль ещё раз или создайте <u>Новый сын</u> или <u>Новая дочь</u>',
                     reply_markup=reply_markup
                 )
             else:
@@ -1514,10 +1529,7 @@ async def put_new_child(message: types.Message, state: FSMContext):
     if await is_it_command(message, state):
         return
     async with state.proxy() as data:
-        if data.get('uuid') and data.get('parent_gender'):
-            if not data.get('new_child_gender'):
-                await prompt_new_child_gender(message, state)
-                return
+        if data.get('uuid') and data.get('parent_gender') and data.get('new_child_gender'):
             if message.content_type != ContentType.TEXT:
                 await message.reply(
                     Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + Misc.MSG_REPEATE_PLEASE,
@@ -1680,76 +1692,33 @@ async def process_callback_child_unknown_parent_gender(callback_query: types.Cal
             await ask_child(callback_query.message, state, data, children=response_sender['response_uuid']['children'])
 
 
-async def prompt_new_child_gender(message: types.Message, state: FSMContext):
-    async with state.proxy() as data:
-        # fool proof
-        if data.get('uuid') and data.get('parent_gender'):
-            callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
-            callback_data_male = callback_data_template % dict(
-                keyboard_type=KeyboardType.NEW_CHILD_GENDER_MALE,
-                sep=KeyboardType.SEP,
-            )
-            inline_btn_male = InlineKeyboardButton('Муж', callback_data=callback_data_male)
-            callback_data_female = callback_data_template % dict(
-                keyboard_type=KeyboardType.NEW_CHILD_GENDER_FEMALE,
-                sep=KeyboardType.SEP,
-            )
-            inline_btn_female = InlineKeyboardButton('Жен', callback_data=callback_data_female)
-            reply_markup = InlineKeyboardMarkup()
-            reply_markup.row(inline_btn_male, inline_btn_female, Misc.inline_button_cancel())
-            await message.reply(
-                'Укажите пол ребенка',
-                reply_markup=reply_markup,
-                disable_web_page_preview=True,
-            )
-        else:
-            await Misc.state_finish(state)
-
-
 @dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s|%s)%s$' % (
-        KeyboardType.NEW_CHILD_GENDER_MALE, KeyboardType.NEW_CHILD_GENDER_FEMALE,
+    lambda c: c.data and re.search(r'^(%s|%s)%s' % (
+        KeyboardType.NEW_SON, KeyboardType.NEW_DAUGHTER,
         KeyboardType.SEP,
-    ), c.data),
-    state = FSMchild.new,
-    )
-async def process_callback_new_child_gender(callback_query: types.CallbackQuery, state: FSMContext):
-    if callback_query.message:
-        async with state.proxy() as data:
-            for key in ('name', 'uuid', 'parent_gender',):
-                if not data.get(key):
-                    await Misc.state_finish(state)
-                    return
-            data['new_child_gender'] = 'm' \
-                if callback_query.data.split(KeyboardType.SEP)[0] == str(KeyboardType.NEW_CHILD_GENDER_MALE) \
-                else 'f'
-            await callback_query.message.reply(
-                (
-                    f'Укажите ФИО {"СЫНА" if data["new_child_gender"] == "m" else "ДОЧЕРИ"} для:\n'
-                    f'{data["name"]}\nНапример, "Иван Иванович Иванов"'
-                ),
-                reply_markup=Misc.reply_markup_cancel_row(),
-            )
-    else:
-        await Misc.state_finish(state)
-
-
-@dp.callback_query_handler(
-    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
-        KeyboardType.NEW_CHILD,
-        KeyboardType.SEP,
-        # uuid потомка папы или мамы           # 1
-        # KeyboardType.SEP,
     ), c.data),
     state = FSMchild.ask,
     )
-async def process_callback_new_child(callback_query: types.CallbackQuery, state: FSMContext):
-    if not (uuid := Misc.getuuid_from_callback(callback_query)) or \
-       not await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid):
+async def process_callback_new_child_gender(callback_query: types.CallbackQuery, state: FSMContext):
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
         await Misc.state_finish(state)
         return
-    await FSMchild.new.set()
-    await prompt_new_child_gender(callback_query.message, state)
+    async with state.proxy() as data:
+        for key in ('name', 'uuid', 'parent_gender',):
+            if not data.get(key) or key == 'uuid' and data[key] != uuid:
+                await Misc.state_finish(state)
+                return
+        data['new_child_gender'] = 'm' \
+            if callback_query.data.split(KeyboardType.SEP)[0] == str(KeyboardType.NEW_SON) \
+            else 'f'
+        await FSMchild.new.set()
+        await callback_query.message.reply(
+            (
+                f'Укажите ФИО {"СЫНА" if data["new_child_gender"] == "m" else "ДОЧЕРИ"} для:\n'
+                f'{data["name"]}\nНапример, "Иван Иванович Иванов"'
+            ),
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
 
 
 @dp.callback_query_handler(

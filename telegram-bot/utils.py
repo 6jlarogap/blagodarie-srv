@@ -106,13 +106,11 @@ class KeyboardType(object):
     # Внести ребёнка
     #
     CHILD = 21
+    #  22. Свободен, но не занимать не менее полгода с 05.09.23:
+    #   См. ниже:
+    #       NEW_SON = 45
+    #       NEW_DAUGHTER = 46
 
-    # Ребёнок вносится как новый
-    #
-    NEW_CHILD = 22
-    # см. ниже
-    # NEW_CHILD_GENDER_MALE = 45
-    # NEW_CHILD_GENDER_FEMALE = 46
 
     # У ребёнка родитель папа или мама?
     #
@@ -159,10 +157,8 @@ class KeyboardType(object):
 
     OFFER_ANSWER = 44
 
-    # Ребёнок вносится как новый, его/её пол
-    #
-    NEW_CHILD_GENDER_MALE = 45
-    NEW_CHILD_GENDER_FEMALE = 46
+    NEW_SON = 45
+    NEW_DAUGHTER = 46
 
     # Новый собственный, его/её пол
     #
@@ -284,11 +280,6 @@ class Misc(object):
         'отправить ссылку на существующий профиль ещё раз'
     )
 
-    MSG_INVALID_LINK_WITH_NEW = (
-        'Профиль не найден - попробуйте скопировать и отправить ссылку '
-        'на существующий профиль ещё раз или создайте <u>Новый</u>'
-    )
-
     MSG_INVALID_LINK = 'Неверная ссылка'
 
     FORMAT_DATE = '%d.%m.%Y'
@@ -296,8 +287,6 @@ class Misc(object):
 
     PROMPT_CANCEL_LOCATION = 'Отмена'
     PROMPT_LOCATION = 'Отправить местоположение'
-
-    PROMPT_BUTTON_NEW_CHILD = 'Новый ребёнок'
 
     PROMPT_IOF_INCORRECT = 'Некорректные ФИО - напишите ещё раз имя отчество и фамилию или Отмена'
 
