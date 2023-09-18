@@ -3248,7 +3248,6 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 '%(v_is_child)s'
             ')'
         )
-
         recs = []
         with connection.cursor() as cursor:
             cursor.execute(sql_req_str % sql_req_dict)
@@ -3270,6 +3269,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
 
         user_pks.add(user_q.pk)
         users = []
+        UuidById = dict()
         for p in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
             if p == profile_q and fmt=='3d-force-graph':
                 users.append(dict(
@@ -3285,18 +3285,34 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 )))
             else:
                 users.append(p.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt, mark_dead=p.is_dead))
+            if fmt == 'd3js':
+                UuidById[p.user.pk] = p.uuid
 
         connections = []
-        q_connections = Q(is_child=True)
-        q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
-        for cs in CurrentState.objects.filter(q_connections).select_related(
-                'user_from__profile', 'user_to__profile',
-            ).distinct():
+        pairs = set()
+        for rec in recs:
+            source = rec['user_from_id'] if rec['is_child'] else rec['user_to_id']
+            target = rec['user_to_id'] if rec['is_child'] else rec['user_from_id']
+            pair = f'{source}/{target}'
+            if pair in pairs:
+                # Зачем нужна проверка по pairs? Во-первых foolproof.
+                # И еще точно во избежание дублей связей в случае инцестов,
+                # например, если дедушка с внучкой породили ребеночка 
+                continue
+            pairs.add(pair)
             if fmt == '3d-force-graph':
-                connections.append(cs.data_dict(show_child=True, fmt=fmt))
+                connections.append(dict(
+                    source=source,
+                    target=target,
+                    is_child=True,
+                ))
             else:
-                connections.append(cs.data_dict(show_parent=True, fmt=fmt))
-
+                connections.append(dict(
+                    source=UuidById[source],
+                    target=UuidById[target],
+                    is_father=rec['is_father'],
+                    is_mother=rec['is_mother'],
+                ))
         if fmt == '3d-force-graph':
             bot_username = self.get_bot_username()
             return dict(bot_username=bot_username, nodes=users, links=connections, user_q_name=user_q.first_name)
