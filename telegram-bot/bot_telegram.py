@@ -5033,6 +5033,7 @@ async def do_chat_join(
     is_channel = data_group['type'] == types.ChatType.CHANNEL
     in_chat = 'в канале' if is_channel else 'в группе'
     to_to_chat = 'в канал' if is_channel else 'в группу'
+    k_to_chat = 'к каналу' if is_channel else 'к группе'
     try:
         await bot.approve_chat_join_request(
                 chat_id,
@@ -5092,6 +5093,7 @@ async def do_chat_join(
         tc_inviter=tc_inviter,
         tc_subscriber=response_subscriber['trust_count'],
         to_to_chat=to_to_chat,
+        k_to_chat=k_to_chat,
         map_link = Misc.get_html_a(href=settings.MAP_HOST, text='карте участников'),
         group_title=data_group['title'],
     )
@@ -5120,6 +5122,22 @@ async def do_chat_join(
             disable_notification=True,
             disable_web_page_preview=True,
         )
+
+    # Пригласившему сообщение, что ему доверяют
+    #
+    msg = (
+        '%(dl_subscriber)s (%(tc_subscriber)s) Вам доверяет.\n\n'
+        '(в связи с подключением %(dl_subscriber)s %(k_to_chat)s %(group_title)s).\n'
+    ) %  msg_dict
+
+    try:
+        await bot.send_message(
+            tg_inviter_id,
+            text=msg % msg_dict,
+            disable_web_page_preview=True,
+        )
+    except (ChatNotFound, CantInitiateConversation):
+        pass
 
     await Misc.put_user_properties(
         uuid=response_subscriber['uuid'],
