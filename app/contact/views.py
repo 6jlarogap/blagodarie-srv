@@ -2227,7 +2227,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                 nodes = []
                 user_pks = []
                 bot_username = self.get_bot_username()
-                nodes.append(dict(
+                root_node = dict(
                     id=user_q.pk,
                     uuid=user_q.profile.uuid,
                     first_name=user_q.first_name,
@@ -2237,8 +2237,8 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                         put_default_avatar=True,
                         default_avatar_in_media=PhotoModel.get_gendered_default_avatar(user_q.profile.gender),
                         mark_dead=user_q.profile.is_dead,
-                    ),
                 ))
+                nodes.append(root_node)
                 user_pks.append(user_q.pk)
                 for rec in recs:
                     if rec['id'] not in user_pks:
@@ -2260,7 +2260,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     'user_to__profile', 'user_from__profile',
                     ).distinct():
                     links.append(cs.data_dict(fmt=fmt, show_trust=True))
-                data.update(bot_username=bot_username, nodes=nodes, links=links, user_q_name=user_q.first_name)
+                data.update(bot_username=bot_username, nodes=nodes, links=links, root_node=root_node)
                 if tggroup:
                     data.update(tg_group=dict(type=tggroup.type, title=tggroup.title))
 
@@ -3041,8 +3041,28 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             (если указан один uuid)
             =что-то: true; отсутствует или пусто: false
             показать прямых потомков от пользователя с uuid
-        Если указан один uuid и отсутствуют или пустые оба параметра up и down,
-        будет показана вся сеть родни от пользователя с uuid, включая двоюродных и т.д.
+          Если указан один uuid и отсутствуют или пустые оба параметра up и down,
+          будет показана вся сеть родни от пользователя с uuid, включая двоюродных и т.д.
+        collapse:
+            (если указан один uuid)
+            =что-то: true; отсутствует или пусто: false
+            Отдать результат в соответствии с потребностями следующего:
+                показывать на фронте не всё дерево от user'a к предкам, потомкам
+                в соответствии с 4 возможнымии комбинациями параметров up, down,
+                а только user'a с ближайшими связями:
+                    дети, если только не задан лишь up=on,
+                    родители, если только не задан лишь down=on
+                чтоб потом можно было связи на фронте сворачивать, разворачивать
+            Это достигается добавлением в каждый link (connection) величин
+            t_source, t_target, которые могут отличаться от source, target.
+
+            Устроить collapse, expand на фронте по щелчкам на узлы можно только
+            в дереве, в котором нет комбинаций связей типа (source-target):
+            1-2, 2-3, 4-3 (1: человек, 2: сын, 3: внук, 4: мама внука),
+            а только связи типа 1-2, 2-3, 3-4.
+            Такие связи отдаются из postgresql функции и для приведенного
+            выше родства t_source, t_target будут:
+            1-2, 2-3 (is_child=True в строке из postgresql function), 3-4 (is_child=False)
 
     Если задан параметр chat_id:
         chat_id:
@@ -3270,24 +3290,27 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
         user_pks.add(user_q.pk)
         users = []
         UuidById = dict()
+
+        root_node = dict(
+            id=user_q.pk,
+            uuid=profile_q.uuid,
+            first_name=user_q.first_name,
+            photo=Profile.image_thumb(
+                request, profile_q.photo,
+                method='crop-green-frame-4',
+                put_default_avatar=True,
+                default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile_q.gender),
+                mark_dead=profile_q.is_dead,
+        ))
         for p in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
             if p == profile_q and fmt=='3d-force-graph':
-                users.append(dict(
-                    id=user_q.pk,
-                    uuid=profile_q.uuid,
-                    first_name=user_q.first_name,
-                    photo=Profile.image_thumb(
-                        request, profile_q.photo,
-                        method='crop-green-frame-4',
-                        put_default_avatar=True,
-                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile_q.gender),
-                        mark_dead=profile_q.is_dead,
-                )))
+                users.append(root_node)
             else:
                 users.append(p.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt, mark_dead=p.is_dead))
             if fmt == 'd3js':
                 UuidById[p.user.pk] = p.uuid
 
+        collapse = bool(request.GET.get('collapse'))
         connections = []
         pairs = set()
         for rec in recs:
@@ -3301,21 +3324,21 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 continue
             pairs.add(pair)
             if fmt == '3d-force-graph':
-                connections.append(dict(
-                    source=source,
-                    target=target,
-                    is_child=True,
-                ))
+                item = dict(source=source, target=target, is_child=True,)
+                if collapse:
+                    item.update(t_source=rec['user_from_id'], t_target=rec['user_to_id'])
             else:
-                connections.append(dict(
+                item = dict(
                     source=UuidById[source],
                     target=UuidById[target],
                     is_father=rec['is_father'],
                     is_mother=rec['is_mother'],
-                ))
+                )
+            connections.append(item)
+
         if fmt == '3d-force-graph':
             bot_username = self.get_bot_username()
-            return dict(bot_username=bot_username, nodes=users, links=connections, user_q_name=user_q.first_name)
+            return dict(bot_username=bot_username, nodes=users, links=connections, root_node=root_node)
         else:
             return dict(users=users, connections=connections, trust_connections=[])
 
