@@ -561,10 +561,10 @@ async def echo_feedback(message: types.Message, state: FSMContext):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=(types.ChatType.GROUP, types.ChatType.SUPERGROUP)),
-    commands=('get_group_id',),
+    commands=('service_get_group_id',),
     state=None,
 )
-async def get_group_id(message: types.Message, state: FSMContext):
+async def service_get_group_id(message: types.Message, state: FSMContext):
     if not message.from_user.is_bot:
         chat = message.chat
         status, response = await TgGroup.post(chat.id, chat.title, chat.type)
@@ -590,6 +590,108 @@ async def get_group_id(message: types.Message, state: FSMContext):
                 )
         except (ChatNotFound, CantInitiateConversation):
             pass
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=(types.ChatType.GROUP, types.ChatType.SUPERGROUP, types.ChatType.CHANNEL)),
+    commands=('service_add_user_to_chat',),
+    state=None,
+)
+async def service_add_user_to_chat(message: types.Message, state: FSMContext):
+    if not message.from_user.is_bot:
+        chat = message.chat
+        try:
+            await message.delete()
+        except:
+            pass
+        status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+        if status_sender != 200:
+            return
+        m = re.search(r'\/\w+\s+(\S+)', message.text)
+        if m:
+            user_uuid = Misc.uuid_from_text(m.group(0))
+        msg_invalid_input = (
+            'Неверный запрос в команду /service_add_user_to_chat в группе/канале '
+            f'{chat.title}.\n'
+            'Ожидалось /service_add_user_to_chat <i>user_uuid</i>'
+        )
+        if not m or not user_uuid:
+            try:
+                await bot.send_message(message.from_user.id, msg_invalid_input)
+            except (ChatNotFound, CantInitiateConversation):
+                pass
+            return
+        status_user, response_user = await Misc.get_user_by_uuid(uuid=user_uuid)
+        tg_uid = response_user['tg_data'] and response_user['tg_data'][0]['tg_uid'] or None
+        if status_user != 200 or not tg_uid:
+            try:
+                await bot.send_message(message.from_user.id,
+                    (
+                    'Неверный запрос в команду /service_add_user_to_chat в группе '
+                    f'{chat.title}.\n\n'
+                    'Пользователь не найден или не в телеграме'
+                ))
+            except (ChatNotFound, CantInitiateConversation):
+                pass
+            return
+        status, response_add_member = await TgGroupMember.add(
+            group_chat_id=chat.id,
+            group_title='',
+            group_type='',
+            user_tg_uid=tg_uid,
+        )
+        if status_user != 200:
+            try:
+                await bot.send_message(message.from_user.id,
+                    (
+                    f'Не удалось добавить {response_user["first_name"]} '
+                    f'в группу/канал {chat.title} в апи'
+                ))
+            except (ChatNotFound, CantInitiateConversation):
+                pass
+            return
+
+        try:
+            await bot.approve_chat_join_request(
+                    chat.id,
+                    tg_uid
+            )
+        except BadRequest as excpt:
+            already = False
+            try:
+                if excpt.args[0] == 'User_already_participant':
+                    already = True
+            except:
+                pass
+            try:
+                await bot.send_message(message.from_user.id,
+                    f'Пользователь уже в телеграм группе/канале {chat.title}' if already \
+                    else f'Не удалось подтвердить завку на подключение в группу/канал',
+                )
+            except (ChatNotFound, CantInitiateConversation):
+                pass
+            return
+
+        post_op = dict(
+            tg_token=settings.TOKEN,
+            operation_type_id=OperationType.TRUST_AND_THANK,
+            tg_user_id_from=tg_uid,
+            user_uuid_to=response_sender['uuid'],
+        )
+        logging.debug('post operation (chat subscriber thanks inviter), payload: %s' % post_op)
+        status_op, response_op = await Misc.api_request(
+            path='/api/addoperation',
+            method='post',
+            data=post_op,
+        )
+        logging.debug('post operation (chat subscriber thanks inviter), status: %s' % status_op)
+        logging.debug('post operation (chat subscriber thanks inviter), response: %s' % response_op)
+        try:
+            await bot.send_message(message.from_user.id,
+                f'{response_user["first_name"]} подключен к телеграм группе/каналу {chat.title}'
+            )
+        except (ChatNotFound, CantInitiateConversation):
+            pass
+        return
 
 
 # --- command list ----
@@ -5021,19 +5123,6 @@ async def do_chat_join(
         if status != 200:
             return
     tg_subscriber_id = tg_subscriber.id
-    status, response_add_member = await TgGroupMember.add(
-        group_chat_id=chat_id,
-        group_title='',
-        group_type='',
-        user_tg_uid=tg_subscriber_id,
-    )
-    if status != 200:
-        return
-    data_group = response_add_member['group']
-    is_channel = data_group['type'] == types.ChatType.CHANNEL
-    in_chat = 'в канале' if is_channel else 'в группе'
-    to_to_chat = 'в канал' if is_channel else 'в группу'
-    k_to_chat = 'к каналу' if is_channel else 'к группе'
     try:
         await bot.approve_chat_join_request(
                 chat_id,
@@ -5058,6 +5147,21 @@ async def do_chat_join(
             except CantInitiateConversation:
                 pass
         return
+
+    status, response_add_member = await TgGroupMember.add(
+        group_chat_id=chat_id,
+        group_title='',
+        group_type='',
+        user_tg_uid=tg_subscriber_id,
+    )
+    if status != 200:
+        return
+
+    data_group = response_add_member['group']
+    is_channel = data_group['type'] == types.ChatType.CHANNEL
+    in_chat = 'в канале' if is_channel else 'в группе'
+    to_to_chat = 'в канал' if is_channel else 'в группу'
+    k_to_chat = 'к каналу' if is_channel else 'к группе'
 
     tc_inviter = 0
     if tg_inviter_id:
@@ -5777,6 +5881,7 @@ if __name__ == '__main__':
     if settings.START_MODE == 'poll':
         start_polling(
             dp,
+            timeout=40,
             skip_updates=True,
             on_startup=on_startup,
         )
