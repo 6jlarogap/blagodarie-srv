@@ -5233,7 +5233,6 @@ async def do_chat_join(
         '%(dl_subscriber)s (%(tc_subscriber)s) Вам доверяет.\n\n'
         '(в связи с подключением %(dl_subscriber)s %(k_to_chat)s %(group_title)s).\n'
     ) %  msg_dict
-
     try:
         await bot.send_message(
             tg_inviter_id,
@@ -5243,10 +5242,6 @@ async def do_chat_join(
     except (ChatNotFound, CantInitiateConversation):
         pass
 
-    await Misc.put_user_properties(
-        uuid=response_subscriber['uuid'],
-        did_bot_start='1',
-    )
     if response_subscriber.get('created'):
         await Misc.update_user_photo(bot, tg_subscriber, response_subscriber)
 
