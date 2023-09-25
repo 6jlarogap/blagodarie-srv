@@ -388,40 +388,43 @@ class Profile(PhotoModel, GeoPointAddressModel):
     def __str__(self):
         return self.user.first_name or str(self.pk)
 
-    def data_dict(self, request=None, short=False, fmt='d3js', mark_dead=False):
+    def data_dict(self, request=None, fmt='d3js', thumb={}):
         user = self.user
         result = dict()
-        if short:
-            if fmt == '3d-force-graph':
-                mark_dead = mark_dead and self.is_dead
-                # Если задано отметить умершего и если умер, то фото в рамке
-                result.update(
-                    id=user.pk,
-                    uuid=self.uuid,
-                    first_name=user.first_name,
-                    photo=self.choose_thumb(
-                        request,
-                        width=128,
-                        height=128,
-                        put_default_avatar=False,
-                        mark_dead=mark_dead,
-                    ) if request else '',
-                    gender=self.gender,
-                    is_dead = self.is_dead,
+        if request:
+            if fmt == '3d-force-graph' and not thumb:
+                # Здесь всегда иконки
+                thumb['method'] = dict(method=PhotoModel.THUMB_METHOD)
+            if thumb:
+                c_thumb = dict(
+                    method = thumb.get('method', PhotoModel.THUMB_METHOD),
+                    width = thumb.get('width', PhotoModel.THUMB_WIDTH if fmt == '3d-force-graph' else 64),
+                    height = thumb.get('width', PhotoModel.THUMB_HEIGHT if fmt == '3d-force-graph' else 64),
+                    put_default_avatar = thumb.get('put_default_avatar', False),
+                    default_avatar_in_media = thumb.get('default_avatar_in_media', PhotoModel.DEFAULT_AVATAR_IN_MEDIA),
+                    mark_dead = thumb.get('mark_dead', False) and self.is_dead,
                 )
+                photo=self.choose_thumb(request, **c_thumb)
             else:
-                result.update(
-                    uuid=str(self.uuid),
-                    first_name=user.first_name,
-                    photo=self.choose_photo(request) if request else '',
-                )
+                photo = self.choose_photo(request)
+        else:
+            photo = ''
+        if fmt == '3d-force-graph':
+            result.update(
+                id=user.pk,
+                uuid=self.uuid,
+                first_name=user.first_name,
+                photo=photo,
+                gender=self.gender,
+                is_dead = self.is_dead,
+            )
         else:
             result.update(
                 uuid=self.uuid,
                 last_name=user.last_name,
                 first_name=user.first_name,
                 middle_name=self.middle_name,
-                photo=self.choose_photo(request) if request else '',
+                photo=photo,
                 is_notified=self.is_notified,
                 sum_thanks_count=self.sum_thanks_count,
                 fame=self.fame,
@@ -1022,7 +1025,7 @@ class Offer(BaseModelInsertTimestamp):
                 if user_ids_only:
                     users.append(user_id)
                 else:
-                    users.append(profile.data_dict(request, short=True, fmt='3d-force-graph'))
+                    users.append(profile.data_dict(request, fmt='3d-force-graph'))
                 if user_answered.get(user_id):
                     user_answered[user_id]['answers'].append(answer_dict['number'])
                 else:

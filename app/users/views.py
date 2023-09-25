@@ -3093,7 +3093,7 @@ class ApiBotPollResults(TelegramApiMixin, APIView):
                     user = oauth.user
                     if user.pk not in user_pks:
                         user_pks.add(user.pk)
-                        nodes.append(user.profile.data_dict(request, short=True, fmt='3d-force-graph'))
+                        nodes.append(user.profile.data_dict(request, fmt='3d-force-graph'))
                     links.append(dict(
                         source=user.pk,
                         target=-answer.number,
@@ -3309,7 +3309,7 @@ class ApiOfferResults(TelegramApiMixin, APIView):
 
             if request.user.is_authenticated and request.user.pk not in user_pks:
                 user_pks.add(request.user.pk)
-                nodes.append(request.user.profile.data_dict(request, short=True, fmt='3d-force-graph'))
+                nodes.append(request.user.profile.data_dict(request, fmt='3d-force-graph'))
 
             q_connections = Q(
                 is_trust__isnull=False, is_reverse=False,

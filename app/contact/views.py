@@ -945,7 +945,6 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
             #   короткий
 
             fmt = request.GET.get('fmt', 'd3js')
-            short = fmt == '3d-force-graph'
             q_users = Q(is_superuser=False)
 
             tg_group_id, tggroup = self.get_tg_group_id(request)
@@ -993,14 +992,14 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
                 users_selected = users_selected[from_:]
             for user in users_selected:
                 profile = user.profile
-                users.append(profile.data_dict(request, short=short, fmt=fmt))
+                users.append(profile.data_dict(request, fmt=fmt))
                 user_pks.append(user.pk)
 
             if request.user and request.user.is_authenticated:
                 if request.user.pk not in user_pks:
                     user= request.user
                     profile = user.profile
-                    users.append(profile.data_dict(request, short=short, fmt=fmt))
+                    users.append(profile.data_dict(request, fmt=fmt))
                     user_pks.append(user.pk)
 
             connections = []
@@ -2899,7 +2898,7 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
 
     Также отдается профиль авторизованного пользователя, даже если его нет в выборке.
     """
-    permission_classes = (IsAuthenticated,)
+    # permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         fmt = request.GET.get('fmt', 'd3js')
@@ -2934,7 +2933,7 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
         if withalone:
             if from_ is None:
                 users = [
-                    profile.data_dict(request=request, short=True, fmt=fmt) \
+                    profile.data_dict(request=request, fmt=fmt) \
                     for profile in Profile.objects.select_related('user').filter(user__is_superuser=False).distinct()
                 ]
                 if rod or dover:
@@ -2958,12 +2957,12 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
                         ).order_by(
                             '-user__date_joined'
                         ).distinct()[from_: from_ + number_]:
-                        users.append(profile.data_dict(request=request, short=True, fmt=fmt))
+                        users.append(profile.data_dict(request=request, fmt=fmt))
                         user_pks.add(profile.user.pk)
 
                     if request.user.is_authenticated and request.user.pk not in user_pks:
                         user_pks.add(request.user.pk)
-                        users.append(request.user.profile.data_dict(request=request, short=True, fmt=fmt))
+                        users.append(request.user.profile.data_dict(request=request, fmt=fmt))
 
                     connections = [
                         cs.data_dict(
@@ -2992,10 +2991,10 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
                     ))
                     if cs.user_from.pk not in user_pks:
                         user_pks.add(cs.user_from.pk)
-                        users.append(cs.user_from.profile.data_dict(request=request, short=True, fmt=fmt))
+                        users.append(cs.user_from.profile.data_dict(request=request, fmt=fmt))
                     if cs.user_to.pk not in user_pks:
                         user_pks.add(cs.user_to.pk)
-                        users.append(cs.user_to.profile.data_dict(request=request, short=True, fmt=fmt))
+                        users.append(cs.user_to.profile.data_dict(request=request, fmt=fmt))
 
         if fmt == '3d-force-graph':
             bot_username = self.get_bot_username()
@@ -3076,7 +3075,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             сколько показывать участников группы в очередной странице,
             по умолчанию settings.MAX_RECURSION_COUNT_IN_GROUP
     """
-    permission_classes = (IsAuthenticated,)
+    # permission_classes = (IsAuthenticated,)
 
     def get_chat_mesh(self, request, chat_id, recursion_depth):
         users = []
@@ -3220,7 +3219,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 connections.append(cs.data_dict(show_parent=True, fmt=fmt))
 
         users = [
-            p.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt, mark_dead=True) for p in \
+            p.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True)) for p in \
             Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability')
         ]
         if fmt == '3d-force-graph':
@@ -3306,7 +3305,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             if p == profile_q and fmt=='3d-force-graph':
                 users.append(root_node)
             else:
-                users.append(p.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt, mark_dead=p.is_dead))
+                users.append(p.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True)))
             if fmt == 'd3js':
                 UuidById[p.user.pk] = p.uuid
 
@@ -3439,7 +3438,7 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
         user_pks.add(user_to_id)
         users = []
         for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
-            users.append(profile.data_dict(request, short=fmt=='3d-force-graph', fmt=fmt, mark_dead=True))
+            users.append(profile.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True)))
 
         if fmt == '3d-force-graph':
             bot_username = self.get_bot_username()

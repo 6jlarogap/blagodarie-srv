@@ -3446,7 +3446,7 @@ async def process_callback_photo(callback_query: types.CallbackQuery, state: FSM
 async def process_callback_photo_remove(callback_query: types.CallbackQuery, state: FSMContext):
     if not (uuid := Misc.getuuid_from_callback(callback_query)):
         await Misc.state_finish(state)
-    return
+        return
     status, response = await Misc.get_user_by_uuid(uuid)
     if status == 200 and response:
         await FSMphoto.next()
@@ -5585,15 +5585,6 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 )
                 logging.debug('post operation, status: %s' % status)
                 logging.debug('post operation, response: %s' % response)
-                if status == 200:
-                    # Обновить, ибо уже на доверие больше у него может быть
-                    response_from['trust_count'] = response['profile_to']['trust_count']
-                #else:
-                    #   status == 400:
-                    #   response == {'message': 'Не найден пользователь с этим ид телеграма'}
-                    #       Возможно, что это не пользователь-администратор, а
-                    #       некий @GroupAnonymousBot добавляет юзера. Такое возможно
-                    #       с группами, подключенными к каналу
 
         if not is_previous_his and not tg_user_left and bot_data.id == user_in.id:
             # ЭТОТ бот подключился.

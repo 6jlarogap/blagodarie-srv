@@ -582,8 +582,8 @@ class PhotoModel(FilesMixin, models.Model):
     DEFAULT_AVATAR_IN_MEDIA_FEMALE = 'images/no-photo-gender-female.jpg'
     DEFAULT_AVATAR_IN_MEDIA_NONE = 'images/no-photo-gender-none.jpg'
 
-    THUMB_WIDTH = 64
-    THUMB_HEIGHT = 64
+    THUMB_WIDTH = 128
+    THUMB_HEIGHT = 128
     THUMB_METHOD = 'crop'
 
     class Meta:
