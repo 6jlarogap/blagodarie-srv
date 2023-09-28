@@ -394,7 +394,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
         if request:
             if fmt == '3d-force-graph' and not thumb:
                 # Здесь всегда иконки
-                thumb['method'] = dict(method=PhotoModel.THUMB_METHOD)
+                thumb = dict(method=PhotoModel.THUMB_METHOD)
             if thumb:
                 c_thumb = dict(
                     method = thumb.get('method', PhotoModel.THUMB_METHOD),
