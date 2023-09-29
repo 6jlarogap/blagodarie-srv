@@ -3288,7 +3288,8 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
 
         user_pks.add(user_q.pk)
         users = []
-        UuidById = dict()
+        UserById = dict()
+        collapse = bool(request.GET.get('collapse'))
 
         root_node = dict(
             id=user_q.pk,
@@ -3307,9 +3308,10 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             else:
                 users.append(p.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True)))
             if fmt == 'd3js':
-                UuidById[p.user.pk] = p.uuid
+                UserById[p.user.pk] = dict(uuid=p.uuid)
+            elif fmt=='3d-force-graph' and collapse:
+                UserById[p.user.pk] = dict(parent_ids=[])
 
-        collapse = bool(request.GET.get('collapse'))
         connections = []
         pairs = set()
         for rec in recs:
@@ -3326,16 +3328,22 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 item = dict(source=source, target=target, is_child=True,)
                 if collapse:
                     item.update(t_source=rec['user_from_id'], t_target=rec['user_to_id'])
+                    # Это потребуется при развертывании потерянных родственных связей между
+                    # свернутыми злами на графе.
+                    UserById[target]['parent_ids'].append(source)
             else:
                 item = dict(
-                    source=UuidById[source],
-                    target=UuidById[target],
+                    source=UserById[source]['uuid'],
+                    target=UserById[target]['uuid'],
                     is_father=rec['is_father'],
                     is_mother=rec['is_mother'],
                 )
             connections.append(item)
 
         if fmt == '3d-force-graph':
+            if collapse:
+                for user in users:
+                    user['parent_ids'] = UserById[user['id']]['parent_ids']
             bot_username = self.get_bot_username()
             return dict(bot_username=bot_username, nodes=users, links=connections, root_node=root_node)
         else:
