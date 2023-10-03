@@ -694,6 +694,404 @@ async def service_add_user_to_chat(message: types.Message, state: FSMContext):
         return
 
 
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=None,
+)
+async def echo_send_to_bot(message: types.Message, state: FSMContext):
+    """
+    Обработка сообщений в бот при state==None, включая команду /start
+    """
+
+    tg_user_sender = message.from_user
+    reply = ''
+    if tg_user_sender.is_bot:
+        reply = 'Сообщения от ботов пока не обрабатываются'
+    elif message.content_type == ContentType.PINNED_MESSAGE:
+        return
+    elif not message.is_forward() and message.content_type != ContentType.TEXT:
+        reply = 'Сюда можно слать текст для поиска, включая @username, или пересылать сообщения любого типа'
+    if reply:
+        await message.reply(reply)
+        return
+
+    reply = ''
+    reply_markup = None
+
+    # Кто будет благодарить... или чей профиль показывать, когда некого благодарить...
+    #
+    user_from_id = None
+    response_from = dict()
+
+    tg_user_forwarded = None
+
+    state_ = ''
+
+    # Кого будут благодарить
+    # или свой профиль в массиве
+    a_response_to = []
+
+    # массив найденных профилей. По ним только deeplinks
+    a_found = []
+
+    message_text = getattr(message, 'text', '') and message.text.strip() or ''
+    bot_data = await bot.get_me()
+    if message.is_forward():
+        tg_user_forwarded = message.forward_from
+        if not tg_user_forwarded:
+            reply = (
+                'Автор исходного сообщения '
+                '<a href="https://telegram.org/blog/unsend-privacy-emoji#anonymous-forwarding">запретил</a> '
+                'идентифицировать себя в пересылаемых сообщениях\n'
+            )
+        elif tg_user_forwarded.is_bot:
+            reply = 'Сообщения, пересланные от ботов, пока не обрабатываются'
+        elif tg_user_forwarded.id == tg_user_sender.id:
+            state_ = 'forwarded_from_me'
+        else:
+            state_ = 'forwarded_from_other'
+    else:
+        if message_text == '/start':
+            state_ = 'start'
+        elif message_text in ('/ya', '/я'):
+            state_ = 'ya'
+
+        elif m := re.search(
+                r'^\/start\s+setplace$',
+                message_text,
+                flags=re.I,
+          ):
+            state_ = 'start_setplace'
+        elif m := re.search(
+                (
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=setplace'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            state_ = 'start_setplace'
+
+        elif m := re.search(
+                r'^\/start\s+offer\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
+                message_text,
+                flags=re.I,
+          ):
+            offer_to_search = m.group(1).lower()
+            state_ = 'start_offer'
+        elif m := re.search(
+                (
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=offer\-'
+                    '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            offer_to_search = m.group(1).lower()
+            state_ = 'start_offer'
+
+        elif m := re.search(
+                r'^\/start\s+([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
+                message_text,
+                flags=re.I,
+          ):
+            uuid_to_search = m.group(1).lower()
+            state_ = 'start_uuid'
+        elif m := re.search(
+                (
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\='
+                    '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            uuid_to_search = m.group(1).lower()
+            state_ = 'start_uuid'
+
+        elif m := re.search(
+                r'^\/start\s+(\w{5,})$',
+                message_text,
+                flags=re.I,
+          ):
+            username_to_search = m.group(1)
+            state_ = 'start_username'
+        elif m := re.search(
+                (
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\='
+                    '(\w{5,})$'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            username_to_search = m.group(1)
+            state_ = 'start_username'
+
+        elif m := re.search(
+                (
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=poll\-'
+                    '(\d{3,})$'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            # https://t.me/doverabot?start=poll
+            poll_to_search = m.group(1)
+            state_ = 'start_poll'
+        elif m := re.search(
+                r'^\/start\s+poll\-(\d{3,})$',
+                message_text,
+                flags=re.I,
+          ):
+            # /start poll:
+            poll_to_search = m.group(1)
+            state_ = 'start_poll'
+
+        elif m := re.search(
+                (
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=auth_redirect\-'
+                    '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            # /start auth_redirect-<token, в котором зашит url для авторизации>
+            redirect_token = m.group(1)
+            state_ = 'start_auth_redirect'
+        elif m := re.search(
+                (
+                r'^\/start\s+auth_redirect\-'
+                    '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
+                ),
+                message_text,
+                flags=re.I,
+          ):
+            # /start auth_redirect-<token, в котором зашит url для авторизации>
+            redirect_token = m.group(1)
+            state_ = 'start_auth_redirect'
+
+        elif m := Misc.get_youtube_id(message_text):
+            youtube_id, youtube_link = m
+            state_ = 'youtube_link'
+
+        elif len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
+            state_ = 'invalid_message_text'
+            reply = Misc.invalid_search_text()
+        else:
+            search_phrase = ''
+            usernames, text_stripped = Misc.get_text_usernames(message_text)
+            if text_stripped:
+                search_phrase = Misc.text_search_phrase(
+                    text_stripped,
+                    MorphAnalyzer,
+                )
+                if not search_phrase and not usernames:
+                    state_ = 'invalid_message_text'
+                    reply = Misc.PROMPT_SEARCH_PHRASE_TOO_SHORT
+
+            if usernames:
+                logging.debug('@usernames found in message text\n')
+                payload_username = dict(tg_username=','.join(usernames),)
+                status, response = await Misc.api_request(
+                    path='/api/profile',
+                    method='get',
+                    params=payload_username,
+                )
+                logging.debug('get by username, status: %s' % status)
+                logging.debug('get by username, response: %s' % response)
+                if status == 200 and response:
+                    a_found += response
+                    state_ = 'found_username'
+                else:
+                    state_ = 'not_found'
+
+            if search_phrase:
+                status, response = await Misc.search_users('query', search_phrase)
+                if status == 400 and response.get('code') and response['code'] == 'programming_error':
+                    if state_ != 'found_username':
+                        state_ = 'not_found'
+                        reply = 'Ошибка доступа к данных. Получили отказ по такой строке в поиске'
+                elif status == 200:
+                    if response:
+                        a_found += response
+                        state_ = 'found_in_search'
+                    elif state_ != 'found_username':
+                        state_ = 'not_found'
+                else:
+                    state_ = 'not_found'
+                    reply = Misc.MSG_ERROR_API
+
+    if state_ == 'not_found' and not reply:
+        reply = Misc.PROMPT_NOTHING_FOUND
+
+    if state_:
+        status, response_from = await Misc.post_tg_user(tg_user_sender)
+        if status == 200:
+            response_from.update(tg_username=tg_user_sender.username)
+            user_from_id = response_from.get('user_id')
+            if state_ in ('ya', 'forwarded_from_me', 'start', ) or \
+               state_ in (
+                    'start_uuid', 'start_username', 'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',
+               ) and response_from.get('created'):
+                a_response_to += [response_from, ]
+
+    if user_from_id and state_ == 'start_uuid':
+        logging.debug('get tg_user_by_start_uuid data in api...')
+        try:
+            status, response_uuid = await Misc.get_user_by_uuid(uuid=uuid_to_search)
+            if status == 200:
+                a_response_to += [response_uuid, ]
+            else:
+                reply = Misc.MSG_USER_NOT_FOUND
+        except:
+            pass
+
+    if user_from_id and state_ == 'start_username':
+        logging.debug('get tg_user_by_start_username data in api...')
+        try:
+            status, response_tg_username = await Misc.api_request(
+                path='/api/profile',
+                method='get',
+                params=dict(tg_username=username_to_search),
+            )
+            logging.debug('get_user_profile by username, status: %s' % status)
+            logging.debug('get_user_profile by username, response: %s' % response_tg_username)
+            if status == 200 and response_tg_username:
+                a_response_to += response_tg_username
+            else:
+                reply = Misc.MSG_USER_NOT_FOUND
+        except:
+            pass
+
+    if user_from_id and state_ == 'forwarded_from_other':
+        status, response_to = await Misc.post_tg_user(tg_user_forwarded)
+        if status == 200:
+            response_to.update(tg_username=tg_user_forwarded.username)
+            a_response_to = [response_to, ]
+
+    if user_from_id and state_ in ('forwarded_from_other', 'forwarded_from_me'):
+        usernames, text_stripped = Misc.get_text_usernames(message_text)
+        if usernames:
+            logging.debug('@usernames found in message text\n')
+            payload_username = dict(tg_username=','.join(usernames),)
+            status, response = await Misc.api_request(
+                path='/api/profile',
+                method='get',
+                params=payload_username,
+            )
+            logging.debug('get by username, status: %s' % status)
+            logging.debug('get by username, response: %s' % response)
+            if status == 200 and response:
+                a_found += response
+
+
+    if state_ and state_ not in (
+        'not_found', 'invalid_message_text',
+        'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',
+        'youtube_link',
+       ) and user_from_id and a_response_to:
+        if state_ == 'start':
+            await message.reply(await Misc.rules_text(), disable_web_page_preview=True)
+            if a_response_to and not a_response_to[0].get('photo'):
+                status_photo, response_photo = await Misc.update_user_photo(bot, tg_user_sender, response_from)
+                if response_photo:
+                    response_from = response_photo
+                    a_response_to[0] = response_photo
+        message_to_forward_id = state_ == 'forwarded_from_other' and message.message_id or ''
+        await Misc.show_cards(
+            a_response_to,
+            message,
+            bot,
+            response_from=response_from,
+            message_to_forward_id=message_to_forward_id,
+        )
+
+    elif reply:
+        await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+
+    if state_ not in (
+        'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',
+        'youtube_link'
+       ):
+        await Misc.show_deeplinks(a_found, message, bot_data)
+
+    if user_from_id:
+        if response_from.get('created') and state_ != 'start':
+            await Misc.update_user_photo(bot, tg_user_sender, response_from)
+            # Будем показывать карточку нового юзера в таких случаях?
+            #if a_response_to and state_ in ('start_setplace', 'start_poll', 'start_offer', ):
+                #await Misc.show_cards(
+                    #a_response_to,
+                    #message,
+                    #bot,
+                    #response_from=response_from,
+                #)
+        if state_ == 'start_setplace':
+            await geo(message, state_to_set=FSMgeo.geo)
+        elif state_ == 'start_auth_redirect':
+            status_token, response_token = await Misc.api_request(
+                path='/api/token/url/',
+                params=dict(token=redirect_token)
+            )
+            if status_token == 200:
+                redirect_path = response_token['url']
+                reply_markup = InlineKeyboardMarkup()
+                inline_btn_redirect = InlineKeyboardButton(
+                    'Продолжить',
+                    login_url=Misc.make_login_url(redirect_path=redirect_path, keep_user_data='on'),
+                )
+                reply_markup.row(inline_btn_redirect)
+                if redirect_path.lower().startswith(settings.VOTE_URL):
+                    if m := re.search(r'\#(\S+)$', redirect_path):
+                        if m := Misc.get_youtube_id(m.group(1)):
+                            youtube_id, youtube_link = m
+                            await answer_youtube_message(message, youtube_id, youtube_link)
+                            return
+                auth_text = f'Для доступа к <pre>{redirect_path}</pre> нажмите Продолжить'
+                auth_url_parse = urlparse(redirect_path)
+                if auth_url_parse.hostname:
+                    for auth_domain in settings.AUTH_PROMPT_FOR_DOMAIN:
+                        if re.search(re.escape(auth_domain) + '$', auth_url_parse.hostname):
+                            auth_text = settings.AUTH_PROMPT_FOR_DOMAIN[auth_domain]
+                            break
+                await message.reply(
+                    auth_text,
+                    reply_markup=reply_markup,
+                    disable_web_page_preview=True
+                )
+            else:
+                await message.reply('Ссылка устарела или не найдена. Получите новую.')
+        elif state_ == 'start_poll':
+            params = dict(tg_token=settings.TOKEN, tg_poll_id=poll_to_search)
+            logging.debug('get_poll, params: %s' % params)
+            status_poll, response_poll = await Misc.api_request(
+                path='/api/bot/poll/results',
+                method='post',
+                json=params,
+            )
+            logging.debug('get_poll, params, status: %s' % status_poll)
+            logging.debug('get_poll, params, response: %s' % response_poll)
+            if status_poll == 200:
+                try:
+                    await bot.forward_message(
+                        tg_user_sender.id,
+                        from_chat_id=response_poll['chat_id'],
+                        message_id=response_poll['message_id'],
+                    )
+                except:
+                    await message.reply('Не удалось отобразить опрос. Уже не действует?')
+            else:
+                await message.reply('Опрос не найден')
+        elif state_ == 'start_offer':
+            status_offer, response_offer = await post_offer_answer(offer_to_search, response_from, [-1])
+            if status_offer == 200:
+                await show_offer(response_from, response_offer, message, bot_data)
+            else:
+                await message.reply('Опрос-предложение не найдено')
+        elif state_ == 'youtube_link':
+            await answer_youtube_message(message, youtube_id, youtube_link)
+        elif state_ == 'forwarded_from_other' and a_response_to and a_response_to[0].get('created'):
+            await Misc.update_user_photo(bot, tg_user_forwarded, response_to)
+
 # --- command list ----
 
 commands_dict = {
@@ -721,9 +1119,11 @@ commands_dict = {
     'help': echo_help_to_bot,
     'stat': echo_stat_to_bot,
     'feedback': echo_feedback,
+    'start': echo_send_to_bot,
+    'ya': echo_send_to_bot,
 }
 
-async def is_it_command(message: types.Message, state: FSMContext):
+async def is_it_command(message: types.Message, state: FSMContext, excepts=[]):
     """
     Проверка, не обнаружилась ли команда, когда от пользователя ждут данных
 
@@ -736,7 +1136,7 @@ async def is_it_command(message: types.Message, state: FSMContext):
         m = re.search(r'^\/(\S+)', message_text)
         if m:
             command = m.group(1)
-            if command in commands_dict:
+            if command in commands_dict and command not in excepts:
                 if state:
                     await state.finish()
                 await message.reply('%s\n%s /%s' % (
@@ -796,7 +1196,7 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
         return
     user_uuid_to = Misc.uuid_from_text(message.text)
     if not user_uuid_to:
-        if await is_it_command(message, state):
+        if await is_it_command(message, state, excepts=('start',)):
             return
         async with state.proxy() as data:
             uuid = data.get('uuid')
@@ -1487,7 +1887,7 @@ async def choose_child_to_clear_link(message: types.Message, state: FSMContext):
             reply_markup=Misc.reply_markup_cancel_row()
         )
         return
-    if await is_it_command(message, state):
+    if await is_it_command(message, state, excepts=('start',)):
         return
     child_uuid = Misc.uuid_from_text(message.text)
     if not child_uuid:
@@ -1537,7 +1937,7 @@ async def put_child_by_uuid(message: types.Message, state: FSMContext):
         return
     user_uuid_from = Misc.uuid_from_text(message.text)
     if not user_uuid_from:
-        if await is_it_command(message, state):
+        if await is_it_command(message, state, excepts=('start',)):
             return
         async with state.proxy() as data:
             if uuid := data.get('uuid'):
@@ -1898,7 +2298,7 @@ async def put_bro_sys_by_uuid(message: types.Message, state: FSMContext):
         return
     uuid_bro_sis = Misc.uuid_from_text(message.text)
     if not uuid_bro_sis:
-        if await is_it_command(message, state):
+        if await is_it_command(message, state, excepts=('start',)):
             return
         async with state.proxy() as data:
             await message.reply(
@@ -2242,13 +2642,13 @@ async def get_keys(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         await message.reply(Misc.MSG_ERROR_TEXT_ONLY, reply_markup=Misc.reply_markup_cancel_row())
         return
+    if await is_it_command(message, state):
+        return
     if re.search(Misc.RE_UUID, message.text):
         await message.reply(
             'Не похоже, что это контакты. Напишите ещё раз или Отмена',
             reply_markup=Misc.reply_markup_cancel_row(),
         )
-        return
-    if await is_it_command(message, state):
         return
     async with state.proxy() as data:
         uuid = data.get('uuid')
@@ -2355,7 +2755,7 @@ async def get_new_owner(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         await message.reply(Misc.MSG_ERROR_TEXT_ONLY, reply_markup=Misc.reply_markup_cancel_row())
         return
-    if await is_it_command(message, state):
+    if await is_it_command(message, state, excepts=('start',)):
         return
     async with state.proxy() as data:
         uuid = data.get('uuid')
@@ -3567,14 +3967,14 @@ async def new_iof_ask_fio(message: types.Message, state: FSMContext):
             reply_markup=Misc.reply_markup_cancel_row(),
         )
         return
+    if await is_it_command(message, state):
+        return
     first_name = Misc.strip_text(message.text)
-    if not first_name or re.search(Misc.RE_UUID, first_name):
+    if not first_name:
         await message.reply(
             Misc.PROMPT_IOF_INCORRECT,
             reply_markup=Misc.reply_markup_cancel_row(),
         )
-        return
-    if await is_it_command(message, state):
         return
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
@@ -4315,406 +4715,6 @@ async def got_message_to_send_to_admins(message: types.Message, state: FSMContex
                     else:
                         await message.reply('Извините, не удалось доставить')
     await Misc.state_finish(state)
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    content_types=ContentType.all(),
-    state=None,
-)
-async def echo_send_to_bot(message: types.Message, state: FSMContext):
-    """
-    Обработка остальных сообщений в бот
-    """
-
-    tg_user_sender = message.from_user
-    reply = ''
-    if tg_user_sender.is_bot:
-        reply = 'Сообщения от ботов пока не обрабатываются'
-    elif message.content_type == ContentType.PINNED_MESSAGE:
-        return
-    elif not message.is_forward() and message.content_type != ContentType.TEXT:
-        reply = 'Сюда можно слать текст для поиска, включая @username, или пересылать сообщения любого типа'
-    if reply:
-        await message.reply(reply)
-        return
-
-    reply = ''
-    reply_markup = None
-
-    # Кто будет благодарить... или чей профиль показывать, когда некого благодарить...
-    #
-    user_from_id = None
-    response_from = dict()
-
-    tg_user_forwarded = None
-
-    state_ = ''
-
-    # Кого будут благодарить
-    # или свой профиль в массиве
-    a_response_to = []
-
-    # массив найденных профилей. По ним только deeplinks
-    a_found = []
-
-    message_text = getattr(message, 'text', '') and message.text.strip() or ''
-    bot_data = await bot.get_me()
-    if message.is_forward():
-        tg_user_forwarded = message.forward_from
-        if not tg_user_forwarded:
-            reply = (
-                'Автор исходного сообщения '
-                '<a href="https://telegram.org/blog/unsend-privacy-emoji#anonymous-forwarding">запретил</a> '
-                'идентифицировать себя в пересылаемых сообщениях\n'
-            )
-        elif tg_user_forwarded.is_bot:
-            reply = 'Сообщения, пересланные от ботов, пока не обрабатываются'
-        elif tg_user_forwarded.id == tg_user_sender.id:
-            state_ = 'forwarded_from_me'
-        else:
-            state_ = 'forwarded_from_other'
-    else:
-        if message_text == '/start':
-            state_ = 'start'
-        elif message_text in ('/ya', '/я'):
-            state_ = 'ya'
-
-        elif m := re.search(
-                r'^\/start\s+setplace$',
-                message_text,
-                flags=re.I,
-          ):
-            state_ = 'start_setplace'
-        elif m := re.search(
-                (
-                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=setplace'
-                ) % re.escape(bot_data['username']),
-                message_text,
-                flags=re.I,
-          ):
-            state_ = 'start_setplace'
-
-        elif m := re.search(
-                r'^\/start\s+offer\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
-                message_text,
-                flags=re.I,
-          ):
-            offer_to_search = m.group(1).lower()
-            state_ = 'start_offer'
-        elif m := re.search(
-                (
-                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=offer\-'
-                    '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
-                ) % re.escape(bot_data['username']),
-                message_text,
-                flags=re.I,
-          ):
-            offer_to_search = m.group(1).lower()
-            state_ = 'start_offer'
-
-        elif m := re.search(
-                r'^\/start\s+([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
-                message_text,
-                flags=re.I,
-          ):
-            uuid_to_search = m.group(1).lower()
-            state_ = 'start_uuid'
-        elif m := re.search(
-                (
-                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\='
-                    '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
-                ) % re.escape(bot_data['username']),
-                message_text,
-                flags=re.I,
-          ):
-            uuid_to_search = m.group(1).lower()
-            state_ = 'start_uuid'
-
-        elif m := re.search(
-                r'^\/start\s+(\w{5,})$',
-                message_text,
-                flags=re.I,
-          ):
-            username_to_search = m.group(1)
-            state_ = 'start_username'
-        elif m := re.search(
-                (
-                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\='
-                    '(\w{5,})$'
-                ) % re.escape(bot_data['username']),
-                message_text,
-                flags=re.I,
-          ):
-            username_to_search = m.group(1)
-            state_ = 'start_username'
-
-        elif m := re.search(
-                (
-                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=poll\-'
-                    '(\d{3,})$'
-                ) % re.escape(bot_data['username']),
-                message_text,
-                flags=re.I,
-          ):
-            # https://t.me/doverabot?start=poll
-            poll_to_search = m.group(1)
-            state_ = 'start_poll'
-        elif m := re.search(
-                r'^\/start\s+poll\-(\d{3,})$',
-                message_text,
-                flags=re.I,
-          ):
-            # /start poll:
-            poll_to_search = m.group(1)
-            state_ = 'start_poll'
-
-        elif m := re.search(
-                (
-                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=auth_redirect\-'
-                    '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
-                ) % re.escape(bot_data['username']),
-                message_text,
-                flags=re.I,
-          ):
-            # /start auth_redirect-<token, в котором зашит url для авторизации>
-            redirect_token = m.group(1)
-            state_ = 'start_auth_redirect'
-        elif m := re.search(
-                (
-                r'^\/start\s+auth_redirect\-'
-                    '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
-                ),
-                message_text,
-                flags=re.I,
-          ):
-            # /start auth_redirect-<token, в котором зашит url для авторизации>
-            redirect_token = m.group(1)
-            state_ = 'start_auth_redirect'
-
-        elif m := Misc.get_youtube_id(message_text):
-            youtube_id, youtube_link = m
-            state_ = 'youtube_link'
-
-        elif len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
-            state_ = 'invalid_message_text'
-            reply = Misc.invalid_search_text()
-        else:
-            search_phrase = ''
-            usernames, text_stripped = Misc.get_text_usernames(message_text)
-            if text_stripped:
-                search_phrase = Misc.text_search_phrase(
-                    text_stripped,
-                    MorphAnalyzer,
-                )
-                if not search_phrase and not usernames:
-                    state_ = 'invalid_message_text'
-                    reply = Misc.PROMPT_SEARCH_PHRASE_TOO_SHORT
-
-            if usernames:
-                logging.debug('@usernames found in message text\n')
-                payload_username = dict(tg_username=','.join(usernames),)
-                status, response = await Misc.api_request(
-                    path='/api/profile',
-                    method='get',
-                    params=payload_username,
-                )
-                logging.debug('get by username, status: %s' % status)
-                logging.debug('get by username, response: %s' % response)
-                if status == 200 and response:
-                    a_found += response
-                    state_ = 'found_username'
-                else:
-                    state_ = 'not_found'
-
-            if search_phrase:
-                status, response = await Misc.search_users('query', search_phrase)
-                if status == 400 and response.get('code') and response['code'] == 'programming_error':
-                    if state_ != 'found_username':
-                        state_ = 'not_found'
-                        reply = 'Ошибка доступа к данных. Получили отказ по такой строке в поиске'
-                elif status == 200:
-                    if response:
-                        a_found += response
-                        state_ = 'found_in_search'
-                    elif state_ != 'found_username':
-                        state_ = 'not_found'
-                else:
-                    state_ = 'not_found'
-                    reply = Misc.MSG_ERROR_API
-
-    if state_ == 'not_found' and not reply:
-        reply = Misc.PROMPT_NOTHING_FOUND
-
-    if state_:
-        status, response_from = await Misc.post_tg_user(tg_user_sender)
-        if status == 200:
-            response_from.update(tg_username=tg_user_sender.username)
-            user_from_id = response_from.get('user_id')
-            if state_ in ('ya', 'forwarded_from_me', 'start', ) or \
-               state_ in (
-                    'start_uuid', 'start_username', 'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',
-               ) and response_from.get('created'):
-                a_response_to += [response_from, ]
-
-    if user_from_id and state_ == 'start_uuid':
-        logging.debug('get tg_user_by_start_uuid data in api...')
-        try:
-            status, response_uuid = await Misc.get_user_by_uuid(uuid=uuid_to_search)
-            if status == 200:
-                a_response_to += [response_uuid, ]
-            else:
-                reply = Misc.MSG_USER_NOT_FOUND
-        except:
-            pass
-
-    if user_from_id and state_ == 'start_username':
-        logging.debug('get tg_user_by_start_username data in api...')
-        try:
-            status, response_tg_username = await Misc.api_request(
-                path='/api/profile',
-                method='get',
-                params=dict(tg_username=username_to_search),
-            )
-            logging.debug('get_user_profile by username, status: %s' % status)
-            logging.debug('get_user_profile by username, response: %s' % response_tg_username)
-            if status == 200 and response_tg_username:
-                a_response_to += response_tg_username
-            else:
-                reply = Misc.MSG_USER_NOT_FOUND
-        except:
-            pass
-
-    if user_from_id and state_ == 'forwarded_from_other':
-        status, response_to = await Misc.post_tg_user(tg_user_forwarded)
-        if status == 200:
-            response_to.update(tg_username=tg_user_forwarded.username)
-            a_response_to = [response_to, ]
-
-    if user_from_id and state_ in ('forwarded_from_other', 'forwarded_from_me'):
-        usernames, text_stripped = Misc.get_text_usernames(message_text)
-        if usernames:
-            logging.debug('@usernames found in message text\n')
-            payload_username = dict(tg_username=','.join(usernames),)
-            status, response = await Misc.api_request(
-                path='/api/profile',
-                method='get',
-                params=payload_username,
-            )
-            logging.debug('get by username, status: %s' % status)
-            logging.debug('get by username, response: %s' % response)
-            if status == 200 and response:
-                a_found += response
-
-
-    if state_ and state_ not in (
-        'not_found', 'invalid_message_text',
-        'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',
-        'youtube_link',
-       ) and user_from_id and a_response_to:
-        if state_ == 'start':
-            await message.reply(await Misc.rules_text(), disable_web_page_preview=True)
-            if a_response_to and not a_response_to[0].get('photo'):
-                status_photo, response_photo = await Misc.update_user_photo(bot, tg_user_sender, response_from)
-                if response_photo:
-                    response_from = response_photo
-                    a_response_to[0] = response_photo
-        message_to_forward_id = state_ == 'forwarded_from_other' and message.message_id or ''
-        await Misc.show_cards(
-            a_response_to,
-            message,
-            bot,
-            response_from=response_from,
-            message_to_forward_id=message_to_forward_id,
-        )
-
-    elif reply:
-        await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
-
-    if state_ not in (
-        'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',
-        'youtube_link'
-       ):
-        await Misc.show_deeplinks(a_found, message, bot_data)
-
-    if user_from_id:
-        if response_from.get('created') and state_ != 'start':
-            await Misc.update_user_photo(bot, tg_user_sender, response_from)
-            # Будем показывать карточку нового юзера в таких случаях?
-            #if a_response_to and state_ in ('start_setplace', 'start_poll', 'start_offer', ):
-                #await Misc.show_cards(
-                    #a_response_to,
-                    #message,
-                    #bot,
-                    #response_from=response_from,
-                #)
-        if state_ == 'start_setplace':
-            await geo(message, state_to_set=FSMgeo.geo)
-        elif state_ == 'start_auth_redirect':
-            status_token, response_token = await Misc.api_request(
-                path='/api/token/url/',
-                params=dict(token=redirect_token)
-            )
-            if status_token == 200:
-                redirect_path = response_token['url']
-                reply_markup = InlineKeyboardMarkup()
-                inline_btn_redirect = InlineKeyboardButton(
-                    'Продолжить',
-                    login_url=Misc.make_login_url(redirect_path=redirect_path, keep_user_data='on'),
-                )
-                reply_markup.row(inline_btn_redirect)
-                if redirect_path.lower().startswith(settings.VOTE_URL):
-                    if m := re.search(r'\#(\S+)$', redirect_path):
-                        if m := Misc.get_youtube_id(m.group(1)):
-                            youtube_id, youtube_link = m
-                            await answer_youtube_message(message, youtube_id, youtube_link)
-                            return
-                auth_text = f'Для доступа к <pre>{redirect_path}</pre> нажмите Продолжить'
-                auth_url_parse = urlparse(redirect_path)
-                if auth_url_parse.hostname:
-                    for auth_domain in settings.AUTH_PROMPT_FOR_DOMAIN:
-                        if re.search(re.escape(auth_domain) + '$', auth_url_parse.hostname):
-                            auth_text = settings.AUTH_PROMPT_FOR_DOMAIN[auth_domain]
-                            break
-                await message.reply(
-                    auth_text,
-                    reply_markup=reply_markup,
-                    disable_web_page_preview=True
-                )
-            else:
-                await message.reply('Ссылка устарела или не найдена. Получите новую.')
-        elif state_ == 'start_poll':
-            params = dict(tg_token=settings.TOKEN, tg_poll_id=poll_to_search)
-            logging.debug('get_poll, params: %s' % params)
-            status_poll, response_poll = await Misc.api_request(
-                path='/api/bot/poll/results',
-                method='post',
-                json=params,
-            )
-            logging.debug('get_poll, params, status: %s' % status_poll)
-            logging.debug('get_poll, params, response: %s' % response_poll)
-            if status_poll == 200:
-                try:
-                    await bot.forward_message(
-                        tg_user_sender.id,
-                        from_chat_id=response_poll['chat_id'],
-                        message_id=response_poll['message_id'],
-                    )
-                except:
-                    await message.reply('Не удалось отобразить опрос. Уже не действует?')
-            else:
-                await message.reply('Опрос не найден')
-        elif state_ == 'start_offer':
-            status_offer, response_offer = await post_offer_answer(offer_to_search, response_from, [-1])
-            if status_offer == 200:
-                await show_offer(response_from, response_offer, message, bot_data)
-            else:
-                await message.reply('Опрос-предложение не найдено')
-        elif state_ == 'youtube_link':
-            await answer_youtube_message(message, youtube_id, youtube_link)
-        elif state_ == 'forwarded_from_other' and a_response_to and a_response_to[0].get('created'):
-            await Misc.update_user_photo(bot, tg_user_forwarded, response_to)
-
 
 async def answer_youtube_message(message, youtube_id, youtube_link):
     """
