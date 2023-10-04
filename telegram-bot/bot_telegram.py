@@ -3188,6 +3188,7 @@ async def draw_dod(message, state, data):
     s_alive = 'Жив' if data['is_male'] else 'Жива'
     s_alive_or_dont_know = s_alive + ' или не знаю'
     s_dead = 'Умер' if data['is_male'] else 'Умерла'
+    s_dead_none_title = s_dead + ', дату не знаю'
     his_her = 'его' if data['is_male'] else 'её'
     he_she = 'он' if data['is_male'] else 'она'
     inline_button_alive = InlineKeyboardButton(
@@ -3196,7 +3197,7 @@ async def draw_dod(message, state, data):
     )
     dict_callback.update(keyboard_type=KeyboardType.OTHER_DOD_DEAD)
     inline_button_dead = InlineKeyboardButton(
-        s_dead,
+        s_dead_none_title,
         callback_data=callback_data_template % dict_callback
     )
     reply_markup = InlineKeyboardMarkup()
@@ -3205,7 +3206,7 @@ async def draw_dod(message, state, data):
     prompt_dod = (
         f'{name}\n\n'
         f'Нажмите <u>{s_alive_or_dont_know}</u>, если {s_alive.lower()} или Вы не знаете, {s_dead.lower()} {he_she} или нет\n\n'
-        f'Или нажмите <u>{s_dead}</u>, если {s_dead.lower()}, но Вы не знаете, когда {he_she} умер\n\n'
+        f'Или нажмите <u>{s_dead_none_title}</u>, если {s_dead.lower()}, но Вы не знаете, когда {he_she} умер\n\n'
         f'Или укажите дату {his_her} смерти {Misc.PROMPT_DATE_FORMAT}, если она Вам известна'
     )
     await message.reply(

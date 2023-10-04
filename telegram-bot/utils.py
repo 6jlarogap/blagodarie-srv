@@ -1128,7 +1128,7 @@ class Misc(object):
             gender = response.get('gender')
             if gender:
                 s_dead = 'умерла' if gender == 'f' else 'умер'
-            lifetime += f'д/с - не известна. Известно, что {s_dead}\n'
+            lifetime += f'д/с - неизвестна. Известно, что {s_dead}\n'
         return lifetime
 
 
