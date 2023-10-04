@@ -3062,12 +3062,22 @@ async def process_callback_other(callback_query: types.CallbackQuery, state: FSM
     state = dp.current_state()
     async with state.proxy() as data:
         data['uuid'] = uuid
+        data['gender'] = response_uuid['gender']
         data['is_owned'] = bool(response_uuid['owner_id'])
         data['name'] = response_uuid['first_name']
-    his_her = 'Ваш' if response_sender['uuid'] == response_uuid['uuid'] else 'его (её)'
+    if response_sender['uuid'] == response_uuid['uuid']:
+        his_her = 'Ваш'
+    else:
+        his_her = 'его (её)'
+        if data['gender']:
+            his_her = 'её' if data['gender'] == 'f' else 'его'
+    prompt_gender = (
+        f'Будет предложено их изменить или подтвердить.\n\n'
+        f'Сначала уточните {his_her} пол:'
+    )
     await callback_query.message.reply(
         Misc.show_other_data(response_uuid) + '\n' + \
-        Misc.PROMPT_GENDER % dict(his_her=his_her),
+        prompt_gender,
         reply_markup=reply_markup,
         disable_web_page_preview=True,
     )
@@ -3120,17 +3130,18 @@ async def process_callback_other_gender(callback_query: types.CallbackQuery, sta
                 )
                 reply_markup = InlineKeyboardMarkup()
                 reply_markup.row(inline_button_dob_unknown, Misc.inline_button_cancel())
-                await FSMother.next()
+                await FSMother.dob.set()
                 if not data.get('is_owned'):
                     his_her = 'Ваш'
                 elif data['is_male']:
                     his_her = 'его'
                 else:
                     his_her = 'её'
-                await callback_query.message.reply(
-                    Misc.PROMPT_DOB % dict(name=data['name'], his_her=his_her),
-                    reply_markup=reply_markup,
-                )
+                prompt_dob = (
+                    f'{data["name"]}\n\n'
+                    f'Укажите {his_her} день рождения '
+                ) + Misc.PROMPT_DATE_FORMAT
+                await callback_query.message.reply(prompt_dob, reply_markup=reply_markup)
             else:
                 await Misc.state_finish(state)
     else:
@@ -3142,14 +3153,14 @@ async def put_other_data(message, tg_user_sender, state, data):
         if response_sender:
             dob = data.get('dob', '')
             dod = data.get('dod', '')
+            is_dead = data.get('is_dead', '')
             is_male = data['is_male']
-            # TODO Пока не отработано меню для умер, но не известна дата
             status, response = await Misc.put_user_properties(
                 uuid=data['uuid'],
                 gender='m' if is_male else 'f',
                 dob=dob,
                 dod=dod,
-                is_dead = '1' if dod else '',
+                is_dead = '1' if is_dead or dod else '',
             )
             if status == 200 and response:
                 await message.reply('Данные внесены:\n' + Misc.show_other_data(response), disable_web_page_preview=True,)
@@ -3168,24 +3179,37 @@ async def put_other_data(message, tg_user_sender, state, data):
 
 
 async def draw_dod(message, state, data):
-    dict_dod = dict(
-        keyboard_type=KeyboardType.OTHER_DOD_UNKNOWN,
+    dict_callback = dict(
+        keyboard_type=KeyboardType.OTHER_DOD_NONE,
         sep=KeyboardType.SEP,
     )
     callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
-    inline_button_dod_unknown = InlineKeyboardButton(
-        '%s или не знаю' % ('Жив' if data['is_male'] else 'Жива'),
-        callback_data=callback_data_template % dict_dod
+    name = data.get('name', '')
+    s_alive = 'Жив' if data['is_male'] else 'Жива'
+    s_alive_or_dont_know = s_alive + ' или не знаю'
+    s_dead = 'Умер' if data['is_male'] else 'Умерла'
+    his_her = 'его' if data['is_male'] else 'её'
+    he_she = 'он' if data['is_male'] else 'она'
+    inline_button_alive = InlineKeyboardButton(
+        s_alive_or_dont_know,
+        callback_data=callback_data_template % dict_callback
+    )
+    dict_callback.update(keyboard_type=KeyboardType.OTHER_DOD_DEAD)
+    inline_button_dead = InlineKeyboardButton(
+        s_dead,
+        callback_data=callback_data_template % dict_callback
     )
     reply_markup = InlineKeyboardMarkup()
-    reply_markup.row(inline_button_dod_unknown, Misc.inline_button_cancel())
-    if data['is_male']:
-        his_her = 'его'
-    else:
-        his_her = 'её'
-    await FSMother.next()
+    reply_markup.row(inline_button_alive, inline_button_dead, Misc.inline_button_cancel())
+    await FSMother.dod.set()
+    prompt_dod = (
+        f'{name}\n\n'
+        f'Нажмите <u>{s_alive_or_dont_know}</u>, если {s_alive.lower()} или Вы не знаете, {s_dead.lower()} {he_she} или нет\n\n'
+        f'Или нажмите <u>{s_dead}</u>, если {s_dead.lower()}, но Вы не знаете, когда {he_she} умер\n\n'
+        f'Или кажите дату {his_her} смерти {Misc.PROMPT_DATE_FORMAT}, если она Вам известна'
+    )
     await message.reply(
-        Misc.PROMPT_DOD % dict(name=data.get('name', ''), his_her=his_her),
+        prompt_dod,
         reply_markup=reply_markup,
     )
 
@@ -3216,12 +3240,12 @@ async def process_callback_other_dob_unknown(callback_query: types.CallbackQuery
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
-        KeyboardType.OTHER_DOD_UNKNOWN,
+        KeyboardType.OTHER_DOD_NONE,
         KeyboardType.SEP,
     ), c.data,
     ), state=FSMother.dod,
     )
-async def process_callback_other_dod_unknown(callback_query: types.CallbackQuery, state: FSMContext):
+async def process_callback_OTHER_DOD_NONE(callback_query: types.CallbackQuery, state: FSMContext):
     """
     Ввести пустую дату смерти
     """
@@ -3229,6 +3253,28 @@ async def process_callback_other_dod_unknown(callback_query: types.CallbackQuery
         async with state.proxy() as data:
             if data.get('uuid') and isinstance(data.get('is_male'), bool) and isinstance(data.get('is_owned'), bool):
                 data['dod'] = ''
+                await put_other_data(callback_query.message, callback_query.from_user, state, data)
+            else:
+                await Misc.state_finish(state)
+    else:
+        await Misc.state_finish(state)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.OTHER_DOD_DEAD,
+        KeyboardType.SEP,
+    ), c.data,
+    ), state=FSMother.dod,
+    )
+async def process_callback_OTHER_DOD_DEAD(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Ввести пустую дату смерти
+    """
+    if callback_query.message:
+        async with state.proxy() as data:
+            if data.get('uuid') and isinstance(data.get('is_male'), bool) and isinstance(data.get('is_owned'), bool):
+                data['is_dead'] = True
                 await put_other_data(callback_query.message, callback_query.from_user, state, data)
             else:
                 await Misc.state_finish(state)

@@ -1471,7 +1471,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
             if 'is_dead' in request.data:
                 profile.is_dead = bool(request.data['is_dead'])
             if 'dod' in request.data:
-                profile.dod = dod
+                profile.dod = dod or None
                 if dod:
                     profile.is_dead = True
 

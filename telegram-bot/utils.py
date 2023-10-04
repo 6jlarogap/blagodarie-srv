@@ -101,7 +101,10 @@ class KeyboardType(object):
     OTHER_MALE = 17
     OTHER_FEMALE = 18
     OTHER_DOB_UNKNOWN = 19
-    OTHER_DOD_UNKNOWN = 20
+    # На вопрос о дате смерти: жив или не знаю
+    OTHER_DOD_NONE = 20
+    # На вопрос о дате смерти: точно знаю, что умер
+    OTHER_DOD_DEAD = 53
 
     # Внести ребёнка
     #
@@ -173,6 +176,8 @@ class KeyboardType(object):
 
     COMMENT = 52
 
+    # занято: 53
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -203,15 +208,7 @@ class Misc(object):
     PROMPT_NEW_IOF = "Укажите имя отчество и фамилию - в одной строке, например: 'Иван Иванович Иванов'"
     PROMPT_EXISTING_IOF = "Укажите для\n\n%(name)s\n\nдругие имя отчество и фамилию - в одной строке, например: 'Иван Иванович Иванов'"
 
-    PROMPT_GENDER = (
-        'Будет предложено их изменить.\n\n'
-        'Сначала укажите %(his_her)s пол:'
-    )
     PROMPT_DATE_FORMAT = 'в формате ДД.ММ.ГГГГ или ММ.ГГГГ или ГГГГ'
-    PROMPT_DOB =    '%(name)s.\n\n' + \
-                    'Укажите %(his_her)s день рождения ' + PROMPT_DATE_FORMAT
-    PROMPT_DOD =    '%(name)s.\n\n' + \
-                    'Укажите %(his_her)s день смерти ' + PROMPT_DATE_FORMAT
 
     PROMPT_PAPA_MAMA_OF_CHILD = (
         'Укажите пол %(name)s'
@@ -555,12 +552,12 @@ class Misc(object):
         if response['is_active'] or response['owner_id']:
             abilities_text = '\n'.join(
                 ability['text'] for ability in response['abilities']
-            ) if response.get('abilities') else 'не задано'
+            ) if response.get('abilities') else 'не заданы'
             reply += ('Возможности: %s' % abilities_text) + '\n\n'
 
             wishes_text = '\n'.join(
                 wish['text'] for wish in response['wishes']
-            ) if response.get('wishes') else 'не задано'
+            ) if response.get('wishes') else 'не заданы'
             reply += ('Потребности: %s' % wishes_text) + '\n\n'
 
             if show_parents:
@@ -1127,7 +1124,11 @@ class Misc(object):
         if response.get('dod'):
             lifetime += 'д/с - %s\n' % response['dod']
         elif response.get('is_dead'):
-            lifetime += 'д/с - известно только, что умер\n'
+            s_dead = 'умер(ла)'
+            gender = response.get('gender')
+            if gender:
+                s_dead = 'умерла' if gender == 'f' else 'умер'
+            lifetime += f'д/с - не известна. Известно, что {s_dead}\n'
         return lifetime
 
 
@@ -1211,32 +1212,33 @@ class Misc(object):
         data: может быть ответ о пользователе из апи, или данные, сохраняемые в состоянии бота
         """
         is_owned = bool(data.get('is_owned') or data.get('owner_id'))
-        gender = 'не задан'
+        name = data.get('name', '') or data.get('first_name', '') or 'Без имени'
+        s_gender = 'не задан'
+        s_dead = 'Умер(ла)'
         if 'is_male' in data:
-            gender = 'муж.' if data['is_male'] else 'жен.'
+            s_gender = 'муж.' if data['is_male'] else 'жен.'
+            s_dead = 'Умер' if data['is_male'] else 'Умерла'
         elif 'gender' in data:
             if data['gender'] == 'm':
-                gender = 'муж.'
+                s_gender = 'муж.'
+                s_dead = 'Умер'
             elif data['gender'] == 'f':
-                gender = 'жен.'
-        dob='Дата рождения: %s' % (data.get('dob') or 'не указана')
-        dod = ''
-        if is_owned:
-            dod='\nДата смерти: %s' % (data.get('dod') or 'не указана')
-        d = dict(
-            name=data.get('name', '') or data.get('first_name', '') or 'Без имени',
-            gender=gender,
-            dob=dob,
-            dod=dod,
+                s_gender = 'жен.'
+                s_dead = 'Умерла'
+        s_dob='Дата рождения: %s' % (data.get('dob') or 'не указана')
+        dod = data.get('dod')
+        is_dead = data.get('is_dead') or bool(dod)
+        s_dod = ''
+        if is_owned and is_dead:
+            s_dod = f'\nДата смерти: {dod}' if dod else f'\n{s_dead}, дата смерти неизвестна'
+        return (
+            f'<b>{name}</b>\n'
+            f'<u>Текущие сведения:</u>\n'
+            f'Пол: {s_gender}\n'
+            f'{s_dob}'
+            f'{s_dod}'
+            '\n'
         )
-        s = (
-            '<b>%(name)s</b>\n'
-            '<u>Текущие сведения:</u>\n'
-            'Пол: %(gender)s\n'
-            '%(dob)s'
-            '%(dod)s'
-        ) % d + '\n'
-        return s
 
 
     @classmethod
