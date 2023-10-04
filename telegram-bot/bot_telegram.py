@@ -3206,7 +3206,7 @@ async def draw_dod(message, state, data):
         f'{name}\n\n'
         f'Нажмите <u>{s_alive_or_dont_know}</u>, если {s_alive.lower()} или Вы не знаете, {s_dead.lower()} {he_she} или нет\n\n'
         f'Или нажмите <u>{s_dead}</u>, если {s_dead.lower()}, но Вы не знаете, когда {he_she} умер\n\n'
-        f'Или кажите дату {his_her} смерти {Misc.PROMPT_DATE_FORMAT}, если она Вам известна'
+        f'Или укажите дату {his_her} смерти {Misc.PROMPT_DATE_FORMAT}, если она Вам известна'
     )
     await message.reply(
         prompt_dod,
