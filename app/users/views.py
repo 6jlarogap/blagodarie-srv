@@ -1467,7 +1467,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
             dob, dod =self.check_dates(request)
             self.check_gender(request)
             if 'dob' in request.data:
-                profile.dob = dob
+                profile.dob = dob or None
             if 'is_dead' in request.data:
                 profile.is_dead = bool(request.data['is_dead'])
             if 'dod' in request.data:
