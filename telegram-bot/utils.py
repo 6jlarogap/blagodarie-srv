@@ -97,22 +97,30 @@ class KeyboardType(object):
 
     IOF = 15
 
-    OTHER = 16
-    OTHER_MALE = 17
-    OTHER_FEMALE = 18
-    OTHER_DOB_UNKNOWN = 19
+    # Замена пола
+    #
+    GENDER = 16
+    GENDER_MALE = 17
+    GENDER_FEMALE = 18
+
+    # Даты рождения/смерти
+    #
+    DATES = 19
+    # не знаю, когда его, ее, мой д.р.
+    DATES_DOB_UNKNOWN = 54
     # На вопрос о дате смерти: жив или не знаю
-    OTHER_DOD_NONE = 20
-    # На вопрос о дате смерти: точно знаю, что умер
-    OTHER_DOD_DEAD = 53
+    DATES_DOD_NONE = 20
+    # На вопрос о дате смерти: точно знаю, что умер, не знаю когда
+    DATES_DOD_DEAD = 53
 
     # Внести ребёнка
     #
     CHILD = 21
+
     #  22. Свободен, но не занимать не менее полгода с 05.09.23:
-    #   См. ниже:
-    #       NEW_SON = 45
-    #       NEW_DAUGHTER = 46
+
+    NEW_SON = 45
+    NEW_DAUGHTER = 46
 
 
     # У ребёнка родитель папа или мама?
@@ -160,8 +168,7 @@ class KeyboardType(object):
 
     OFFER_ANSWER = 44
 
-    NEW_SON = 45
-    NEW_DAUGHTER = 46
+    # заняты: 45, 46
 
     # Новый собственный, его/её пол
     #
@@ -176,7 +183,7 @@ class KeyboardType(object):
 
     COMMENT = 52
 
-    # занято: 53
+    # заняты: 53, 54
 
     # Разделитель данных в call back data
     #
@@ -934,13 +941,6 @@ class Misc(object):
                         uuid=response_to['uuid'],
                         sep=KeyboardType.SEP,
                     ))
-                    inline_btn_other = InlineKeyboardButton(
-                        'Пол и даты' if is_owned_account else 'Пол и дата рождения',
-                        callback_data=callback_data_template % dict(
-                        keyboard_type=KeyboardType.OTHER,
-                        uuid=response_to['uuid'],
-                        sep=KeyboardType.SEP,
-                    ))
                     inline_btn_photo = InlineKeyboardButton(
                         'Фото',
                         callback_data=callback_data_template % dict(
@@ -948,6 +948,27 @@ class Misc(object):
                         uuid=response_to['uuid'],
                         sep=KeyboardType.SEP,
                     ))
+                    inline_btn_gender = InlineKeyboardButton(
+                        'Пол',
+                        callback_data=callback_data_template % dict(
+                        keyboard_type=KeyboardType.GENDER,
+                        uuid=response_to['uuid'],
+                        sep=KeyboardType.SEP,
+                    ))
+                    inline_btn_dates = InlineKeyboardButton(
+                        'Д.р.' if is_own_account else 'Даты',
+                        callback_data=callback_data_template % dict(
+                        keyboard_type=KeyboardType.DATES,
+                        uuid=response_to['uuid'],
+                        sep=KeyboardType.SEP,
+                    ))
+                    reply_markup.row(
+                        inline_btn_iof,
+                        inline_btn_photo,
+                        inline_btn_gender,
+                        inline_btn_dates,
+                    )
+
                     inline_btn_location = InlineKeyboardButton(
                         'Место',
                         callback_data=callback_data_template % dict(
@@ -962,13 +983,19 @@ class Misc(object):
                         uuid=response_to['uuid'],
                         sep=KeyboardType.SEP,
                     ))
-                    reply_markup.row(
-                        inline_btn_iof,
-                        inline_btn_other,
-                        inline_btn_photo,
-                        inline_btn_location,
-                        inline_btn_comment,
-                    )
+                    args_edit_2 = [inline_btn_location, inline_btn_comment]
+                    if is_owned_account:
+                        dict_change_owner = dict(
+                            keyboard_type=KeyboardType.CHANGE_OWNER,
+                            uuid=response_to['uuid'],
+                            sep=KeyboardType.SEP,
+                        )
+                        inline_btn_change_owner = InlineKeyboardButton(
+                            'Владелец',
+                            callback_data=callback_data_template % dict_change_owner,
+                        )
+                        args_edit_2.append(inline_btn_change_owner)
+                    reply_markup.row(*args_edit_2)
 
                     dict_papa_mama = dict(
                         keyboard_type=KeyboardType.FATHER,
@@ -993,7 +1020,7 @@ class Misc(object):
                         'Ребёнок',
                         callback_data=callback_data_template % dict_child,
                     )
-                    args_papa_mama_owner = [inline_btn_papa, inline_btn_mama, inline_btn_child, ]
+                    args_relatives = [inline_btn_papa, inline_btn_mama, inline_btn_child, ]
                     if response_to.get('father') or response_to.get('mother'):
                         dict_bro_sis = dict(
                             keyboard_type=KeyboardType.BRO_SIS,
@@ -1004,19 +1031,8 @@ class Misc(object):
                             'Брат/сестра',
                             callback_data=callback_data_template % dict_bro_sis,
                         )
-                        args_papa_mama_owner.append(inline_btn_bro_sis)
-                    if is_owned_account:
-                        dict_change_owner = dict(
-                            keyboard_type=KeyboardType.CHANGE_OWNER,
-                            uuid=response_to['uuid'],
-                            sep=KeyboardType.SEP,
-                        )
-                        inline_btn_change_owner = InlineKeyboardButton(
-                            'Владелец',
-                            callback_data=callback_data_template % dict_change_owner,
-                        )
-                        args_papa_mama_owner.append(inline_btn_change_owner)
-                    reply_markup.row(*args_papa_mama_owner)
+                        args_relatives.append(inline_btn_bro_sis)
+                    reply_markup.row(*args_relatives)
 
                     dict_abwishkey = dict(
                         keyboard_type=KeyboardType.ABILITY,
@@ -1202,43 +1218,6 @@ class Misc(object):
         reply_markup = InlineKeyboardMarkup()
         reply_markup.row(inline_btn_cancel)
         return reply_markup
-
-
-    @classmethod
-    def show_other_data(cls, data):
-        """
-        Показать текущие другие данные
-
-        data: может быть ответ о пользователе из апи, или данные, сохраняемые в состоянии бота
-        """
-        is_owned = bool(data.get('is_owned') or data.get('owner_id'))
-        name = data.get('name', '') or data.get('first_name', '') or 'Без имени'
-        s_gender = 'не задан'
-        s_dead = 'Умер(ла)'
-        if 'is_male' in data:
-            s_gender = 'муж.' if data['is_male'] else 'жен.'
-            s_dead = 'Умер' if data['is_male'] else 'Умерла'
-        elif 'gender' in data:
-            if data['gender'] == 'm':
-                s_gender = 'муж.'
-                s_dead = 'Умер'
-            elif data['gender'] == 'f':
-                s_gender = 'жен.'
-                s_dead = 'Умерла'
-        s_dob='Дата рождения: %s' % (data.get('dob') or 'не указана')
-        dod = data.get('dod')
-        is_dead = data.get('is_dead') or bool(dod)
-        s_dod = ''
-        if is_owned and is_dead:
-            s_dod = f'\nДата смерти: {dod}' if dod else f'\n{s_dead}, дата смерти неизвестна'
-        return (
-            f'<b>{name}</b>\n'
-            f'<u>Текущие сведения:</u>\n'
-            f'Пол: {s_gender}\n'
-            f'{s_dob}'
-            f'{s_dod}'
-            '\n'
-        )
 
 
     @classmethod

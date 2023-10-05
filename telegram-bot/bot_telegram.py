@@ -38,6 +38,13 @@ class FSMcomment(StatesGroup):
 class FSMexistingIOF(StatesGroup):
     ask = State()
 
+class FSMgender(StatesGroup):
+    ask = State()
+
+class FSMdates(StatesGroup):
+    dob = State()
+    dod = State()
+
 class FSMphoto(StatesGroup):
     ask = State()
     remove = State()
@@ -57,11 +64,6 @@ class FSMchild(StatesGroup):
 class FSMbroSis(StatesGroup):
     ask = State()
     new = State()
-
-class FSMother(StatesGroup):
-    gender = State()
-    dob = State()
-    dod = State()
 
 class FSMsendMessage(StatesGroup):
     ask = State()
@@ -2964,6 +2966,346 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
                 )
     await Misc.state_finish(state)
 
+# ------------------------------------------------------------------------------
+#   Пол
+# ------------------------------------------------------------------------------
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.GENDER,
+        KeyboardType.SEP,
+    ), c.data,
+    ), state=None,
+    )
+async def process_callback_gender(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Задать пол
+    """
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+        return
+    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    if not response_sender:
+        return
+    response_uuid = response_sender['response_uuid']
+    dict_gender = dict(
+        keyboard_type=KeyboardType.GENDER_MALE,
+        sep=KeyboardType.SEP,
+    )
+    callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
+    inline_button_male = InlineKeyboardButton('Муж', callback_data=callback_data_template % dict_gender)
+    dict_gender.update(keyboard_type=KeyboardType.GENDER_FEMALE)
+    inline_button_female = InlineKeyboardButton('Жен', callback_data=callback_data_template % dict_gender)
+    reply_markup = InlineKeyboardMarkup()
+    reply_markup.row(inline_button_male, inline_button_female, Misc.inline_button_cancel())
+    await FSMgender.ask.set()
+    state = dp.current_state()
+    async with state.proxy() as data:
+        data['uuid'] = uuid
+    his_her = Misc.his_her(response_uuid) if response_uuid['owner_id'] else 'Ваш'
+    prompt_gender = (
+        f'<b>{response_uuid["first_name"]}</b>.\n\n'
+        f'Уточните {his_her} пол:'
+    )
+    await callback_query.message.reply(
+        prompt_gender,
+        reply_markup=reply_markup,
+        disable_web_page_preview=True,
+    )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMgender.ask,
+)
+async def got_gender_text(message: types.Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    await message.reply(
+        'Ожидается выбор пола, нажатием одной из кнопок, в сообщении выше',
+        reply_markup=Misc.reply_markup_cancel_row(),
+    )
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s|%s)%s' % (
+        KeyboardType.GENDER_MALE, KeyboardType.GENDER_FEMALE,
+        KeyboardType.SEP,
+    ), c.data,
+    ), state=FSMgender.ask,
+    )
+async def process_callback_gender_got(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Ввести пол человека
+    """
+    if callback_query.message:
+        tg_user_sender = callback_query.from_user
+        uuid = None
+        async with state.proxy() as data:
+            if data.get('uuid'):
+                uuid = data['uuid']
+        if uuid:
+            response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+            if response_sender:
+                code = callback_query.data.split(KeyboardType.SEP)
+                gender = 'm' if code[0] == str(KeyboardType.GENDER_MALE) else 'f'
+                status, response = await Misc.put_user_properties(
+                    uuid=data['uuid'],
+                    gender=gender,
+                )
+                if status == 200 and response:
+                    gender = response.get('gender')
+                    s_gender = 'не известный'
+                    if gender:
+                        s_gender = 'мужской' if gender == 'm' else 'женский'
+                    bot_data = await bot.get_me()
+                    deeplink = Misc.get_deeplink_with_name(response, bot_data)
+                    await callback_query.message.reply(
+                        text= f'{deeplink}\nУстановлен пол: {s_gender}',
+                        disable_web_page_preview=True,
+                    )
+    await Misc.state_finish(state)
+
+# ------------------------------------------------------------------------------
+#   Даты
+# ------------------------------------------------------------------------------
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.DATES,
+        KeyboardType.SEP,
+    ), c.data,
+    ), state=None,
+    )
+async def process_callback_dates(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Задать пол
+    """
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+        return
+    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    if not response_sender:
+        return
+    response_uuid = response_sender['response_uuid']
+    his_her = Misc.his_her(response_uuid) if response_uuid['owner_id'] else 'Ваш'
+    title_dob = 'Не знаю'
+    prompt_dob = (
+        f'<b>{response_uuid["first_name"]}</b>\n\n'
+        f'Укажите {his_her} день рождения '
+    ) + Misc.PROMPT_DATE_FORMAT
+    if not response_uuid['owner_id']:
+        prompt_dob += (
+            f'\n\nЕсли хотите скрыть дату своего рождения '
+            f'или в самом деле не знаете, когда Ваш день рождения, нажмите <u>{title_dob}</u>'
+        )
+    callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
+    dict_dob_unknown = dict(
+        keyboard_type=KeyboardType.DATES_DOB_UNKNOWN,
+        sep=KeyboardType.SEP,
+    )
+    inline_button_dob_unknown = InlineKeyboardButton(
+        title_dob, callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict_dob_unknown
+    )
+    reply_markup = InlineKeyboardMarkup()
+    reply_markup.row(inline_button_dob_unknown, Misc.inline_button_cancel())
+    await FSMdates.dob.set()
+    state = dp.current_state()
+    async with state.proxy() as data:
+        data['uuid'] = uuid
+    await callback_query.message.reply(
+        prompt_dob,
+        reply_markup=reply_markup,
+        disable_web_page_preview=True,
+    )
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.DATES_DOB_UNKNOWN,
+        KeyboardType.SEP,
+    ), c.data,
+    ), state=FSMdates.dob,
+    )
+async def process_callback_other_dob_unknown(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Ввести пустую дату рождения
+    """
+    finish_it = True
+    if callback_query.message:
+        async with state.proxy() as data:
+            if uuid := data.get('uuid'):
+                response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+                if response_sender:
+                    finish_it = False
+                    response_uuid = response_sender['response_uuid']
+                    data['dob'] = ''
+                    if response_uuid['owner_id']:
+                        await draw_dod(callback_query.message, response_uuid)
+                    else:
+                        await put_dates(callback_query.message, callback_query.from_user, state, data)
+    if finish_it:
+        await Misc.state_finish(state)
+
+
+async def draw_dod(message, profile):
+    if profile['gender']:
+        is_male = profile['gender'] == 'm'
+        s_alive = 'Жив' if is_male else 'Жива'
+        s_alive_or_dont_know = s_alive + ' или не знаю'
+        s_dead = 'Умер' if is_male else 'Умерла'
+        s_dead_none_title = s_dead + ', дату не знаю'
+        his_her = 'его' if is_male else 'её'
+        he_she = 'он' if is_male else 'она'
+        prompt_dod = (
+            f'<b>{profile["first_name"]}</b>\n\n'
+            f'Нажмите <u>{s_alive_or_dont_know}</u>, если {s_alive.lower()} или Вы не знаете, {s_dead.lower()} {he_she} или нет\n\n'
+            f'Или нажмите <u>{s_dead_none_title}</u>, если {s_dead.lower()}, но Вы не знаете, когда {he_she} {s_dead.lower()}\n\n'
+            f'Или укажите дату {his_her} смерти {Misc.PROMPT_DATE_FORMAT}, если она Вам известна'
+        )
+    else:
+        s_alive = 'Жив(а)'
+        s_alive_or_dont_know = 'Жив(а) или не знаю'
+        s_dead = 'Умер(ла)'
+        s_dead_none_title = s_dead + ', дату не знаю'
+        prompt_dod = (
+            f'<b>{profile["first_name"]}</b>\n\n'
+            f'Нажмите <u>{s_alive_or_dont_know}</u>, если {s_alive.lower()} или Вы не знаете, {s_dead.lower()} или нет\n\n'
+            f'Или нажмите <u>{s_dead_none_title}</u>, если {s_dead.lower()}, но Вы не знаете дату смерти\n\n'
+            f'Или укажите дату смерти {Misc.PROMPT_DATE_FORMAT}'
+        )
+
+    callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
+    dict_callback = dict(
+        keyboard_type=KeyboardType.DATES_DOD_NONE,
+        sep=KeyboardType.SEP,
+    )
+    inline_button_alive = InlineKeyboardButton(
+        s_alive_or_dont_know,
+        callback_data=callback_data_template % dict_callback
+    )
+    dict_callback.update(keyboard_type=KeyboardType.DATES_DOD_DEAD)
+    inline_button_dead = InlineKeyboardButton(
+        s_dead_none_title,
+        callback_data=callback_data_template % dict_callback
+    )
+    reply_markup = InlineKeyboardMarkup()
+    reply_markup.row(inline_button_alive, inline_button_dead, Misc.inline_button_cancel())
+    await FSMdates.dod.set()
+    await message.reply(
+        prompt_dod,
+        reply_markup=reply_markup,
+    )
+
+
+async def put_dates(message, tg_user_sender, state, data):
+    if data.get('uuid'):
+        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=data['uuid'])
+        if response_sender:
+            dob = data.get('dob', '')
+            dod = data.get('dod', '')
+            is_dead = data.get('is_dead', '')
+            status, response = await Misc.put_user_properties(
+                uuid=data['uuid'],
+                dob=dob,
+                dod=dod,
+                is_dead = '1' if is_dead or dod else '',
+            )
+            if status == 200 and response:
+                await Misc.show_cards(
+                    [response],
+                    message,
+                    bot,
+                    response_from=response_sender,
+                    tg_user_from=tg_user_sender,
+                )
+            elif status == 400 and response and response.get('message'):
+                dates = 'даты' if response_sender['response_uuid']['owner_id'] else 'дату рождения'
+                await message.reply(f'Ошибка!\n{response["message"]}\n\nНазначайте {dates} по новой')
+            else:
+                await message.reply(Misc.MSG_ERROR_API)
+    await Misc.state_finish(state)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMdates.dob,
+)
+async def get_dob(message: types.Message, state: FSMContext):
+    if message.content_type != ContentType.TEXT:
+        await message.reply(
+            Misc.MSG_ERROR_TEXT_ONLY,
+            reply_markup=Misc.reply_markup_cancel_row()
+        )
+        return
+    if await is_it_command(message, state):
+        return
+    finish_it = True
+    if message_text := Misc.strip_text(message.text):
+        async with state.proxy() as data:
+            if data.get('uuid'):
+                if response_sender := await Misc.check_owner(owner_tg_user=message.from_user, uuid=data['uuid']):
+                    finish_it = False
+                    data['dob'] = message_text
+                    response_uuid = response_sender['response_uuid']
+                    if response_uuid['owner_id']:
+                        await draw_dod(message, response_uuid)
+                    else:
+                        await put_dates(message, message.from_user, state, data)
+    if finish_it:
+        await Misc.state_finish(state)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(r'^(%s|%s)%s$' % (
+        KeyboardType.DATES_DOD_NONE, KeyboardType.DATES_DOD_DEAD,
+        KeyboardType.SEP,
+    ), c.data,
+    ), state=FSMdates.dod,
+    )
+async def process_callback_dates_DOD_NONE_or_DEAD(callback_query: types.CallbackQuery, state: FSMContext):
+    finish_it = True
+    if callback_query.message:
+        async with state.proxy() as data:
+            if uuid := data.get('uuid'):
+                if response_sender := await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid):
+                    finish_it = False
+                    code = callback_query.data.split(KeyboardType.SEP)
+                    data['dod'] = ''
+                    data['is_dead'] = code[0] == str(KeyboardType.DATES_DOD_DEAD)
+                    await put_dates(callback_query.message, callback_query.from_user, state, data)
+    if finish_it:
+        await Misc.state_finish(state)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMdates.dod,
+)
+async def get_dod(message: types.Message, state: FSMContext):
+    if message.content_type != ContentType.TEXT:
+        await message.reply(
+            Misc.MSG_ERROR_TEXT_ONLY,
+            reply_markup=Misc.reply_markup_cancel_row()
+        )
+        return
+    if await is_it_command(message, state):
+        return
+    finish_it = True
+    if message_text := Misc.strip_text(message.text):
+        async with state.proxy() as data:
+            if data.get('uuid'):
+                if response_sender := await Misc.check_owner(owner_tg_user=message.from_user, uuid=data['uuid']):
+                    finish_it = False
+                    data['is_dead'] = True
+                    data['dod'] = message_text
+                    await put_dates(message, message.from_user, state, data)
+    if finish_it:
+        await Misc.state_finish(state)
+
+# ------------------------------------------------------------------------------
+#   Комментарий
+# ------------------------------------------------------------------------------
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
@@ -2975,9 +3317,6 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
     ), state=None,
     )
 async def process_callback_comment(callback_query: types.CallbackQuery, state: FSMContext):
-    """
-    Заменить имя, фамилию, отчество
-    """
     if not (uuid := Misc.getuuid_from_callback(callback_query)):
         return
     response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
@@ -3029,318 +3368,9 @@ async def put_comment(message: types.Message, state: FSMContext):
     await Misc.state_finish(state)
 
 
-@dp.callback_query_handler(
-    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
-        KeyboardType.OTHER,
-        KeyboardType.SEP,
-        # uuid своё ил родственника           # 1
-        # KeyboardType.SEP,
-    ), c.data,
-    ), state=None,
-    )
-async def process_callback_other(callback_query: types.CallbackQuery, state: FSMContext):
-    """
-    Ввести другие данные человека: пол, дата рождения, дата смерти, если это родственник
-    """
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
-        return
-    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
-    if not response_sender:
-        return
-    response_uuid = response_sender['response_uuid']
-    dict_gender = dict(
-        keyboard_type=KeyboardType.OTHER_MALE,
-        sep=KeyboardType.SEP,
-    )
-    callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
-    inline_button_male = InlineKeyboardButton('Муж', callback_data=callback_data_template % dict_gender)
-    dict_gender.update(keyboard_type=KeyboardType.OTHER_FEMALE)
-    inline_button_female = InlineKeyboardButton('Жен', callback_data=callback_data_template % dict_gender)
-    reply_markup = InlineKeyboardMarkup()
-    reply_markup.row(inline_button_male, inline_button_female, Misc.inline_button_cancel())
-    await FSMother.gender.set()
-    state = dp.current_state()
-    async with state.proxy() as data:
-        data['uuid'] = uuid
-        data['gender'] = response_uuid['gender']
-        data['is_owned'] = bool(response_uuid['owner_id'])
-        data['name'] = response_uuid['first_name']
-    if response_sender['uuid'] == response_uuid['uuid']:
-        his_her = 'Ваш'
-    else:
-        his_her = 'его (её)'
-        if data['gender']:
-            his_her = 'её' if data['gender'] == 'f' else 'его'
-    prompt_gender = (
-        f'Будет предложено их изменить или подтвердить.\n\n'
-        f'Сначала уточните {his_her} пол:'
-    )
-    await callback_query.message.reply(
-        Misc.show_other_data(response_uuid) + '\n' + \
-        prompt_gender,
-        reply_markup=reply_markup,
-        disable_web_page_preview=True,
-    )
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    content_types=ContentType.all(),
-    state=FSMother.gender,
-)
-async def got_gender_text(message: types.Message, state: FSMContext):
-    await message.reply(
-        'Ожидается выбор пола, нажатием одной из кнопок, в сообщении выше',
-        reply_markup=Misc.reply_markup_cancel_row(),
-    )
-
-
-@dp.callback_query_handler(
-    lambda c: c.data and re.search(r'^(%s|%s)%s' % (
-        KeyboardType.OTHER_MALE, KeyboardType.OTHER_FEMALE,
-        KeyboardType.SEP,
-    ), c.data,
-    ), state=FSMother.gender,
-    )
-async def process_callback_other_gender(callback_query: types.CallbackQuery, state: FSMContext):
-    """
-    Ввести другие данные человека: пол, дата рождения, дата смерти, если это родственник
-    """
-    if callback_query.message:
-        tg_user_sender = callback_query.from_user
-        code = callback_query.data.split(KeyboardType.SEP)
-        uuid = None
-        async with state.proxy() as data:
-            if data.get('uuid'):
-                uuid = data['uuid']
-            if uuid:
-                response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
-                if not response_sender:
-                    await Misc.state_finish(state)
-                    return
-                data['is_male'] = code[0] == str(KeyboardType.OTHER_MALE)
-                response_uuid = response_sender['response_uuid']
-                dict_dob_unknown = dict(
-                    keyboard_type=KeyboardType.OTHER_DOB_UNKNOWN,
-                    sep=KeyboardType.SEP,
-                )
-                callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
-                inline_button_dob_unknown = InlineKeyboardButton(
-                    'Не знаю', callback_data=callback_data_template % dict_dob_unknown
-                )
-                reply_markup = InlineKeyboardMarkup()
-                reply_markup.row(inline_button_dob_unknown, Misc.inline_button_cancel())
-                await FSMother.dob.set()
-                if not data.get('is_owned'):
-                    his_her = 'Ваш'
-                elif data['is_male']:
-                    his_her = 'его'
-                else:
-                    his_her = 'её'
-                prompt_dob = (
-                    f'{data["name"]}\n\n'
-                    f'Укажите {his_her} день рождения '
-                ) + Misc.PROMPT_DATE_FORMAT
-                await callback_query.message.reply(prompt_dob, reply_markup=reply_markup)
-            else:
-                await Misc.state_finish(state)
-    else:
-        await Misc.state_finish(state)
-
-async def put_other_data(message, tg_user_sender, state, data):
-    if data.get('uuid') and isinstance(data.get('is_male'), bool):
-        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=data['uuid'])
-        if response_sender:
-            dob = data.get('dob', '')
-            dod = data.get('dod', '')
-            is_dead = data.get('is_dead', '')
-            is_male = data['is_male']
-            status, response = await Misc.put_user_properties(
-                uuid=data['uuid'],
-                gender='m' if is_male else 'f',
-                dob=dob,
-                dod=dod,
-                is_dead = '1' if is_dead or dod else '',
-            )
-            if status == 200 and response:
-                await message.reply('Данные внесены:\n' + Misc.show_other_data(response), disable_web_page_preview=True,)
-                await Misc.show_cards(
-                    [response],
-                    message,
-                    bot,
-                    response_from=response_sender,
-                    tg_user_from=tg_user_sender,
-                )
-            elif status == 400 and response and response.get('message'):
-                await message.reply('Ошибка!\n%s\n\nНазначайте сведения по новой' % response['message'])
-            else:
-                await message.reply(Misc.MSG_ERROR_API)
-    await Misc.state_finish(state)
-
-
-async def draw_dod(message, state, data):
-    dict_callback = dict(
-        keyboard_type=KeyboardType.OTHER_DOD_NONE,
-        sep=KeyboardType.SEP,
-    )
-    callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
-    name = data.get('name', '')
-    s_alive = 'Жив' if data['is_male'] else 'Жива'
-    s_alive_or_dont_know = s_alive + ' или не знаю'
-    s_dead = 'Умер' if data['is_male'] else 'Умерла'
-    s_dead_none_title = s_dead + ', дату не знаю'
-    his_her = 'его' if data['is_male'] else 'её'
-    he_she = 'он' if data['is_male'] else 'она'
-    inline_button_alive = InlineKeyboardButton(
-        s_alive_or_dont_know,
-        callback_data=callback_data_template % dict_callback
-    )
-    dict_callback.update(keyboard_type=KeyboardType.OTHER_DOD_DEAD)
-    inline_button_dead = InlineKeyboardButton(
-        s_dead_none_title,
-        callback_data=callback_data_template % dict_callback
-    )
-    reply_markup = InlineKeyboardMarkup()
-    reply_markup.row(inline_button_alive, inline_button_dead, Misc.inline_button_cancel())
-    await FSMother.dod.set()
-    prompt_dod = (
-        f'{name}\n\n'
-        f'Нажмите <u>{s_alive_or_dont_know}</u>, если {s_alive.lower()} или Вы не знаете, {s_dead.lower()} {he_she} или нет\n\n'
-        f'Или нажмите <u>{s_dead_none_title}</u>, если {s_dead.lower()}, но Вы не знаете, когда {he_she} {s_dead.lower()}\n\n'
-        f'Или укажите дату {his_her} смерти {Misc.PROMPT_DATE_FORMAT}, если она Вам известна'
-    )
-    await message.reply(
-        prompt_dod,
-        reply_markup=reply_markup,
-    )
-
-@dp.callback_query_handler(
-    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
-        KeyboardType.OTHER_DOB_UNKNOWN,
-        KeyboardType.SEP,
-    ), c.data,
-    ), state=FSMother.dob,
-    )
-async def process_callback_other_dob_unknown(callback_query: types.CallbackQuery, state: FSMContext):
-    """
-    Ввести пустую дату рождения
-    """
-    if callback_query.message:
-        async with state.proxy() as data:
-            if data.get('uuid') and isinstance(data.get('is_male'), bool) and isinstance(data.get('is_owned'), bool):
-                data['dob'] = ''
-                if data.get('is_owned'):
-                    await draw_dod(callback_query.message, state, data)
-                else:
-                    await put_other_data(callback_query.message, callback_query.from_user, state, data)
-            else:
-                await Misc.state_finish(state)
-    else:
-        await Misc.state_finish(state)
-
-
-@dp.callback_query_handler(
-    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
-        KeyboardType.OTHER_DOD_NONE,
-        KeyboardType.SEP,
-    ), c.data,
-    ), state=FSMother.dod,
-    )
-async def process_callback_OTHER_DOD_NONE(callback_query: types.CallbackQuery, state: FSMContext):
-    """
-    Ввести пустую дату смерти
-    """
-    if callback_query.message:
-        async with state.proxy() as data:
-            if data.get('uuid') and isinstance(data.get('is_male'), bool) and isinstance(data.get('is_owned'), bool):
-                data['dod'] = ''
-                await put_other_data(callback_query.message, callback_query.from_user, state, data)
-            else:
-                await Misc.state_finish(state)
-    else:
-        await Misc.state_finish(state)
-
-
-@dp.callback_query_handler(
-    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
-        KeyboardType.OTHER_DOD_DEAD,
-        KeyboardType.SEP,
-    ), c.data,
-    ), state=FSMother.dod,
-    )
-async def process_callback_OTHER_DOD_DEAD(callback_query: types.CallbackQuery, state: FSMContext):
-    """
-    Ввести пустую дату смерти
-    """
-    if callback_query.message:
-        async with state.proxy() as data:
-            if data.get('uuid') and isinstance(data.get('is_male'), bool) and isinstance(data.get('is_owned'), bool):
-                data['is_dead'] = True
-                await put_other_data(callback_query.message, callback_query.from_user, state, data)
-            else:
-                await Misc.state_finish(state)
-    else:
-        await Misc.state_finish(state)
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    content_types=ContentType.all(),
-    state=FSMother.dob,
-)
-async def get_dob(message: types.Message, state: FSMContext):
-    if message.content_type != ContentType.TEXT:
-        await message.reply(
-            Misc.MSG_ERROR_TEXT_ONLY,
-            reply_markup=Misc.reply_markup_cancel_row()
-        )
-        return
-    if await is_it_command(message, state):
-        return
-    async with state.proxy() as data:
-        if data.get('uuid') and isinstance(data.get('is_male'), bool) and isinstance(data.get('is_owned'), bool):
-            message_text = Misc.strip_text(message.text)
-            dob = ''
-            try:
-                dob = message_text.split()[0]
-            except IndexError:
-                pass
-            data['dob'] = dob
-            if data.get('is_owned'):
-                await draw_dod(message, state, data)
-            else:
-                await put_other_data(message, message.from_user, state, data)
-        else:
-            await Misc.state_finish(state)
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    content_types=ContentType.all(),
-    state=FSMother.dod,
-)
-async def get_dod(message: types.Message, state: FSMContext):
-    if message.content_type != ContentType.TEXT:
-        await message.reply(
-            Misc.MSG_ERROR_TEXT_ONLY,
-            reply_markup=Misc.reply_markup_cancel_row()
-        )
-        return
-    if await is_it_command(message, state):
-        return
-    async with state.proxy() as data:
-        if data.get('uuid') and isinstance(data.get('is_male'), bool) and isinstance(data.get('is_owned'), bool):
-            message_text = Misc.strip_text(message.text)
-            dod = ''
-            try:
-                dod = message_text.split()[0]
-            except IndexError:
-                pass
-            data['dod'] = dod
-            await put_other_data(message, message.from_user, state, data)
-        else:
-            await Misc.state_finish(state)
-
+# ------------------------------------------------------------------------------
+#   Отправить сообщение
+# ------------------------------------------------------------------------------
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
@@ -3370,6 +3400,96 @@ async def process_callback_send_message(callback_query: types.CallbackQuery, sta
         reply_markup=Misc.reply_markup_cancel_row(),
         disable_web_page_preview=True,
     )
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMsendMessage.ask,
+)
+async def got_message_to_send(message: types.Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    msg_saved = 'Сообщение сохранено'
+    async with state.proxy() as data:
+        if data.get('uuid'):
+            status_to, profile_to = await Misc.get_user_by_uuid(data['uuid'], with_owner=True)
+            if status_to == 200 and profile_to:
+                status_from, profile_from = await Misc.post_tg_user(message.from_user)
+                if status_from == 200 and profile_from:
+
+                    # Возможны варианты с получателем:
+                    #   - самому себе                               нет смысла отправлять
+                    #   - своему овнеду                             нет смысла отправлять
+                    #   - чужому овнеду с владельцем с телеграмом
+                    #   - чужому овнеду с владельцем без телеграма  нет смысла отправлять
+                    #   - юзеру с телеграмом
+                    #   - юзеру без телеграма                       нет смысла отправлять
+
+                    # Есть ли смысл отправлять и если есть то кому?
+                    #
+                    tg_user_to_tg_data = []
+                    user_to_delivered_uuid = None
+                    if profile_from['uuid'] == profile_to['uuid']:
+                        # самому себе
+                        user_to_delivered_uuid = profile_to['uuid']
+                    elif profile_to['owner'] and profile_to['owner']['uuid'] == profile_from['uuid']:
+                        # своему овнеду
+                        pass
+                    elif profile_to['owner'] and profile_to['owner']['uuid'] != profile_from['uuid']:
+                        # чужому овнеду: телеграм у него есть?
+                        if profile_to['owner'].get('tg_data'):
+                            tg_user_to_tg_data = profile_to['owner']['tg_data']
+                            user_to_delivered_uuid = profile_to['owner']['uuid']
+                    elif profile_to.get('tg_data'):
+                        tg_user_to_tg_data = profile_to['tg_data']
+                        user_to_delivered_uuid = profile_to['uuid']
+                    if tg_user_to_tg_data:
+                        bot_data = await bot.get_me()
+                        for tgd in tg_user_to_tg_data:
+                            try:
+                                try:
+                                    await bot.send_message(
+                                        tgd['tg_uid'],
+                                        text=Misc.MSG_YOU_GOT_MESSAGE % Misc.get_deeplink_with_name(profile_from, bot_data),
+                                        disable_web_page_preview=True,
+                                    )
+                                    await bot.forward_message(
+                                        tgd['tg_uid'],
+                                        from_chat_id=message.chat.id,
+                                        message_id=message.message_id,
+                                    )
+                                    await message.reply('Сообщение доставлено')
+                                except CantTalkWithBots:
+                                    await message.reply('Сообщения к боту запрещены')
+                            except (ChatNotFound, CantInitiateConversation):
+                                user_to_delivered_uuid = None
+                                await message.reply(msg_saved)
+                    else:
+                        await message.reply(msg_saved)
+
+                payload_log_message = dict(
+                    tg_token=settings.TOKEN,
+                    from_chat_id=message.chat.id,
+                    message_id=message.message_id,
+                    user_from_uuid=profile_from['uuid'],
+                    user_to_uuid=profile_to['uuid'],
+                    user_to_delivered_uuid=user_to_delivered_uuid,
+                )
+                try:
+                    status_log, response_log = await Misc.api_request(
+                        path='/api/tg_message',
+                        method='post',
+                        json=payload_log_message,
+                    )
+                except:
+                    pass
+
+    await Misc.state_finish(state)
+
+
+# ------------------------------------------------------------------------------
+#   Архив (показать сообщения)
+# ------------------------------------------------------------------------------
 
 @dp.callback_query_handler(
     lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
@@ -3459,92 +3579,7 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
             msg = 'Сообщения не найдены'
         await bot.send_message(tg_user_sender.id, text=msg, disable_web_page_preview=True,)
 
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    content_types=ContentType.all(),
-    state=FSMsendMessage.ask,
-)
-async def got_message_to_send(message: types.Message, state: FSMContext):
-    if await is_it_command(message, state):
-        return
-    msg_saved = 'Сообщение сохранено'
-    async with state.proxy() as data:
-        if data.get('uuid'):
-            status_to, profile_to = await Misc.get_user_by_uuid(data['uuid'], with_owner=True)
-            if status_to == 200 and profile_to:
-                status_from, profile_from = await Misc.post_tg_user(message.from_user)
-                if status_from == 200 and profile_from:
-
-                    # Возможны варианты с получателем:
-                    #   - самому себе                               нет смысла отправлять
-                    #   - своему овнеду                             нет смысла отправлять
-                    #   - чужому овнеду с владельцем с телеграмом
-                    #   - чужому овнеду с владельцем без телеграма  нет смысла отправлять
-                    #   - юзеру с телеграмом
-                    #   - юзеру без телеграма                       нет смысла отправлять
-
-                    # Есть ли смысл отправлять и если есть то кому?
-                    #
-                    tg_user_to_tg_data = []
-                    user_to_delivered_uuid = None
-                    if profile_from['uuid'] == profile_to['uuid']:
-                        # самому себе
-                        user_to_delivered_uuid = profile_to['uuid']
-                    elif profile_to['owner'] and profile_to['owner']['uuid'] == profile_from['uuid']:
-                        # своему овнеду
-                        pass
-                    elif profile_to['owner'] and profile_to['owner']['uuid'] != profile_from['uuid']:
-                        # чужому овнеду: телеграм у него есть?
-                        if profile_to['owner'].get('tg_data'):
-                            tg_user_to_tg_data = profile_to['owner']['tg_data']
-                            user_to_delivered_uuid = profile_to['owner']['uuid']
-                    elif profile_to.get('tg_data'):
-                        tg_user_to_tg_data = profile_to['tg_data']
-                        user_to_delivered_uuid = profile_to['uuid']
-                    if tg_user_to_tg_data:
-                        bot_data = await bot.get_me()
-                        for tgd in tg_user_to_tg_data:
-                            try:
-                                try:
-                                    await bot.send_message(
-                                        tgd['tg_uid'],
-                                        text=Misc.MSG_YOU_GOT_MESSAGE % Misc.get_deeplink_with_name(profile_from, bot_data),
-                                        disable_web_page_preview=True,
-                                    )
-                                    await bot.forward_message(
-                                        tgd['tg_uid'],
-                                        from_chat_id=message.chat.id,
-                                        message_id=message.message_id,
-                                    )
-                                    await message.reply('Сообщение доставлено')
-                                except CantTalkWithBots:
-                                    await message.reply('Сообщения к боту запрещены')
-                            except (ChatNotFound, CantInitiateConversation):
-                                user_to_delivered_uuid = None
-                                await message.reply(msg_saved)
-                    else:
-                        await message.reply(msg_saved)
-
-                payload_log_message = dict(
-                    tg_token=settings.TOKEN,
-                    from_chat_id=message.chat.id,
-                    message_id=message.message_id,
-                    user_from_uuid=profile_from['uuid'],
-                    user_to_uuid=profile_to['uuid'],
-                    user_to_delivered_uuid=user_to_delivered_uuid,
-                )
-                try:
-                    status_log, response_log = await Misc.api_request(
-                        path='/api/tg_message',
-                        method='post',
-                        json=payload_log_message,
-                    )
-                except:
-                    pass
-
-    await Misc.state_finish(state)
-
+# ------------------------------------------------------------------------------
 
 async def do_process_ability(message: types.Message, uuid=None):
     reply_markup = Misc.reply_markup_cancel_row()
@@ -3603,7 +3638,6 @@ async def process_callback_ability(callback_query: types.CallbackQuery, state: F
     except IndexError:
         uuid = None
     await do_process_ability(callback_query.message, uuid=uuid)
-
 
 
 @dp.callback_query_handler(
