@@ -2848,30 +2848,40 @@ api_invite_use_token = ApiInviteUseToken.as_view()
 class GetTrustGenesisMixin(object):
     def get(self, request):
         try:
-            chat_id = request.GET.get('chat_id')
-            fmt = request.GET.get('fmt', 'd3js')
-            try:
-                recursion_depth = int(request.GET.get('depth', 0) or 0)
-            except (TypeError, ValueError,):
-                recursion_depth = 0
-            max_recursion_depth = settings.MAX_RECURSION_DEPTH_IN_GROUP if chat_id else settings.MAX_RECURSION_DEPTH
-            if recursion_depth <= 0 or recursion_depth > max_recursion_depth:
-                recursion_depth = max_recursion_depth
-
-            uuid = request.GET.get('uuid', '').strip(' ,')
-            if chat_id:
-                data = self.get_chat_mesh(request, chat_id, recursion_depth)
-            elif uuid:
-                uuids = re.split(r'[, ]+', uuid)
-                len_uuids = len(uuids)
-                if len_uuids == 1:
-                    data = self.get_tree(request, uuids[0], recursion_depth, fmt)
-                elif len_uuids == 2:
-                    data = self.get_shortest_path(request, uuids, recursion_depth, fmt)
-                else:
-                    raise ServiceException("Допускается  uuid (дерево) или 2 uuid's (найти путь между)")
+            is_request_genesis = 'genesis' in request.path.lower()
+            if closest := is_request_genesis and request.GET.get('closest'):
+                # Получить быстро родителей и детей id в формате 3d-force
+                # (вызывается по щелчку на разворачиваемого пользователя в дереве)
+                try:
+                    closest = int(closest)
+                except ValueError:
+                    raise ServiceException("closest должен быть положительным числом")
+                data = self.get_closect_relations(request, closest)
             else:
-                raise ServiceException('Не заданы параметры uuid или chat_id')
+                fmt = request.GET.get('fmt', 'd3js')
+                try:
+                    recursion_depth = int(request.GET.get('depth', 0) or 0)
+                except (TypeError, ValueError,):
+                    recursion_depth = 0
+
+                uuid = request.GET.get('uuid', '').strip(' ,')
+                chat_id = is_request_genesis and request.GET.get('chat_id')
+                max_recursion_depth = settings.MAX_RECURSION_DEPTH_IN_GROUP if chat_id else settings.MAX_RECURSION_DEPTH
+                if recursion_depth <= 0 or recursion_depth > max_recursion_depth:
+                    recursion_depth = max_recursion_depth
+                if uuid:
+                    uuids = re.split(r'[, ]+', uuid)
+                    len_uuids = len(uuids)
+                    if len_uuids == 1:
+                        data = self.get_tree(request, uuids[0], recursion_depth, fmt)
+                    elif len_uuids == 2:
+                        data = self.get_shortest_path(request, uuids, recursion_depth, fmt)
+                    else:
+                        raise ServiceException("Допускается  uuid (дерево) или 2 uuid's (найти путь между)")
+                elif chat_id:
+                    data = self.get_chat_mesh(request, chat_id, recursion_depth)
+                else:
+                    raise ServiceException('Не заданы параметры необходимые параметры')
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
@@ -2898,7 +2908,7 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
 
     Также отдается профиль авторизованного пользователя, даже если его нет в выборке.
     """
-    # permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         fmt = request.GET.get('fmt', 'd3js')
@@ -3013,14 +3023,16 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
     Если задан параметр chat_id, то показ родственных связей между участниками
     телеграм группы/канала, возможно опосредованный через иных пользователей
 
+    Если задан параметр closest
+        Отдать максимально быстро родителей и детей user'a с user__pk = closest
+
     Если задан параметр uuid
         Если указан один uuid:
             Возвращает информацию о пользователе, а также его родственных связях (дерево рода).
+            С возможностью разворачивания связей
 
         Если указаны 2 uuid через запятую:
             Возвращает кратчайший путь (пути) между двумя родственниками
-    В любом случае возвращаются данные авторизованного пользователя и
-    его доверия (недоверия) к пользователям в цепочках связей.
 
     Параметры
     Если задан параметр uuid:
@@ -3042,26 +3054,6 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             показать прямых потомков от пользователя с uuid
           Если указан один uuid и отсутствуют или пустые оба параметра up и down,
           будет показана вся сеть родни от пользователя с uuid, включая двоюродных и т.д.
-        collapse:
-            (если указан один uuid)
-            =что-то: true; отсутствует или пусто: false
-            Отдать результат в соответствии с потребностями следующего:
-                показывать на фронте не всё дерево от user'a к предкам, потомкам
-                в соответствии с 4 возможнымии комбинациями параметров up, down,
-                а только user'a с ближайшими связями:
-                    дети, если только не задан лишь up=on,
-                    родители, если только не задан лишь down=on
-                чтоб потом можно было связи на фронте сворачивать, разворачивать
-            Это достигается добавлением в каждый link (connection) величин
-            t_source, t_target, которые могут отличаться от source, target.
-
-            Устроить collapse, expand на фронте по щелчкам на узлы можно только
-            в дереве, в котором нет комбинаций связей типа (source-target):
-            1-2, 2-3, 4-3 (1: человек, 2: сын, 3: внук, 4: мама внука),
-            а только связи типа 1-2, 2-3, 3-4.
-            Такие связи отдаются из postgresql функции и для приведенного
-            выше родства t_source, t_target будут:
-            1-2, 2-3 (is_child=True в строке из postgresql function), 3-4 (is_child=False)
 
     Если задан параметр chat_id:
         chat_id:
@@ -3075,7 +3067,43 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             сколько показывать участников группы в очередной странице,
             по умолчанию settings.MAX_RECURSION_COUNT_IN_GROUP
     """
-    # permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated,)
+
+    def get_closect_relations(self, request, closest):
+        q = Q(user_to__isnull=False) & Q(user_from__pk=closest) & (Q(is_father=True) | Q(is_mother=True))
+        root_node = None
+        nodes = []
+        links = []
+        fmt = '3d-force-graph'
+        for l in CurrentState.objects.filter(q). \
+                           select_related(
+                               'user_from', 'user_from__profile',
+                               'user_to', 'user_to__profile',
+                           ).distinct():
+            if l.is_child:
+                source = l.user_from.pk
+                target = l.user_to.pk
+            else:
+                source = l.user_to.pk
+                target = l.user_from.pk
+            link = dict(
+                source=source, target=target,
+                t_source=l.user_from.pk, t_target=l.user_to.pk,
+                is_child=True,
+            )
+            if not root_node:
+                root_node = l.user_from.profile.data_dict(request, thumb=dict(mark_dead=True), fmt=fmt)
+                root_node.update(parent_ids=[], complete=True)
+            relation = l.user_to.profile.data_dict(request, thumb=dict(mark_dead=True), fmt=fmt)
+            relation.update(parent_ids=[], complete=False)
+            nodes.append(relation)
+            links.append(link)
+            if not l.is_child:
+                root_node['parent_ids'].append(l.user_to.pk)
+        # Важно: root_node должен быть последним!
+        if root_node:
+            nodes.append(root_node)
+        return dict(nodes=nodes, links=links)
 
     def get_chat_mesh(self, request, chat_id, recursion_depth):
         users = []
@@ -3385,10 +3413,6 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
     """
     permission_classes = (IsAuthenticated,)
 
-    def get_chat_mesh(self, request, chat_id, recursion_depth):
-        raise ServiceException('Не реализовано, ибо не востребовано')
-        #return dict(users=[], connections=[], trust_connections=[])
-
     def get_shortest_path(self, request, uuids, recursion_depth, fmt='d3js'):
         """
         Кратчайший путь доверий между двумя пользователями
@@ -3499,7 +3523,7 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
             pair = '%s/%s' % (cs.user_from_id, cs.user_to_id)
             pair_reverse = '%s/%s' % (cs.user_to_id, cs.user_from_id)
             if pair in pairs or pair_reverse in pairs:
-                d = cs.data_dict(show_trust=True)
+                d = cs.data_dict(show_trust=True, fmt=fmt)
                 d.update(
                     # Это ради фронта, который заточен для обработки родственных
                     # деревьев
@@ -3510,7 +3534,7 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
         users = []
         user_pks.add(user_q.pk)
         for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
-            users.append(profile.data_dict(request))
+            users.append(profile.data_dict(request, fmt=fmt))
 
         return dict(users=users, connections=connections, trust_connections=[])
 
