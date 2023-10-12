@@ -3070,7 +3070,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             сколько показывать участников группы в очередной странице,
             по умолчанию settings.MAX_RECURSION_COUNT_IN_GROUP
     """
-    # permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated,)
 
     def get_closect_relations(self, request, closest):
         q = Q(user_to__isnull=False) & Q(user_from__pk=closest) & (Q(is_father=True) | Q(is_mother=True))
