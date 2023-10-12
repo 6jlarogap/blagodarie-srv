@@ -2873,7 +2873,10 @@ class GetTrustGenesisMixin(object):
                     uuids = re.split(r'[, ]+', uuid)
                     len_uuids = len(uuids)
                     if len_uuids == 1:
-                        data = self.get_tree(request, uuids[0], recursion_depth, fmt)
+                        if is_request_genesis and request.GET.get('new'):
+                            data = self.get_tree_new(request, uuids[0], recursion_depth, fmt)
+                        else:
+                            data = self.get_tree(request, uuids[0], recursion_depth, fmt)
                     elif len_uuids == 2:
                         data = self.get_shortest_path(request, uuids, recursion_depth, fmt)
                     else:
@@ -3256,6 +3259,162 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
         else:
             return dict(users=users, connections=connections, trust_connections=[])
 
+    def get_tree_new(self, request, uuid, recursion_depth, fmt='d3js'):
+        """
+        Дерево родственных связей от пользователя
+        """
+        related = ('user', 'owner', 'ability',)
+        user_q, profile_q = self.check_user_uuid(uuid, related=related)
+
+        nodes_by_id = dict()
+        root_node = dict(
+            id=user_q.pk,
+            uuid=profile_q.uuid,
+            first_name=user_q.first_name,
+            photo=Profile.image_thumb(
+                request, profile_q.photo,
+                method='crop-rgb0033cc-frame-4',
+                put_default_avatar=True,
+                default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile_q.gender),
+                mark_dead=profile_q.is_dead,
+        ))
+
+        v_up = bool(request.GET.get('up'))
+        v_down = bool(request.GET.get('down'))
+        v_all = not v_up and not v_down
+        v_is_child = 'True' if v_down else 'False'
+        sql_req_dict = dict(
+                user_id=user_q.pk,
+                recursion_depth=recursion_depth,
+                v_all='True' if v_all else 'False',
+                v_is_child=v_is_child,
+        )
+        sql_req_str = (
+
+            # Вызов postgresql функции.
+            # Родственные связи, начиная с пользователя user_id
+            #  recursion_depth:
+            #      максимальное число итераций при проходе по дереву связей
+            #  v_all:
+            #      показывать ли все связи, то есть проходим и по потомкам,
+            #      и по предкам, получаем в т.ч. тетей, двоюродных и т.д.
+            #      Если True, то v_is_child роли не играет
+            #  v_is_child:
+            #      При v_all == False:
+            #          v_is_child == True:     проходим только по детям.
+            #          v_is_child == False:    проходим только по предкам.
+
+            'select * from find_genesis_tree('
+                '%(user_id)s,'
+                '%(recursion_depth)s,'
+                '%(v_all)s,'
+                '%(v_is_child)s'
+            ')'
+        )
+
+        pairs = []
+        final_nodes = set()
+        with connection.cursor() as cursor:
+            cursor.execute(sql_req_str % sql_req_dict)
+            recs = self.dictfetchall(cursor)
+        for rec in recs:
+            # tree_links:
+            #   направление развертывания по дереву от корня к окраинам
+            # parent_ids:
+            #   нужны для решения проблемы на фронте:
+            #       Развернули человека, появились его папа с мамой, оба свернутые.
+            #       Разворачиваем папу, в дереве появляется его дети,
+            #       все свернутые. Поскольку дети свернутые, то у них
+            #       не будет связи с их свернутой мамой!
+            #
+            if not nodes_by_id.get(rec['user_from_id']):
+                nodes_by_id[rec['user_from_id']] = dict(tree_links=[], parent_ids=set())
+            if not nodes_by_id.get(rec['user_to_id']):
+                nodes_by_id[rec['user_to_id']] = dict(tree_links=[], parent_ids=set())
+
+            source = rec['user_from_id'] if rec['is_child'] else rec['user_to_id']
+            target = rec['user_to_id'] if rec['is_child'] else rec['user_from_id']
+            pair = f'{source}/{target}'
+            if pair in pairs:
+                continue
+            link = dict(
+                t_source=rec['user_from_id'], t_target=rec['user_to_id'],
+                source=source, target=target,
+                is_child=True,
+            )
+            nodes_by_id[rec['user_from_id']]['tree_links'].append(link)
+            nodes_by_id[rec['user_from_id']]['complete'] = v_all
+            nodes_by_id[rec['user_to_id']]['complete'] = v_all
+            nodes_by_id[target]['parent_ids'].add(source)
+            nodes_by_id[rec['user_from_id']]['direct'] = not v_all
+            nodes_by_id[rec['user_to_id']]['direct'] = not v_all
+            if v_all and rec['level'] == recursion_depth:
+                final_nodes.add(rec['user_to_id'])
+                # собрать ид узлов на последнем уровне
+
+        if not v_all and v_up and v_down:
+            # v_is_child сейчас 'True'. Потомков нашли. Ищем предков
+            sql_req_dict.update(v_is_child='False',)
+            with connection.cursor() as cursor:
+                cursor.execute(sql_req_str % sql_req_dict)
+                recs = self.dictfetchall(cursor)
+            for rec in recs:
+                if not nodes_by_id.get(rec['user_from_id']):
+                    nodes_by_id[rec['user_from_id']] = dict(
+                        tree_links=[], parent_ids=set(), direct=True,
+                    )
+                if not nodes_by_id.get(rec['user_to_id']):
+                    nodes_by_id[rec['user_to_id']] = dict(
+                        tree_links=[], parent_ids=set(), direct=True,
+                    )
+                source = rec['user_from_id'] if rec['is_child'] else rec['user_to_id']
+                target = rec['user_to_id'] if rec['is_child'] else rec['user_from_id']
+                pair = f'{source}/{target}'
+                if pair in pairs:
+                    continue
+                link = dict(
+                    t_source=rec['user_from_id'], t_target=rec['user_to_id'],
+                    source=source, target=target,
+                    is_child=True,
+                )
+                nodes_by_id[rec['user_from_id']]['tree_links'].append(link)
+                nodes_by_id[rec['user_from_id']]['complete'] = False
+                nodes_by_id[rec['user_to_id']]['complete'] = False
+                nodes_by_id[target]['parent_ids'].add(source)
+
+        if v_all:
+            # надо получить тех в куче по v_all, у кого прямое родство
+            sql_req_dict.update(v_all='False')
+            sql_req_dict.update(v_is_child='True')
+            with connection.cursor() as cursor:
+                cursor.execute(sql_req_str % sql_req_dict)
+                recs = self.dictfetchall(cursor)
+            for rec in recs:
+                nodes_by_id[rec['user_from_id']]['direct'] = True
+                nodes_by_id[rec['user_to_id']]['direct'] = True
+            sql_req_dict.update(v_is_child='False')
+            with connection.cursor() as cursor:
+                cursor.execute(sql_req_str % sql_req_dict)
+                recs = self.dictfetchall(cursor)
+            for rec in recs:
+                nodes_by_id[rec['user_from_id']]['direct'] = True
+                nodes_by_id[rec['user_to_id']]['direct'] = True
+            for i in final_nodes:
+                nodes_by_id[i]['complete'] = False
+
+        # Этим обеспечим, что выше корня только по потомкам и
+        # ниже корня только по предкам не пойдешь!
+        #
+        nodes_by_id[user_q.pk]['complete'] = True
+
+        for p in Profile.objects.filter(user__pk__in=nodes_by_id.keys()).select_related('user'):
+            if p == profile_q:
+                nodes_by_id[user_q.pk].update(**root_node)
+            else:
+                nodes_by_id[p.user.pk].update(**p.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True)))
+
+        return dict(nodes_by_id=nodes_by_id)
+
     def get_tree(self, request, uuid, recursion_depth, fmt='d3js'):
         """
         Дерево родственных связей от пользователя
@@ -3275,7 +3434,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
         )
         sql_req_str = (
 
-            # Вызов postgresql функции. 
+            # Вызов postgresql функции.
             # Родственные связи, начиная с пользователя user_id
             #  recursion_depth:
             #      максимальное число итераций при проходе по дереву связей
