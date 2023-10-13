@@ -3351,8 +3351,8 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 is_child=True,
             )
             nodes_by_id[rec['user_from_id']]['tree_links'].append(link)
-            nodes_by_id[rec['user_from_id']]['complete'] = v_all
-            nodes_by_id[rec['user_to_id']]['complete'] = v_all
+            nodes_by_id[rec['user_from_id']].update(complete = v_all, collapsed=not v_all)
+            nodes_by_id[rec['user_to_id']].update(complete = v_all, collapsed=not v_all)
             nodes_by_id[target]['parent_ids'].add(source)
             is_root_node = rec['user_from_id'] == user_q.pk
             up =   not v_all and (v_up and not v_down)
@@ -3420,7 +3420,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 nodes_by_id[rec['user_from_id']]['up'] = True
                 nodes_by_id[rec['user_to_id']]['up'] = True
             for i in final_nodes:
-                nodes_by_id[i]['complete'] = False
+                nodes_by_id[i].update(complete = False, collapsed=True)
             if final_nodes:
                 # получить родителей людей в конечных, незаполненных узлах
                 q = q_relations & Q(is_child=False) & Q(user_from__pk__in=final_nodes)
@@ -3450,7 +3450,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     if not nodes_by_id.get(cs.user_to.pk) and not_last_level:
                         nodes_by_id[cs.user_to.pk] = dict(
                             tree_links=[], parent_ids=set(), complete=False,
-                            up=False, down=False
+                            up=False, down=False, collapsed=True,
                         )
                         new_lateral = True
                 source = cs.user_from.pk if cs.is_child else cs.user_to.pk
@@ -3466,7 +3466,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     ))
                     if new_lateral:
                         all_lateral_pks.add(cs.user_to.pk)
-                nodes_by_id[cs.user_from.pk]['complete'] = not_last_level
+                nodes_by_id[cs.user_from.pk].update(complete=not_last_level, collapsed=not not_last_level)
                 if nodes_by_id[cs.user_from.pk].get('id') is None:
                     if is_root_node:
                         nodes_by_id[cs.user_from.pk].update(**root_node)
