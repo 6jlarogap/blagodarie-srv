@@ -3424,7 +3424,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             if final_nodes:
                 # получить родителей людей в конечных, незаполненных узлах
                 q = q_relations & Q(is_child=False) & Q(user_from__pk__in=final_nodes)
-                for cs in CurrentState.objects.filter(q):
+                for cs in CurrentState.objects.filter(q).select_related('user_from', 'user_to'):
                     nodes_by_id[cs.user_from.pk]['parent_ids'].add(cs.user_to.pk)
             for p in Profile.objects.filter(user__pk__in=nodes_by_id.keys()).select_related('user'):
                 if p == profile_q:
@@ -3479,7 +3479,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                         **cs.user_to.profile.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True
                     )))
 
-        return dict(nodes_by_id=nodes_by_id)
+        return dict(nodes_by_id=nodes_by_id, bot_username = self.get_bot_username())
 
     def get_tree(self, request, uuid, recursion_depth, fmt='d3js'):
         """
