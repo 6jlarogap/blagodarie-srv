@@ -3273,7 +3273,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             first_name=user_q.first_name,
             photo=Profile.image_thumb(
                 request, profile_q.photo,
-                method='crop-rgb0033cc-frame-4',
+                method='crop-green-frame-4',
                 put_default_avatar=True,
                 default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile_q.gender),
                 mark_dead=profile_q.is_dead,
@@ -3357,11 +3357,8 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             is_root_node = rec['user_from_id'] == user_q.pk
             up =   not v_all and (v_up and not v_down)
             down = not v_all and (not v_up and v_down or v_up and v_down)
-            if up or down:
-                # Уровень в узле - это на каком уровне встретился t_target,
-                # при выборке всех не нужен (пока?)
-                nodes_by_id[rec['user_from_id']]['level'] = rec['level'] - 1
-                nodes_by_id[rec['user_to_id']]['level'] = rec['level']
+            nodes_by_id[rec['user_from_id']]['level'] = rec['level'] - 1
+            nodes_by_id[rec['user_to_id']]['level'] = rec['level']
             nodes_by_id[rec['user_from_id']]['up'] = up
             nodes_by_id[rec['user_from_id']]['down'] = down
             nodes_by_id[rec['user_to_id']]['up'] = up
@@ -3479,7 +3476,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                         **cs.user_to.profile.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True
                     )))
 
-        return dict(nodes_by_id=nodes_by_id, bot_username = self.get_bot_username())
+        return dict(nodes_by_id=nodes_by_id, root_node=root_node, bot_username = self.get_bot_username())
 
     def get_tree(self, request, uuid, recursion_depth, fmt='d3js'):
         """
