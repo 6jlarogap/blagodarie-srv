@@ -3273,7 +3273,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             first_name=user_q.first_name,
             photo=Profile.image_thumb(
                 request, profile_q.photo,
-                method='crop-green-frame-4',
+                method='crop-rgb0033cc-frame-4',
                 put_default_avatar=True,
                 default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile_q.gender),
                 mark_dead=profile_q.is_dead,
@@ -3285,7 +3285,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
         v_is_child = 'True' if v_down else 'False'
         sql_req_dict = dict(
                 user_id=user_q.pk,
-                recursion_depth=recursion_depth,
+                recursion_depth=recursion_depth + (1 if v_all else 0),
                 v_all='True' if v_all else 'False',
                 v_is_child=v_is_child,
         )
@@ -3313,7 +3313,6 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
         )
 
         pairs = []
-        final_nodes = set()
         q_relations = (Q(is_father=True) | Q(is_mother=True)) & Q(user_to__isnull =False)
 
         with connection.cursor() as cursor:
@@ -3324,6 +3323,8 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
         #   или     только вверх,               v_all==False, v_up == True,     v_down = False
         #   или     только вниз,                v_all==False, v_up == False,    v_down = True
         #   или     вниз (вверх будет затем),   v_all==False, v_up == True,     v_down = True
+        up =   not v_all and (v_up and not v_down)
+        down = not v_all and (not v_up and v_down or v_up and v_down)
         for rec in recs:
 
             # tree_links:
@@ -3334,6 +3335,10 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             #       Разворачиваем папу, в дереве появляется его дети,
             #       все свернутые. Поскольку дети свернутые, то у них
             #       не будет связи с их свернутой мамой!
+            #
+            # complete:
+            #       узлу известны не только соседние t_target's, но и t_target'sам
+            #       известны их t_target's
             #
             if not nodes_by_id.get(rec['user_from_id']):
                 nodes_by_id[rec['user_from_id']] = dict(tree_links=[], parent_ids=set())
@@ -3351,25 +3356,25 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 is_child=True,
             )
             nodes_by_id[rec['user_from_id']]['tree_links'].append(link)
-            nodes_by_id[rec['user_from_id']].update(complete = v_all, collapsed=not v_all)
-            nodes_by_id[rec['user_to_id']].update(complete = v_all, collapsed=not v_all)
+            nodes_by_id[rec['user_from_id']].update(
+                complete = v_all and rec['level'] < recursion_depth,
+                collapsed=not v_all or rec['level'] > recursion_depth,
+            )
+            nodes_by_id[rec['user_to_id']].update(
+                complete = v_all and rec['level'] < recursion_depth - 1,
+                collapsed=not v_all or rec['level'] > recursion_depth - 1,
+            )
             nodes_by_id[target]['parent_ids'].add(source)
-            is_root_node = rec['user_from_id'] == user_q.pk
-            up =   not v_all and (v_up and not v_down)
-            down = not v_all and (not v_up and v_down or v_up and v_down)
-            nodes_by_id[rec['user_from_id']]['level'] = rec['level'] - 1
-            nodes_by_id[rec['user_to_id']]['level'] = rec['level']
+            # nodes_by_id[rec['user_from_id']]['level'] = rec['level'] - 1
+            # nodes_by_id[rec['user_to_id']]['level'] = rec['level']
             nodes_by_id[rec['user_from_id']]['up'] = up
             nodes_by_id[rec['user_from_id']]['down'] = down
             nodes_by_id[rec['user_to_id']]['up'] = up
             nodes_by_id[rec['user_to_id']]['down'] = down
-            if v_all and rec['level'] == recursion_depth:
-                # собрать ид узлов на последнем уровне
-                final_nodes.add(rec['user_to_id'])
 
         if not v_all and v_up and v_down:
             # v_is_child сейчас 'True'. Потомков нашли. Ищем предков
-            sql_req_dict.update(v_is_child='False',)
+            sql_req_dict.update(v_is_child='False', recursion_depth=recursion_depth,)
             with connection.cursor() as cursor:
                 cursor.execute(sql_req_str % sql_req_dict)
                 recs = self.dictfetchall(cursor)
@@ -3391,8 +3396,8 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     t_source=rec['user_from_id'], t_target=rec['user_to_id'],
                     source=source, target=target, is_child=True,
                 )
-                nodes_by_id[rec['user_from_id']]['level'] = rec['level'] - 1
-                nodes_by_id[rec['user_to_id']]['level'] = rec['level']
+                # nodes_by_id[rec['user_from_id']]['level'] = rec['level'] - 1
+                # nodes_by_id[rec['user_to_id']]['level'] = rec['level']
                 nodes_by_id[rec['user_from_id']]['tree_links'].append(link)
                 nodes_by_id[rec['user_from_id']]['complete'] = False
                 nodes_by_id[rec['user_to_id']]['complete'] = False
@@ -3401,7 +3406,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
 
         if v_all:
             # надо получить тех в куче по v_all, у кого прямое родство
-            sql_req_dict.update(v_all='False')
+            sql_req_dict.update(v_all='False', recursion_depth=recursion_depth + 1)
             sql_req_dict.update(v_is_child='True')
             with connection.cursor() as cursor:
                 cursor.execute(sql_req_str % sql_req_dict)
@@ -3416,13 +3421,6 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             for rec in recs:
                 nodes_by_id[rec['user_from_id']]['up'] = True
                 nodes_by_id[rec['user_to_id']]['up'] = True
-            for i in final_nodes:
-                nodes_by_id[i].update(complete = False, collapsed=True)
-            if final_nodes:
-                # получить родителей людей в конечных, незаполненных узлах
-                q = q_relations & Q(is_child=False) & Q(user_from__pk__in=final_nodes)
-                for cs in CurrentState.objects.filter(q).select_related('user_from', 'user_to'):
-                    nodes_by_id[cs.user_from.pk]['parent_ids'].add(cs.user_to.pk)
             for p in Profile.objects.filter(user__pk__in=nodes_by_id.keys()).select_related('user'):
                 if p == profile_q:
                     nodes_by_id[user_q.pk].update(**root_node)
@@ -3439,15 +3437,14 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             )
             for cs in qs:
                 is_root_node = cs.user_from.pk == user_q.pk
-                not_last_level = nodes_by_id[cs.user_from.pk]['level'] < recursion_depth
                 if nodes_by_id[cs.user_from.pk].get('lateral_links') is None:
                     nodes_by_id[cs.user_from.pk]['lateral_links'] = []
                 new_lateral = False
                 if not is_root_node:
-                    if not nodes_by_id.get(cs.user_to.pk) and not_last_level:
+                    if not nodes_by_id.get(cs.user_to.pk):
                         nodes_by_id[cs.user_to.pk] = dict(
                             tree_links=[], parent_ids=set(), complete=False,
-                            up=False, down=False, collapsed=True,
+                            up=False, down=False, collapsed=False,
                         )
                         new_lateral = True
                 source = cs.user_from.pk if cs.is_child else cs.user_to.pk
@@ -3463,7 +3460,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     ))
                     if new_lateral:
                         all_lateral_pks.add(cs.user_to.pk)
-                nodes_by_id[cs.user_from.pk].update(complete=not_last_level, collapsed=not not_last_level)
+                nodes_by_id[cs.user_from.pk].update(complete=is_root_node, collapsed=not is_root_node)
                 if nodes_by_id[cs.user_from.pk].get('id') is None:
                     if is_root_node:
                         nodes_by_id[cs.user_from.pk].update(**root_node)
@@ -3475,6 +3472,32 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     nodes_by_id[cs.user_to.pk].update(
                         **cs.user_to.profile.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True
                     )))
+            # Не тупиковые узлы. Если у них нет боковых связей, значит они complete
+            for i in nodes_by_id:
+                if (i != user_q.pk) and \
+                   (nodes_by_id[i]['up'] or nodes_by_id[i]['down']) and \
+                   nodes_by_id[i]['tree_links']:
+                    nodes_by_id[i]['complete'] = not bool(nodes_by_id[i]['lateral_links'])
+
+            # Тупиковые узлы в дереве прямой родни. Найденные там боковые связи совсем не боковые.
+            # Их нужно держать, чтоб знать, есть ли от тупиковых узлов какие связи
+            final_expandable_nodes = dict()
+            for i in nodes_by_id:
+                if (nodes_by_id[i]['up'] or nodes_by_id[i]['down']) and not nodes_by_id[i]['tree_links']:
+                    nodes_by_id[i].update(collapsed=True, complete=False)
+                    if nodes_by_id[i]['lateral_links']:
+                        nodes_by_id[i]['tree_links'] = nodes_by_id[i]['lateral_links'].copy()
+                    else:
+                        nodes_by_id[i].update(complete=True)
+                    del nodes_by_id[i]['lateral_links']
+                for l in nodes_by_id[i]['tree_links']:
+                    final_expandable_nodes[l['t_target']] = dict(up=False, down=False, collapsed=True)
+                    if nodes_by_id[i]['up'] and l['t_target'] != l['target']:
+                        final_expandable_nodes[l['t_target']]['up'] = True
+                    if nodes_by_id[i]['down'] and l['t_target'] == l['target']:
+                        final_expandable_nodes[l['t_target']]['down'] = True
+            for i in final_expandable_nodes.keys():
+                nodes_by_id[i].update(final_expandable_nodes[i])
 
         return dict(nodes_by_id=nodes_by_id, root_node=root_node, bot_username = self.get_bot_username())
 
