@@ -3356,12 +3356,20 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 is_child=True,
             )
             nodes_by_id[rec['user_from_id']]['tree_links'].append(link)
+            # complete (v_all):
+            # (1) Пусть встретили на 2-м уровне. recursion_depth = 2, 1 <= 2 == True
+            # (2) Тех кто на за ним на 3-м уровне, будет знать, 1 <= 2
+            # (3) Тех, кто за ними на 4-м уровне попадут на 3-м уровне в user_to_id
             nodes_by_id[rec['user_from_id']].update(
-                complete = v_all and rec['level'] < recursion_depth,
+                complete = v_all and rec['level'] <= recursion_depth,
                 collapsed=not v_all or rec['level'] > recursion_depth,
             )
+            # complete (v_all):
+            # (1) Пусть встретили на 1-м уровне. recursion_depth = 2, 1 <= 2 - 1 == True
+            # (2) Тех кто на за ним на 2-м уровне, будет знать
+            # (3) Тех, кто за ними на 3-м уровне будем знать, т.к. реальная рекурсия здесь 2+1
             nodes_by_id[rec['user_to_id']].update(
-                complete = v_all and rec['level'] < recursion_depth - 1,
+                complete = v_all and rec['level'] <= recursion_depth - 1,
                 collapsed=not v_all or rec['level'] > recursion_depth - 1,
             )
             nodes_by_id[target]['parent_ids'].add(source)
