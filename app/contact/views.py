@@ -2849,42 +2849,33 @@ class GetTrustGenesisMixin(object):
     def get(self, request):
         try:
             is_request_genesis = 'genesis' in request.path.lower()
-            if closest := is_request_genesis and request.GET.get('closest'):
-                # Получить быстро родителей и детей id в формате 3d-force
-                # (вызывается по щелчку на разворачиваемого пользователя в дереве)
-                try:
-                    closest = int(closest)
-                except ValueError:
-                    raise ServiceException("closest должен быть положительным числом")
-                data = self.get_closect_relations(request, closest)
-            else:
-                fmt = request.GET.get('fmt', 'd3js')
-                try:
-                    recursion_depth = int(request.GET.get('depth', 0) or 0)
-                except (TypeError, ValueError,):
-                    recursion_depth = 0
+            fmt = request.GET.get('fmt', 'd3js')
+            try:
+                recursion_depth = int(request.GET.get('depth', 0) or 0)
+            except (TypeError, ValueError,):
+                recursion_depth = 0
 
-                uuid = request.GET.get('uuid', '').strip(' ,')
-                chat_id = is_request_genesis and request.GET.get('chat_id')
-                max_recursion_depth = settings.MAX_RECURSION_DEPTH_IN_GROUP if chat_id else settings.MAX_RECURSION_DEPTH
-                if recursion_depth <= 0 or recursion_depth > max_recursion_depth:
-                    recursion_depth = max_recursion_depth
-                if uuid:
-                    uuids = re.split(r'[, ]+', uuid)
-                    len_uuids = len(uuids)
-                    if len_uuids == 1:
-                        if is_request_genesis and request.GET.get('new'):
-                            data = self.get_tree_new(request, uuids[0], recursion_depth, fmt)
-                        else:
-                            data = self.get_tree(request, uuids[0], recursion_depth, fmt)
-                    elif len_uuids == 2:
-                        data = self.get_shortest_path(request, uuids, recursion_depth, fmt)
+            uuid = request.GET.get('uuid', '').strip(' ,')
+            chat_id = is_request_genesis and request.GET.get('chat_id')
+            max_recursion_depth = settings.MAX_RECURSION_DEPTH_IN_GROUP if chat_id else settings.MAX_RECURSION_DEPTH
+            if recursion_depth <= 0 or recursion_depth > max_recursion_depth:
+                recursion_depth = max_recursion_depth
+            if uuid:
+                uuids = re.split(r'[, ]+', uuid)
+                len_uuids = len(uuids)
+                if len_uuids == 1:
+                    if is_request_genesis and request.GET.get('new'):
+                        data = self.get_tree_new(request, uuids[0], recursion_depth, fmt)
                     else:
-                        raise ServiceException("Допускается  uuid (дерево) или 2 uuid's (найти путь между)")
-                elif chat_id:
-                    data = self.get_chat_mesh(request, chat_id, recursion_depth)
+                        data = self.get_tree(request, uuids[0], recursion_depth, fmt)
+                elif len_uuids == 2:
+                    data = self.get_shortest_path(request, uuids, recursion_depth, fmt)
                 else:
-                    raise ServiceException('Не заданы параметры необходимые параметры')
+                    raise ServiceException("Допускается  uuid (дерево) или 2 uuid's (найти путь между)")
+            elif chat_id:
+                data = self.get_chat_mesh(request, chat_id, recursion_depth)
+            else:
+                raise ServiceException('Не заданы параметры необходимые параметры')
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
@@ -3070,43 +3061,89 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             сколько показывать участников группы в очередной странице,
             по умолчанию settings.MAX_RECURSION_COUNT_IN_GROUP
     """
-    permission_classes = (IsAuthenticated,)
+    # permission_classes = (IsAuthenticated,)
 
-    def get_closect_relations(self, request, closest):
-        q = Q(user_to__isnull=False) & Q(user_from__pk=closest) & (Q(is_father=True) | Q(is_mother=True))
-        root_node = None
-        nodes = []
-        links = []
-        fmt = '3d-force-graph'
-        for l in CurrentState.objects.filter(q). \
-                           select_related(
-                               'user_from', 'user_from__profile',
-                               'user_to', 'user_to__profile',
-                           ).distinct():
-            if l.is_child:
-                source = l.user_from.pk
-                target = l.user_to.pk
-            else:
-                source = l.user_to.pk
-                target = l.user_from.pk
-            link = dict(
-                source=source, target=target,
-                t_source=l.user_from.pk, t_target=l.user_to.pk,
-                is_child=True,
-            )
-            if not root_node:
-                root_node = l.user_from.profile.data_dict(request, thumb=dict(mark_dead=True), fmt=fmt)
-                root_node.update(parent_ids=[], complete=True)
-            relation = l.user_to.profile.data_dict(request, thumb=dict(mark_dead=True), fmt=fmt)
-            relation.update(parent_ids=[], complete=False)
-            nodes.append(relation)
-            links.append(link)
-            if not l.is_child:
-                root_node['parent_ids'].append(l.user_to.pk)
-        # Важно: root_node должен быть последним!
-        if root_node:
-            nodes.append(root_node)
-        return dict(nodes=nodes, links=links)
+    def post(self, request):
+        """
+        Получить развертывание узлов (детей, родителей из дерева на фронте)
+
+        Ожидается типа такого:
+        {
+            "fan_source": {
+                "node_id": 392,
+                "sources_by_id": {
+                    "393": {"up": false, "down": true},
+                    "2315": {"up": false,"down": false}
+                }
+            }
+        }
+        -   node_id:
+                узел, от которого идет развертывание
+        -   sources_by_id:
+                узлы, следующие по пути развертывания, известны фронту.
+                Надо уточнить их данные:
+                    parent_ids, tree_links, возможно complete
+            up / down:
+                признаки, что узел находится на линии прямого родства
+        Главное:
+            получить узлы, следующие за sources_by_id
+
+        """
+        try:
+            if not request.data.get('fan_source'):
+                raise ServiceException("Неверные исходные данные")
+            sources_by_id_ = request.data['fan_source']['sources_by_id']
+            sources_by_id = dict()
+            for k in sources_by_id_.keys():
+                sources_by_id[int(k)] = sources_by_id_[k]
+            targets_by_id = dict()
+            for k in sources_by_id.keys():
+                targets_by_id[k] = dict(
+                    tree_links=[], parent_ids=set(), complete=False
+                )
+            node_id = request.data['fan_source']['node_id']
+            q = Q(is_father=True) | Q(is_mother=True)
+            q &= Q(user_to__isnull=False) & Q(user_from__pk__in=sources_by_id.keys())
+            fmt = '3d-force-graph'
+            for cs in CurrentState.objects.filter(q).select_related(
+                        'user_from',
+                        'user_to', 'user_to__profile',
+                      ).distinct():
+                source = cs.user_from.pk if cs.is_child else cs.user_to.pk
+                target = cs.user_to.pk if cs.is_child else cs.user_from.pk
+                if cs.user_to.pk != node_id:
+                    if not targets_by_id.get(cs.user_to.pk):
+                        targets_by_id[cs.user_to.pk] = dict(
+                            tree_links=[], parent_ids=set(), complete=False,
+                            up=False, down=False, collapsed=True,
+                        )
+                    targets_by_id[cs.user_from.pk]['tree_links'].append(dict(
+                        t_source=cs.user_from.pk, t_target=cs.user_to.pk,
+                        source=source, target=target,
+                        is_child=True,
+                    ))
+                    if cs.is_child and sources_by_id[cs.user_from.pk]['down']:
+                        targets_by_id[cs.user_to.pk]['down'] = True
+                    if not cs.is_child and sources_by_id[cs.user_from.pk]['up']:
+                        targets_by_id[cs.user_to.pk]['up'] = True
+                    targets_by_id[cs.user_to.pk].update(
+                        **cs.user_to.profile.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True))
+                    )
+                try:
+                    targets_by_id[target]['parent_ids'].add(source)
+                except KeyError:
+                    pass
+            for k in targets_by_id.keys():
+                if not targets_by_id[k].get('id') and not targets_by_id[k]['tree_links']:
+                    targets_by_id[k]['complete'] = True
+
+            data = dict(targets_by_id=targets_by_id)
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status.HTTP_200_OK)
+
 
     def get_chat_mesh(self, request, chat_id, recursion_depth):
         users = []
