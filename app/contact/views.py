@@ -3070,15 +3070,16 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
         Ожидается типа такого:
         {
             "fan_source": {
-                "nodes": ['392', '500'...]
+                "nodes": [392]
                 "sources_by_id": {
                     "393": {"up": false, "down": true},
                     "2315": {"up": false,"down": false}
                 }
             }
         }
-        -   node_id:
-                узел, от которого идет развертывание
+        -   nodes:
+                узлы, связи на которые не должны включаться в итоговые связи.
+                Пусть будет пока лишь узел, от которого идет развертывание
         -   sources_by_id:
                 узлы, следующие по пути развертывания, известны фронту.
                 Надо уточнить их данные:
