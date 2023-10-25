@@ -3061,7 +3061,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             сколько показывать участников группы в очередной странице,
             по умолчанию settings.MAX_RECURSION_COUNT_IN_GROUP
     """
-    permission_classes = (IsAuthenticated,)
+    # permission_classes = (IsAuthenticated,)
 
     def post(self, request):
         """
@@ -3070,7 +3070,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
         Ожидается типа такого:
         {
             "fan_source": {
-                "nodes": [392]
+                "nodes": [392],
                 "sources_by_id": {
                     "393": {"up": false, "down": true},
                     "2315": {"up": false,"down": false}
@@ -3078,8 +3078,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             }
         }
         -   nodes:
-                узлы, связи на которые не должны включаться в итоговые связи.
-                Пусть будет пока лишь узел, от которого идет развертывание
+                узлы, которые не учитываем. Пока от которого идет развертывание
         -   sources_by_id:
                 узлы, следующие по пути развертывания, известны фронту.
                 Надо уточнить их данные:
@@ -3095,11 +3094,9 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 raise ServiceException("Неверные исходные данные")
             sources_by_id_ = request.data['fan_source']['sources_by_id']
             sources_by_id = dict()
+            nodes = request.data['fan_source']['nodes']
             for k in sources_by_id_.keys():
                 sources_by_id[int(k)] = sources_by_id_[k]
-            nodes = request.data['fan_source']['nodes']
-            for i, node in enumerate(nodes):
-                nodes[i] = int(nodes[i])
             targets_by_id = dict()
             for k in sources_by_id.keys():
                 targets_by_id[k] = dict(
@@ -3136,6 +3133,10 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     targets_by_id[target]['parent_ids'].add(source)
                 except KeyError:
                     pass
+            for k in targets_by_id.keys():
+                if not targets_by_id[k].get('id') and not targets_by_id[k]['tree_links']:
+                    targets_by_id[k]['complete'] = True
+
             data = dict(targets_by_id=targets_by_id)
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
