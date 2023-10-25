@@ -3098,7 +3098,9 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             for i, node in enumerate(nodes):
                 nodes[i] = int(nodes[i])
             for k in sources_by_id_.keys():
-                sources_by_id[int(k)] = sources_by_id_[k]
+                i = int(k)
+                if not sources_by_id_[k]['complete']:
+                    sources_by_id[i] = sources_by_id_[k]
             targets_by_id = dict()
             for k in sources_by_id.keys():
                 targets_by_id[k] = dict(
@@ -3135,9 +3137,6 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     targets_by_id[target]['parent_ids'].add(source)
                 except KeyError:
                     pass
-            for k in targets_by_id.keys():
-                if not targets_by_id[k].get('id') and not targets_by_id[k]['tree_links']:
-                    targets_by_id[k]['complete'] = True
 
             data = dict(targets_by_id=targets_by_id)
             status_code = status.HTTP_200_OK
