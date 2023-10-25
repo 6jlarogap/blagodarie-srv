@@ -3070,7 +3070,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
         Ожидается типа такого:
         {
             "fan_source": {
-                "node_id": 392,
+                "nodes": ['392', '500'...]
                 "sources_by_id": {
                     "393": {"up": false, "down": true},
                     "2315": {"up": false,"down": false}
@@ -3096,12 +3096,14 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             sources_by_id = dict()
             for k in sources_by_id_.keys():
                 sources_by_id[int(k)] = sources_by_id_[k]
+            nodes = request.data['fan_source']['nodes']
+            for i, node in enumerate(nodes):
+                nodes[i] = int(nodes[i])
             targets_by_id = dict()
             for k in sources_by_id.keys():
                 targets_by_id[k] = dict(
                     tree_links=[], parent_ids=set(), complete=False
                 )
-            node_id = request.data['fan_source']['node_id']
             q = Q(is_father=True) | Q(is_mother=True)
             q &= Q(user_to__isnull=False) & Q(user_from__pk__in=sources_by_id.keys())
             fmt = '3d-force-graph'
@@ -3111,7 +3113,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                       ).distinct():
                 source = cs.user_from.pk if cs.is_child else cs.user_to.pk
                 target = cs.user_to.pk if cs.is_child else cs.user_from.pk
-                if cs.user_to.pk != node_id:
+                if cs.user_to.pk not in nodes:
                     if not targets_by_id.get(cs.user_to.pk):
                         targets_by_id[cs.user_to.pk] = dict(
                             tree_links=[], parent_ids=set(), complete=False,
