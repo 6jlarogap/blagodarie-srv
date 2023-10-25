@@ -3061,7 +3061,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             сколько показывать участников группы в очередной странице,
             по умолчанию settings.MAX_RECURSION_COUNT_IN_GROUP
     """
-    # permission_classes = (IsAuthenticated,)
+    permission_classes = (IsAuthenticated,)
 
     def post(self, request):
         """
@@ -3133,10 +3133,6 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     targets_by_id[target]['parent_ids'].add(source)
                 except KeyError:
                     pass
-            for k in targets_by_id.keys():
-                if not targets_by_id[k].get('id') and not targets_by_id[k]['tree_links']:
-                    targets_by_id[k]['complete'] = True
-
             data = dict(targets_by_id=targets_by_id)
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
@@ -3489,7 +3485,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     if not nodes_by_id.get(cs.user_to.pk):
                         nodes_by_id[cs.user_to.pk] = dict(
                             tree_links=[], parent_ids=set(), complete=False,
-                            up=False, down=False, collapsed=False,
+                            up=False, down=False, collapsed=True,
                         )
                         new_lateral = True
                 source = cs.user_from.pk if cs.is_child else cs.user_to.pk
