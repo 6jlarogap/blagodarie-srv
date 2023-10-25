@@ -3094,18 +3094,14 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 raise ServiceException("Неверные исходные данные")
             sources_by_id_ = request.data['fan_source']['sources_by_id']
             sources_by_id = dict()
+            for k in sources_by_id_.keys():
+                sources_by_id[int(k)] = sources_by_id_[k]
             nodes = request.data['fan_source']['nodes']
             for i, node in enumerate(nodes):
                 nodes[i] = int(nodes[i])
-            for k in sources_by_id_.keys():
-                i = int(k)
-                if not sources_by_id_[k]['complete']:
-                    sources_by_id[i] = sources_by_id_[k]
             targets_by_id = dict()
             for k in sources_by_id.keys():
-                targets_by_id[k] = dict(
-                    tree_links=[], parent_ids=set(), complete=False
-                )
+                targets_by_id[k] = dict(tree_links=[], parent_ids=set(),)
             q = Q(is_father=True) | Q(is_mother=True)
             q &= Q(user_to__isnull=False) & Q(user_from__pk__in=sources_by_id.keys())
             fmt = '3d-force-graph'
