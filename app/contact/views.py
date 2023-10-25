@@ -3095,6 +3095,8 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             sources_by_id_ = request.data['fan_source']['sources_by_id']
             sources_by_id = dict()
             nodes = request.data['fan_source']['nodes']
+            for i, node in enumerate(nodes):
+                nodes[i] = int(nodes[i])
             for k in sources_by_id_.keys():
                 sources_by_id[int(k)] = sources_by_id_[k]
             targets_by_id = dict()
