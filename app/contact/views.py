@@ -3444,7 +3444,10 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 nodes_by_id[rec['user_from_id']]['complete'] = False
                 nodes_by_id[rec['user_to_id']]['complete'] = False
                 nodes_by_id[target]['parent_ids'].add(source)
-            nodes_by_id[user_q.pk]['up'] = True
+            try:
+                nodes_by_id[user_q.pk]['up'] = True
+            except KeyError:
+                pass
 
         if v_all:
             # надо получить тех в куче по v_all, у кого прямое родство
@@ -3543,6 +3546,10 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                         final_expandable_nodes[l['t_target']]['down'] = True
             for i in final_expandable_nodes.keys():
                 nodes_by_id[i].update(final_expandable_nodes[i])
+
+        if not nodes_by_id:
+            nodes_by_id[user_q.pk] = dict(tree_links=[], parent_ids=set(), up=True, down=True)
+            nodes_by_id[user_q.pk].update(**root_node)
 
         return dict(nodes_by_id=nodes_by_id, root_node=root_node, bot_username = self.get_bot_username())
 
