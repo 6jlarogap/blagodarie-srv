@@ -871,7 +871,18 @@ class Misc(object):
                             user_uuid=response_to['uuid'],
                         ), keep_user_data='on',
                     ))
-                login_url_buttons = [inline_btn_trusts, ]
+                inline_btn_genesis = InlineKeyboardButton(
+                    'Род',
+                    login_url=cls.make_login_url(
+                        redirect_path=(
+                                '%(graph_host)s/?user_uuid_genesis_tree=%(user_uuid)s'
+                                '&up=on&down=on&depth=2'
+                            ) % dict(
+                            graph_host=settings.GRAPH_HOST,
+                            user_uuid=response_to['uuid'],
+                        ), keep_user_data='on',
+                    ))
+                login_url_buttons = [inline_btn_trusts, inline_btn_genesis]
 
                 if response_to.get('latitude') is not None and response_to.get('longitude') is not None:
                     inline_btn_map = InlineKeyboardButton(

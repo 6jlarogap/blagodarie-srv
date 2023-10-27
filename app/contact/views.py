@@ -3511,9 +3511,12 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                             **cs.user_from.profile.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True
                         )))
                 if nodes_by_id.get(cs.user_to.pk) and nodes_by_id[cs.user_to.pk].get('id') is None:
-                    nodes_by_id[cs.user_to.pk].update(
-                        **cs.user_to.profile.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True
-                    )))
+                    if cs.user_to.pk == user_q.pk:
+                        nodes_by_id[cs.user_to.pk].update(**root_node)
+                    else:
+                        nodes_by_id[cs.user_to.pk].update(
+                            **cs.user_to.profile.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True
+                        )))
             # Не тупиковые узлы. Если у них нет боковых связей, значит они complete
             for i in nodes_by_id:
                 if (i != user_q.pk) and \
