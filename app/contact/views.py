@@ -3548,7 +3548,10 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 nodes_by_id[i].update(final_expandable_nodes[i])
 
         if not nodes_by_id:
-            nodes_by_id[user_q.pk] = dict(tree_links=[], parent_ids=set(), up=True, down=True)
+            nodes_by_id[user_q.pk] = dict(
+                tree_links=[], parent_ids=set(), up=True, down=True,
+                complete = True, collapsed=False,
+            )
             nodes_by_id[user_q.pk].update(**root_node)
 
         return dict(nodes_by_id=nodes_by_id, root_node=root_node, bot_username = self.get_bot_username())
