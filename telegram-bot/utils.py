@@ -862,7 +862,7 @@ class Misc(object):
                 bot_data=bot_data,
             )
             reply_markup = InlineKeyboardMarkup()
-            if response_to['is_active'] or response_to['owner_id']:
+            if is_own_account or is_owned_account:
                 inline_btn_trusts = InlineKeyboardButton(
                     'Доверия',
                     login_url=cls.make_login_url(
