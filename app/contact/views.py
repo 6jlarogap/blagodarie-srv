@@ -907,8 +907,8 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
 
         if kwargs.get('only') == 'user_connections_graph':
 
-            if not request.user.is_authenticated:
-                raise NotAuthenticated
+            # if not request.user.is_authenticated:
+            #     raise NotAuthenticated
 
             # Возвращает:
             #  список пользователей, которые выполнили логин в систему
@@ -2040,7 +2040,7 @@ api_delete_key = ApiDeleteKeyView.as_view()
 
 
 class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, TelegramApiMixin, APIView):
-    permission_classes = (IsAuthenticated, )
+    # permission_classes = (IsAuthenticated, )
 
     def get(self, request, *args, **kwargs):
         """
@@ -2902,7 +2902,7 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
 
     Также отдается профиль авторизованного пользователя, даже если его нет в выборке.
     """
-    permission_classes = (IsAuthenticated,)
+    # permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         fmt = request.GET.get('fmt', 'd3js')
@@ -3711,7 +3711,7 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
             1 или более:
                 показать в рекурсии связи не дальше указанной глубины рекурсии
     """
-    permission_classes = (IsAuthenticated,)
+    # permission_classes = (IsAuthenticated,)
 
     def get_shortest_path(self, request, uuids, recursion_depth, fmt='d3js'):
         """

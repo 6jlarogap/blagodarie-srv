@@ -3116,8 +3116,8 @@ class ApiBotPollResults(TelegramApiMixin, APIView):
         return Response(data=data, status=status_code)
 
     def get(self, request):
-        if not request.user.is_authenticated:
-            raise NotAuthenticated
+        # if not request.user.is_authenticated:
+        #     raise NotAuthenticated
         return self.do_it(request, request.GET.get('tg_poll_id'))
 
     def post(self, request):
@@ -3273,7 +3273,7 @@ api_offer_answer = ApiOfferAnswer.as_view()
 
 
 class ApiOfferResults(TelegramApiMixin, APIView):
-    permission_classes = (IsAuthenticated,)
+    # permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         """

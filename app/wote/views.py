@@ -277,7 +277,7 @@ api_wote_vote_sums = ApiWoteVoteSums.as_view()
 
 
 class ApiVoteGraph(FromToCountMixin, TelegramApiMixin, APIView):
-    permission_classes = (IsAuthenticated,)
+    # permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         """
