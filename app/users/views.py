@@ -3433,9 +3433,9 @@ class ApiTokenUrl(TelegramApiMixin, APIView):
         На выходе:
             {
                 "url": "<url>",
-                "token": "<url>",
+                "token": "<token>",
                 // Это требуется для формирования ссылки login url
-                // к нопке телеграма
+                // к кнопке телеграма
                 "bot_username": "<bot_username>"
             }
         """
@@ -3474,8 +3474,8 @@ class ApiTokenUrl(TelegramApiMixin, APIView):
             https:/.../path/to/?token=<token>
         На выходе:
             {
+                "token": "<token>"
                 "url": "<url>",
-                "token": "<url>"
             }
             или HTTP_404_NOT_FOUND
         """
@@ -3490,7 +3490,6 @@ class ApiTokenUrl(TelegramApiMixin, APIView):
                 r.expire(token_in_redis, 1)
                 status_code = status.HTTP_200_OK
         return Response(data=data, status=status_code)
-
 
 api_token_url = ApiTokenUrl.as_view()
 
@@ -3574,3 +3573,94 @@ class ApiTokenAuthData(ApiTokenAuthDataMixin, APIView):
         return Response(data=data, status=status_code)
 
 api_token_authdata = ApiTokenAuthData.as_view()
+
+class ApiTokenInvite(TelegramApiMixin, UuidMixin, APIView):
+    """
+    Зашить invite в токене. Получить данные invite из token
+
+    Invite:
+        Приглашение в бот: пользователь телеграма велит боту создать
+        сообщение для приглашения своего собственного живого пользователя,
+        содержащее ссылку типа:
+            https://t.me/<имя_бота>?start=<токен>
+        Пользователь пересылает это сообщение приглашаемому, тот давит
+        на ссылку, если приглашаемого нет в системе, то создается.
+        Собственный пользователь приглашающего становится тем
+        приглашаемым.
+    Используем кэш redis!
+    Ключ токена:
+        <TOKEN_INVITE_PREFIX><TOKEN_INVITE_PREFIX><токен>
+    Данные токена:
+        <uuid_приглашающего><TOKEN_INVITE_SEP><uuid_его_собственного>
+    """
+
+    # Префикс и разделитель полей для ключа токена
+    #
+    TOKEN_INVITE_PREFIX = 'invite'
+    TOKEN_INVITE_SEP = '~'
+
+    def post(self, request):
+        """
+        Зашить данные invite в токене. Получить данные из токена invite
+
+        На входе
+            Зашить данные invite в токене:
+                {
+                    "operation": "set",
+                    "tg_token": settings.TELEGRAM_BOT_TOKEN,
+                    "uuid_inviter": "<uuid>"
+                    "uuid_invited": "<uuid>"
+                }
+            На выходе:
+                {
+                    "token": "<токен>",
+                    // Это требуется для формирования ссылки login url
+                    // к нопке телеграма
+                    "bot_username": "<bot_username>"
+                }
+            Получить данные invite в токене:
+                {
+                    "operation": "get",
+                    "tg_token": settings.TELEGRAM_BOT_TOKEN,
+                    "token": "<token>"
+                }
+            На выходе:
+                {}
+        """
+        try:
+            if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                raise ServiceException('Неверный токен телеграм бота')
+            operation = request.data.get('operation')
+            if operation == 'set':
+                uuid_inviter = request.data.get('uuid_inviter')
+                uuid_invited = request.data.get('uuid_invited')
+                user_inviter, profile_inviter = self.check_user_uuid(uuid_inviter, related= ('user',))
+                user_invited, profile_invited = self.check_user_uuid(uuid_invited, related= ('user',))
+                if not profile_invited.owner or \
+                   profile_invited.owner != user_inviter or \
+                   profile_invited.is_dead:
+                    raise ServiceException('Нет прав на операцию или приглашаемый умер')
+                token = str(uuid.uuid4())
+                data = dict(
+                    token=token,
+                    bot_username=self.get_bot_username(),
+                )
+                if r := redis.Redis(**settings.REDIS_TOKEN_CONNECT):
+                    r.set(
+                        name=self.TOKEN_INVITE_PREFIX + self.TOKEN_INVITE_SEP + token,
+                        value=uuid_inviter + self.TOKEN_INVITE_SEP + uuid_invited,
+                        ex=settings.TOKEN_INVITE_EXPIRE,
+                    )
+                else:
+                    raise ServiceException('Не удалось подключиться к хранилищу токенов (redis cache)')
+            elif operation == 'get':
+                pass
+            else:
+                raise ServiceException('Неверный вызов апи')
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_token_invite = ApiTokenInvite.as_view()
