@@ -3604,12 +3604,13 @@ class ApiTokenInvite(TelegramApiMixin, UuidMixin, APIView):
         Зашить данные invite в токене. Получить данные из токена invite
 
         На входе
+            Приглашающий:
             Зашить данные invite в токене:
                 {
                     "operation": "set",
                     "tg_token": settings.TELEGRAM_BOT_TOKEN,
                     "uuid_inviter": "<uuid>"
-                    "uuid_invited": "<uuid>"
+                    "uuid_invited": "<uuid>" // user owned by inviter
                 }
             На выходе:
                 {
@@ -3618,14 +3619,20 @@ class ApiTokenInvite(TelegramApiMixin, UuidMixin, APIView):
                     // к нопке телеграма
                     "bot_username": "<bot_username>"
                 }
+            Приглашаемый:
             Получить данные invite в токене:
                 {
                     "operation": "get",
                     "tg_token": settings.TELEGRAM_BOT_TOKEN,
                     "token": "<token>"
+                    "uuid_active": "<uuid>" // активный пользователь,
+                                            // нажавший на ссылку- приглашения
                 }
             На выходе:
-                {}
+                {
+                    "uuid_inviter": "<uuid>"
+                    "uuid_invited": "<uuid>" // user owned by inviter
+                }
         """
         try:
             if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
@@ -3636,10 +3643,10 @@ class ApiTokenInvite(TelegramApiMixin, UuidMixin, APIView):
                 uuid_invited = request.data.get('uuid_invited')
                 user_inviter, profile_inviter = self.check_user_uuid(uuid_inviter, related= ('user',))
                 user_invited, profile_invited = self.check_user_uuid(uuid_invited, related= ('user',))
-                if not profile_invited.owner or \
-                   profile_invited.owner != user_inviter or \
-                   profile_invited.is_dead:
-                    raise ServiceException('Нет прав на операцию или приглашаемый умер')
+                if not profile_invited.owner or profile_invited.owner != user_inviter:
+                    raise ServiceException('Не прав на операцию')
+                if profile_invited.is_dead:
+                    raise ServiceException(f'{user_invited.first_name} умер. Нельзя приглашать умершего')
                 token = str(uuid.uuid4())
                 data = dict(
                     token=token,
@@ -3654,7 +3661,29 @@ class ApiTokenInvite(TelegramApiMixin, UuidMixin, APIView):
                 else:
                     raise ServiceException('Не удалось подключиться к хранилищу токенов (redis cache)')
             elif operation == 'get':
-                pass
+                token = request.data.get('token', 'token')
+                token_in_redis = self.TOKEN_INVITE_PREFIX + self.TOKEN_INVITE_SEP + token
+                if r := redis.Redis(**settings.REDIS_TOKEN_CONNECT):
+                    if value_in_redis := r.get(token_in_redis):
+                        values = value_in_redis.split(self.TOKEN_INVITE_SEP)
+                        try:
+                            data = dict(
+                                uuid_inviter = values[0],
+                                uuid_invited = values[1],
+                            )
+                        except IndexError:
+                            raise ServiceException('Ошибка апи')
+                        # Часто может быть: приглашающий щелкнул на ссылку
+                        uuid_active = request.data.get('uuid_active')
+                        if uuid_active == data['uuid_inviter']:
+                            raise ServiceException('Приглашение относится не к Вам')
+                        status_code = status.HTTP_200_OK
+                    else:
+                        raise ServiceException('Приглашение уже принято')
+                # TODO. Здесь жду ответа от постановщика задачи: сразу мержить или после
+                #       ответа на вопрос.
+                # Так быстрее, чем delete, redis в фоне удалит через секунду
+                # r.expire(token_in_redis, 1)
             else:
                 raise ServiceException('Неверный вызов апи')
             status_code = status.HTTP_200_OK
