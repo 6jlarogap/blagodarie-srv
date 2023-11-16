@@ -185,7 +185,10 @@ class KeyboardType(object):
 
     # заняты: 53, 54
 
+    # В карточке пользователя при кнопке "Пригласить"
     INVITE = 55
+    # В вопросе, не желает ли принять приглашение
+    INVITE_CONFIRM = 56
 
     # Разделитель данных в call back data
     #
@@ -1008,7 +1011,7 @@ class Misc(object):
                             callback_data=callback_data_template % dict_change_owner,
                         )
                         args_edit_2.append(inline_btn_change_owner)
-                        if not response_to['is_dead']:
+                        if False and not response_to['is_dead']:
                             dict_invite = dict(
                                 keyboard_type=KeyboardType.INVITE,
                                 uuid=response_to['uuid'],

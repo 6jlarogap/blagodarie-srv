@@ -101,7 +101,7 @@ class FSMtrustThank(StatesGroup):
     # благодарности, недоверия, не-знакомы
     ask = State()
 
-class FSMinvite(StatesGroup):
+class FSMinviteConfirm(StatesGroup):
     # приглашение с объединением собственного
     ask = State()
 
@@ -785,6 +785,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
           ):
             offer_to_search = m.group(1).lower()
             state_ = 'start_offer'
+
         elif m := re.search(
                 (
                     r'^(?:https?\:\/\/)?t\.me\/%s\?start\=offer\-'
@@ -795,6 +796,25 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
           ):
             offer_to_search = m.group(1).lower()
             state_ = 'start_offer'
+
+        elif m := re.search(
+                r'^\/start\s+invite\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
+                message_text,
+                flags=re.I,
+          ):
+            token_invite = m.group(1).lower()
+            state_ = 'start_invite'
+
+        elif m := re.search(
+                (
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=invite\-'
+                    '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            token_invite = m.group(1).lower()
+            state_ = 'start_invite'
 
         elif m := re.search(
                 r'^\/start\s+([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
@@ -993,7 +1013,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
     if state_ and state_ not in (
         'not_found', 'invalid_message_text',
         'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',
-        'youtube_link',
+        'youtube_link', 'start_invite'
        ) and user_from_id and a_response_to:
         if state_ == 'start':
             await message.reply(await Misc.rules_text(), disable_web_page_preview=True)
@@ -1097,6 +1117,8 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             await answer_youtube_message(message, youtube_id, youtube_link)
         elif state_ == 'forwarded_from_other' and a_response_to and a_response_to[0].get('created'):
             await Misc.update_user_photo(bot, tg_user_forwarded, response_to)
+        elif state_ == 'start_invite':
+            await show_invite(response_from, token_invite, message, bot_data)
 
 # --- command list ----
 
@@ -5977,14 +5999,14 @@ async def process_callback_invite(callback_query: types.CallbackQuery, state: FS
         uuid_inviter=response_sender['uuid'],
         uuid_to_merge=uuid,
     )
-    logging.debug('post invite (get token), payload: %s' % post_invite_set)
+    logging.debug('post invite (set token), payload: %s' % post_invite_set)
     status, response = await Misc.api_request(
         path='/api/token/invite/',
         method='post',
         json=post_invite_set,
     )
-    logging.debug('post invite (get token), status: %s' % status)
-    logging.debug('post invite (get token): %s' % response)
+    logging.debug('post invite (set token), status: %s' % status)
+    logging.debug('post invite (set token): %s' % response)
     reply = ''
     if status == 200:
         bot_data = await bot.get_me()
@@ -5997,9 +6019,51 @@ async def process_callback_invite(callback_query: types.CallbackQuery, state: FS
             f'сформирована - перешлите её адресату: {link}'
         )
     elif status == 400 and response.get("message"):
-        reply = f'Ошибка: {response["message"]}'
+        reply = f'Ошибка:\n\n{response["message"]}'
     if reply:
         await callback_query.message.reply(reply, disable_web_page_preview=True,)
+
+
+async def show_invite(profile, token_invite, message, bot_data):
+    """
+    Действия приглашенного пользователя
+    """
+    post_invite_get = dict(
+        tg_token=settings.TOKEN,
+        operation='get',
+        token=token_invite,
+        uuid_invited=profile['uuid'],
+    )
+    logging.debug('post invite ( token), payload: %s' % post_invite_get)
+    status, response = await Misc.api_request(
+        path='/api/token/invite/',
+        method='post',
+        json=post_invite_get,
+    )
+    logging.debug('post invite (get token), status: %s' % status)
+    logging.debug('post invite (get token): %s' % response)
+    reply_markup = reply = None
+    if status == 200:
+        reply = (
+            f'Чтобы объединить свой профиль с профилем '
+            f'<b>{response["name_to_merge"]}</b> нажмите Продолжить'
+        )
+        callback_data_invite_confirm = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+            keyboard_type=KeyboardType.INVITE_CONFIRM,
+            uuid=token_invite,
+            sep=KeyboardType.SEP,
+        )
+        inline_btn_invite_confirm = InlineKeyboardButton(
+            "Продолжить",
+            callback_data=callback_data_invite_confirm,
+        )
+        reply_markup = InlineKeyboardMarkup()
+        reply_markup.row(inline_btn_invite_confirm, Misc.inline_button_cancel())
+        await FSMinviteConfirm.ask.set()
+    elif status == 400 and response.get("message"):
+        reply = f'Ошибка:\n\n{response["message"]}'
+    if reply:
+        await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True,)
 
 
 # ---------------------------------
