@@ -3574,7 +3574,7 @@ class ApiTokenAuthData(ApiTokenAuthDataMixin, APIView):
 
 api_token_authdata = ApiTokenAuthData.as_view()
 
-class ApiTokenInvite(TelegramApiMixin, UuidMixin, APIView):
+class ApiTokenInvite(UuidMixin, APIView):
     """
     Зашить invite в токене. Получить данные invite из token
 
@@ -3589,7 +3589,7 @@ class ApiTokenInvite(TelegramApiMixin, UuidMixin, APIView):
         приглашаемым.
     Используем кэш redis!
     Ключ токена:
-        <TOKEN_INVITE_PREFIX><TOKEN_INVITE_PREFIX><токен>
+        <TOKEN_INVITE_PREFIX><TOKEN_INVITE_SEP><токен>
     Данные токена:
         <uuid_приглашающего><TOKEN_INVITE_SEP><uuid_его_собственного>
     """
@@ -3605,34 +3605,31 @@ class ApiTokenInvite(TelegramApiMixin, UuidMixin, APIView):
 
         На входе
             Приглашающий:
-            Зашить данные invite в токене:
-                {
-                    "operation": "set",
-                    "tg_token": settings.TELEGRAM_BOT_TOKEN,
-                    "uuid_inviter": "<uuid>"
-                    "uuid_invited": "<uuid>" // user owned by inviter
-                }
-            На выходе:
-                {
-                    "token": "<токен>",
-                    // Это требуется для формирования ссылки login url
-                    // к нопке телеграма
-                    "bot_username": "<bot_username>"
-                }
-            Приглашаемый:
-            Получить данные invite в токене:
-                {
-                    "operation": "get",
-                    "tg_token": settings.TELEGRAM_BOT_TOKEN,
-                    "token": "<token>"
-                    "uuid_active": "<uuid>" // активный пользователь,
-                                            // нажавший на ссылку- приглашения
-                }
-            На выходе:
-                {
-                    "uuid_inviter": "<uuid>"
-                    "uuid_invited": "<uuid>" // user owned by inviter
-                }
+                Зашить данные invite в токене:
+                    {
+                        "operation": "set",
+                        "tg_token": settings.TELEGRAM_BOT_TOKEN,
+                        "uuid_inviter": "<uuid>"
+                        "uuid_to_merge": "<uuid>"   // user owned by inviter
+                    }
+                На выходе:
+                    {
+                        "token": "<токен>",
+                    }
+            Приглашаемый.
+                Получает данные по ссылке (get) или подтверждает (accept) 
+                    {
+                        "operation": "get",         // получить данные по ссылке
+                                     "accept",      // подтвердить
+                        "tg_token": settings.TELEGRAM_BOT_TOKEN,
+                        "token": "<token>"
+                        "uuid_invited": "<uuid>"    // активный приглашаемый пользователь,
+                                                    // нажавший на ссылку- приглашения
+                    }
+                На выходе:
+                    {
+                        "name_to_merge": "<uuid>"   // first_name of the user owned by inviter
+                    }
         """
         try:
             if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
@@ -3640,48 +3637,62 @@ class ApiTokenInvite(TelegramApiMixin, UuidMixin, APIView):
             operation = request.data.get('operation')
             if operation == 'set':
                 uuid_inviter = request.data.get('uuid_inviter')
-                uuid_invited = request.data.get('uuid_invited')
+                uuid_to_merge = request.data.get('uuid_to_merge')
                 user_inviter, profile_inviter = self.check_user_uuid(uuid_inviter, related= ('user',))
-                user_invited, profile_invited = self.check_user_uuid(uuid_invited, related= ('user',))
-                if not profile_invited.owner or profile_invited.owner != user_inviter:
-                    raise ServiceException('Не прав на операцию')
-                if profile_invited.is_dead:
-                    raise ServiceException(f'{user_invited.first_name} умер. Нельзя приглашать умершего')
+                user_to_merge, profile_to_merge = self.check_user_uuid(uuid_to_merge, related= ('user',))
+                if not profile_to_merge.owner or profile_to_merge.owner != user_inviter:
+                    raise ServiceException('Нет прав на операцию')
+                if profile_to_merge.is_dead:
+                    raise ServiceException(f'{user_to_merge.first_name} умер. Нельзя приглашать умершего')
                 token = str(uuid.uuid4())
-                data = dict(
-                    token=token,
-                    bot_username=self.get_bot_username(),
-                )
+                data = dict(token=token,)
                 if r := redis.Redis(**settings.REDIS_TOKEN_CONNECT):
                     r.set(
                         name=self.TOKEN_INVITE_PREFIX + self.TOKEN_INVITE_SEP + token,
-                        value=uuid_inviter + self.TOKEN_INVITE_SEP + uuid_invited,
+                        value=uuid_inviter + self.TOKEN_INVITE_SEP + uuid_to_merge,
                         ex=settings.TOKEN_INVITE_EXPIRE,
                     )
                 else:
                     raise ServiceException('Не удалось подключиться к хранилищу токенов (redis cache)')
-            elif operation == 'get':
+            elif operation in ('get', 'accept'):
                 token = request.data.get('token', 'token')
                 token_in_redis = self.TOKEN_INVITE_PREFIX + self.TOKEN_INVITE_SEP + token
                 if r := redis.Redis(**settings.REDIS_TOKEN_CONNECT):
                     if value_in_redis := r.get(token_in_redis):
                         values = value_in_redis.split(self.TOKEN_INVITE_SEP)
                         try:
-                            data = dict(
-                                uuid_inviter = values[0],
-                                uuid_invited = values[1],
-                            )
+                            uuid_inviter = values[0]
+                            uuid_to_merge = values[1]
                         except IndexError:
                             raise ServiceException('Ошибка апи')
                         # Часто может быть: приглашающий щелкнул на ссылку
-                        uuid_active = request.data.get('uuid_active')
-                        if uuid_active == data['uuid_inviter']:
+                        uuid_invited = request.data.get('uuid_invited')
+                        if uuid_invited == uuid_inviter:
                             raise ServiceException('Приглашение относится не к Вам')
+                        try:
+                            user_invited, profile_invited = self.check_user_uuid(uuid_invited, related= ('user',))
+                        except ServiceException:
+                            raise ServiceException('Приглашающего уже нет в системе')
+                        if Profile.objects.filter(owner=user_invited).exists():
+                            raise ServiceException(
+                                'У Вас уже есть связи - обратитесь, пожалуйста, в поддержку ( /feedback )'
+                            )
+                        try:
+                            user_to_merge, profile_to_merge = self.check_user_uuid(uuid_to_merge, related= ('user',))
+                        except ServiceException:
+                            raise ServiceException('Приглашение уже не действует')
+                        try:
+                            user_inviter, profile_inviter = self.check_user_uuid(uuid_inviter, related= ('user',))
+                        except ServiceException:
+                            raise ServiceException('Приглашающий исчез из системы')
+                        if not profile_to_merge.owner or profile_to_merge.owner != user_inviter:
+                            raise ServiceException('Профиль, с которым было намечено Вас объединить, исчез или передан другому')
+                        if profile_to_merge.is_dead:
+                            raise ServiceException(f'{user_to_merge.first_name} умер. Нельзя объединять Вас с умершим')
+                        data = dict(name_to_merge=user_to_merge.first_name)
                         status_code = status.HTTP_200_OK
                     else:
                         raise ServiceException('Приглашение уже принято')
-                # TODO. Здесь жду ответа от постановщика задачи: сразу мержить или после
-                #       ответа на вопрос.
                 # Так быстрее, чем delete, redis в фоне удалит через секунду
                 # r.expire(token_in_redis, 1)
             else:

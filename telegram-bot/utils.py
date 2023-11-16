@@ -185,6 +185,8 @@ class KeyboardType(object):
 
     # заняты: 53, 54
 
+    INVITE = 55
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -1006,6 +1008,17 @@ class Misc(object):
                             callback_data=callback_data_template % dict_change_owner,
                         )
                         args_edit_2.append(inline_btn_change_owner)
+                        if not response_to['is_dead']:
+                            dict_invite = dict(
+                                keyboard_type=KeyboardType.INVITE,
+                                uuid=response_to['uuid'],
+                                sep=KeyboardType.SEP,
+                            )
+                            inline_btn_invite = InlineKeyboardButton(
+                                'Пригласить',
+                                callback_data=callback_data_template % dict_invite,
+                            )
+                            args_edit_2.append(inline_btn_invite)
                     reply_markup.row(*args_edit_2)
 
                     dict_papa_mama = dict(

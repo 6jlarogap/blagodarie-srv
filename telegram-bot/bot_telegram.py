@@ -101,6 +101,10 @@ class FSMtrustThank(StatesGroup):
     # благодарности, недоверия, не-знакомы
     ask = State()
 
+class FSMinvite(StatesGroup):
+    # приглашение с объединением собственного
+    ask = State()
+
 # Отслеживаем по каждой группе (ключ этого словаря),
 # кто был автором последнего сообщения в группу.
 # Если юзер отправит два сообщения подряд, то
@@ -5940,6 +5944,62 @@ async def inline_handler(query: types.InlineQuery):
                     cache_time=1 if settings.DEBUG else 300,
                     is_personal=True,
                 )
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.INVITE,
+        KeyboardType.SEP,
+    ), c.data
+    ), state=None,
+    )
+async def process_callback_invite(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Нажата кнопка "Пригласить"
+
+    Отправить запрос на получение токена приглашения.
+    По токену сформировать ссылку, ответить нажавшему кнопку
+    сообщением, которое можно будет переслать в личку кому-то,
+    от которого мы хотим, чтоб он объединил себя с собственным
+    профилем нажавшего кнопку
+    """
+    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+        return
+    message = callback_query.message
+    response_sender = await Misc.check_owner(
+        owner_tg_user=callback_query.from_user, uuid=uuid, check_owned_only=True
+    )
+    if not response_sender:
+        return
+    post_invite_set = dict(
+        tg_token=settings.TOKEN,
+        operation='set',
+        uuid_inviter=response_sender['uuid'],
+        uuid_to_merge=uuid,
+    )
+    logging.debug('post invite (get token), payload: %s' % post_invite_set)
+    status, response = await Misc.api_request(
+        path='/api/token/invite/',
+        method='post',
+        json=post_invite_set,
+    )
+    logging.debug('post invite (get token), status: %s' % status)
+    logging.debug('post invite (get token): %s' % response)
+    reply = ''
+    if status == 200:
+        bot_data = await bot.get_me()
+        link = Misc.get_html_a(
+            href=f't.me/{bot_data["username"]}?start=invite-{response["token"]}',
+            text='ссылка'
+        )
+        reply = (
+            f'Ссылка для приглашения <b>{response_sender["response_uuid"]["first_name"]}</b> '
+            f'сформирована - перешлите её адресату: {link}'
+        )
+    elif status == 400 and response.get("message"):
+        reply = f'Ошибка: {response["message"]}'
+    if reply:
+        await callback_query.message.reply(reply, disable_web_page_preview=True,)
 
 
 # ---------------------------------
