@@ -3666,11 +3666,11 @@ class ApiTokenInvite(UuidMixin, APIView):
                             uuid_inviter = values[0]
                             uuid_to_merge = values[1]
                         except IndexError:
-                            raise ServiceException('Ошибка апи')
+                            raise ServiceException('Ошибка API')
                         # Часто может быть: приглашающий щелкнул на ссылку
                         uuid_invited = request.data.get('uuid_invited')
                         if uuid_invited == uuid_inviter:
-                            raise ServiceException('Приглашение относится не к Вам')
+                            raise ServiceException('Вы пригласили. Приглашенный -- кто-то другой, кому Вы потравите ссылку')
                         try:
                             user_invited, profile_invited = self.check_user_uuid(uuid_invited, related= ('user',))
                         except ServiceException:
@@ -3679,6 +3679,8 @@ class ApiTokenInvite(UuidMixin, APIView):
                             raise ServiceException(
                                 'У Вас уже есть связи - обратитесь, пожалуйста, в поддержку: /feedback'
                             )
+                        if profile_invited.owner:
+                            raise ServiceException('Приглашаемый является собственным')
                         try:
                             user_to_merge, profile_to_merge = self.check_user_uuid(uuid_to_merge, related= ('user',))
                         except ServiceException:
@@ -3691,14 +3693,25 @@ class ApiTokenInvite(UuidMixin, APIView):
                             raise ServiceException('Профиль, с которым было намечено Вас объединить, исчез или передан другому')
                         if profile_to_merge.is_dead:
                             raise ServiceException(f'{user_to_merge.first_name} умер. Нельзя объединять Вас с умершим')
-                        profile = profile_to_merge if operation == 'get' else profile_inviter
-                        profile_data = profile.data_dict(request)
+                        if operation == 'get':
+                            profile = profile_to_merge
+                            profile_data = profile.data_dict(request)
+                        else:
+                            # accept
+                            profile = profile_invited
+                            profile.merge(profile_to_merge)
+                            profile_data = profile.data_dict(request)
+                            profile_data.update(profile.parents_dict(request))
+                            profile_data.update(profile.data_WAK())
+                            profile_data.update(user_id=user_invited.pk, owner_id=None)
+                            profile_data.update(tg_data=profile.tg_data())
+                            # Так быстрее, чем delete, redis в фоне удалит через секунду
+                            r.expire(token_in_redis, 1)
                         data = dict(profile=profile_data)
                         status_code = status.HTTP_200_OK
                     else:
                         raise ServiceException('Приглашение уже принято')
-                # Так быстрее, чем delete, redis в фоне удалит через секунду
-                # r.expire(token_in_redis, 1)
+
             else:
                 raise ServiceException('Неверный вызов апи')
             status_code = status.HTTP_200_OK

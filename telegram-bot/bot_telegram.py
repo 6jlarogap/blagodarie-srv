@@ -6062,9 +6062,75 @@ async def show_invite(profile, token_invite, message, bot_data):
         await FSMinviteConfirm.ask.set()
     elif status == 400 and response.get("message"):
         reply = f'Ошибка:\n\n{response["message"]}'
+    else:
+        reply = Misc.MSG_ERROR_API
     if reply:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True,)
 
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.INVITE_CONFIRM,
+        KeyboardType.SEP,
+    ), c.data
+    ), state=FSMinviteConfirm.ask,
+    )
+async def process_callback_invite_confirm(callback_query: types.CallbackQuery, state: FSMContext):
+    """
+    Пользователь подтверждает приглашение
+
+    В токене есть всё необходимое
+    """
+    reply = None
+    if token_invite := Misc.getuuid_from_callback(callback_query):
+        status_sender, response_sender = await Misc.post_tg_user(callback_query.from_user)
+        if status_sender == 200:
+            post_invite_accept = dict(
+                tg_token=settings.TOKEN,
+                operation='accept',
+                token=token_invite,
+                uuid_invited=response_sender['uuid'],
+            )
+            logging.debug('post invite (accept token), payload: %s' % post_invite_accept)
+            status, response = await Misc.api_request(
+                path='/api/token/invite/',
+                method='post',
+                json=post_invite_accept,
+            )
+            logging.debug('post invite (accept token), status: %s' % status)
+            logging.debug('post invite (accept token): %s' % response)
+            if status == 200:
+                await callback_query.message.reply(
+                    'Добро пожаловать в родственную сеть',
+                    disable_web_page_preview=True,
+                )
+                await Misc.show_cards(
+                    [response['profile']],
+                    callback_query.message,
+                    bot,
+                    response_from=response_sender,
+                    tg_user_from=callback_query.from_user
+                )
+            elif status == 400 and response.get("message"):
+                reply = f'Ошибка:\n\n{response["message"]}'
+            else:
+                reply = 'Ошибка:\n\nОбратитесь в поддежку: /feedback'
+        else:
+            reply = Misc.MSG_ERROR_API
+    if reply:
+        await callback_query.message.reply(reply, disable_web_page_preview=True,)
+    await Misc.state_finish(state)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMinviteConfirm.ask,
+)
+async def process_invite_confirm_message(message: types.Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    await message.reply('Ожидается ответ на вопрос о приглашении', disable_web_page_preview=True,)
 
 # ---------------------------------
 
