@@ -3628,7 +3628,9 @@ class ApiTokenInvite(UuidMixin, APIView):
                     }
                 На выходе:
                     {
-                        "name_to_merge": "<uuid>"   // first_name of the user owned by inviter
+                        "profile": {...}            // данные профиля
+                                                    // при get: того с uuid_to_merge
+                                                    // при accept: того с uuid_invited
                     }
         """
         try:
@@ -3675,7 +3677,7 @@ class ApiTokenInvite(UuidMixin, APIView):
                             raise ServiceException('Приглашающего уже нет в системе')
                         if Profile.objects.filter(owner=user_invited).exists():
                             raise ServiceException(
-                                'У Вас уже есть связи - обратитесь, пожалуйста, в поддержку ( /feedback )'
+                                'У Вас уже есть связи - обратитесь, пожалуйста, в поддержку: /feedback'
                             )
                         try:
                             user_to_merge, profile_to_merge = self.check_user_uuid(uuid_to_merge, related= ('user',))
@@ -3689,7 +3691,9 @@ class ApiTokenInvite(UuidMixin, APIView):
                             raise ServiceException('Профиль, с которым было намечено Вас объединить, исчез или передан другому')
                         if profile_to_merge.is_dead:
                             raise ServiceException(f'{user_to_merge.first_name} умер. Нельзя объединять Вас с умершим')
-                        data = dict(name_to_merge=user_to_merge.first_name)
+                        profile = profile_to_merge if operation == 'get' else profile_inviter
+                        profile_data = profile.data_dict(request)
+                        data = dict(profile=profile_data)
                         status_code = status.HTTP_200_OK
                     else:
                         raise ServiceException('Приглашение уже принято')

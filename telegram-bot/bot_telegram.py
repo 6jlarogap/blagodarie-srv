@@ -6046,7 +6046,7 @@ async def show_invite(profile, token_invite, message, bot_data):
     if status == 200:
         reply = (
             f'Чтобы объединить свой профиль с профилем '
-            f'<b>{response["name_to_merge"]}</b> нажмите Продолжить'
+            f'<b>{response["profile"]["first_name"]}</b> нажмите Продолжить'
         )
         callback_data_invite_confirm = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
             keyboard_type=KeyboardType.INVITE_CONFIRM,
