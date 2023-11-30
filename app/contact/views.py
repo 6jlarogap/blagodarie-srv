@@ -3314,12 +3314,14 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
         """
         related = ('user', 'owner', 'ability',)
         user_q, profile_q = self.check_user_uuid(uuid, related=related)
+        auth_user_pk = request.user.pk if request.user.is_authenticated else -1
 
         nodes_by_id = dict()
         root_node = dict(
             id=user_q.pk,
             uuid=profile_q.uuid,
             first_name=user_q.first_name,
+            is_my=auth_user_pk in (user_q.pk, profile_q.owner and profile_q.owner.pk or None),
             photo=Profile.image_thumb(
                 request, profile_q.photo,
                 method='crop-rgb0033cc-frame-4',
@@ -3487,6 +3489,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     nodes_by_id[user_q.pk].update(**root_node)
                 else:
                     nodes_by_id[p.user.pk].update(**p.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True)))
+                    nodes_by_id[p.user.pk].update(is_my=auth_user_pk in (p.user.pk, p.owner and p.owner.pk or None))
 
         # если только предки и/или потомки, то получить боковые связи и заодно сами узлы
         #
@@ -3529,6 +3532,11 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                         nodes_by_id[cs.user_from.pk].update(
                             **cs.user_from.profile.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True
                         )))
+                        nodes_by_id[cs.user_from.pk].update(
+                            is_my=auth_user_pk in (
+                                cs.user_from.pk,
+                                cs.user_from.profile.owner and cs.user_from.profile.owner.pk or None
+                        ))
                 if nodes_by_id.get(cs.user_to.pk) and nodes_by_id[cs.user_to.pk].get('id') is None:
                     if cs.user_to.pk == user_q.pk:
                         nodes_by_id[cs.user_to.pk].update(**root_node)
@@ -3536,6 +3544,11 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                         nodes_by_id[cs.user_to.pk].update(
                             **cs.user_to.profile.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True
                         )))
+                        nodes_by_id[cs.user_to.pk].update(
+                            is_my=auth_user_pk in (
+                                cs.user_to.pk,
+                                cs.user_to.profile.owner and cs.user_to.profile.owner.pk or None
+                        ))
             # Не тупиковые узлы. Если у них нет боковых связей, значит они complete
             for i in nodes_by_id:
                 if (i != user_q.pk) and \
