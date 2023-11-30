@@ -3063,6 +3063,21 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
     """
     # permission_classes = (IsAuthenticated,)
 
+    def parent_key(self, rec):
+        """
+        Ключ в словаре родителей
+
+        Выбирается или из rec, где rec - словарь,
+        или из записи rec из CurrentState
+        """
+        MOTHER = 'mother'
+        FATHER = 'father'
+        if type(rec) is dict:
+            result = MOTHER if rec['is_mother'] else FATHER
+        else:
+            result = MOTHER if rec.is_mother else FATHER
+        return result
+
     def post(self, request):
         """
         Получить развертывание узлов (детей, родителей из дерева на фронте)
@@ -3082,7 +3097,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
         -   sources_by_id:
                 узлы, следующие по пути развертывания, известны фронту.
                 Надо уточнить их данные:
-                    parent_ids, tree_links, возможно complete
+                    parents, tree_links, возможно complete
             up / down:
                 признаки, что узел находится на линии прямого родства
         Главное:
@@ -3101,7 +3116,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 nodes[i] = int(nodes[i])
             targets_by_id = dict()
             for k in sources_by_id.keys():
-                targets_by_id[k] = dict(tree_links=[], parent_ids=set(),)
+                targets_by_id[k] = dict(tree_links=[], parent_ids=set(), parents={})
             q = Q(is_father=True) | Q(is_mother=True)
             q &= Q(user_to__isnull=False) & Q(user_from__pk__in=sources_by_id.keys())
             fmt = '3d-force-graph'
@@ -3114,7 +3129,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 if cs.user_to.pk not in nodes:
                     if not targets_by_id.get(cs.user_to.pk):
                         targets_by_id[cs.user_to.pk] = dict(
-                            tree_links=[], parent_ids=set(), complete=False,
+                            tree_links=[], parent_ids=set(), parents={}, complete=False,
                             up=False, down=False, collapsed=True,
                         )
                     targets_by_id[cs.user_from.pk]['tree_links'].append(dict(
@@ -3131,6 +3146,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     )
                 try:
                     targets_by_id[target]['parent_ids'].add(source)
+                    targets_by_id[target]['parents'][self.parent_key(cs)] = source
                 except KeyError:
                     pass
 
@@ -3363,7 +3379,8 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
 
             # tree_links:
             #   направление развертывания по дереву от корня к окраинам
-            # parent_ids:
+            # parents:
+            #   {'mother': <mother_id>, 'father': <father_id>}
             #   нужны для решения проблемы на фронте:
             #       Развернули человека, появились его папа с мамой, оба свернутые.
             #       Разворачиваем папу, в дереве появляется его дети,
@@ -3375,9 +3392,9 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             #       известны их t_target's
             #
             if not nodes_by_id.get(rec['user_from_id']):
-                nodes_by_id[rec['user_from_id']] = dict(tree_links=[], parent_ids=set())
+                nodes_by_id[rec['user_from_id']] = dict(tree_links=[], parent_ids=set(), parents={})
             if not nodes_by_id.get(rec['user_to_id']):
-                nodes_by_id[rec['user_to_id']] = dict(tree_links=[], parent_ids=set())
+                nodes_by_id[rec['user_to_id']] = dict(tree_links=[], parent_ids=set(), parents={})
 
             source = rec['user_from_id'] if rec['is_child'] else rec['user_to_id']
             target = rec['user_to_id'] if rec['is_child'] else rec['user_from_id']
@@ -3407,6 +3424,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 collapsed=not v_all or rec['level'] > recursion_depth - 1,
             )
             nodes_by_id[target]['parent_ids'].add(source)
+            nodes_by_id[target]['parents'][self.parent_key(rec)] = source
             # nodes_by_id[rec['user_from_id']]['level'] = rec['level'] - 1
             # nodes_by_id[rec['user_to_id']]['level'] = rec['level']
             nodes_by_id[rec['user_from_id']]['up'] = up
@@ -3423,11 +3441,11 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             for rec in recs:
                 if not nodes_by_id.get(rec['user_from_id']):
                     nodes_by_id[rec['user_from_id']] = dict(
-                        tree_links=[], parent_ids=set(), up=True, down=False,
+                        tree_links=[], parent_ids=set(), parents={}, up=True, down=False,
                     )
                 if not nodes_by_id.get(rec['user_to_id']):
                     nodes_by_id[rec['user_to_id']] = dict(
-                        tree_links=[], parent_ids=set(), up=True, down=False,
+                        tree_links=[], parent_ids=set(), parents={}, up=True, down=False,
                     )
                 source = rec['user_from_id'] if rec['is_child'] else rec['user_to_id']
                 target = rec['user_to_id'] if rec['is_child'] else rec['user_from_id']
@@ -3444,6 +3462,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 nodes_by_id[rec['user_from_id']]['complete'] = False
                 nodes_by_id[rec['user_to_id']]['complete'] = False
                 nodes_by_id[target]['parent_ids'].add(source)
+                nodes_by_id[target]['parents'][self.parent_key(rec)] = source
             try:
                 nodes_by_id[user_q.pk]['up'] = True
             except KeyError:
@@ -3488,7 +3507,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 if not is_root_node:
                     if not nodes_by_id.get(cs.user_to.pk):
                         nodes_by_id[cs.user_to.pk] = dict(
-                            tree_links=[], parent_ids=set(), complete=False,
+                            tree_links=[], parent_ids=set(), parents={}, complete=False,
                             up=False, down=False, collapsed=True,
                         )
                         new_lateral = True
@@ -3496,6 +3515,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 target = cs.user_to.pk   if cs.is_child else cs.user_from.pk
                 try:
                     nodes_by_id[target]['parent_ids'].add(source)
+                    nodes_by_id[target]['parents'][self.parent_key(cs)] = source
                 except KeyError:
                     pass
                 if new_lateral or cs.user_to.pk in all_lateral_pks:
@@ -3549,7 +3569,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
 
         if not nodes_by_id:
             nodes_by_id[user_q.pk] = dict(
-                tree_links=[], parent_ids=set(), up=True, down=True,
+                tree_links=[], parent_ids=set(), parents={}, up=True, down=True,
                 complete = True, collapsed=False,
             )
             nodes_by_id[user_q.pk].update(**root_node)
@@ -3638,7 +3658,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             if fmt == 'd3js':
                 UserById[p.user.pk] = dict(uuid=p.uuid)
             elif fmt=='3d-force-graph' and collapse:
-                UserById[p.user.pk] = dict(parent_ids=[])
+                UserById[p.user.pk] = dict(parent_ids=[], parents={})
 
         connections = []
         pairs = set()
@@ -3659,6 +3679,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     # Это потребуется при развертывании потерянных родственных связей между
                     # свернутыми злами на графе.
                     UserById[target]['parent_ids'].append(source)
+                    UserById[target]['parents'][self.parent_key(rec)] = source
             else:
                 item = dict(
                     source=UserById[source]['uuid'],
@@ -3672,6 +3693,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             if collapse:
                 for user in users:
                     user['parent_ids'] = UserById[user['id']]['parent_ids']
+                    user['parents'] = UserById[user['id']]['parents']
             bot_username = self.get_bot_username()
             return dict(bot_username=bot_username, nodes=users, links=connections, root_node=root_node)
         else:
