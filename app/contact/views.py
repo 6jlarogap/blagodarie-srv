@@ -2251,8 +2251,13 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                         ))
                         user_pks.append(rec['id'])
                 links = []
+
                 if user_q.pk not in user_pks:
                     user_pks.append(user_q.pk)
+                user_a = request.user
+                if user_a.is_authenticated and user_a.pk not in user_pks:
+                    nodes.append(user_a.profile.data_dict(request, fmt=fmt))
+                    user_pks.append(user_a.pk)
                 q = Q(user_from__in=user_pks) & Q(user_to__in=user_pks)
                 q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust__isnull=False)
                 for cs in CurrentState.objects.filter(q).select_related(
