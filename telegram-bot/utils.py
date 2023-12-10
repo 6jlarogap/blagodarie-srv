@@ -898,7 +898,7 @@ class Misc(object):
                         ), keep_user_data='on',
                     ))
                 login_url_buttons.append(inline_btn_map)
-                reply_markup.row(*login_url_buttons)
+            reply_markup.row(*login_url_buttons)
 
             response_relations = {}
             if user_from_id and user_from_id != response_to['user_id']:
