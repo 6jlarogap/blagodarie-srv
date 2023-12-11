@@ -105,15 +105,6 @@ class FSMinviteConfirm(StatesGroup):
     # приглашение с объединением собственного
     ask = State()
 
-# Отслеживаем по каждой группе (ключ этого словаря),
-# кто был автором последнего сообщения в группу.
-# Если юзер отправит два сообщения подряд, то
-# реакция бота будет только по первому сообщению.
-# Несколько сообщений подряд от одного и того же юзера
-# могут быть и в сообщении, включающем множество картинок.
-#
-last_user_in_group = dict()
-
 bot = Bot(
     token=settings.TOKEN,
     parse_mode=types.ParseMode.HTML,
@@ -5622,8 +5613,6 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
     except (TypeError, AttributeError,):
         pass
 
-    global last_user_in_group
-
     # Данные из телеграма пользователя /пользователей/, данные которых надо выводить при поступлении
     # сообщения в группу
     #
@@ -5655,18 +5644,6 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
         return
 
     bot_data = await bot.get_me()
-    if tg_user_left or tg_users_new:
-        # Если сообщение о новом, убывшем пользователе, то любое следующее
-        # сообщение будет как бы от нового пользователя
-        is_previous_his = False
-        last_user_in_group[message.chat.id] = None
-    else:
-        previous_user_in_group = last_user_in_group.get(message.chat.id)
-        is_previous_his = True
-        if previous_user_in_group != message.from_user.id:
-            last_user_in_group[message.chat.id] = message.from_user.id
-            is_previous_his = False
-
     for user_in in a_users_in:
         reply_markup = None
         response_from = {}
@@ -5710,7 +5687,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 logging.debug('post operation, status: %s' % status)
                 logging.debug('post operation, response: %s' % response)
 
-        if not is_previous_his and not tg_user_left and bot_data.id == user_in.id:
+        if not tg_user_left and bot_data.id == user_in.id:
             # ЭТОТ бот подключился.
             await Misc.send_pin_group_message(message.chat, bot, bot_data)
 
