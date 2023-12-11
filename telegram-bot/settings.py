@@ -124,6 +124,35 @@ AUTH_PROMPT_FOR_DOMAIN = {
 #
 VOTE_URL = 'https://6jlarogap.github.io/razum/'
 
+# Параметры для redis кэша, где хранится временно
+#   -   id автора пересылаемоего сообщения ~ id телеграм пользователя
+#       Пересылаемое сообщение в бот может состоять из нескольких
+#       сообщений, но показать карточку автора пересылаемоего сообщения
+#       надо лишь раз. Посему в кэше redis ставится запись:
+#           REDIS_FORWARDED_MESSAGE_PREFIX +
+#           id автора пересылаемоего сообщения +
+#           REDIS_RECORD_SEP +
+#           id телеграм пользователя
+#       Запись имеет время жизни REDIS_FORWARDED_MESSAGE_TTL сек.
+#       Если при поступлении очередного перенаправленного сообщения
+#       в бот запись в redis, соответствующая этому сообщению существует,
+#       карточка автора пересылаемоего сообщения не показывается.
+#       Иначе ставится та запись в redis кэше.
+#
+REDIS_CONNECT =dict(
+    # Параметры инициализации redis connection,
+    # те же, что в redis.Redis()
+    # https://redis-py.readthedocs.io/en/stable/connections.html
+    #
+    host='127.0.0.1',
+    port=6379,
+    db=2,
+    decode_responses=True,
+)
+REDIS_RECORD_SEP = '~'
+REDIS_FORWARDED_MESSAGE_PREFIX = 'forwarded_'
+REDIS_FORWARDED_MESSAGE_TTL = 60
+
 try:
     from local_settings import *
 except ModuleNotFoundError:

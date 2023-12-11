@@ -1,4 +1,4 @@
-import base64, re, hashlib
+import base64, re, hashlib, redis
 from io import BytesIO
 from urllib.parse import urlparse
 
@@ -992,7 +992,24 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         status, response_to = await Misc.post_tg_user(tg_user_forwarded)
         if status == 200:
             response_to.update(tg_username=tg_user_forwarded.username)
-            a_response_to = [response_to, ]
+            show_forwarded_response = True
+            if r := redis.Redis(**settings.REDIS_CONNECT):
+                check_str = (
+                    f'{settings.REDIS_FORWARDED_MESSAGE_PREFIX}'
+                    f'{tg_user_forwarded.id}'
+                    f'{settings.REDIS_RECORD_SEP}'
+                    f'{tg_user_sender.id}'
+                )
+                if r.get(check_str):
+                    show_forwarded_response = False
+                else:
+                    r.set(
+                        name=check_str,
+                        value='1',
+                        ex=settings.REDIS_FORWARDED_MESSAGE_TTL,
+                    )
+            if show_forwarded_response:
+                a_response_to = [response_to, ]
 
     if user_from_id and state_ in ('forwarded_from_other', 'forwarded_from_me'):
         usernames, text_stripped = Misc.get_text_usernames(message_text)
