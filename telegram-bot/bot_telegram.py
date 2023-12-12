@@ -984,21 +984,20 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         if status == 200:
             response_to.update(tg_username=tg_user_forwarded.username)
             show_forwarded_response = True
-            if r := redis.Redis(**settings.REDIS_CONNECT):
-                check_str = (
-                    f'{settings.REDIS_FORWARDED_MESSAGE_PREFIX}'
-                    f'{tg_user_forwarded.id}'
-                    f'{settings.REDIS_RECORD_SEP}'
-                    f'{tg_user_sender.id}'
-                )
-                if r.get(check_str):
-                    show_forwarded_response = False
-                else:
-                    r.set(
-                        name=check_str,
-                        value='1',
-                        ex=settings.REDIS_FORWARDED_MESSAGE_TTL,
+            if getattr(message, 'media_group_id', None):
+                if r := redis.Redis(**settings.REDIS_CONNECT):
+                    check_str = (
+                        f'{settings.REDIS_MEDIA_GROUP_PREFIX}'
+                        f'{message.media_group_id}'
                     )
+                    if r.get(check_str):
+                        show_forwarded_response = False
+                    else:
+                        r.set(
+                            name=check_str,
+                            value='1',
+                            ex=settings.REDIS_MEDIA_GROUP_TTL,
+                        )
             if show_forwarded_response:
                 a_response_to = [response_to, ]
 
