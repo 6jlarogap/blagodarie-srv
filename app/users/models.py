@@ -412,6 +412,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
         if fmt == '3d-force-graph':
             result.update(
                 id=user.pk,
+                username=user.username,
                 uuid=self.uuid,
                 first_name=user.first_name,
                 photo=photo,
@@ -421,6 +422,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
         else:
             result.update(
                 uuid=self.uuid,
+                username=user.username,
                 last_name=user.last_name,
                 first_name=user.first_name,
                 middle_name=self.middle_name,
@@ -701,14 +703,11 @@ class CreateUserMixin(object):
     ):
         user = None
         random.seed()
-        chars = string.ascii_lowercase + string.digits
-        for c in '0Ol1':
-            chars = chars.replace(c, '')
-        dt_str = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-        for i in range(100):
+        chars = string.ascii_lowercase + string.digits + string.ascii_uppercase
+        for i in range(1000):
             with transaction.atomic():
                 try:
-                    username = "%s-%s" % (dt_str, ''.join(random.choice(chars) for x in range(5)),)
+                    username = ''.join(random.choice(chars) for x in range(10))
                     user = User.objects.create(
                         username=username,
                         last_name='',

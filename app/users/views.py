@@ -1934,7 +1934,7 @@ class ApiBotGroupMember(ApiBotGroupMixin, APIView):
 api_bot_groupmember = ApiBotGroupMember.as_view()
 
 class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
-    permission_classes = (IsAuthenticated,)
+    # permission_classes = (IsAuthenticated,)
 
     # Фото пользователя, когда в карте щелкаешь на балун
     #
