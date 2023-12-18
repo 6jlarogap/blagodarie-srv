@@ -326,6 +326,11 @@ GRAPH_URL = 'https://graph.blagoroda.org'
 #
 MAP_URL = 'https://map.blagoroda.org'
 
+# Переход по короткой ссылке. По url типа ../t/qwert12345
+# делается redirect на:
+#
+SHORT_ID_URL = 'https://graph.blagoroda.org/?user_uuid_trusts=%s'
+
 # ------------------------------------------------
 
 # Это надо полностью переписать в local_settings.py:

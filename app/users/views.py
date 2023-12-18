@@ -15,6 +15,7 @@ from django.http import Http404
 from django.contrib.postgres.search import SearchQuery, SearchVector
 from django.db.utils import ProgrammingError
 from django.core.validators import URLValidator
+from django.views.generic.base import View
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -3721,3 +3722,14 @@ class ApiTokenInvite(UuidMixin, APIView):
         return Response(data=data, status=status_code)
 
 api_token_invite = ApiTokenInvite.as_view()
+
+class ApiShortIdView(View):
+
+    def get(self, request, short_id):
+        try:
+            user = User.objects.select_related('profile').get(username=short_id)
+        except User.DoesNotExist:
+            raise Http404
+        return redirect(settings.SHORT_ID_URL % user.profile.uuid)
+
+api_short_id = ApiShortIdView.as_view()
