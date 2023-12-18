@@ -599,6 +599,8 @@ class Misc(object):
             't.me/%s?start=%s' % (bot_data['username'], tgd['tg_username']) \
                 for tgd in response.get('tg_data', []) if tgd['tg_username']
         ]
+        if response.get('username'):
+            keys.append(settings.SHORT_ID_LINK % response['username'])
 
         keys_text = '\n' + '\n'.join(
             key for key in keys

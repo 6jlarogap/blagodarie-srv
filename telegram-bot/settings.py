@@ -86,6 +86,8 @@ GRAPH_HOST = 'https://graph.blagoroda.org'
 #
 FRONTEND_AUTH_PATH = '/auth/telegram/'
 
+SHORT_ID_LINK = 'blagoroda.org/t/%s'
+
 # Админитраторы бота, их telegram ids
 #
 BOT_ADMINS = ()
