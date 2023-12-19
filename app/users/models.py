@@ -369,6 +369,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
     trust_count = models.PositiveIntegerField(_("Число оказанных доверий"), default=0)
     mistrust_count = models.PositiveIntegerField(_("Число утрат доверия"), default=0)
     did_bot_start = models.BooleanField(_("Стартовал телеграм бот"), default=False)
+    is_org = models.BooleanField(_("Организация"), default=False)
     ability = models.ForeignKey('contact.Ability', verbose_name=_("Способность"), null=True, on_delete=models.SET_NULL)
     # Для родни:
     owner = models.ForeignKey('auth.User', on_delete=models.CASCADE, null=True, related_name='profile_owner_set')
@@ -412,7 +413,6 @@ class Profile(PhotoModel, GeoPointAddressModel):
         if fmt == '3d-force-graph':
             result.update(
                 id=user.pk,
-                username=user.username,
                 uuid=self.uuid,
                 first_name=user.first_name,
                 photo=photo,
@@ -438,6 +438,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 address=self.address,
                 ability=self.ability and self.ability.text or None,
                 gender=self.gender,
+                is_org=self.is_org,
                 dob=self.dob and self.dob.str_safe() or None,
                 is_dead=self.is_dead or bool(self.dod),
                 dod=self.dod and self.dod.str_safe() or None,
@@ -687,6 +688,8 @@ class CreateUserMixin(object):
     MSG_FAILED_CREATE_USER = 'Не удалось создать пользователя с уникальным именем. Попробуйте еще раз.'
 
     def create_user(self,
+        # Keyword only parameters
+        *,
         last_name='',
         first_name='',
         middle_name='',
@@ -697,6 +700,7 @@ class CreateUserMixin(object):
         dod=None,
         is_active=True,
         gender=None,
+        is_org=False,
         latitude=None,
         longitude=None,
         comment=None,
@@ -734,6 +738,7 @@ class CreateUserMixin(object):
                 is_dead=is_dead,
                 dod=dod,
                 gender=gender,
+                is_org=is_org,
                 latitude=latitude,
                 longitude=longitude,
                 address=GeoPointAddressModel.coordinates_to_address(latitude, longitude),

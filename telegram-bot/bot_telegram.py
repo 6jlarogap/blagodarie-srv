@@ -4142,6 +4142,7 @@ async def process_callback_new_iof_gender(callback_query: types.CallbackQuery, s
                                 callback_query.message,
                                 bot,
                                 response_from=response_sender,
+                                tg_user_from=callback_query.from_user,
                             )
                     except:
                         pass

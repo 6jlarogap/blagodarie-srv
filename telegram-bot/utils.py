@@ -550,14 +550,13 @@ class Misc(object):
         reply = f'<b>{response["first_name"]}</b>\n'
         if (comment := response.get('comment', '').strip()) and comment:
             reply += f'{comment}\n'
-        lifetime_str = cls.get_lifetime_str(response)
-        if lifetime_str:
-            lifetime_str += '\n'
+        if not response.get('is_org'):
+            reply += cls.get_lifetime_str(response)
         reply += (
-                f'{lifetime_str}'
-                f'Доверий: {response["trust_count"]}\n'
-                f'Благодарностей: {response["sum_thanks_count"]}\n'
-                '\n'
+            '\n'
+            f'Доверий: {response["trust_count"]}\n'
+            f'Благодарностей: {response["sum_thanks_count"]}\n'
+            '\n'
         )
         keys = []
 
@@ -572,7 +571,7 @@ class Misc(object):
             ) if response.get('wishes') else 'не заданы'
             reply += ('Потребности: %s' % wishes_text) + '\n\n'
 
-            if show_parents:
+            if show_parents and not response.get('is_org'):
                 papa = response.get('father') and \
                     cls.get_deeplink_with_name(response['father'], bot_data, with_lifetime_years=True) or \
                     'не задан'
@@ -610,12 +609,12 @@ class Misc(object):
         return reply
 
     @classmethod
-    def reply_relations(cls, response):
+    def reply_relations(cls, response, response_to):
         result = ''
-        arr = [
-            'От Вас: %s' % OperationType.relation_text(response['from_to']['is_trust']),
-            'К Вам: %s' % OperationType.relation_text(response['to_from']['is_trust']),
-        ]
+        arr = ['От Вас: %s' % OperationType.relation_text(response['from_to']['is_trust']),]
+        # Организация может доверять только, если у нее не собственный аккаунт
+        if not response_to.get('is_org') and not response_to.get('owner_id'):
+            arr.append('К Вам: %s' % OperationType.relation_text(response['to_from']['is_trust']))
         arr.append('\n')
         result = '\n'.join(arr)
         return result
@@ -863,6 +862,7 @@ class Misc(object):
         for response_to in a_response_to:
             is_own_account = user_from_id and user_from_id == response_to['user_id']
             is_owned_account = user_from_id and response_to.get('owner_id') and response_to['owner_id'] == user_from_id
+            is_org = response_to.get('is_org')
 
             reply = cls.reply_user_card(
                 response_to,
@@ -877,18 +877,21 @@ class Misc(object):
                         user_uuid=response_to['uuid'],
                     ), keep_user_data='on',
                 ))
-            inline_btn_genesis = InlineKeyboardButton(
-                'Род',
-                login_url=cls.make_login_url(
-                    redirect_path=(
-                            '%(graph_host)s/?user_uuid_genesis_tree=%(user_uuid)s'
-                            '&up=on&down=on&depth=2'
-                        ) % dict(
-                        graph_host=settings.GRAPH_HOST,
-                        user_uuid=response_to['uuid'],
-                    ), keep_user_data='on',
-                ))
-            login_url_buttons = [inline_btn_trusts, inline_btn_genesis]
+            login_url_buttons = [inline_btn_trusts, ]
+
+            if not is_org:
+                inline_btn_genesis = InlineKeyboardButton(
+                    'Род',
+                    login_url=cls.make_login_url(
+                        redirect_path=(
+                                '%(graph_host)s/?user_uuid_genesis_tree=%(user_uuid)s'
+                                '&up=on&down=on&depth=2'
+                            ) % dict(
+                            graph_host=settings.GRAPH_HOST,
+                            user_uuid=response_to['uuid'],
+                        ), keep_user_data='on',
+                    ))
+                login_url_buttons.append(inline_btn_genesis)
 
             if response_to.get('latitude') is not None and response_to.get('longitude') is not None:
                 inline_btn_map = InlineKeyboardButton(
@@ -906,7 +909,7 @@ class Misc(object):
             if user_from_id and user_from_id != response_to['user_id']:
                 status_relations, response_relations = await cls.call_response_relations(response_from, response_to)
                 if response_relations:
-                    reply += cls.reply_relations(response_relations)
+                    reply += cls.reply_relations(response_relations, response_to)
 
             if user_from_id != response_to['user_id'] and bot_data.id != tg_user_from_id:
                 dict_reply = dict(
@@ -965,26 +968,24 @@ class Misc(object):
                         uuid=response_to['uuid'],
                         sep=KeyboardType.SEP,
                     ))
-                    inline_btn_gender = InlineKeyboardButton(
-                        'Пол',
-                        callback_data=callback_data_template % dict(
-                        keyboard_type=KeyboardType.GENDER,
-                        uuid=response_to['uuid'],
-                        sep=KeyboardType.SEP,
-                    ))
-                    inline_btn_dates = InlineKeyboardButton(
-                        'Д.р.' if is_own_account else 'Даты',
-                        callback_data=callback_data_template % dict(
-                        keyboard_type=KeyboardType.DATES,
-                        uuid=response_to['uuid'],
-                        sep=KeyboardType.SEP,
-                    ))
-                    reply_markup.row(
-                        inline_btn_iof,
-                        inline_btn_photo,
-                        inline_btn_gender,
-                        inline_btn_dates,
-                    )
+                    edit_buttons = [inline_btn_iof, inline_btn_photo,]
+                    if not is_org:
+                        inline_btn_gender = InlineKeyboardButton(
+                            'Пол',
+                            callback_data=callback_data_template % dict(
+                            keyboard_type=KeyboardType.GENDER,
+                            uuid=response_to['uuid'],
+                            sep=KeyboardType.SEP,
+                        ))
+                        inline_btn_dates = InlineKeyboardButton(
+                            'Д.р.' if is_own_account else 'Даты',
+                            callback_data=callback_data_template % dict(
+                            keyboard_type=KeyboardType.DATES,
+                            uuid=response_to['uuid'],
+                            sep=KeyboardType.SEP,
+                        ))
+                        edit_buttons += [inline_btn_gender, inline_btn_dates,]
+                    reply_markup.row(*edit_buttons)
 
                     inline_btn_location = InlineKeyboardButton(
                         'Место',
@@ -1025,42 +1026,43 @@ class Misc(object):
                             args_edit_2.append(inline_btn_invite)
                     reply_markup.row(*args_edit_2)
 
-                    dict_papa_mama = dict(
-                        keyboard_type=KeyboardType.FATHER,
-                        uuid=response_to['uuid'],
-                        sep=KeyboardType.SEP,
-                    )
-                    inline_btn_papa = InlineKeyboardButton(
-                        'Папа',
-                        callback_data=callback_data_template % dict_papa_mama,
-                    )
-                    dict_papa_mama.update(keyboard_type=KeyboardType.MOTHER)
-                    inline_btn_mama = InlineKeyboardButton(
-                        'Мама',
-                        callback_data=callback_data_template % dict_papa_mama,
-                    )
-                    dict_child = dict(
-                        keyboard_type=KeyboardType.CHILD,
-                        uuid=response_to['uuid'],
-                        sep=KeyboardType.SEP,
-                    )
-                    inline_btn_child = InlineKeyboardButton(
-                        'Ребёнок',
-                        callback_data=callback_data_template % dict_child,
-                    )
-                    args_relatives = [inline_btn_papa, inline_btn_mama, inline_btn_child, ]
-                    if response_to.get('father') or response_to.get('mother'):
-                        dict_bro_sis = dict(
-                            keyboard_type=KeyboardType.BRO_SIS,
+                    if not is_org:
+                        dict_papa_mama = dict(
+                            keyboard_type=KeyboardType.FATHER,
                             uuid=response_to['uuid'],
                             sep=KeyboardType.SEP,
                         )
-                        inline_btn_bro_sis = InlineKeyboardButton(
-                            'Брат/сестра',
-                            callback_data=callback_data_template % dict_bro_sis,
+                        inline_btn_papa = InlineKeyboardButton(
+                            'Папа',
+                            callback_data=callback_data_template % dict_papa_mama,
                         )
-                        args_relatives.append(inline_btn_bro_sis)
-                    reply_markup.row(*args_relatives)
+                        dict_papa_mama.update(keyboard_type=KeyboardType.MOTHER)
+                        inline_btn_mama = InlineKeyboardButton(
+                            'Мама',
+                            callback_data=callback_data_template % dict_papa_mama,
+                        )
+                        dict_child = dict(
+                            keyboard_type=KeyboardType.CHILD,
+                            uuid=response_to['uuid'],
+                            sep=KeyboardType.SEP,
+                        )
+                        inline_btn_child = InlineKeyboardButton(
+                            'Ребёнок',
+                            callback_data=callback_data_template % dict_child,
+                        )
+                        args_relatives = [inline_btn_papa, inline_btn_mama, inline_btn_child, ]
+                        if response_to.get('father') or response_to.get('mother'):
+                            dict_bro_sis = dict(
+                                keyboard_type=KeyboardType.BRO_SIS,
+                                uuid=response_to['uuid'],
+                                sep=KeyboardType.SEP,
+                            )
+                            inline_btn_bro_sis = InlineKeyboardButton(
+                                'Брат/сестра',
+                                callback_data=callback_data_template % dict_bro_sis,
+                            )
+                            args_relatives.append(inline_btn_bro_sis)
+                        reply_markup.row(*args_relatives)
 
                     dict_abwishkey = dict(
                         keyboard_type=KeyboardType.ABILITY,

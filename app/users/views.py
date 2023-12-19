@@ -1374,6 +1374,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 gender=gender_new,
                 latitude=request.data['latitude'] if 'latitude' in request.data else None,
                 longitude=request.data['longitude'] if 'longitude' in request.data else None,
+                is_org = bool(request.data['is_org']) if 'is_org' in request.data else False,
                 comment=request.data.get('comment') or None,
             )
 
@@ -1485,9 +1486,14 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 user.last_name = ''
                 user.first_name = first_name
 
+            # Поля с возможным null, может прийти 'значение' или ''
             for f in ('comment', 'gender', ):
                 if f in  request.data:
                     setattr(profile, f, request.data[f] or None)
+            # Булевы поля, может прийти '1' или ''
+            for f in ('is_org',):
+                if f in  request.data:
+                    setattr(profile, f, bool(request.data[f]))
             if 'latitude' in request.data and 'longitude' in request.data:
                 latitude = longitude = None
                 try:
@@ -2093,6 +2099,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         first_name = ''
         gender = ''
         address = None
+        is_org = False
         legend=''
         chat_id = chat_title = chat_type = None
         offer_id = offer_question = offer_deeplink = None
@@ -2127,6 +2134,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     lat_avg = found_profile.latitude
                     lng_avg = found_profile.longitude
                     address = found_profile.address
+                    is_org = found_profile.is_org
             except ServiceException:
                 pass
         elif request.GET.get('chat_id'):
@@ -2184,6 +2192,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 return dict(
                     full_name = profile.user.first_name,
                     trust_count=profile.trust_count,
+                    is_org=profile.is_org,
                     url_profile = url_profile,
                     url_deeplink=url_deeplink,
                     url_photo_popup=Profile.image_thumb(
@@ -2212,6 +2221,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     lat_avg = found_profile.latitude
                     lng_avg = found_profile.longitude
                     address = found_profile.address
+                    is_org = found_profile.is_org
                 color = 'black' if found_profile.is_dead or found_profile.dod else 'blue'
                 legend = f'<br><table style="border-spacing: 0;border-top: 2px solid {color};border-bottom: 2px solid {color};">'
                 legend += '<tr><td>'
@@ -2249,18 +2259,17 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         size_icon=self.THUMB_SIZE_ICON_FOUND + frame * 2,
                     ))
                 legend_trust_true = legend_trust_false = ''
-                if found_profile.gender == GenderMixin.GENDER_FEMALE:
-                    legend_trust_true_title = 'Ей доверяют:'
-                elif found_profile.gender == GenderMixin.GENDER_MALE:
-                    legend_trust_true_title = 'Ему доверяют:'
-                else:
-                    legend_trust_true_title = 'Доверяют:'
-                if found_profile.gender == GenderMixin.GENDER_FEMALE:
-                    legend_trust_false_title = 'Ей не доверяют:'
-                elif found_profile.gender == GenderMixin.GENDER_MALE:
-                    legend_trust_false_title = 'Ему не доверяют:'
-                else:
-                    legend_trust_false_title = 'Не доверяют:'
+                legend_trust_true_title = 'Доверяют:'
+                legend_trust_false_title = 'Не доверяют:'
+                if not found_profile.is_org:
+                    if found_profile.gender == GenderMixin.GENDER_FEMALE:
+                        legend_trust_true_title = 'Ей доверяют:'
+                    elif found_profile.gender == GenderMixin.GENDER_MALE:
+                        legend_trust_true_title = 'Ему доверяют:'
+                    if found_profile.gender == GenderMixin.GENDER_FEMALE:
+                        legend_trust_false_title = 'Ей не доверяют:'
+                    elif found_profile.gender == GenderMixin.GENDER_MALE:
+                        legend_trust_false_title = 'Ему не доверяют:'
                 title_template = '%(full_name)s (%(trust_count)s)'
                 for cs in CurrentState.objects.filter(
                             user_to=found_profile.user,
@@ -2768,6 +2777,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             first_name=first_name,
             found_coordinates=found_coordinates,
             address=address,
+            is_org = is_org,
             gender=gender,
             lat_avg=lat_avg,
             lng_avg=lng_avg,
