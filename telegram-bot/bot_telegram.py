@@ -32,6 +32,9 @@ class FSMnewIOF(StatesGroup):
     ask = State()
     ask_gender = State()
 
+class FSMnewOrg(StatesGroup):
+    ask = State()
+
 class FSMcomment(StatesGroup):
     ask = State()
 
@@ -325,15 +328,30 @@ async def process_command_wish(message: types.Message, state: FSMContext):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=('new',),
+    commands=('new', 'new-person',),
     state=None,
 )
-async def process_command_new(message: types.Message, state: FSMContext):
+async def process_command_new_person(message: types.Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
         await FSMnewIOF.ask.set()
         state = dp.current_state()
         await message.reply(Misc.PROMPT_NEW_IOF, reply_markup=Misc.reply_markup_cancel_row())
+        if response_sender.get('created'):
+            await Misc.update_user_photo(bot, message.from_user, response_sender)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('new-org',),
+    state=None,
+)
+async def process_command_new_org(message: types.Message, state: FSMContext):
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender == 200:
+        await FSMnewOrg.ask.set()
+        state = dp.current_state()
+        await message.reply(Misc.PROMPT_NEW_ORG, reply_markup=Misc.reply_markup_cancel_row())
         if response_sender.get('created'):
             await Misc.update_user_photo(bot, message.from_user, response_sender)
 
@@ -1144,7 +1162,9 @@ commands_dict = {
     'poll': process_command_poll,
     'offer': process_command_offer,
     'poll': process_command_offer,
-    'new': process_command_new,
+    'new': process_command_new_person,
+    'new-person': process_command_new_person,
+    'new-person': process_command_new_org,
     'trip': trip_geo_command_handler,
     'тур': trip_geo_command_handler,
     'getowned': echo_getowned_to_bot,
@@ -4067,6 +4087,60 @@ async def new_iof_ask_gender_if_message(message: types.Message, state: FSMContex
     async with state.proxy() as data:
         await new_iof_ask_gender(message, state)
 
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMnewOrg.ask,
+)
+async def new_iof_ask_org(message: types.Message, state: FSMContext):
+    if message.content_type != ContentType.TEXT:
+        await message.reply(
+            Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + \
+            Misc.PROMPT_NEW_ORG,
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+        return
+    if await is_it_command(message, state):
+        return
+    first_name = Misc.strip_text(message.text)
+    if not first_name or len(first_name) < 5:
+        await message.reply(
+            Misc.PROMPT_ORG_INCORRECT,
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+        return
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender == 200:
+        payload_org = dict(
+            tg_token=settings.TOKEN,
+            owner_id=response_sender['user_id'],
+            first_name=first_name,
+            is_org='1',
+        )
+        logging.debug('post new org, payload: %s' % payload_org)
+        status, response = await Misc.api_request(
+            path='/api/profile',
+            method='post',
+            data=payload_org,
+        )
+        logging.debug('post new org, status: %s' % status)
+        logging.debug('post new org, response: %s' % response)
+        if status == 200:
+            await message.reply('Добавлена организация')
+            try:
+                status, response = await Misc.get_user_by_uuid(response['uuid'])
+                if status == 200:
+                    await Misc.show_cards(
+                        [response],
+                        message,
+                        bot,
+                        response_from=response_sender,
+                        tg_user_from=message.from_user,
+                    )
+            except:
+                pass
+    await Misc.state_finish(state)
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
