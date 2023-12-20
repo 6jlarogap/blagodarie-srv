@@ -5820,12 +5820,19 @@ async def process_callback_delete_user(callback_query: types.CallbackQuery, stat
             'Если подтверждаете, то нажмите <u>Продолжить</u>. Иначе <u>Отмена</u>\n'
         ) % dict(name = owner['first_name'])
     else:
-        bot_data = await bot.get_me()
+        p_udalen = 'удалён'
+        if user.get('is_org'):
+            name = user['first_name']
+            p_udalen = 'удалена организация:'
+        else:
+            bot_data = await bot.get_me()
+            name = Misc.get_deeplink_with_name(user, bot_data, with_lifetime_years=True,)
+            if user.get('gender') == 'f':
+                p_udalen = 'удалена'
         prompt = (
-            'Будет удалён %(name)s!\n'
-            '\n'
+            f'Будет {p_udalen} {name}!\n\n'
             'Если подтверждаете удаление, нажмите <u>Продолжить</u>. Иначе <u>Отмена</u>\n'
-        ) % dict(name = Misc.get_deeplink_with_name(user, bot_data, with_lifetime_years=True,))
+        )
     callback_data = (Misc.CALLBACK_DATA_UUID_TEMPLATE + '%(owner_id)s%(sep)s') % dict(
         keyboard_type=KeyboardType.DELETE_USER_CONFIRMED,
         uuid=user['uuid'],
@@ -5839,7 +5846,7 @@ async def process_callback_delete_user(callback_query: types.CallbackQuery, stat
     reply_markup = InlineKeyboardMarkup()
     reply_markup.row(inline_btn_go, Misc.inline_button_cancel())
     await FSMdelete.ask.set()
-    await callback_query.message.reply(prompt, reply_markup=reply_markup)
+    await callback_query.message.reply(prompt, reply_markup=reply_markup, disable_web_page_preview=True,)
 
 
 @dp.callback_query_handler(
