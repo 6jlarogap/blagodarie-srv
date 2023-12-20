@@ -788,6 +788,33 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             state_ = 'start_setplace'
 
         elif m := re.search(
+                r'^\/start\s+(t|n)\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
+                message_text,
+                flags=re.I,
+          ):
+            d_trust = dict(
+                operation_type_id = OperationType.TRUST_AND_THANK if m.group(1).lower() == 't' \
+                                    else OperationType.MISTRUST,
+                uuid = m.group(2).lower()
+            )
+            state_ = 'start_trust'
+
+        elif m := re.search(
+                (
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=(t|n)\-'
+                    '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            d_trust = dict(
+                operation_type_id = OperationType.TRUST_AND_THANK if m.group(1).lower() == 't' \
+                                    else OperationType.MISTRUST,
+                uuid = m.group(2).lower()
+            )
+            state_ = 'start_trust'
+
+        elif m := re.search(
                 r'^\/start\s+offer\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
                 message_text,
                 flags=re.I,
@@ -965,7 +992,8 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             user_from_id = response_from.get('user_id')
             if state_ in ('ya', 'forwarded_from_me', 'start', ) or \
                state_ in (
-                    'start_uuid', 'start_username', 'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',
+                    'start_uuid', 'start_username', 'start_setplace', 'start_poll',
+                    'start_offer', 'start_auth_redirect',
                ) and response_from.get('created'):
                 a_response_to += [response_from, ]
 
@@ -1037,7 +1065,8 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
     if state_ and state_ not in (
         'not_found', 'invalid_message_text',
-        'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',
+        'start_setplace', 'start_poll',
+        'start_offer', 'start_trust', 'start_auth_redirect',
         'youtube_link', 'start_invite'
        ) and user_from_id and a_response_to:
         if state_ == 'start':
@@ -1060,8 +1089,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
     if state_ not in (
-        'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect',
-        'youtube_link'
+        'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect', 'start_trust', 'youtube_link',
        ):
         await Misc.show_deeplinks(a_found, message, bot_data)
 
@@ -1144,6 +1172,13 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             await Misc.update_user_photo(bot, tg_user_forwarded, response_to)
         elif state_ == 'start_invite':
             await show_invite(response_from, token_invite, message, bot_data)
+        elif state_ == 'start_trust':
+            code = (
+                KeyboardType.TRUST_THANK,
+                d_trust['operation_type_id'],
+                Misc.uuid_strip(d_trust['uuid']),
+            )
+            await do_process_tn(callback_query=None, state=state, message=message, code=code)
 
 # --- command list ----
 
@@ -4299,52 +4334,72 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         <message_to_forward_id>             # 3
         <KeyboardType.SEP>
     """
-    tg_user_sender = callback_query.from_user
+    await do_process_tn(callback_query=callback_query, state=state, message=None, code=None)
+
+async def do_process_tn(callback_query=None, state=None, message=None, code=None):
+    """
+    Благодарность, недоверия и т.п. как от кнопки, так и из команды /start (t|n)-<uuid>
+
+    Если функция вызвана нажатием на кнопку, то:
+        callback_query=callback_query
+        code=None. code будет вычислен из callback_query.data
+    Если функция вызвана из команды /start (t|n)-<uuid>, то:
+        callback_query=None
+        code: список, аналогичный тому, что если из кнопки, в callback_query.data
+    """
+    tg_user_sender = callback_query.from_user if callback_query else message.from_user
+    message_ = callback_query.message if callback_query else message
     status_sender, profile_sender = await Misc.post_tg_user(tg_user_sender)
     if status_sender != 200 or not profile_sender:
         return
-    group_member = callback_query.message.chat.type in (types.ChatType.GROUP, types.ChatType.SUPERGROUP) \
-        and dict(
-                group_chat_id=callback_query.message.chat.id,
-                group_title=callback_query.message.chat.title,
-                group_type=callback_query.message.chat.type,
+    group_member = \
+        callback_query and \
+        message_.chat.type in (types.ChatType.GROUP, types.ChatType.SUPERGROUP) and \
+        dict(
+                group_chat_id=message_.chat.id,
+                group_title=message_.chat.title,
+                group_type=message_.chat.type,
                 user_tg_uid=tg_user_sender.id,
-            ) \
+        ) \
         or None
-    code = callback_query.data.split(KeyboardType.SEP)
+    if callback_query:
+        code = callback_query.data.split(KeyboardType.SEP)
     try:
         operation_type_id=int(code[1])
-        if not operation_type_id or operation_type_id not in (
-               OperationType.TRUST_AND_THANK, OperationType.TRUST,
-               OperationType.MISTRUST, OperationType.NULLIFY_TRUST,
-           ):
-            return
-        uuid = Misc.uuid_from_text(code[2], unstrip=True)
-        if not uuid:
-            return
-        status_to, profile_to = await Misc.get_user_by_uuid(uuid)
-        if status_to != 200 or not profile_to:
-            return
-        if profile_sender['uuid'] == profile_to['uuid']:
-            if group_member:
-                if operation_type_id in (OperationType.TRUST_AND_THANK, OperationType.TRUST):
-                    try:
-                        await bot.answer_callback_query(
-                                callback_query.id,
-                                text='Благодарности и доверия самому себе не предусмотрены',
-                                show_alert=True,
-                            )
-                    except (ChatNotFound, CantInitiateConversation):
-                        pass
-                return
-            else:
-                return
-        try:
-            message_to_forward_id = int(code[3])
-        except (ValueError, IndexError,):
-            message_to_forward_id = None
     except (ValueError, IndexError,):
         return
+    if not operation_type_id or operation_type_id not in (
+            OperationType.TRUST_AND_THANK, OperationType.TRUST,
+            OperationType.MISTRUST, OperationType.NULLIFY_TRUST,
+        ):
+        return
+    uuid = Misc.uuid_from_text(code[2], unstrip=True)
+    if not uuid:
+        return
+    status_to, profile_to = await Misc.get_user_by_uuid(uuid)
+    if status_to != 200 or not profile_to:
+        return
+    if profile_sender['uuid'] == profile_to['uuid']:
+        text_same = 'Операция на себя не позволяется'
+        if group_member:
+            if operation_type_id in (OperationType.TRUST_AND_THANK, OperationType.TRUST):
+                text_same ='Благодарности и доверия самому себе не предусмотрены'
+            try:
+                await bot.answer_callback_query(
+                        callback_query.id,
+                        text=text_same,
+                        show_alert=True,
+                    )
+            except (ChatNotFound, CantInitiateConversation):
+                pass
+            return
+        else:
+            await message_.reply(text_same, disable_web_page_preview=True,)
+            return
+    try:
+        message_to_forward_id = int(code[3])
+    except (ValueError, IndexError,):
+        message_to_forward_id = None
 
     data_ = dict(
         profile_from = profile_sender,
@@ -4386,14 +4441,13 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
     reply_markup = InlineKeyboardMarkup()
     reply_markup.row(inline_btn_wo_comment, Misc.inline_button_cancel())
     await FSMtrustThank.ask.set()
-    await callback_query.message.reply(
+    await message_.reply(
         'Напишите комментарий %(msg_what)s <b>%(name)s</b>' % dict(
             msg_what=msg_what,
             name=profile_to['first_name'],
         ),
         reply_markup=reply_markup,
     )
-
 
 async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
     # Может прийти неколько картинок, .т.е сообщений, чтоб не было
