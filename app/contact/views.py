@@ -2265,6 +2265,8 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     ).distinct():
                     links.append(cs.data_dict(fmt=fmt, show_trust=True))
                 data.update(bot_username=bot_username, nodes=nodes, links=links, root_node=root_node)
+                #TODO после срока действия текущей куки у юзеров не нужен будет, т. после 10.01.24
+                data.update(auth_user_id=user_a.is_authenticated and user_a.pk or None)
                 if tggroup:
                     data.update(tg_group=dict(type=tggroup.type, title=tggroup.title))
 

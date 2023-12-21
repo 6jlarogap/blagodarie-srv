@@ -542,6 +542,7 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, ApiToken
             if put_photo_from_url:
                 profile.put_photo_from_url(photo_url)
         return dict(
+            user_id=user.pk,
             user_uuid=str(user.profile.uuid),
             auth_token=token.key,
         )
@@ -760,6 +761,7 @@ class ApiOauthCallback(FrontendMixin, CreateUserMixin, APIView):
             response = redirect(redirect_from_callback)
             to_cookie = dict(
                 provider=provider,
+                user_id=user.pk,
                 user_uuid=str(user.profile.uuid),
                 auth_token=user.auth_token.key
             )
@@ -1699,6 +1701,7 @@ class ApiTestGoToLink(FrontendMixin, APIView):
             response = redirect(redirect_from_callback)
             to_cookie = dict(
                 provider=provider,
+                user_id=user.pk,
                 user_uuid=str(user.profile.uuid),
                 auth_token=user.auth_token.key
             )
@@ -3528,6 +3531,7 @@ class ApiTokenAuthData(ApiTokenAuthDataMixin, APIView):
         {
             "auth_data": {
                 "provider": "telegram",
+                "user_id": <user.pk>,
                 "user_uuid": <uuid>,
                 "auth_token": <auth_token>
             }
