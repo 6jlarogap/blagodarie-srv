@@ -328,7 +328,7 @@ async def process_command_wish(message: types.Message, state: FSMContext):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=('new', 'new-person',),
+    commands=('new', 'new_person',),
     state=None,
 )
 async def process_command_new_person(message: types.Message, state: FSMContext):
@@ -343,7 +343,7 @@ async def process_command_new_person(message: types.Message, state: FSMContext):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=('new-org',),
+    commands=('new_org',),
     state=None,
 )
 async def process_command_new_org(message: types.Message, state: FSMContext):
@@ -788,29 +788,27 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             state_ = 'start_setplace'
 
         elif m := re.search(
-                r'^\/start\s+(t|n)\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
+                r'^\/start\s+(t|n|f)\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
                 message_text,
                 flags=re.I,
           ):
             d_trust = dict(
-                operation_type_id = OperationType.TRUST_AND_THANK if m.group(1).lower() == 't' \
-                                    else OperationType.MISTRUST,
-                uuid = m.group(2).lower()
+                operation_type_id=OperationType.start_prefix_to_op(m.group(1).lower()),
+                uuid=m.group(2).lower()
             )
             state_ = 'start_trust'
 
         elif m := re.search(
                 (
-                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=(t|n)\-'
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=(t|n|f)\-'
                     '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
                 ) % re.escape(bot_data['username']),
                 message_text,
                 flags=re.I,
           ):
             d_trust = dict(
-                operation_type_id = OperationType.TRUST_AND_THANK if m.group(1).lower() == 't' \
-                                    else OperationType.MISTRUST,
-                uuid = m.group(2).lower()
+                operation_type_id=OperationType.start_prefix_to_op(m.group(1).lower()),
+                uuid=m.group(2).lower()
             )
             state_ = 'start_trust'
 
@@ -1198,8 +1196,8 @@ commands_dict = {
     'offer': process_command_offer,
     'poll': process_command_offer,
     'new': process_command_new_person,
-    'new-person': process_command_new_person,
-    'new-person': process_command_new_org,
+    'new_person': process_command_new_person,
+    'new_org': process_command_new_org,
     'trip': trip_geo_command_handler,
     'тур': trip_geo_command_handler,
     'getowned': echo_getowned_to_bot,

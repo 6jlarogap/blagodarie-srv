@@ -45,6 +45,18 @@ class OperationType(object):
             result = 'недоверие'
         return result
 
+    @classmethod
+    def start_prefix_to_op(cls, prefix):
+        """
+        Префикс команды /start <prefix>-<uuid> --> операция
+        """
+        return dict(
+            t=cls.TRUST_AND_THANK,
+            n=cls.MISTRUST,
+            f=cls.NULLIFY_TRUST
+        ).get(prefix)
+
+
 class KeyboardType(object):
     """
     Варианты клавиатур и служебный символ для call back data из кнопок клавиатур
@@ -961,7 +973,7 @@ class Misc(object):
                     # Карточка самому пользователю или его родственнику
                     #
                     inline_btn_iof = InlineKeyboardButton(
-                        'ФИО',
+                        'Название' if is_org else 'ФИО',
                         callback_data=callback_data_template % dict(
                         keyboard_type=KeyboardType.IOF,
                         uuid=response_to['uuid'],
@@ -1019,7 +1031,7 @@ class Misc(object):
                             callback_data=callback_data_template % dict_change_owner,
                         )
                         args_edit_2.append(inline_btn_change_owner)
-                        if not response_to['is_dead']:
+                        if not response_to['is_dead'] and not is_org:
                             dict_invite = dict(
                                 keyboard_type=KeyboardType.INVITE,
                                 uuid=response_to['uuid'],
