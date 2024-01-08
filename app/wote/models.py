@@ -10,18 +10,20 @@ class Video(BaseModelInsertTimestamp):
     SOURCE_RUTUBE = 'rt'
     SOURCE_VKONTAKTE = 'vk'
     SOURCE_BASTYON = 'bn'
+    SOURCE_PEERTUBE = 'pt'
 
     VIDEO_SOURCES = (
         (SOURCE_YOUTUBE, 'Google'),
         (SOURCE_RUTUBE, 'RuTube'),
         (SOURCE_VKONTAKTE, 'ВКонтакте'),
         (SOURCE_BASTYON, 'Bastyon'),
+        (SOURCE_PEERTUBE, 'PeerTube'),
     )
 
     creator = models.ForeignKey('auth.User', verbose_name='Владелец', on_delete=models.CASCADE,)
     source = models.CharField('Источник', max_length=2, choices=VIDEO_SOURCES)
     # Ссылка для авторизации через tg bot имеет вид:
-    # start=wote-rt-<videoid>, не длинне 64 символов,
+    # start=wote-rt-<videoid>, не длиннее 64 символов,
     # отсюда и макс длина videoid = 50
     videoid = models.CharField('Видео Id', max_length=50)
 

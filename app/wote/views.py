@@ -40,7 +40,7 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
         http(s)://<api-host>/api/wote/vote/
         Post запрос. На входе json. Например:
         {
-            // video source: возможны yt, rt, vk, bn.
+            // video source: возможны yt, rt, vk, bn, pt, по умолчанию yt
             // И ничто другое, кроме как в ./models.py:Video.VIDEO_SOURCES
             "source": "yt",
             "videoid": "Ac5cEy5llr4",
@@ -109,7 +109,7 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
         http(s)://<api-host>/api/wote/vote/
         Delete запрос. На входе json. Например:
         {
-            // video source: возможны yt, rt, vk, bn.
+            // video source: возможны yt, rt, vk, bn, pt, по умолчанию yt
             // И ничто другое, кроме как в ./models.py:Video.VIDEO_SOURCES
             "source": "yt",
             "videoid": "Ac5cEy5llr4",
@@ -189,7 +189,7 @@ class ApiWoteVote(ApiWoteVideoMixin, APIView):
         users = []
         try:
             video = Video.objects.get(
-                source=request.GET.get('source', 'yt'),
+                source=request.GET.get('source', Video.SOURCE_YOUTUBE),
                 videoid=request.GET.get('videoid', ''),
             )
         except Video.DoesNotExist:
@@ -252,7 +252,7 @@ class ApiWoteVoteSums(FromToCountMixin, APIView):
         for button in dict(Vote.VOTES):
             buttons[button] = []
         q = Q(
-            video__source=request.GET.get('source', 'yt'),
+            video__source=request.GET.get('source', Video.SOURCE_YOUTUBE),
             video__videoid=request.GET.get('videoid', '')
         )
         from_, to_ = self.get_from_to(request.GET, 'from', 'to')
@@ -348,7 +348,7 @@ class ApiVoteGraph(FromToCountMixin, TelegramApiMixin, APIView):
             ]
         }
         """
-        source = request.GET.get('source', 'yt')
+        source = request.GET.get('source', Video.SOURCE_YOUTUBE)
         videoid = request.GET.get('videoid', '')
         nodes = []
         links = []
@@ -466,7 +466,7 @@ class ApiVoteMy(FromToCountMixin, TelegramApiMixin, APIView):
         votes = []
         try:
             video = Video.objects.get(
-                source=request.GET.get('source', 'yt'),
+                source=request.GET.get('source', Video.SOURCE_YOUTUBE),
                 videoid=request.GET.get('videoid', ''),
             )
         except Video.DoesNotExist:
