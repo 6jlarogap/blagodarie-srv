@@ -695,6 +695,8 @@ class Misc(object):
     async def get_user_by_uuid(cls, uuid, with_owner=False):
         """
         Получить данные пользователя по uuid
+
+        Если не найден, будет status == 400
         """
         params = dict(uuid=uuid)
         if with_owner:

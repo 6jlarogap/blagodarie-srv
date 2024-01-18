@@ -1171,6 +1171,25 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         elif state_ == 'start_invite':
             await show_invite(response_from, token_invite, message, bot_data)
         elif state_ == 'start_trust':
+            # Если здесь доверие после незнакомства или недоверия, то без вопросов
+            if d_trust['operation_type_id'] == OperationType.TRUST_AND_THANK:
+                status_to, profile_to = await Misc.get_user_by_uuid(d_trust['uuid'])
+                if status_to != 200:
+                    return
+                status_relations, response_relations = await Misc.call_response_relations(response_from, profile_to)
+                if status_relations != 200:
+                    return
+                if not response_relations['from_to']['is_trust']:
+                    # Не доверяет (False) или забыл / не знаком (None)
+                    data = dict(
+                        profile_from = response_from,
+                        profile_to = profile_to,
+                        operation_type_id = d_trust['operation_type_id'],
+                        tg_user_sender_id = tg_user_sender.id,
+                        message_to_forward_id = None,
+                    )
+                    await put_thank_etc(tg_user_sender, data, state=state, comment_message=None)
+                    return
             code = (KeyboardType.TRUST_THANK, d_trust['operation_type_id'], d_trust['uuid'])
             await do_process_tn_question(callback_query=None, state=state, message=message, code=code)
 
@@ -3468,7 +3487,7 @@ async def process_callback_send_message(callback_query: types.CallbackQuery, sta
     if not (uuid := Misc.getuuid_from_callback(callback_query)):
         return
     status_to, profile_to = await Misc.get_user_by_uuid(uuid)
-    if not (status_to == 200 and profile_to):
+    if status_to != 200:
         return
 
     await FSMsendMessage.ask.set()
@@ -3495,7 +3514,7 @@ async def got_message_to_send(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         if data.get('uuid'):
             status_to, profile_to = await Misc.get_user_by_uuid(data['uuid'], with_owner=True)
-            if status_to == 200 and profile_to:
+            if status_to == 200:
                 status_from, profile_from = await Misc.post_tg_user(message.from_user)
                 if status_from == 200 and profile_from:
 
@@ -3652,7 +3671,7 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
                 )
     else:
         status_to, profile_to = await Misc.get_user_by_uuid(uuid)
-        if status_to == 200 and profile_to:
+        if status_to == 200:
             msg = '%(full_name)s не получал%(a)s сообщений' % dict(
                 full_name=Misc.get_deeplink_with_name(profile_to, bot_data),
                 a='а' if profile_to.get('gender') == 'f' else '' if profile_to.get('gender') == 'm' else '(а)',
@@ -3980,7 +3999,7 @@ async def process_callback_photo(callback_query: types.CallbackQuery, state: FSM
             data['uuid'] = uuid
         prompt_photo = Misc.PROMPT_PHOTO
         status, response = await Misc.get_user_by_uuid(uuid)
-        if status == 200 and response and Misc.is_photo_downloaded(response):
+        if status == 200 and Misc.is_photo_downloaded(response):
             prompt_photo += '\n' + Misc.PROMPT_PHOTO_REMOVE
             callback_data_remove = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
                 keyboard_type=KeyboardType.PHOTO_REMOVE,
@@ -4011,7 +4030,7 @@ async def process_callback_photo_remove(callback_query: types.CallbackQuery, sta
         await Misc.state_finish(state)
         return
     status, response = await Misc.get_user_by_uuid(uuid)
-    if status == 200 and response:
+    if status == 200:
         await FSMphoto.next()
         inline_button_cancel = Misc.inline_button_cancel()
         callback_data_remove = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
@@ -4429,7 +4448,7 @@ async def do_process_tn_question(callback_query=None, state=None, message=None, 
         ):
         return
     status_to, profile_to = await Misc.get_user_by_uuid(uuid)
-    if status_to != 200 or not profile_to:
+    if status_to != 200:
         return
     if profile_sender['uuid'] == profile_to['uuid']:
         text_same = 'Операция на себя не позволяется'
@@ -4956,7 +4975,7 @@ async def got_message_to_send_to_admins(message: types.Message, state: FSMContex
         # Надо проверить, тот ли человек пишет админам
         if data.get('uuid'):
             status_from, profile_from = await Misc.get_user_by_uuid(data['uuid'])
-            if status_from == 200 and profile_from:
+            if status_from == 200:
                 status_sender, profile_sender = await Misc.post_tg_user(message.from_user)
                 if status_from == 200 and profile_from and profile_sender['uuid'] == profile_from['uuid']:
                     status_admins, response_admins = await Misc.get_admins()
