@@ -1171,12 +1171,8 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         elif state_ == 'start_invite':
             await show_invite(response_from, token_invite, message, bot_data)
         elif state_ == 'start_trust':
-            code = (
-                KeyboardType.TRUST_THANK,
-                d_trust['operation_type_id'],
-                Misc.uuid_strip(d_trust['uuid']),
-            )
-            await do_process_tn(callback_query=None, state=state, message=message, code=code)
+            code = (KeyboardType.TRUST_THANK, d_trust['operation_type_id'], d_trust['uuid'])
+            await do_process_tn_question(callback_query=None, state=state, message=message, code=code)
 
 # --- command list ----
 
@@ -4311,6 +4307,37 @@ async def process_make_query(message: types.Message, state: FSMContext):
     await Misc.state_finish(state)
 
 
+def parse_code_tn(callback_query):
+    '''
+    Получить необходимое из callback_query.data при (не)доверии, забыть
+
+    ValueError, если что-то там неверно
+    '''
+    code = callback_query.data.split(KeyboardType.SEP)
+    try:
+        operation_type_id=int(code[1])
+    except (ValueError, IndexError,):
+        raise ValueError
+    uuid = Misc.uuid_from_text(code[2], unstrip=True)
+    if not uuid:
+        raise ValueError
+    try:
+        message_to_forward_id = int(code[3])
+    except (ValueError, IndexError,):
+        message_to_forward_id = None
+    message_ = callback_query.message
+    group_member = \
+        message_.chat.type in (types.ChatType.GROUP, types.ChatType.SUPERGROUP) and \
+        dict(
+                group_chat_id=message_.chat.id,
+                group_title=message_.chat.title,
+                group_type=message_.chat.type,
+                user_tg_uid=tg_user_sender.id,
+        ) \
+        or None
+    return operation_type_id, uuid, message_to_forward_id, group_member
+
+
 @dp.callback_query_handler(
     lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.TRUST_THANK,
@@ -4320,7 +4347,7 @@ async def process_make_query(message: types.Message, state: FSMContext):
     )
 async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMContext):
     """
-    Действия по нажатию кнопок (не)доверия, забвения
+    Действия по нажатию кнопок доверия, недоверия, забыть
 
     На входе строка:
         <KeyboardType.TRUST_THANK>          # 0
@@ -4332,9 +4359,43 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         <message_to_forward_id>             # 3
         <KeyboardType.SEP>
     """
-    await do_process_tn(callback_query=callback_query, state=state, message=None, code=None)
+    try:
+        operation_type_id, uuid, message_to_forward_id, group_member = parse_code_tn(callback_query)
+    except ValueError:
+        return
 
-async def do_process_tn(callback_query=None, state=None, message=None, code=None):
+    # Если благодарность и т.п. из группы, то без вопроса: это в do_process_tn_question
+
+    if operation_type_id == OperationType.TRUST_AND_THANK and not group_member:
+        # Выразить доверие
+        # Если уже доверяет, т.е. "выразить благодарность", то вопрос.
+        # Если еще не доверяет, то сразу доверие с благодарностью без вопроса
+        #
+        tg_user_sender = callback_query.from_user
+        status_sender, profile_sender = await Misc.post_tg_user(tg_user_sender)
+        if status_sender != 200:
+            return
+        status_to, profile_to = await Misc.get_user_by_uuid(uuid)
+        if status_to != 200:
+            return
+        status_relations, response_relations = await Misc.call_response_relations(profile_sender, profile_to)
+        if status_relations != 200:
+            return
+        if not response_relations['from_to']['is_trust']:
+            # Не доверяет (False) или забыл / не знаком (None)
+            data = dict(
+                profile_from = profile_sender,
+                profile_to = profile_to,
+                operation_type_id = operation_type_id,
+                tg_user_sender_id = tg_user_sender.id,
+                message_to_forward_id = message_to_forward_id,
+            )
+            await put_thank_etc(tg_user_sender, data, state=state, comment_message=None)
+            return
+    await do_process_tn_question(callback_query=callback_query, state=state, message=None, code=None)
+
+
+async def do_process_tn_question(callback_query=None, state=None, message=None, code=None):
     """
     Благодарность, недоверия и т.п. как от кнопки, так и из команды /start (t|n)-<uuid>
 
@@ -4350,29 +4411,22 @@ async def do_process_tn(callback_query=None, state=None, message=None, code=None
     status_sender, profile_sender = await Misc.post_tg_user(tg_user_sender)
     if status_sender != 200 or not profile_sender:
         return
-    group_member = \
-        callback_query and \
-        message_.chat.type in (types.ChatType.GROUP, types.ChatType.SUPERGROUP) and \
-        dict(
-                group_chat_id=message_.chat.id,
-                group_title=message_.chat.title,
-                group_type=message_.chat.type,
-                user_tg_uid=tg_user_sender.id,
-        ) \
-        or None
     if callback_query:
-        code = callback_query.data.split(KeyboardType.SEP)
-    try:
-        operation_type_id=int(code[1])
-    except (ValueError, IndexError,):
+        try:
+            operation_type_id, uuid, message_to_forward_id, group_member = parse_code_tn(callback_query)
+        except ValueError:
+            return
+    elif code:
+        operation_type_id = code[1]
+        uuid = code[2]
+        message_to_forward_id = None
+        group_member = None
+    else:
         return
     if not operation_type_id or operation_type_id not in (
             OperationType.TRUST_AND_THANK, OperationType.TRUST,
             OperationType.MISTRUST, OperationType.NULLIFY_TRUST,
         ):
-        return
-    uuid = Misc.uuid_from_text(code[2], unstrip=True)
-    if not uuid:
         return
     status_to, profile_to = await Misc.get_user_by_uuid(uuid)
     if status_to != 200 or not profile_to:
@@ -4394,10 +4448,6 @@ async def do_process_tn(callback_query=None, state=None, message=None, code=None
         else:
             await message_.reply(text_same, disable_web_page_preview=True,)
             return
-    try:
-        message_to_forward_id = int(code[3])
-    except (ValueError, IndexError,):
-        message_to_forward_id = None
 
     data_ = dict(
         profile_from = profile_sender,
@@ -4460,7 +4510,6 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
             raise ValueError
         if data.get('tg_user_sender_id') != tg_user_sender.id:
             raise ValueError
-            await put_thank_etc(tg_user_sender, data, state, comment_message=message)
     except ValueError:
         return
 
