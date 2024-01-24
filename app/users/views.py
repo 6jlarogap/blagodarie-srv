@@ -869,6 +869,11 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
         с параметром tg_uids=...
             получить данные по пользователям телеграма, список с разделителями
             запятой, более короткая выборка, нежели по одному tg_uid
+        с параметром owner_uuid=...
+            получить массив данных по всем собственным профилям того uuid
+                если еще параметр name_iexact:
+                    пустой массив или содержащий данные собственного
+                    профиля с first_name = name_exact
         с одним из параметров query, query_ability, query_wish, query_person:
             получить список профилей пользователей,
                 - найденных по фио и ключам (query_person),
@@ -1179,7 +1184,10 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                         )
             elif request.GET.get('uuid_owner'):
                 data = []
-                users_selected = Profile.objects.filter(owner__profile__uuid=request.GET['uuid_owner']). \
+                q_uuid_owner = Q(owner__profile__uuid=request.GET['uuid_owner'])
+                if request.GET.get('name_iexact'):
+                    q_uuid_owner &= Q(user__first_name__iexact=request.GET['name_iexact'])
+                users_selected = Profile.objects.filter(q_uuid_owner). \
                     select_related('user', 'ability',).order_by('user__first_name',)
                 for profile in users_selected:
                     data_item = profile.data_dict(request)
