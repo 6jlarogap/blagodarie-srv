@@ -690,7 +690,7 @@ async def service_add_user_to_chat(message: types.Message, state: FSMContext):
             tg_token=settings.TOKEN,
             operation_type_id=OperationType.TRUST_AND_THANK,
             tg_user_id_from=tg_uid,
-            user_uuid_to=response_sender['uuid'],
+            user_id_to=response_sender['uuid'],
         )
         logging.debug('post operation (chat subscriber thanks inviter), payload: %s' % post_op)
         status_op, response_op = await Misc.api_request(
@@ -1349,8 +1349,8 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
     post_op = dict(
         tg_token=settings.TOKEN,
         operation_type_id=OperationType.SET_FATHER if is_father else OperationType.SET_MOTHER,
-        user_uuid_from=user_uuid_from,
-        user_uuid_to=user_uuid_to,
+        user_id_from=user_uuid_from,
+        user_id_to=user_uuid_to,
     )
     logging.debug('post operation, payload: %s' % post_op)
     status, response = await Misc.api_request(
@@ -1430,17 +1430,17 @@ async def put_new_papa_mama(message: types.Message, state: FSMContext):
         tg_token=settings.TOKEN,
         first_name = first_name_to,
         link_relation='new_is_father' if is_father else 'new_is_mother',
-        link_uuid=user_uuid_from,
+        link_id=user_uuid_from,
         owner_id=owner['user_id'],
     )
-    logging.debug('post new owned user with link_uuid, payload: %s' % post_data)
+    logging.debug('post new owned user with link_id, payload: %s' % post_data)
     status, response = await Misc.api_request(
         path='/api/profile',
         method='post',
         data=post_data,
     )
-    logging.debug('post new owned user with link_uuid, status: %s' % status)
-    logging.debug('post new owned user with link_uuid, response: %s' % response)
+    logging.debug('post new owned user with link_id, status: %s' % status)
+    logging.debug('post new owned user with link_id, response: %s' % response)
     if status != 200:
         if status == 400  and response.get('message'):
             await message.reply(
@@ -1711,8 +1711,8 @@ async def process_callback_clear_parent_confirmed(callback_query: types.Callback
     post_op = dict(
         tg_token=settings.TOKEN,
         operation_type_id=OperationType.NOT_PARENT,
-        user_uuid_from=response_sender['response_uuid']['uuid'],
-        user_uuid_to=existing_parent_uuid,
+        user_id_from=response_sender['response_uuid']['uuid'],
+        user_id_to=existing_parent_uuid,
     )
     logging.debug('post operation, payload: %s' % post_op)
     status, response = await Misc.api_request(
@@ -1883,8 +1883,8 @@ async def process_callback_clear_child_confirmed(callback_query: types.CallbackQ
         post_op = dict(
             tg_token=settings.TOKEN,
             operation_type_id=OperationType.NOT_PARENT,
-            user_uuid_from=data['child_uuid'],
-            user_uuid_to=parent_uuid,
+            user_id_from=data['child_uuid'],
+            user_id_to=parent_uuid,
         )
         logging.debug('post operation, payload: %s' % post_op)
         status, response = await Misc.api_request(
@@ -2079,8 +2079,8 @@ async def put_child_by_uuid(message: types.Message, state: FSMContext):
                 post_op = dict(
                     tg_token=settings.TOKEN,
                     operation_type_id=OperationType.SET_FATHER if is_father else OperationType.SET_MOTHER,
-                    user_uuid_from=user_uuid_from,
-                    user_uuid_to=data['uuid'],
+                    user_id_from=user_uuid_from,
+                    user_id_to=data['uuid'],
                 )
                 logging.debug('post operation, payload: %s' % post_op)
                 status, response = await Misc.api_request(
@@ -2159,7 +2159,7 @@ async def put_new_child(message: types.Message, state: FSMContext):
                 post_new_link = dict(
                     tg_token=settings.TOKEN,
                     first_name=first_name,
-                    link_uuid=data['uuid'],
+                    link_id=data['uuid'],
                     link_relation='link_is_father' if data['parent_gender'] == 'm' else 'link_is_mother',
                     owner_id=response_sender['user_id'],
                     gender=data['new_child_gender']
@@ -2445,8 +2445,8 @@ async def put_bro_sys_by_uuid(message: types.Message, state: FSMContext):
                         post_op = dict(
                             tg_token=settings.TOKEN,
                             operation_type_id=OperationType.SET_FATHER,
-                            user_uuid_from=data_bro_sis['uuid'],
-                            user_uuid_to=data_whose['father']['uuid'],
+                            user_id_from=data_bro_sis['uuid'],
+                            user_id_to=data_whose['father']['uuid'],
                         )
                         logging.debug('post operation, payload: %s' % post_op)
                         status, response = await Misc.api_request(
@@ -2473,8 +2473,8 @@ async def put_bro_sys_by_uuid(message: types.Message, state: FSMContext):
                         post_op = dict(
                             tg_token=settings.TOKEN,
                             operation_type_id=OperationType.SET_MOTHER,
-                            user_uuid_from=data_bro_sis['uuid'],
-                            user_uuid_to=data_whose['mother']['uuid'],
+                            user_id_from=data_bro_sis['uuid'],
+                            user_id_to=data_whose['mother']['uuid'],
                         )
                         logging.debug('post operation, payload: %s' % post_op)
                         status, response = await Misc.api_request(
@@ -2608,7 +2608,7 @@ async def put_new_bro_sis(message: types.Message, state: FSMContext):
                     )
                     if data_whose.get('father'):
                         payload_post.update(
-                            link_uuid=data_whose['father']['uuid'],
+                            link_id=data_whose['father']['uuid'],
                             link_relation='link_is_father',
                         )
                         logging.debug('post new brother or sister & set father payload: %s' % payload_post)
@@ -2636,8 +2636,8 @@ async def put_new_bro_sis(message: types.Message, state: FSMContext):
                             payload_op = dict(
                                 tg_token=settings.TOKEN,
                                 operation_type_id=OperationType.SET_MOTHER,
-                                user_uuid_from=data_bro_sis['uuid'],
-                                user_uuid_to=data_whose['mother']['uuid'],
+                                user_id_from=data_bro_sis['uuid'],
+                                user_id_to=data_whose['mother']['uuid'],
                             )
                             logging.debug('post operation, payload: %s' % payload_op)
                             status, response = await Misc.api_request(
@@ -2666,7 +2666,7 @@ async def put_new_bro_sis(message: types.Message, state: FSMContext):
                                 is_mother_set = True
                         else:
                             payload_post.update(
-                                link_uuid=data_whose['mother']['uuid'],
+                                link_id=data_whose['mother']['uuid'],
                                 link_relation='link_is_mother',
                             )
                             logging.debug('post new brother or sister & set mother payload: %s' % payload_post)
@@ -4542,7 +4542,7 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
         tg_token=settings.TOKEN,
         operation_type_id=data.get('operation_type_id'),
         tg_user_id_from=str(tg_user_sender.id),
-        user_uuid_to=profile_to['uuid'],
+        user_id_to=profile_to['uuid'],
     )
     if data.get('message_to_forward_id'):
         post_op.update(
@@ -5481,7 +5481,7 @@ async def do_chat_join(
             tg_token=settings.TOKEN,
             operation_type_id=OperationType.TRUST_AND_THANK,
             tg_user_id_from=tg_subscriber_id,
-            user_uuid_to=response_inviter['uuid'],
+            user_id_to=response_inviter['uuid'],
         )
         logging.debug('post operation (chat subscriber thanks inviter), payload: %s' % post_op)
         status_op, response_op = await Misc.api_request(
@@ -5870,7 +5870,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                     tg_token=settings.TOKEN,
                     operation_type_id=OperationType.TRUST_AND_THANK,
                     tg_user_id_from=tg_user_sender.id,
-                    user_uuid_to=response_from['uuid'],
+                    user_id_to=response_from['uuid'],
                 )
                 logging.debug('post operation, payload: %s' % post_op)
                 status, response = await Misc.api_request(

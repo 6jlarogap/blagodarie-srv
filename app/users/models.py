@@ -828,6 +828,16 @@ class UuidMixin(object):
             raise ServiceException('Не найден пользователь с uuid = %s' % uuid)
         return user, profile
 
+    def check_user_id(self, id_, related=('user', 'ability',), comment=''):
+        if not id_:
+            raise ServiceException(comment + self.MSG_NO_UUID)
+        try:
+            profile = Profile.objects.select_related(*related).get(user__pk=id_)
+            user = profile.user
+        except Profile.DoesNotExist:
+            raise ServiceException('Не найден пользователь с id = %s' % id_)
+        return user, profile
+
     def check_user_or_owned_uuid(
             self, request,
             uuid_field='uuid',
@@ -854,6 +864,15 @@ class UuidMixin(object):
                 raise ServiceException(err_message)
         return user, profile
 
+    def is_uuid(self, val):
+        """
+        Это uuid передано?
+        """
+        try:
+            uuid.UUID(str(val))
+            return True
+        except ValueError:
+            return False
 
 class TelegramApiMixin(object):
 

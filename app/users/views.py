@@ -969,22 +969,22 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
         Возможно вместе с созданием родственника сразу указать степень его родства
         к существующему пользователю (или пользователю - родственнику)
 
-        link_uuid
+        link_id (id или uuid)
             родитель или ребенок создаваемого профиля, должен существовать.
         link_relation, одно из:
-            new_is_father: создаваемый родич является папой по отношению к link_uuid
-            new_is_mother: создаваемая родственница является мамой по отношению к link_uuid
-            link_is_father: link_uuid – это папа создаваемого родственника (создаваемой родственницы)
-            link_is_mother: link_uuid – это мама создаваемого родственника (создаваемой родственницы)
+            new_is_father: создаваемый родич является папой по отношению к link_id
+            new_is_mother: создаваемая родственница является мамой по отношению к link_id
+            link_is_father: link_id – это папа создаваемого родственника (создаваемой родственницы)
+            link_is_mother: link_id – это мама создаваемого родственника (создаваемой родственницы)
 
-        Если заданы link_uuid & link_relation, то новый пользователь становится прямым
-        родственником по отношению к link_uuid. Вид родства, см. link_relation.
-        Задать таким образом родство можно или если link_uuid
+        Если заданы link_id & link_relation, то новый пользователь становится прямым
+        родственником по отношению к link_id. Вид родства, см. link_relation.
+        Задать таким образом родство можно или если link_id
         это сам авторизованный пользователь или его родственник
-        (владелец link_uuid - авторизованный пользователь).
+        (владелец link_id - авторизованный пользователь).
         Иначе ошибка, а если нет недоверия между авторизованным пользователем и
-        владельцем link_uuid или самим link_uuid, если им никто не владеет,
-        то еще и уведомление в телеграм, что кто-то предлагает link_uuid назначить родственика
+        владельцем link_id или самим link_id, если им никто не владеет,
+        то еще и уведомление в телеграм, что кто-то предлагает link_id назначить родственика
 
     DELETE
         uuid:
@@ -1321,12 +1321,15 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
             if dod:
                 is_dead = True
             self.check_gender(request)
-            link_uuid = request.data.get('link_uuid')
-            if link_uuid:
-                link_user, link_profile = self.check_user_uuid(link_uuid)
+            link_id = request.data.get('link_id')
+            if link_id:
+                if self.is_uuid(link_id):
+                    link_user, link_profile = self.check_user_uuid(link_id)
+                else:
+                    link_user, link_profile = self.check_user_id(link_id)
                 relation = request.data.get('link_relation', '')
                 if relation not in ('new_is_father', 'new_is_mother', 'link_is_father', 'link_is_mother'):
-                    raise ServiceException('При заданном link_uuid не получен или получен неправильный link_relation')
+                    raise ServiceException('При заданном link_id не получен или получен неправильный link_relation')
                 if not (link_profile.owner == owner or link_user == owner):
                     if link_profile.owner:
                         msg_user_to = link_profile.owner
@@ -1349,7 +1352,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                     raise ServiceException('У Вас нет права указывать родственника к этому профилю')
 
             gender_new = request.data.get('gender', '').lower() or None
-            if link_uuid:
+            if link_id:
                 msg_female_is_father = 'Женщина не может быть папой'
                 msg_male_is_mother = 'Мужчина не может быть мамой'
                 gender_link = link_profile.gender or None
@@ -1380,7 +1383,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 comment=request.data.get('comment') or None,
             )
 
-            if link_uuid:
+            if link_id:
                 if relation == 'new_is_father':
                     is_father = True
                     link_user_from = link_user
@@ -1420,7 +1423,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
             )
             data.update(profile.data_WAK())
             data.update(profile.parents_dict(request))
-            if got_tg_token and link_uuid and relation in ('new_is_father', 'new_is_mother',):
+            if got_tg_token and link_id and relation in ('new_is_father', 'new_is_mother',):
                 user_from = link_user_from
                 profile_from = user_from.profile
                 profile_from_data=profile_from.data_dict(request)

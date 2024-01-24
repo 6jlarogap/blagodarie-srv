@@ -34,7 +34,7 @@ from users.models import CreateUserMixin, IncognitoUser, Profile, TempToken, Oau
 MSG_NO_PARM = 'Не задан или не верен какой-то из параметров в связке номер %s (начиная с 0)'
 
 
-class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin, APIView):
+class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, FrontendMixin, APIView):
     parser_classes = (JSONParser, FormParser, MultiPartParser)
 
     @transaction.atomic
@@ -54,16 +54,11 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin,
                 tg_user_id_from
                     Ид телеграм прользователя
             или
-                user_uuid_from
-                    Это uuid, от кого
+                user_id_from
+                    Это uuid или id, от кого
 
             К кому (обязательно)
-                user_id_to
-                    (не uuid!) пользователя к кому
-                        NB! при передаче данных по кнопке есть ограничение, строка не больше 64 символов, uuid не подходит
-            или
-                user_uuid_to
-                    Это uuid, к кому
+                user_id_to, id или uuid
 
             Тип операции, обязательно, operation_type_id:
                 THANK = 1
@@ -115,7 +110,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin,
                     При SET_MOTHER, если у человека уже есть другая мама, заменяем маму.
                     В аналогичных случаях для операций FATHER, MOTHER будет ошибка.
 
-            * user_id_from, от кого, uuid:
+            * user_id_from, от кого, uuid или id:
                 Необязательно.
                     Если не задан, полагается uuid авторизованного юзера
                     Если задан,
@@ -136,7 +131,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin,
                 "operation_type_id": 1
             }
 
-        - если user_id_from == user_id_to, то вернуть ошибку (нельзя добавить операцию себе);
+        - если user_from == user_to, то вернуть ошибку (нельзя добавить операцию себе);
         - иначе:
             - если тип операции THANK:
                 - записать данные в таблицу tbl_journal;
@@ -182,7 +177,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin,
                       при этом кроме message, еще передается code='already';
 
             - По операциям Father, Mother not_Parent NB
-            !!! может быть задан еще и user_from_id,
+            !!! может быть задан еще и user_from_id (uuid или id),
             !!! из user_from, user_to хотя бы один должен быть
                 или авторизованным пользователем или его родственником
 
@@ -228,20 +223,21 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin,
                 if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
                     raise ServiceException('Неверный токен телеграм бота')
 
-                if not request.data.get('user_uuid_from') and not request.data.get('tg_user_id_from'):
+                if not request.data.get('user_id_from') and not request.data.get('tg_user_id_from'):
                     raise ServiceException('Не заданы ни user_id_from, ни tg_user_id_from')
-                if request.data.get('user_uuid_from') and request.data.get('tg_user_id_from'):
-                    raise ServiceException('Заданы и user_uuid_from, и tg_user_id_from')
+                if request.data.get('user_id_from') and request.data.get('tg_user_id_from'):
+                    raise ServiceException('Заданы и user_id_from, и tg_user_id_from')
 
-                user_uuid_from = request.data.get('user_uuid_from')
-                if user_uuid_from:
+                user_id_from = request.data.get("user_id_from")
+                if user_id_from:
                     try:
-                        profile_from = Profile.objects.select_related('user').get(uuid=user_uuid_from)
+                        q = dict(uuid=user_id_from) if self.is_uuid(user_id_from) else dict(user__pk==user_id_from)
+                        profile_from = Profile.objects.select_related('user').get(**q)
                         user_from = profile_from.user
                     except ValidationError:
-                        raise ServiceException('Неверный user_uuid_from = "%s"' % user_uuid_from)
+                        raise ServiceException('Неверный user_id_from = "%s"' % user_id_from)
                     except Profile.DoesNotExist:
-                        raise ServiceException('Не найден пользователь, user_uuid_from = "%s"' % user_uuid_from)
+                        raise ServiceException('Не найден пользователь, user_id_from = "%s"' % user_id_from)
 
                 tg_user_id_from = request.data.get('tg_user_id_from')
                 if tg_user_id_from:
@@ -254,28 +250,17 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin,
                     except Oauth.DoesNotExist:
                         raise ServiceException('Не найден пользователь с этим ид телеграма')
 
-                if not request.data.get('user_uuid_to') and not request.data.get('user_id_to'):
-                    raise ServiceException('Не заданы ни user_uuid_to, ни user_id_to')
-                if request.data.get('user_uuid_to') and request.data.get('user_id_to'):
-                    raise ServiceException('Заданы и user_uuid_to, и user_id_to')
-
-                user_id_to = request.data.get('user_id_to')
-                if user_id_to:
-                    try:
-                        profile_to = Profile.objects.select_for_update().select_related('user').get(user__pk=user_id_to)
-                        user_to = profile_to.user
-                    except (Profile.DoesNotExist, ValueError,):
-                        raise ServiceException('Не задан или не найден user_id_to')
-
-                user_uuid_to = request.data.get('user_uuid_to')
-                if user_uuid_to:
-                    try:
-                        profile_to = Profile.objects.select_for_update().select_related('user').get(uuid=user_uuid_to)
-                        user_to = profile_to.user
-                    except ValidationError:
-                        raise ServiceException('Неверный uuid = "%s"' % user_uuid_to)
-                    except Profile.DoesNotExist:
-                        raise ServiceException('Не найдено ничего с uuid = "%s"' % user_uuid_to)
+                user_id_to = request.data.get("user_id_to")
+                if not user_id_to:
+                    raise ServiceException('Не задан user_id_to')
+                try:
+                    q = dict(uuid=user_id_to) if self.is_uuid(user_id_to) else dict(user__pk==user_id_to)
+                    profile_to = Profile.objects.select_for_update().select_related('user').get(**q)
+                    user_to = profile_to.user
+                except ValidationError:
+                    raise ServiceException('Неверный user_id_to = "%s"' % user_id_to)
+                except Profile.DoesNotExist:
+                    raise ServiceException('Не найден пользователь, user_id_to = "%s"' % user_id_to)
 
                 tg_from_chat_id = request.data.get('tg_from_chat_id')
                 tg_message_id = request.data.get('tg_message_id')
@@ -287,29 +272,31 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin,
             if not got_tg_token:
                 user_from = request.user
                 profile_from = user_from.profile
-                user_from_uuid = profile_from.uuid
 
-                user_to_uuid = request.data.get("user_id_to")
-                if not user_to_uuid:
+                user_id_to = request.data.get("user_id_to")
+                if not user_id_to:
                     raise ServiceException('Не задан user_id_to')
                 try:
-                    profile_to = Profile.objects.select_for_update().select_related('user').get(uuid=user_to_uuid)
+                    q = dict(uuid=user_id_to) if self.is_uuid(user_id_to) else dict(user__pk==user_id_to)
+                    profile_to = Profile.objects.select_for_update().select_related('user').get(**q)
                     user_to = profile_to.user
                 except ValidationError:
-                    raise ServiceException('Неверный user_id_to = "%s"' % user_to_uuid)
+                    raise ServiceException('Неверный user_id_to = "%s"' % user_id_to)
                 except Profile.DoesNotExist:
-                    raise ServiceException('Не найден пользователь, user_id_to = "%s"' % user_to_uuid)
+                    raise ServiceException('Не найден пользователь, user_id_to = "%s"' % user_id_to)
 
                 if operationtype_id in (OperationType.FATHER, OperationType.MOTHER, OperationType.NOT_PARENT,):
-                    user_from_uuid = request.data.get("user_id_from")
-                    if user_from_uuid:
+                    user_id_from = request.data.get("user_id_from")
+                    if user_id_from:
                         try:
-                            profile_from = Profile.objects.select_related('user').get(uuid=user_from_uuid)
+                            q = dict(uuid=user_id_from) if self.is_uuid(user_id_from) else dict(user__pk==user_id_from)
+                            profile_from = Profile.objects.select_related('user').get(**q)
                             user_from = profile_from.user
                         except ValidationError:
-                            raise ServiceException('Неверный user_id_from = "%s"' % user_from_uuid)
+                            raise ServiceException('Неверный user_id_from = "%s"' % user_id_from)
                         except Profile.DoesNotExist:
-                            raise ServiceException('Не найден пользователь, user_id_from = "%s"' % user_from_uuid)
+                            raise ServiceException('Не найден пользователь, user_id_from = "%s"' % user_id_from)
+
             if user_to == user_from:
                 raise ServiceException('Операция на самого себя не предусмотрена')
 
@@ -2265,8 +2252,6 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     ).distinct():
                     links.append(cs.data_dict(fmt=fmt, show_trust=True))
                 data.update(bot_username=bot_username, nodes=nodes, links=links, root_node=root_node)
-                #TODO после срока действия текущей куки у юзеров не нужен будет, т. после 10.01.24
-                data.update(auth_user_id=user_a.is_authenticated and user_a.pk or None)
                 if tggroup:
                     data.update(tg_group=dict(type=tggroup.type, title=tggroup.title))
 
