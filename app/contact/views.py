@@ -211,6 +211,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                   при этом кроме message, еще передается code='already'
                 - если нет ошибок, то записать данные в таблицу tbl_journal
         """
+        print(request.data)
         try:
             try:
                 operationtype_id = int(request.data.get("operation_type_id"))
@@ -231,7 +232,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 user_id_from = request.data.get("user_id_from")
                 if user_id_from:
                     try:
-                        q = dict(uuid=user_id_from) if self.is_uuid(user_id_from) else dict(user__pk==user_id_from)
+                        q = dict(uuid=user_id_from) if self.is_uuid(user_id_from) else dict(user__pk=user_id_from)
                         profile_from = Profile.objects.select_related('user').get(**q)
                         user_from = profile_from.user
                     except ValidationError:
@@ -254,7 +255,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 if not user_id_to:
                     raise ServiceException('Не задан user_id_to')
                 try:
-                    q = dict(uuid=user_id_to) if self.is_uuid(user_id_to) else dict(user__pk==user_id_to)
+                    q = dict(uuid=user_id_to) if self.is_uuid(user_id_to) else dict(user__pk=user_id_to)
                     profile_to = Profile.objects.select_for_update().select_related('user').get(**q)
                     user_to = profile_to.user
                 except ValidationError:
@@ -277,7 +278,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 if not user_id_to:
                     raise ServiceException('Не задан user_id_to')
                 try:
-                    q = dict(uuid=user_id_to) if self.is_uuid(user_id_to) else dict(user__pk==user_id_to)
+                    q = dict(uuid=user_id_to) if self.is_uuid(user_id_to) else dict(user__pk=user_id_to)
                     profile_to = Profile.objects.select_for_update().select_related('user').get(**q)
                     user_to = profile_to.user
                 except ValidationError:
@@ -285,11 +286,14 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 except Profile.DoesNotExist:
                     raise ServiceException('Не найден пользователь, user_id_to = "%s"' % user_id_to)
 
-                if operationtype_id in (OperationType.FATHER, OperationType.MOTHER, OperationType.NOT_PARENT,):
+                if operationtype_id in (
+                    OperationType.FATHER, OperationType.MOTHER, OperationType.NOT_PARENT,
+                    OperationType.SET_FATHER, OperationType.SET_MOTHER,
+                ):
                     user_id_from = request.data.get("user_id_from")
                     if user_id_from:
                         try:
-                            q = dict(uuid=user_id_from) if self.is_uuid(user_id_from) else dict(user__pk==user_id_from)
+                            q = dict(uuid=user_id_from) if self.is_uuid(user_id_from) else dict(user__pk=user_id_from)
                             profile_from = Profile.objects.select_related('user').get(**q)
                             user_from = profile_from.user
                         except ValidationError:
@@ -3099,6 +3103,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
         try:
             if not request.data.get('fan_source'):
                 raise ServiceException("Неверные исходные данные")
+            auth_user_pk = request.user.pk if request.user.is_authenticated else -1
             sources_by_id_ = request.data['fan_source']['sources_by_id']
             sources_by_id = dict()
             for k in sources_by_id_.keys():
@@ -3108,7 +3113,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 nodes[i] = int(nodes[i])
             targets_by_id = dict()
             for k in sources_by_id.keys():
-                targets_by_id[k] = dict(tree_links=[], parents={})
+                targets_by_id[k] = dict(tree_links=[], parents={},)
             q = Q(is_father=True) | Q(is_mother=True)
             q &= Q(user_to__isnull=False) & Q(user_from__pk__in=sources_by_id.keys())
             fmt = '3d-force-graph'
@@ -3134,7 +3139,11 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     if not cs.is_child and sources_by_id[cs.user_from.pk]['up']:
                         targets_by_id[cs.user_to.pk]['up'] = True
                     targets_by_id[cs.user_to.pk].update(
-                        **cs.user_to.profile.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True))
+                        **cs.user_to.profile.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True)),
+                        is_my=auth_user_pk in (
+                            cs.user_to.profile.user.pk,
+                            cs.user_to.profile.owner and cs.user_to.profile.owner.pk or None
+                        )
                     )
                 try:
                     targets_by_id[target]['parents'][self.parent_key(cs)] = source
