@@ -2215,6 +2215,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                 root_node = dict(
                     id=user_q.pk,
                     uuid=user_q.profile.uuid,
+                    gender=user_q.profile.gender,
                     first_name=user_q.first_name,
                     photo=Profile.image_thumb(
                         request, user_q.profile.photo,
@@ -3312,6 +3313,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             id=user_q.pk,
             uuid=profile_q.uuid,
             first_name=user_q.first_name,
+            gender=profile_q.gender,
             is_my=auth_user_pk in (user_q.pk, profile_q.owner and profile_q.owner.pk or None),
             photo=Profile.image_thumb(
                 request, profile_q.photo,
@@ -3642,6 +3644,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
         root_node = dict(
             id=user_q.pk,
             uuid=profile_q.uuid,
+            gender=profile_q.gender,
             first_name=user_q.first_name,
             photo=Profile.image_thumb(
                 request, profile_q.photo,
