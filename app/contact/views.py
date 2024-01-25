@@ -327,11 +327,11 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
             if got_tg_token:
                 profile_from_data=profile_from.data_dict(request)
                 profile_from_data.update(profile_from.data_WAK())
-                profile_from_data.update(tg_data=profile_from.tg_data(), user_id=user_from.pk)
+                profile_from_data.update(tg_data=profile_from.tg_data())
 
                 profile_to_data=profile_to.data_dict(request)
                 profile_to_data.update(profile_to.data_WAK())
-                profile_to_data.update(tg_data=profile_to.tg_data(), user_id=user_to.pk)
+                profile_to_data.update(tg_data=profile_to.tg_data())
                 data.update(
                     profile_from=profile_from_data,
                     profile_to=profile_to_data,
@@ -1903,7 +1903,6 @@ class ApiAddKeyView(UuidMixin, APIView):
                 data.update(user_profile.parents_dict(request))
                 data.update(user_profile.data_WAK())
                 data.update(
-                    user_id=user.pk,
                     owner_id=user_profile.owner and user_profile.owner.pk or None,
                 )
             else:

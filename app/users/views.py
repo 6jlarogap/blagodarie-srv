@@ -1029,7 +1029,6 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 profile = oauth.user.profile
                 data = profile.data_dict(request)
                 data.update(tg_data=profile.tg_data())
-                data.update(user_id=oauth.user.pk)
             elif request.GET.get('uuid'):
                 if request.GET.get('with_owner'):
                     related = ('user', 'ability','owner','owner__profile')
@@ -1043,7 +1042,6 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 data.update(profile.parents_dict(request))
                 data.update(profile.data_WAK())
                 data.update(
-                    user_id=user.pk,
                     owner_id=profile.owner and profile.owner.pk or None,
                 )
                 data.update(tg_data=profile.tg_data())
@@ -1086,7 +1084,6 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                         item.update(profile.parents_dict(request))
                         item.update(profile.data_WAK())
                         item.update(
-                            user_id=user.pk,
                             owner_id=profile.owner and profile.owner.pk or None,
                         )
                         item.update(tg_data=profile.tg_data())
@@ -1170,7 +1167,6 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                         for user in users:
                             profile = user.profile
                             item = profile.data_dict(request)
-                            item.update(user_id=user.pk)
                             if thumb_size:
                                 item.update(thumb_url=profile.choose_thumb(
                                     request, width=thumb_size, height=thumb_size,
@@ -1192,7 +1188,6 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 for profile in users_selected:
                     data_item = profile.data_dict(request)
                     data_item.update(
-                        user_id=profile.user.pk,
                         owner_id=profile.owner and profile.owner.pk or None,
                     )
                     data.append(data_item)
@@ -1293,7 +1288,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
 
         data.update(profile.data_dict(request))
         data.update(profile.parents_dict(request))
-        data.update(user_id=user.pk, tg_data=profile.tg_data())
+        data.update(tg_data=profile.tg_data())
         data.update(owner_id=profile.owner and profile.owner.id or None)
         data.update(profile.data_WAK())
         return data
@@ -1425,7 +1420,6 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
             self.save_photo(request, profile)
             data = profile.data_dict(request)
             data.update(
-                user_id=user.pk,
                 owner_id=profile.owner and profile.owner.pk or None,
                 tg_data=profile.tg_data()
             )
@@ -1436,7 +1430,6 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 profile_from = user_from.profile
                 profile_from_data=profile_from.data_dict(request)
                 profile_from_data.update(
-                    user_id=user_from.pk,
                     owner_id=profile_from.owner and profile_from.owner.pk or None,
                     tg_data=profile_from.tg_data()
                 )
@@ -1530,7 +1523,6 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
             data.update(profile.parents_dict(request))
             data.update(profile.data_WAK())
             data.update(
-                user_id=user.pk,
                 owner_id=profile.owner and profile.owner.pk or None,
             )
             if got_tg_token:
@@ -1626,7 +1618,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 user.is_active = False
                 user.save()
                 data = profile.data_dict(request)
-                data.update(user_id=user.pk, owner_id=None,)
+                data.update(owner_id=None,)
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             transaction.set_rollback(True)
@@ -3728,7 +3720,7 @@ class ApiTokenInvite(UuidMixin, APIView):
                             profile_data = profile.data_dict(request)
                             profile_data.update(profile.parents_dict(request))
                             profile_data.update(profile.data_WAK())
-                            profile_data.update(user_id=user_invited.pk, owner_id=None)
+                            profile_data.update(owner_id=None)
                             profile_data.update(tg_data=profile.tg_data())
                             # Так быстрее, чем delete, redis в фоне удалит через секунду
                             r.expire(token_in_redis, 1)
