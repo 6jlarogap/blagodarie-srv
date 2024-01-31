@@ -448,12 +448,13 @@ class Profile(PhotoModel, GeoPointAddressModel):
         return result
 
     def owner_dict(self, request=None):
+        owner = {}
         if self.owner:
-            owner_profile = self.owner.profile
-            owner = owner_profile.data_dict(request)
-            owner.update(tg_data=owner_profile.tg_data())
-        else:
-            owner = None
+            owner.update(
+                user_id=self.owner.pk,
+                uuid=self.owner.profile.uuid,
+                first_name=self.owner.first_name,
+            )
         return dict(owner=owner)
 
     def tg_data(self):

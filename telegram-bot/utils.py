@@ -578,7 +578,7 @@ class Misc(object):
         )
         keys = []
 
-        if response['is_active'] or response['owner_id']:
+        if response['is_active'] or response.get('owner'):
             abilities_text = '\n'.join(
                 ability['text'] for ability in response['abilities']
             ) if response.get('abilities') else 'не заданы'
@@ -631,7 +631,7 @@ class Misc(object):
         result = ''
         arr = ['От Вас: %s' % OperationType.relation_text(response['from_to']['is_trust']),]
         # Организация может доверять только, если у нее не собственный аккаунт
-        if not response_to.get('is_org') and not response_to.get('owner_id'):
+        if not response_to.get('is_org') and not response_to.get('owner'):
             arr.append('К Вам: %s' % OperationType.relation_text(response['to_from']['is_trust']))
         arr.append('\n')
         result = '\n'.join(arr)
@@ -692,15 +692,15 @@ class Misc(object):
 
 
     @classmethod
-    async def get_user_by_uuid(cls, uuid, with_owner=False):
+    async def get_user_by_uuid(cls, uuid, with_owner_tg_data=False):
         """
         Получить данные пользователя по uuid
 
         Если не найден, будет status == 400
         """
         params = dict(uuid=uuid)
-        if with_owner:
-            params.update(with_owner='1')
+        if with_owner_tg_data:
+            params.update(with_owner_tg_data='1')
         logging.debug('get_user_profile by uuid, params: %s' % params)
         status, response = await Misc.api_request(
             path='/api/profile',
@@ -771,8 +771,8 @@ class Misc(object):
         if status_sender == 200 and response_sender.get('user_id'):
             status_uuid, response_uuid = await cls.get_user_by_uuid(uuid)
             if status_uuid == 200 and response_uuid:
-                if response_uuid.get('owner_id'):
-                    result = response_uuid['owner_id'] == response_sender['user_id']
+                if response_uuid.get('owner'):
+                    result = response_uuid['owner']['user_id'] == response_sender['user_id']
                 elif not check_owned_only:
                     result = response_uuid['user_id'] == response_sender['user_id']
                 if result:
@@ -881,7 +881,7 @@ class Misc(object):
 
         for response_to in a_response_to:
             is_own_account = user_from_id and user_from_id == response_to['user_id']
-            is_owned_account = user_from_id and response_to.get('owner_id') and response_to['owner_id'] == user_from_id
+            is_owned_account = user_from_id and response_to.get('owner') and response_to['owner']['user_id'] == user_from_id
             is_org = response_to.get('is_org')
 
             reply = cls.reply_user_card(
@@ -970,7 +970,7 @@ class Misc(object):
                 reply_markup.row(*thank_buttons)
 
             callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE
-            if response_to['is_active'] or response_to['owner_id']:
+            if response_to['is_active'] or response_to['owner']:
                 if is_own_account or is_owned_account:
                     # Карточка самому пользователю или его родственнику
                     #
@@ -1153,7 +1153,7 @@ class Misc(object):
                 reply_markup.row(inline_btn_undelete)
 
             send_text_message = True
-            if user_from_id and (response_to['is_active'] or response_to['owner_id']) and reply:
+            if user_from_id and (response_to['is_active'] or response_to['owner']) and reply:
                 # в бот
                 #
                 if response_to.get('photo') and response_from and response_from.get('tg_data') and reply:

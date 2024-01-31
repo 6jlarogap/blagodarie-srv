@@ -1906,9 +1906,7 @@ class ApiAddKeyView(UuidMixin, APIView):
                 data = user_profile.data_dict(request)
                 data.update(user_profile.parents_dict(request))
                 data.update(user_profile.data_WAK())
-                data.update(
-                    owner_id=user_profile.owner and user_profile.owner.pk or None,
-                )
+                data.update(user_profile.owner_dict())
             else:
                 if not request.user.is_authenticated:
                     raise NotAuthenticated

@@ -1030,23 +1030,17 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 data = profile.data_dict(request)
                 data.update(tg_data=profile.tg_data())
             elif request.GET.get('uuid'):
-                if request.GET.get('with_owner'):
-                    related = ('user', 'ability','owner','owner__profile')
-                else:
-                    related = ('user', 'ability',)
                 user, profile = self.check_user_uuid(
                     request.GET['uuid'],
-                    related=related,
+                    related=('user', 'ability','owner','owner__profile'),
                 )
                 data = profile.data_dict(request)
                 data.update(profile.parents_dict(request))
                 data.update(profile.data_WAK())
-                data.update(
-                    owner_id=profile.owner and profile.owner.pk or None,
-                )
+                data.update(profile.owner_dict())
                 data.update(tg_data=profile.tg_data())
-                if request.GET.get('with_owner'):
-                    data.update(profile.owner_dict())
+                if request.GET.get('with_owner_tg_data') and profile.owner:
+                    data['owner'].update(tg_data=profile.owner.profile.tg_data())
             elif request.GET.get('tg_uids'):
                 data = []
                 uids = request.GET['tg_uids'].split(',')
@@ -1083,9 +1077,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                         item = profile.data_dict(request)
                         item.update(profile.parents_dict(request))
                         item.update(profile.data_WAK())
-                        item.update(
-                            owner_id=profile.owner and profile.owner.pk or None,
-                        )
+                        item.update(profile.owner_dict())
                         item.update(tg_data=profile.tg_data())
                         data.append(item)
                         user_pks.add(user.pk)
@@ -1187,9 +1179,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                     select_related('user', 'ability',).order_by('user__first_name',)
                 for profile in users_selected:
                     data_item = profile.data_dict(request)
-                    data_item.update(
-                        owner_id=profile.owner and profile.owner.pk or None,
-                    )
+                    data_item.update(profile.owner_dict())
                     data.append(data_item)
             else:
                 if not request.user.is_authenticated:
@@ -1289,7 +1279,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
         data.update(profile.data_dict(request))
         data.update(profile.parents_dict(request))
         data.update(tg_data=profile.tg_data())
-        data.update(owner_id=profile.owner and profile.owner.id or None)
+        data.update(profile.owner_dict())
         data.update(profile.data_WAK())
         return data
 
@@ -1419,20 +1409,16 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
             profile = user.profile
             self.save_photo(request, profile)
             data = profile.data_dict(request)
-            data.update(
-                owner_id=profile.owner and profile.owner.pk or None,
-                tg_data=profile.tg_data()
-            )
+            data.update(profile.owner_dict())
+            data.update(tg_data=profile.tg_data())
             data.update(profile.data_WAK())
             data.update(profile.parents_dict(request))
             if got_tg_token and link_id and relation in ('new_is_father', 'new_is_mother',):
                 user_from = link_user_from
                 profile_from = user_from.profile
                 profile_from_data=profile_from.data_dict(request)
-                profile_from_data.update(
-                    owner_id=profile_from.owner and profile_from.owner.pk or None,
-                    tg_data=profile_from.tg_data()
-                )
+                profile_from_data.update(profile_from.owner_dict())
+                profile_from_data.update(tg_data=profile_from.tg_data())
                 profile_from_data.update(profile_from.data_WAK())
                 profile_from_data.update(profile_from.parents_dict(request))
                 data.update(
@@ -1522,9 +1508,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
             data = profile.data_dict(request)
             data.update(profile.parents_dict(request))
             data.update(profile.data_WAK())
-            data.update(
-                owner_id=profile.owner and profile.owner.pk or None,
-            )
+            data.update(profile.owner_dict())
             if got_tg_token:
                 data.update(tg_data=profile.tg_data())
         except SkipException:
@@ -1618,7 +1602,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 user.is_active = False
                 user.save()
                 data = profile.data_dict(request)
-                data.update(owner_id=None,)
+                data.update(profile.owner_dict())
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             transaction.set_rollback(True)
@@ -3720,7 +3704,7 @@ class ApiTokenInvite(UuidMixin, APIView):
                             profile_data = profile.data_dict(request)
                             profile_data.update(profile.parents_dict(request))
                             profile_data.update(profile.data_WAK())
-                            profile_data.update(owner_id=None)
+                            profile_data.update(profile.owner_dict())
                             profile_data.update(tg_data=profile.tg_data())
                             # Так быстрее, чем delete, redis в фоне удалит через секунду
                             r.expire(token_in_redis, 1)

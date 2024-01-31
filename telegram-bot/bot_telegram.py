@@ -2898,14 +2898,14 @@ async def get_new_owner(message: types.Message, state: FSMContext):
                     bot_data = await bot.get_me()
                     iof_from = Misc.get_deeplink_with_name(response_from, bot_data)
                     iof_to = Misc.get_deeplink_with_name(response_to, bot_data)
-                    if response_from['owner_id'] == response_to['user_id']:
+                    if response_from['owner']['user_id'] == response_to['user_id']:
                         # Сам себя назначил
                         await message.reply(
                             Misc.PROMPT_CHANGE_OWNER_SUCCESS % dict(
                                 iof_from=iof_from, iof_to=iof_to
                         ))
                         # state_finish, return
-                    elif response_to['owner_id']:
+                    elif response_to['owner']:
                         await message.reply('Нельзя назначить владельцем - неактивного пользователя')
                         # state_finish, return
                     else:
@@ -3112,7 +3112,7 @@ async def process_callback_gender(callback_query: types.CallbackQuery, state: FS
     state = dp.current_state()
     async with state.proxy() as data:
         data['uuid'] = uuid
-    his_her = Misc.his_her(response_uuid) if response_uuid['owner_id'] else 'Ваш'
+    his_her = Misc.his_her(response_uuid) if response_uuid['owner'] else 'Ваш'
     prompt_gender = (
         f'<b>{response_uuid["first_name"]}</b>.\n\n'
         f'Уточните {his_her} пол:'
@@ -3197,13 +3197,13 @@ async def process_callback_dates(callback_query: types.CallbackQuery, state: FSM
     if not response_sender:
         return
     response_uuid = response_sender['response_uuid']
-    his_her = Misc.his_her(response_uuid) if response_uuid['owner_id'] else 'Ваш'
+    his_her = Misc.his_her(response_uuid) if response_uuid['owner'] else 'Ваш'
     title_dob = 'Не знаю'
     prompt_dob = (
         f'<b>{response_uuid["first_name"]}</b>\n\n'
         f'Укажите {his_her} день рождения '
     ) + Misc.PROMPT_DATE_FORMAT
-    if not response_uuid['owner_id']:
+    if not response_uuid['owner']:
         prompt_dob += (
             f'\n\nЕсли хотите скрыть дату своего рождения '
             f'или в самом деле не знаете, когда Ваш день рождения, нажмите <u>{title_dob}</u>'
@@ -3249,7 +3249,7 @@ async def process_callback_other_dob_unknown(callback_query: types.CallbackQuery
                     finish_it = False
                     response_uuid = response_sender['response_uuid']
                     data['dob'] = ''
-                    if response_uuid['owner_id']:
+                    if response_uuid['owner']:
                         await draw_dod(callback_query.message, response_uuid)
                     else:
                         await put_dates(callback_query.message, callback_query.from_user, state, data)
@@ -3329,7 +3329,7 @@ async def put_dates(message, tg_user_sender, state, data):
                     tg_user_from=tg_user_sender,
                 )
             elif status == 400 and response and response.get('message'):
-                dates = 'даты' if response_sender['response_uuid']['owner_id'] else 'дату рождения'
+                dates = 'даты' if response_sender['response_uuid']['owner'] else 'дату рождения'
                 await message.reply(f'Ошибка!\n{response["message"]}\n\nНазначайте {dates} по новой')
             else:
                 await message.reply(Misc.MSG_ERROR_API)
@@ -3358,7 +3358,7 @@ async def get_dob(message: types.Message, state: FSMContext):
                     finish_it = False
                     data['dob'] = message_text
                     response_uuid = response_sender['response_uuid']
-                    if response_uuid['owner_id']:
+                    if response_uuid['owner']:
                         await draw_dod(message, response_uuid)
                     else:
                         await put_dates(message, message.from_user, state, data)
@@ -3523,7 +3523,7 @@ async def got_message_to_send(message: types.Message, state: FSMContext):
     msg_saved = 'Сообщение сохранено'
     async with state.proxy() as data:
         if data.get('uuid'):
-            status_to, profile_to = await Misc.get_user_by_uuid(data['uuid'], with_owner=True)
+            status_to, profile_to = await Misc.get_user_by_uuid(data['uuid'], with_owner_tg_data=True)
             if status_to == 200:
                 status_from, profile_from = await Misc.post_tg_user(message.from_user)
                 if status_from == 200 and profile_from:
@@ -5937,7 +5937,7 @@ async def process_callback_delete_user(callback_query: types.CallbackQuery, stat
     user, owner = await check_user_delete_undelete(callback_query)
     #   owner:  Кто удаляет (если собственного) или обезличивает (сам себя)
     #   user:   его удаляем или обезличиваем
-    if not user or not (user['is_active'] or user['owner_id']):
+    if not user or not (user['is_active'] or user['owner']):
         return
     if user['user_id'] == owner['user_id']:
         # Себя обезличиваем
@@ -5991,7 +5991,7 @@ async def process_callback_delete_user_confirmed(callback_query: types.CallbackQ
     #   owner:  Кто удаляет (если собственного) или обезличивает (сам себя)
     #   user:   его удаляем или обезличиваем
 
-    if not user or not (user['is_active'] or user['owner_id']):
+    if not user or not (user['is_active'] or user['owner']):
         await Misc.state_finish(state)
         return
 
@@ -6037,7 +6037,7 @@ async def process_callback_delete_user_confirmed(callback_query: types.CallbackQ
     )
 async def process_callback_undelete_user(callback_query: types.CallbackQuery, state: FSMContext):
     user, owner = await check_user_delete_undelete(callback_query)
-    if not user or user['user_id'] != owner['user_id'] or user['is_active'] or user['owner_id']:
+    if not user or user['user_id'] != owner['user_id'] or user['is_active'] or user['owner']:
         return
     prompt = (
         '<b>%(name)s</b>\n'
@@ -6073,7 +6073,7 @@ async def process_callback_undelete_user_confirmed(callback_query: types.Callbac
     user, owner = await check_user_delete_undelete(callback_query)
     #   owner:  Кто восстанавливает себя
     #   user:   Он же должен быть
-    if not user or user['user_id'] != owner['user_id'] or user['is_active'] or user['owner_id']:
+    if not user or user['user_id'] != owner['user_id'] or user['is_active'] or user['owner']:
         await Misc.state_finish(state)
         return
 
