@@ -931,6 +931,9 @@ class Misc(object):
                 if response_relations:
                     reply += cls.reply_relations(response_relations, response_to)
 
+            if response_to['owner']:
+                reply += f'Владелец: {cls.get_deeplink_with_name(response_to["owner"], bot_data)}\n'
+
             if user_from_id != response_to['user_id'] and bot_data.id != tg_user_from_id:
                 dict_reply = dict(
                     keyboard_type=KeyboardType.TRUST_THANK,
