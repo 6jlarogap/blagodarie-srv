@@ -166,6 +166,8 @@ install-readme.txt
 
         Alias /media/           /home/www-data/django/MEDIA/project/
         <Directory /home/www-data/django/MEDIA/project/>
+            Header set Access-Control-Allow-Origin *
+            Header set Access-Control-Allow-Credentials true
             Require all granted
         </Directory>
 
@@ -288,8 +290,11 @@ install-readme.txt
 
     </VirtualHost>
 
-Установка Telegram Bot Server на сервер Apache в Ubuntu Linux.
-----------------------------------------------------------------
+Установка Telegram Bot
+----------------------
+
+    * Д.б. установлено на Linux:
+         - redis-server
 
     (Здесь каталог telegram-bot)
 
