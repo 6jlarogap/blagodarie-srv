@@ -479,7 +479,7 @@ async def echo_graph_to_bot(message: types.Message, state: FSMContext):
     inline_btn_recent = InlineKeyboardButton(
         'Недавно добавленные',
         login_url=Misc.make_login_url(
-            redirect_path=settings.FRONTEND_HOST + '/?f=0&q=50',
+            redirect_path=settings.GRAPH_HOST + '/?f=0&q=50',
             keep_user_data='on'
     ))
     reply_markup.row(inline_btn_all_users)

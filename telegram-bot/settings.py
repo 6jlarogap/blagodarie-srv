@@ -69,6 +69,9 @@ HTTP_TIMEOUT = 60
 #
 API_HOST = 'https://api.blagoroda.org'
 
+# - домен, прописанный в боте
+# - там находятся ресурсы: <FRONTEND_HOST>/res/telegram-bot/*.txt
+#
 FRONTEND_HOST = 'https://blagoroda.org'
 FRONTEND_HOST_TITLE = 'БлагоРода'
 
@@ -76,9 +79,9 @@ FRONTEND_HOST_TITLE = 'БлагоРода'
 #
 MAP_HOST = 'https://map.blagoroda.org'
 
-# Ссылка на пространстсво доверия
+# Ссылка на пространство доверия
 #
-GRAPH_HOST = 'https://graph.blagoroda.org'
+GRAPH_HOST = 'https://blagoroda.org'
 
 # Ссылка на фронте, которая будет открываться там под авторизованным
 # пользователем:

@@ -320,16 +320,11 @@ REDIRECT_FROM_CALLBACK = 'oauth-landing'
 
 # Рисуем графики в формате '3d-force-graph' здесь
 #
-GRAPH_URL = 'https://graph.blagoroda.org'
+GRAPH_URL = 'https://blagoroda.org'
 
 # Рисуем карту в формате здесь
 #
 MAP_URL = 'https://map.blagoroda.org'
-
-# Переход по короткой ссылке. По url типа ../t/qwert12345
-# делается redirect на:
-#
-SHORT_ID_URL = 'https://graph.blagoroda.org/?user_uuid_trusts=%s'
 
 # ------------------------------------------------
 
@@ -512,6 +507,11 @@ try:
     from app.local_settings import *
 except ModuleNotFoundError:
     pass
+
+# Переход по короткой ссылке. По url типа ../t/qwert12345
+# делается redirect на:
+#
+SHORT_ID_URL = GRAPH_URL + '/?user_uuid_trusts=%s'
 
 # MEDIA_ROOT может измениться в local_settings
 #
