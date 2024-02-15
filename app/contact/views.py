@@ -211,7 +211,6 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                   при этом кроме message, еще передается code='already'
                 - если нет ошибок, то записать данные в таблицу tbl_journal
         """
-        print(request.data)
         try:
             try:
                 operationtype_id = int(request.data.get("operation_type_id"))
