@@ -888,51 +888,15 @@ class Misc(object):
                 response_to,
                 bot_data=bot_data,
             )
-            reply_markup = InlineKeyboardMarkup()
-            inline_btn_trusts = InlineKeyboardButton(
-                'Доверия',
-                login_url=cls.make_login_url(
-                    redirect_path='%(graph_host)s/?user_uuid_trusts=%(user_uuid)s' % dict(
-                        graph_host=settings.GRAPH_HOST,
-                        user_uuid=response_to['uuid'],
-                    ), keep_user_data='on',
-                ))
-            login_url_buttons = [inline_btn_trusts, ]
-
-            if not is_org:
-                inline_btn_genesis = InlineKeyboardButton(
-                    'Род',
-                    login_url=cls.make_login_url(
-                        redirect_path=(
-                                '%(graph_host)s/?user_uuid_genesis_tree=%(user_uuid)s'
-                                '&up=on&down=on&depth=2'
-                            ) % dict(
-                            graph_host=settings.GRAPH_HOST,
-                            user_uuid=response_to['uuid'],
-                        ), keep_user_data='on',
-                    ))
-                login_url_buttons.append(inline_btn_genesis)
-
-            if response_to.get('latitude') is not None and response_to.get('longitude') is not None:
-                inline_btn_map = InlineKeyboardButton(
-                    'Карта',
-                    login_url=cls.make_login_url(
-                        redirect_path='%(map_host)s/?uuid_trustees=%(user_uuid)s' % dict(
-                            map_host=settings.MAP_HOST,
-                            user_uuid=response_to['uuid'],
-                        ), keep_user_data='on',
-                    ))
-                login_url_buttons.append(inline_btn_map)
-            reply_markup.row(*login_url_buttons)
-
             response_relations = {}
             if user_from_id and user_from_id != response_to['user_id']:
                 status_relations, response_relations = await cls.call_response_relations(response_from, response_to)
                 if response_relations:
                     reply += cls.reply_relations(response_relations, response_to)
-
             if response_to['owner']:
                 reply += f'Владелец: {cls.get_deeplink_with_name(response_to["owner"], bot_data)}\n'
+
+            reply_markup = InlineKeyboardMarkup()
 
             if user_from_id != response_to['user_id'] and bot_data.id != tg_user_from_id:
                 dict_reply = dict(
@@ -971,6 +935,42 @@ class Misc(object):
                     )
                     thank_buttons.append(inline_btn_nullify_trust)
                 reply_markup.row(*thank_buttons)
+
+            inline_btn_trusts = InlineKeyboardButton(
+                'Доверия',
+                login_url=cls.make_login_url(
+                    redirect_path='%(graph_host)s/?user_uuid_trusts=%(user_uuid)s' % dict(
+                        graph_host=settings.GRAPH_HOST,
+                        user_uuid=response_to['uuid'],
+                    ), keep_user_data='on',
+                ))
+            login_url_buttons = [inline_btn_trusts, ]
+
+            if not is_org:
+                inline_btn_genesis = InlineKeyboardButton(
+                    'Род',
+                    login_url=cls.make_login_url(
+                        redirect_path=(
+                                '%(graph_host)s/?user_uuid_genesis_tree=%(user_uuid)s'
+                                '&up=on&down=on&depth=2'
+                            ) % dict(
+                            graph_host=settings.GRAPH_HOST,
+                            user_uuid=response_to['uuid'],
+                        ), keep_user_data='on',
+                    ))
+                login_url_buttons.append(inline_btn_genesis)
+
+            if response_to.get('latitude') is not None and response_to.get('longitude') is not None:
+                inline_btn_map = InlineKeyboardButton(
+                    'Карта',
+                    login_url=cls.make_login_url(
+                        redirect_path='%(map_host)s/?uuid_trustees=%(user_uuid)s' % dict(
+                            map_host=settings.MAP_HOST,
+                            user_uuid=response_to['uuid'],
+                        ), keep_user_data='on',
+                    ))
+                login_url_buttons.append(inline_btn_map)
+            reply_markup.row(*login_url_buttons)
 
             callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE
             if response_to['is_active'] or response_to['owner']:
