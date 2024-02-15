@@ -4491,15 +4491,15 @@ async def do_process_tn_question(callback_query=None, state=None, message=None, 
         return
 
     if operation_type_id == OperationType.TRUST:
-        msg_what = 'к <b>доверию</b>'
+        msg_what = 'к <u>доверию</u>'
     if operation_type_id == OperationType.TRUST_AND_THANK:
         status_relations, response_relations = await Misc.call_response_relations(profile_sender, profile_to)
         if response_relations and response_relations['from_to']['is_trust'] and response_relations['from_to']['thanks_count']:
-            msg_what = 'к <b>благодарности</b>'
+            msg_what = 'к <u>благодарности</u>'
         else:
-            msg_what = 'к <b>доверию</b> к'
+            msg_what = 'к <u>доверию</u> к'
     elif operation_type_id == OperationType.MISTRUST:
-        msg_what = 'к <b>недоверию</b> для'
+        msg_what = 'к <u>недоверию</u> для'
     else:
         # OperationType.NULLIFY_TRUST
         msg_what = 'к тому что хотите <b>забыть</b>'
@@ -4569,7 +4569,6 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
     logging.debug('post operation, response: %s' % response)
     text = None
     operation_done = False
-    tg_user_to_tg_data = profile_to.get('tg_data', [])
     if status == 200:
         if post_op['operation_type_id'] == OperationType.MISTRUST:
             text = '%(full_name_from_link)s не доверяет %(full_name_to_link)s'
@@ -4642,13 +4641,19 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
         except (ChatNotFound, CantInitiateConversation):
             pass
 
-    # Это получателю благодарности и т.п.
+    # Это получателю благодарности и т.п. или владельцу получателя, если получатель собственный
     #
     comment_delivered = False
     text_to_recipient = text
     if operation_done and data.get('message_to_forward_id') or comment_message:
         text_to_recipient += ' с комментарием:'
-    for tgd in tg_user_to_tg_data:
+    tg_user_to_notify_tg_data = []
+    if profile_to.get('owner'):
+        if profile_to['owner']['uuid'] != profile_from['uuid']:
+            tg_user_to_notify_tg_data = profile_to['owner'].get('tg_data', [])
+    else:
+        tg_user_to_notify_tg_data = profile_to.get('tg_data', [])
+    for tgd in tg_user_to_notify_tg_data:
         if operation_done:
             try:
                 await bot.send_message(
@@ -4658,7 +4663,7 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
                 )
             except (ChatNotFound, CantInitiateConversation):
                 pass
-        if operation_done and data.get('message_to_forward_id'):
+        if operation_done and not profile_to.get('owner') and data.get('message_to_forward_id'):
             try:
                 await bot.forward_message(
                     chat_id=tgd['tg_uid'],
@@ -4678,11 +4683,20 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
             except (ChatNotFound, CantInitiateConversation):
                 pass
     if comment_delivered:
+        if profile_to.get('owner'):
+            profile_to_whom = profile_to['owner']
+            to_owner = Misc.his_her(profile_to) + ' владельцу, '
+        else:
+            profile_to_whom = profile_to
+            to_owner = ''
         try:
             await bot.send_message(
                 tg_user_sender.id,
-                text='Ваш комментарий доставлен к %s' % Misc.get_deeplink_with_name(profile_to, bot_data, plus_trusts=True),
-            )
+                text='Ваш комментарий доставлен к %s%s' % (
+                    to_owner,
+                    Misc.get_deeplink_with_name(
+                        profile_to_whom, bot_data, plus_trusts=True,
+            )))
         except (ChatNotFound, CantInitiateConversation):
             pass
 

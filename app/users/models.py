@@ -389,7 +389,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
     def __str__(self):
         return self.user.first_name or str(self.pk)
 
-    def data_dict(self, request=None, fmt='d3js', thumb={}):
+    def data_dict(self, request=None, fmt='d3js', thumb={}, short=False):
         user = self.user
         result = dict()
         if request:
@@ -418,6 +418,14 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 photo=photo,
                 gender=self.gender,
                 is_dead = self.is_dead,
+            )
+        elif short:
+            result.update(
+                user_id=user.pk,
+                uuid=self.uuid,
+                username=user.username,
+                first_name=user.first_name,
+                trust_count=self.trust_count,
             )
         else:
             result.update(

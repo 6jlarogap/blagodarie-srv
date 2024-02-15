@@ -335,6 +335,16 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 profile_to_data=profile_to.data_dict(request)
                 profile_to_data.update(profile_to.data_WAK())
                 profile_to_data.update(tg_data=profile_to.tg_data())
+                if profile_to.owner_id  and operationtype_id in (
+                       OperationType.THANK, OperationType.MISTRUST,
+                       OperationType.TRUST, OperationType.NULLIFY_TRUST,
+                       OperationType.TRUST_AND_THANK,
+                   ):
+                    profile_to_owner = Profile.objects.select_related('user').get(user__pk=profile_to.owner.pk)
+                    profile_to_data.update(owner=profile_to_owner.data_dict(short=True))
+                    profile_to_data['owner'].update(tg_data=profile_to_owner.tg_data())
+                else:
+                    profile_to_data.update(owner={})
                 data.update(
                     profile_from=profile_from_data,
                     profile_to=profile_to_data,
