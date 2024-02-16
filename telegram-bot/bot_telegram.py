@@ -1130,16 +1130,14 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                         if re.search(re.escape(auth_domain) + '$', auth_url_parse.hostname):
                             auth_text = settings.AUTH_PROMPT_FOR_DOMAIN[auth_domain]
                             break
+                redirect_path_new = redirect_path
                 if not auth_text:
                     # Чтобы телеграм не предлагал ссылку, берется после последнего http(s)://,
                     # впереди ставится троеточие
                     #
-                    m = re.search(r'(?:https?\:\/\/)?([^\:\#]+)$', redirect_path)
-                    if m:
+                    if m:=re.search(r'(?:https?\:\/\/)?([^\:\#]+)$', redirect_path):
                         redirect_path_new = '...' + m.group(1)
-                    else:
-                        redirect_path_new = redirect_path
-                auth_text = f'Нажмите <u>Продолжить</u> для доступа к:\n{redirect_path_new}'
+                    auth_text = f'Нажмите <u>Продолжить</u> для доступа к:\n{redirect_path_new}'
                 await message.reply(
                     auth_text,
                     reply_markup=reply_markup,
