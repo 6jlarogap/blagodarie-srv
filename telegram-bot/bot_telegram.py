@@ -869,24 +869,6 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             state_ = 'start_uuid'
 
         elif m := re.search(
-                r'^\/start\s+(\w{5,})$',
-                message_text,
-                flags=re.I,
-          ):
-            username_to_search = m.group(1)
-            state_ = 'start_username'
-        elif m := re.search(
-                (
-                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\='
-                    '(\w{5,})$'
-                ) % re.escape(bot_data['username']),
-                message_text,
-                flags=re.I,
-          ):
-            username_to_search = m.group(1)
-            state_ = 'start_username'
-
-        elif m := re.search(
                 (
                     r'^(?:https?\:\/\/)?t\.me\/%s\?start\=poll\-'
                     '(\d{3,})$'
@@ -990,7 +972,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             user_from_id = response_from.get('user_id')
             if state_ in ('ya', 'forwarded_from_me', 'start', ) or \
                state_ in (
-                    'start_uuid', 'start_username', 'start_setplace', 'start_poll',
+                    'start_uuid', 'start_setplace', 'start_poll',
                     'start_offer', 'start_auth_redirect',
                ) and response_from.get('created'):
                 a_response_to += [response_from, ]
@@ -1001,23 +983,6 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             status, response_uuid = await Misc.get_user_by_uuid(uuid=uuid_to_search)
             if status == 200:
                 a_response_to += [response_uuid, ]
-            else:
-                reply = Misc.MSG_USER_NOT_FOUND
-        except:
-            pass
-
-    if user_from_id and state_ == 'start_username':
-        logging.debug('get tg_user_by_start_username data in api...')
-        try:
-            status, response_tg_username = await Misc.api_request(
-                path='/api/profile',
-                method='get',
-                params=dict(tg_username=username_to_search),
-            )
-            logging.debug('get_user_profile by username, status: %s' % status)
-            logging.debug('get_user_profile by username, response: %s' % response_tg_username)
-            if status == 200 and response_tg_username:
-                a_response_to += response_tg_username
             else:
                 reply = Misc.MSG_USER_NOT_FOUND
         except:

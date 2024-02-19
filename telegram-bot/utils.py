@@ -612,10 +612,7 @@ class Misc(object):
         keys += ['@%s' % tgd['tg_username'] for tgd in response.get('tg_data', []) if tgd['tg_username']]
         keys += [key['value'] for key in response.get('keys', [])]
         keys.append(cls.get_deeplink(response, bot_data))
-        keys += [
-            't.me/%s?start=%s' % (bot_data['username'], tgd['tg_username']) \
-                for tgd in response.get('tg_data', []) if tgd['tg_username']
-        ]
+
         if response.get('username'):
             keys.append(settings.SHORT_ID_LINK % response['username'])
 
