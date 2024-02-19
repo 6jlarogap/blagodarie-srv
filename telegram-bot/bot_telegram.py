@@ -778,6 +778,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 flags=re.I,
           ):
             state_ = 'start_setplace'
+
         elif m := re.search(
                 (
                     r'^(?:https?\:\/\/)?t\.me\/%s\?start\=setplace'
@@ -851,12 +852,31 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             state_ = 'start_invite'
 
         elif m := re.search(
+                r'^\/start\s+([0-9a-z]{10})$',
+                message_text,
+                flags=re.I,
+          ):
+            sid_to_search = m.group(1)
+            state_ = 'start_sid'
+
+        elif m := re.search(
+                (
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=([0-9a-z]{10})$'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            sid_to_search = m.group(1)
+            state_ = 'start_sid'
+
+        elif m := re.search(
                 r'^\/start\s+([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
                 message_text,
                 flags=re.I,
           ):
             uuid_to_search = m.group(1).lower()
             state_ = 'start_uuid'
+
         elif m := re.search(
                 (
                     r'^(?:https?\:\/\/)?t\.me\/%s\?start\='
@@ -972,10 +992,21 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             user_from_id = response_from.get('user_id')
             if state_ in ('ya', 'forwarded_from_me', 'start', ) or \
                state_ in (
-                    'start_uuid', 'start_setplace', 'start_poll',
+                    'start_uuid', 'start_sid', 'start_setplace', 'start_poll',
                     'start_offer', 'start_auth_redirect',
                ) and response_from.get('created'):
                 a_response_to += [response_from, ]
+
+    if user_from_id and state_ == 'start_sid':
+        logging.debug('get tg_user_by_start_sid data in api...')
+        try:
+            status, response_uuid = await Misc.get_user_by_sid(sid=sid_to_search)
+            if status == 200:
+                a_response_to += [response_uuid, ]
+            else:
+                reply = Misc.MSG_USER_NOT_FOUND
+        except:
+            pass
 
     if user_from_id and state_ == 'start_uuid':
         logging.debug('get tg_user_by_start_uuid data in api...')
@@ -1251,7 +1282,7 @@ async def process_callback_location(callback_query: types.CallbackQuery, state: 
         code = callback_query.data.split(KeyboardType.SEP)
         try:
             uuid = code[1]
-            if uuid and not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+            if uuid and not await Misc.check_owner_by_uuid(owner_tg_user=tg_user_sender, uuid=uuid):
                 return
         except IndexError:
             uuid = None
@@ -1270,8 +1301,8 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
             reply_markup=Misc.reply_markup_cancel_row()
         )
         return
-    user_uuid_to = Misc.uuid_from_text(message.text)
-    if not user_uuid_to:
+    user_sid_to = Misc.sid_from_text(message.text)
+    if not user_sid_to:
         if await is_it_command(message, state, excepts=('start',)):
             return
         async with state.proxy() as data:
@@ -1315,7 +1346,8 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
     if not user_uuid_from or not isinstance(is_father, bool):
         await Misc.state_finish(state)
         return
-    if not await Misc.check_owner(owner_tg_user=message.from_user, uuid=user_uuid_to):
+    response_sender = await Misc.check_owner_by_sid(owner_tg_user=message.from_user, sid=user_sid_to)
+    if not response_sender:
         await Misc.state_finish(state)
         return
 
@@ -1323,7 +1355,7 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
         tg_token=settings.TOKEN,
         operation_type_id=OperationType.SET_FATHER if is_father else OperationType.SET_MOTHER,
         user_id_from=user_uuid_from,
-        user_id_to=user_uuid_to,
+        user_id_to=response_sender['response_uuid']['uuid']
     )
     logging.debug('post operation, payload: %s' % post_op)
     status, response = await Misc.api_request(
@@ -1394,7 +1426,7 @@ async def put_new_papa_mama(message: types.Message, state: FSMContext):
     if not user_uuid_from or not isinstance(is_father, bool):
         await Misc.state_finish(state)
         return
-    owner = await Misc.check_owner(owner_tg_user=message.from_user, uuid=user_uuid_from)
+    owner = await Misc.check_owner_by_uuid(owner_tg_user=message.from_user, uuid=user_uuid_from)
     if not owner or not owner.get('user_id'):
         await Misc.state_finish(state)
         return
@@ -1473,7 +1505,7 @@ async def process_callback_new_papa_mama(callback_query: types.CallbackQuery, st
         if not uuid:
             await Misc.state_finish(state)
             return
-        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
+        response_sender = await Misc.check_owner_by_uuid(owner_tg_user=tg_user_sender, uuid=uuid)
         if not response_sender:
             await Misc.state_finish(state)
             return
@@ -1522,7 +1554,7 @@ async def process_callback_papa_mama(callback_query: types.CallbackQuery, state:
         if not uuid:
             return
         tg_user_sender = callback_query.from_user
-        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
+        response_sender = await Misc.check_owner_by_uuid(owner_tg_user=tg_user_sender, uuid=uuid)
         if not response_sender:
             return
         response_uuid = response_sender['response_uuid']
@@ -1608,7 +1640,7 @@ async def process_callback_clear_parent(callback_query: types.CallbackQuery, sta
     if not (uuid := Misc.getuuid_from_callback(callback_query)):
         await Misc.state_finish(state)
         return
-    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
     if not response_sender:
         await Misc.state_finish(state)
         return
@@ -1666,7 +1698,7 @@ async def process_callback_clear_parent_confirmed(callback_query: types.Callback
         await Misc.state_finish(state)
         return
     message = callback_query.message
-    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
     if not response_sender:
         await Misc.state_finish(state)
         return
@@ -1839,7 +1871,7 @@ async def process_callback_clear_child_confirmed(callback_query: types.CallbackQ
         return
     message = callback_query.message
     tg_user_sender = callback_query.from_user
-    response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=parent_uuid)
+    response_sender = await Misc.check_owner_by_uuid(owner_tg_user=tg_user_sender, uuid=parent_uuid)
     if not response_sender or \
         not response_sender.get('response_uuid') or \
         not response_sender['response_uuid'].get('children'):
@@ -1912,7 +1944,7 @@ async def process_callback_clear_child(callback_query: types.CallbackQuery, stat
         await Misc.state_finish(state)
         return
     message = callback_query.message
-    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
     if not response_sender or \
         not response_sender.get('response_uuid') or \
         not response_sender['response_uuid'].get('children'):
@@ -1965,8 +1997,8 @@ async def choose_child_to_clear_link(message: types.Message, state: FSMContext):
         return
     if await is_it_command(message, state, excepts=('start',)):
         return
-    child_uuid = Misc.uuid_from_text(message.text)
-    if not child_uuid:
+    child_sid = Misc.sid_from_text(message.text)
+    if not child_sid:
         await message.reply(
             Misc.MSG_INVALID_LINK + '\n\n' + Misc.MSG_REPEATE_PLEASE,
             reply_markup=Misc.reply_markup_cancel_row()
@@ -1975,7 +2007,7 @@ async def choose_child_to_clear_link(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         if data.get('uuid') and data.get('parent_gender'):
             parent_uuid = data['uuid']
-            response_sender = await Misc.check_owner(owner_tg_user=message.from_user, uuid=parent_uuid)
+            response_sender = await Misc.check_owner_by_uuid(owner_tg_user=message.from_user, uuid=parent_uuid)
             if not response_sender:
                 await Misc.state_finish(state)
                 return
@@ -1983,7 +2015,7 @@ async def choose_child_to_clear_link(message: types.Message, state: FSMContext):
             children = parent_profile.get('children', [])
             child_profile = None
             for child in children:
-                if child['uuid'] == child_uuid:
+                if child['username'] == child_sid:
                     child_profile = child
                     break
             if not child_profile:
@@ -2004,15 +2036,15 @@ async def choose_child_to_clear_link(message: types.Message, state: FSMContext):
     content_types=ContentType.all(),
     state=FSMchild.ask,
 )
-async def put_child_by_uuid(message: types.Message, state: FSMContext):
+async def put_child_by_sid(message: types.Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
         await message.reply(
             Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + Misc.MSG_REPEATE_PLEASE,
             reply_markup=Misc.reply_markup_cancel_row()
         )
         return
-    user_uuid_from = Misc.uuid_from_text(message.text)
-    if not user_uuid_from:
+    user_sid_from = Misc.sid_from_text(message.text)
+    if not user_sid_from:
         if await is_it_command(message, state, excepts=('start',)):
             return
         async with state.proxy() as data:
@@ -2046,8 +2078,9 @@ async def put_child_by_uuid(message: types.Message, state: FSMContext):
             return
     async with state.proxy() as data:
         if data.get('uuid') and data.get('parent_gender'):
-            response_sender = await Misc.check_owner(owner_tg_user=message.from_user, uuid=user_uuid_from)
+            response_sender = await Misc.check_owner_by_sid(owner_tg_user=message.from_user, sid=user_sid_from)
             if response_sender:
+                user_uuid_from = response_sender['response_uuid']['uuid']
                 is_father = data['parent_gender'] == 'm'
                 post_op = dict(
                     tg_token=settings.TOKEN,
@@ -2121,7 +2154,7 @@ async def put_new_child(message: types.Message, state: FSMContext):
                     reply_markup=Misc.reply_markup_cancel_row(),
                 )
                 return
-            response_sender = await Misc.check_owner(owner_tg_user=message.from_user, uuid=data['uuid'])
+            response_sender = await Misc.check_owner_by_uuid(owner_tg_user=message.from_user, uuid=data['uuid'])
             if response_sender:
                 response_parent = response_sender['response_uuid']
                 if not response_parent['gender']:
@@ -2189,7 +2222,7 @@ async def process_callback_child(callback_query: types.CallbackQuery, state: FSM
     """
     if not (uuid := Misc.getuuid_from_callback(callback_query)):
         return
-    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
     if not response_sender:
         return
     response_uuid = response_sender['response_uuid']
@@ -2259,7 +2292,7 @@ async def process_callback_child_unknown_parent_gender(callback_query: types.Cal
         if not uuid:
             await Misc.state_finish(state)
             return
-        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid)
+        response_sender = await Misc.check_owner_by_uuid(owner_tg_user=tg_user_sender, uuid=uuid)
         if not response_sender:
             await Misc.state_finish(state)
             return
@@ -2314,7 +2347,7 @@ async def process_callback_bro_sis(callback_query: types.CallbackQuery, state: F
     """
     if not (uuid := Misc.getuuid_from_callback(callback_query)):
         return
-    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
     if not response_sender:
         return
     response_uuid = response_sender['response_uuid']
@@ -2372,8 +2405,8 @@ async def put_bro_sys_by_uuid(message: types.Message, state: FSMContext):
             reply_markup=Misc.reply_markup_cancel_row()
         )
         return
-    uuid_bro_sis = Misc.uuid_from_text(message.text)
-    if not uuid_bro_sis:
+    sid_bro_sis = Misc.sid_from_text(message.text)
+    if not sid_bro_sis:
         if await is_it_command(message, state, excepts=('start',)):
             return
         async with state.proxy() as data:
@@ -2385,8 +2418,8 @@ async def put_bro_sys_by_uuid(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         if data.get('uuid'):
             uuid_whose = data['uuid']
-            response_whose = await Misc.check_owner(owner_tg_user=message.from_user, uuid=uuid_whose)
-            response_bro_sis = await Misc.check_owner(owner_tg_user=message.from_user, uuid=uuid_bro_sis)
+            response_whose = await Misc.check_owner_by_uuid(owner_tg_user=message.from_user, uuid=uuid_whose)
+            response_bro_sis = await Misc.check_owner_by_sid(owner_tg_user=message.from_user, sid=sid_bro_sis)
             if response_whose and response_bro_sis:
                 data_whose = response_whose['response_uuid']
                 data_bro_sis = response_bro_sis['response_uuid']
@@ -2508,7 +2541,7 @@ async def process_callback_new_bro_sis_gender(callback_query: types.CallbackQuer
             if callback_query.data.split(KeyboardType.SEP)[0] == str(KeyboardType.NEW_BRO) \
             else 'f'
         brata_sestru = "брата" if data["gender"] == "m" else "сестру"
-        response = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+        response = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
         if not response:
             await callback_query.message.reply((
                 f'Можно назначить {brata_sestru} только Вам '
@@ -2559,7 +2592,7 @@ async def put_new_bro_sis(message: types.Message, state: FSMContext):
                 )
                 return
             brata_sestru = "брата" if data["gender"] == "m" else "сестру"
-            response_whose = await Misc.check_owner(owner_tg_user=message.from_user, uuid=data['uuid'])
+            response_whose = await Misc.check_owner_by_uuid(owner_tg_user=message.from_user, uuid=data['uuid'])
             if response_whose:
                 data_whose = response_whose['response_uuid']
                 bot_data = await bot.get_me()
@@ -2689,7 +2722,7 @@ async def process_callback_keys(callback_query: types.CallbackQuery, state: FSMC
     """
     if not (uuid := Misc.getuuid_from_callback(callback_query)):
         return
-    response_sender = await Misc.check_owner(
+    response_sender = await Misc.check_owner_by_uuid(
         owner_tg_user=callback_query.from_user,
         uuid=uuid,
     )
@@ -2729,7 +2762,7 @@ async def get_keys(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         uuid = data.get('uuid')
         if uuid:
-            response_sender = await Misc.check_owner(
+            response_sender = await Misc.check_owner_by_uuid(
                 owner_tg_user=message.from_user,
                 uuid=uuid
             )
@@ -2799,7 +2832,7 @@ async def process_callback_change_owner(callback_query: types.CallbackQuery, sta
             pass
         if not uuid:
             return
-        response_sender = await Misc.check_owner(
+        response_sender = await Misc.check_owner_by_uuid(
             owner_tg_user=callback_query.from_user,
             uuid=uuid,
             check_owned_only=True
@@ -2836,21 +2869,21 @@ async def get_new_owner(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         uuid = data.get('uuid')
         if uuid:
-            response_sender = await Misc.check_owner(
+            response_sender = await Misc.check_owner_by_uuid(
                 owner_tg_user=message.from_user,
                 uuid=uuid,
                 check_owned_only=True
             )
             if response_sender:
-                user_uuid_to = Misc.uuid_from_text(message.text)
-                if not user_uuid_to:
+                user_sid_to = Misc.sid_from_text(message.text)
+                if not user_sid_to:
                     await message.reply(
                         Misc.MSG_ERROR_UUID_NOT_VALID,
                         reply_markup=Misc.reply_markup_cancel_row()
                     )
                     return
                 response_from = response_sender['response_uuid']
-                status_to, response_to = await Misc.get_user_by_uuid(user_uuid_to)
+                status_to, response_to = await Misc.get_user_by_sid(user_sid_to)
                 if status_to == 400:
                     if response_to.get('message'):
                         reply = response_to['message']
@@ -2865,7 +2898,7 @@ async def get_new_owner(message: types.Message, state: FSMContext):
                         # Сам себя назначил
                         await message.reply(
                             Misc.PROMPT_CHANGE_OWNER_SUCCESS % dict(
-                                iof_from=iof_from, iof_to=iof_to
+                                iof_from=iof_from, iof_to=iof_to, already='уже',
                         ))
                         # state_finish, return
                     elif response_to['owner']:
@@ -2910,7 +2943,7 @@ async def process_callback_change_owner_confirmed(callback_query: types.Callback
     if not (uuid := Misc.getuuid_from_callback(callback_query)):
         await Misc.state_finish(state)
         return
-    response_sender = await Misc.check_owner(
+    response_sender = await Misc.check_owner_by_uuid(
         owner_tg_user=callback_query.from_user,
         uuid=uuid,
         check_owned_only=True
@@ -2944,7 +2977,7 @@ async def process_callback_change_owner_confirmed(callback_query: types.Callback
                         iof_from = Misc.get_deeplink_with_name(response_sender['response_uuid'], bot_data)
                         iof_to = Misc.get_deeplink_with_name(response_to, bot_data)
                         reply = Misc.PROMPT_CHANGE_OWNER_SUCCESS % dict(
-                                iof_from=iof_from, iof_to=iof_to
+                                iof_from=iof_from, iof_to=iof_to, already='',
                         )
                         if response_to.get('tg_data', []):
                             iof_sender = Misc.get_deeplink_with_name(response_sender, bot_data)
@@ -2981,7 +3014,7 @@ async def process_callback_iof(callback_query: types.CallbackQuery, state: FSMCo
     """
     if not (uuid := Misc.getuuid_from_callback(callback_query)):
         return
-    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
     if not response_sender:
         return
     response_uuid = response_sender['response_uuid']
@@ -3021,7 +3054,7 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         uuid = data.get('uuid')
     if uuid:
-        response_sender = await Misc.check_owner(
+        response_sender = await Misc.check_owner_by_uuid(
             owner_tg_user=message.from_user,
             uuid=uuid
         )
@@ -3057,7 +3090,7 @@ async def process_callback_gender(callback_query: types.CallbackQuery, state: FS
     """
     if not (uuid := Misc.getuuid_from_callback(callback_query)):
         return
-    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
     if not response_sender:
         return
     response_uuid = response_sender['response_uuid']
@@ -3118,7 +3151,7 @@ async def process_callback_gender_got(callback_query: types.CallbackQuery, state
             if data.get('uuid'):
                 uuid = data['uuid']
         if uuid:
-            response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+            response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
             if response_sender:
                 code = callback_query.data.split(KeyboardType.SEP)
                 gender = 'm' if code[0] == str(KeyboardType.GENDER_MALE) else 'f'
@@ -3156,7 +3189,7 @@ async def process_callback_dates(callback_query: types.CallbackQuery, state: FSM
     """
     if not (uuid := Misc.getuuid_from_callback(callback_query)):
         return
-    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
     if not response_sender:
         return
     response_uuid = response_sender['response_uuid']
@@ -3207,7 +3240,7 @@ async def process_callback_other_dob_unknown(callback_query: types.CallbackQuery
     if callback_query.message:
         async with state.proxy() as data:
             if uuid := data.get('uuid'):
-                response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+                response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
                 if response_sender:
                     finish_it = False
                     response_uuid = response_sender['response_uuid']
@@ -3272,7 +3305,7 @@ async def draw_dod(message, profile):
 
 async def put_dates(message, tg_user_sender, state, data):
     if data.get('uuid'):
-        response_sender = await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=data['uuid'])
+        response_sender = await Misc.check_owner_by_uuid(owner_tg_user=tg_user_sender, uuid=data['uuid'])
         if response_sender:
             dob = data.get('dob', '')
             dod = data.get('dod', '')
@@ -3317,7 +3350,7 @@ async def get_dob(message: types.Message, state: FSMContext):
     if message_text := Misc.strip_text(message.text):
         async with state.proxy() as data:
             if data.get('uuid'):
-                if response_sender := await Misc.check_owner(owner_tg_user=message.from_user, uuid=data['uuid']):
+                if response_sender := await Misc.check_owner_by_uuid(owner_tg_user=message.from_user, uuid=data['uuid']):
                     finish_it = False
                     data['dob'] = message_text
                     response_uuid = response_sender['response_uuid']
@@ -3341,7 +3374,7 @@ async def process_callback_dates_DOD_NONE_or_DEAD(callback_query: types.Callback
     if callback_query.message:
         async with state.proxy() as data:
             if uuid := data.get('uuid'):
-                if response_sender := await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid):
+                if response_sender := await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid):
                     finish_it = False
                     code = callback_query.data.split(KeyboardType.SEP)
                     data['dod'] = ''
@@ -3369,7 +3402,7 @@ async def get_dod(message: types.Message, state: FSMContext):
     if message_text := Misc.strip_text(message.text):
         async with state.proxy() as data:
             if data.get('uuid'):
-                if response_sender := await Misc.check_owner(owner_tg_user=message.from_user, uuid=data['uuid']):
+                if response_sender := await Misc.check_owner_by_uuid(owner_tg_user=message.from_user, uuid=data['uuid']):
                     finish_it = False
                     data['is_dead'] = True
                     data['dod'] = message_text
@@ -3393,7 +3426,7 @@ async def get_dod(message: types.Message, state: FSMContext):
 async def process_callback_comment(callback_query: types.CallbackQuery, state: FSMContext):
     if not (uuid := Misc.getuuid_from_callback(callback_query)):
         return
-    response_sender = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+    response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
     if not response_sender:
         return
     response_uuid = response_sender['response_uuid']
@@ -3424,7 +3457,7 @@ async def put_comment(message: types.Message, state: FSMContext):
     async with state.proxy() as data:
         uuid = data.get('uuid')
     if uuid:
-        response_sender = await Misc.check_owner(owner_tg_user=message.from_user, uuid=uuid)
+        response_sender = await Misc.check_owner_by_uuid(owner_tg_user=message.from_user, uuid=uuid)
         if response_sender:
             status, response = await Misc.put_user_properties(
                 uuid=uuid,
@@ -3707,7 +3740,7 @@ async def process_callback_ability(callback_query: types.CallbackQuery, state: F
     tg_user_sender = callback_query.from_user
     try:
         uuid = code[1]
-        if uuid and not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+        if uuid and not await Misc.check_owner_by_uuid(owner_tg_user=tg_user_sender, uuid=uuid):
             return
     except IndexError:
         uuid = None
@@ -3728,7 +3761,7 @@ async def process_callback_wish(callback_query: types.CallbackQuery, state: FSMC
     tg_user_sender = callback_query.from_user
     try:
         uuid = code[1]
-        if uuid and not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+        if uuid and not await Misc.check_owner_by_uuid(owner_tg_user=tg_user_sender, uuid=uuid):
             return
     except IndexError:
         uuid = None
@@ -3959,7 +3992,7 @@ async def process_callback_photo(callback_query: types.CallbackQuery, state: FSM
     tg_user_sender = callback_query.from_user
     try:
         uuid = code[1]
-        if uuid and not await Misc.check_owner(owner_tg_user=tg_user_sender, uuid=uuid):
+        if uuid and not await Misc.check_owner_by_uuid(owner_tg_user=tg_user_sender, uuid=uuid):
             return
     except IndexError:
         uuid = None
@@ -5891,7 +5924,7 @@ async def check_user_delete_undelete(callback_query):
         uuid = code[1]
         if not uuid:
             raise ValueError
-        owner = await Misc.check_owner(owner_tg_user=callback_query.from_user, uuid=uuid)
+        owner = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
         if not owner:
             raise ValueError
         owner_id = code[2]
@@ -6170,7 +6203,7 @@ async def process_callback_invite(callback_query: types.CallbackQuery, state: FS
     if not (uuid := Misc.getuuid_from_callback(callback_query)):
         return
     message = callback_query.message
-    response_sender = await Misc.check_owner(
+    response_sender = await Misc.check_owner_by_uuid(
         owner_tg_user=callback_query.from_user, uuid=uuid, check_owned_only=True
     )
     if not response_sender:

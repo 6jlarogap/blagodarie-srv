@@ -414,6 +414,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
             result.update(
                 id=user.pk,
                 uuid=self.uuid,
+                username=user.username,
                 first_name=user.first_name,
                 photo=photo,
                 gender=self.gender,
@@ -461,6 +462,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
             owner.update(
                 user_id=self.owner.pk,
                 uuid=self.owner.profile.uuid,
+                username=self.owner.username,
                 first_name=self.owner.first_name,
             )
         return dict(owner=owner)
@@ -824,7 +826,7 @@ class TempToken(BaseModelInsertTimestamp):
 
 class UuidMixin(object):
 
-    MSG_NO_UUID = 'Не задан uuid пользователя'
+    MSG_NO_UUID = 'Не задан идентификатор пользователя'
 
     def check_user_uuid(self, uuid, related=('user', 'ability',), comment=''):
         if not uuid:
@@ -846,6 +848,16 @@ class UuidMixin(object):
             user = profile.user
         except Profile.DoesNotExist:
             raise ServiceException('Не найден пользователь с id = %s' % id_)
+        return user, profile
+
+    def check_user_username(self, username, related=('user', 'ability',), comment=''):
+        if not username:
+            raise ServiceException(comment + self.MSG_NO_UUID)
+        try:
+            profile = Profile.objects.select_related(*related).get(user__username=username)
+            user = profile.user
+        except Profile.DoesNotExist:
+            raise ServiceException('Не найден пользователь с username (sid) = %s' % username)
         return user, profile
 
     def check_user_or_owned_uuid(

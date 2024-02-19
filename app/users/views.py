@@ -864,6 +864,8 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
             если запрос авторизован.
         с параметром uuid=...
             получить данные по одному пользователю, необязательно родственнику,
+        с параметром username=... (short id)
+            получить данные по одному пользователю по его username
         с параметром tg_uid=...
             получить данные по пользователю телеграма
         с параметром tg_uids=...
@@ -1032,6 +1034,18 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
             elif request.GET.get('uuid'):
                 user, profile = self.check_user_uuid(
                     request.GET['uuid'],
+                    related=('user', 'ability','owner','owner__profile'),
+                )
+                data = profile.data_dict(request)
+                data.update(profile.parents_dict(request))
+                data.update(profile.data_WAK())
+                data.update(profile.owner_dict())
+                data.update(tg_data=profile.tg_data())
+                if request.GET.get('with_owner_tg_data') and profile.owner:
+                    data['owner'].update(tg_data=profile.owner.profile.tg_data())
+            elif request.GET.get('username'):
+                user, profile = self.check_user_username(
+                    request.GET['username'],
                     related=('user', 'ability','owner','owner__profile'),
                 )
                 data = profile.data_dict(request)

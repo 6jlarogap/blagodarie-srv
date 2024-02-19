@@ -264,7 +264,7 @@ class Misc(object):
     ) + PROMPT_CHANGE_OWNER_WARN
 
     PROMPT_CHANGE_OWNER_SUCCESS = (
-        '%(iof_to)s установлен владельцем для профиля %(iof_from)s'
+        '%(iof_to)s %(already)s установлен владельцем для профиля %(iof_from)s'
     )
 
     PROMPT_CHANGE_OWNER_CONFIRM = (
@@ -290,7 +290,9 @@ class Misc(object):
 
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE
 
+    RE_SID = re.compile(r'[0-9a-z]{10}', re.IGNORECASE)
     RE_UUID = re.compile(r'[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}', re.IGNORECASE)
+
     # Никакого re.compile! :
     RE_KEY_SEP = r'^%s%s'
 
@@ -508,10 +510,7 @@ class Misc(object):
         """
         Получить ссылку типа http://t.me/BotNameBot?start=:uuid
         """
-        deeplink = "t.me/%(bot_data_username)s?start=%(response_uuid)s" % dict(
-            bot_data_username=bot_data['username'],
-            response_uuid=response['uuid']
-        )
+        deeplink = f't.me/{bot_data["username"]}?start={response["username"]}'
         if https:
             deeplink = 'https://' + deeplink
         return deeplink
@@ -710,6 +709,27 @@ class Misc(object):
 
 
     @classmethod
+    async def get_user_by_sid(cls, sid, with_owner_tg_data=False):
+        """
+        Получить данные пользователя по sid, short_id. Это username в апи
+
+        Если не найден, будет status == 400
+        """
+        params = dict(username=sid)
+        if with_owner_tg_data:
+            params.update(with_owner_tg_data='1')
+        logging.debug('get_user_profile by sid, params: %s' % params)
+        status, response = await Misc.api_request(
+            path='/api/profile',
+            method='get',
+            params=params,
+        )
+        logging.debug('get_user_profile by sid, status: %s' % status)
+        logging.debug('get_user_profile by sid, response: %s' % response)
+        return status, response
+
+
+    @classmethod
     async def get_admins(cls,):
         """
         Получить данные администраторов (они же разработчики)
@@ -755,7 +775,7 @@ class Misc(object):
 
 
     @classmethod
-    async def check_owner(cls, owner_tg_user, uuid, check_owned_only=False):
+    async def check_owner_by_uuid(cls, owner_tg_user, uuid, check_owned_only=False):
         """
         Проверить, принадлежит ли uuid к owner_tg_user или им является
 
@@ -776,6 +796,31 @@ class Misc(object):
                     result = response_sender
                     result.update(response_uuid=response_uuid)
         return result
+
+
+    @classmethod
+    async def check_owner_by_sid(cls, owner_tg_user, sid, check_owned_only=False):
+        """
+        Проверить, принадлежит ли user c sid к owner_tg_user или им является
+
+        При check_onwed_only проверяет исключительно, принадлежит ли.
+        Если принадлежит и им является, то возвращает данные из апи по owner_tg_user,
+        а внутри словарь response_uuid, данные из апи по sid:
+        """
+        result = False
+        status_sender, response_sender = await cls.post_tg_user(owner_tg_user)
+        if status_sender == 200 and response_sender.get('user_id'):
+            status_uuid, response_uuid = await cls.get_user_by_sid(sid)
+            if status_uuid == 200 and response_uuid:
+                if response_uuid.get('owner'):
+                    result = response_uuid['owner']['user_id'] == response_sender['user_id']
+                elif not check_owned_only:
+                    result = response_uuid['user_id'] == response_sender['user_id']
+                if result:
+                    result = response_sender
+                    result.update(response_uuid=response_uuid)
+        return result
+
 
     @classmethod
     def get_text_usernames(cls, s):
@@ -1328,6 +1373,15 @@ class Misc(object):
             except (TypeError, ValueError,):
                 pass
         return user_uuid_to
+
+
+    @classmethod
+    def sid_from_text(cls, text):
+        user_sid = None
+        m = re.search(cls.RE_SID, text)
+        if m:
+            user_sid = m.group(0)
+        return user_sid
 
 
     @classmethod
