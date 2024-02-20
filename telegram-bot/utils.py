@@ -290,7 +290,6 @@ class Misc(object):
 
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE
 
-    RE_SID = re.compile(r'[0-9a-z]{10}', re.IGNORECASE)
     RE_UUID = re.compile(r'[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}', re.IGNORECASE)
 
     # Никакого re.compile! :
@@ -1376,12 +1375,13 @@ class Misc(object):
 
 
     @classmethod
-    def sid_from_text(cls, text):
-        user_sid = None
-        m = re.search(cls.RE_SID, text)
-        if m:
-            user_sid = m.group(0)
-        return user_sid
+    def sid_from_link(cls, link):
+        """
+        Короткий ид из ссылки типа t.me/?start=(короткий_ид) или .../t/(короткий_ид)
+        """
+        if m:= re.search(r'([0-9A-Za-z]{10})$', link):
+            return m.group(1)
+        return None
 
 
     @classmethod

@@ -1301,7 +1301,7 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
             reply_markup=Misc.reply_markup_cancel_row()
         )
         return
-    user_sid_to = Misc.sid_from_text(message.text)
+    user_sid_to = Misc.sid_from_link(message.text)
     if not user_sid_to:
         if await is_it_command(message, state, excepts=('start',)):
             return
@@ -1997,7 +1997,7 @@ async def choose_child_to_clear_link(message: types.Message, state: FSMContext):
         return
     if await is_it_command(message, state, excepts=('start',)):
         return
-    child_sid = Misc.sid_from_text(message.text)
+    child_sid = Misc.sid_from_link(message.text)
     if not child_sid:
         await message.reply(
             Misc.MSG_INVALID_LINK + '\n\n' + Misc.MSG_REPEATE_PLEASE,
@@ -2043,7 +2043,7 @@ async def put_child_by_sid(message: types.Message, state: FSMContext):
             reply_markup=Misc.reply_markup_cancel_row()
         )
         return
-    user_sid_from = Misc.sid_from_text(message.text)
+    user_sid_from = Misc.sid_from_link(message.text)
     if not user_sid_from:
         if await is_it_command(message, state, excepts=('start',)):
             return
@@ -2405,7 +2405,7 @@ async def put_bro_sys_by_uuid(message: types.Message, state: FSMContext):
             reply_markup=Misc.reply_markup_cancel_row()
         )
         return
-    sid_bro_sis = Misc.sid_from_text(message.text)
+    sid_bro_sis = Misc.sid_from_link(message.text)
     if not sid_bro_sis:
         if await is_it_command(message, state, excepts=('start',)):
             return
@@ -2875,7 +2875,7 @@ async def get_new_owner(message: types.Message, state: FSMContext):
                 check_owned_only=True
             )
             if response_sender:
-                user_sid_to = Misc.sid_from_text(message.text)
+                user_sid_to = Misc.sid_from_link(message.text)
                 if not user_sid_to:
                     await message.reply(
                         Misc.MSG_ERROR_UUID_NOT_VALID,
