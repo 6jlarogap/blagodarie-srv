@@ -22,6 +22,10 @@ MorphAnalyzer = pymorphy2.MorphAnalyzer()
 
 storage = MemoryStorage()
 
+# Последний пользователь в группе, который слал сообщение
+#
+last_user_in_group = dict()
+
 class FSMability(StatesGroup):
     ask = State()
 
@@ -4357,7 +4361,6 @@ def parse_code_tn(callback_query):
                 group_chat_id=message_.chat.id,
                 group_title=message_.chat.title,
                 group_type=message_.chat.type,
-                user_tg_uid=tg_user_sender.id,
         ) \
         or None
     return operation_type_id, uuid, message_to_forward_id, group_member
@@ -4483,6 +4486,7 @@ async def do_process_tn_question(callback_query=None, state=None, message=None, 
         group_member= group_member,
     )
     if group_member:
+        group_member.update(user_tg_uid=tg_user_sender.id)
         await put_thank_etc(tg_user_sender, data=data_, state=None, comment_message=None)
         return
 
@@ -5749,6 +5753,8 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
     if await offer_forwarded_in_group_or_channel(message, state):
         return
 
+    global last_user_in_group
+
     # При преобразовании группы в супергруппу сообщения:
     #   Это если юзер сделал из частной группы публичную:
     # {
@@ -5857,6 +5863,22 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
         # Но делаем исключение, когда анонимный владелей
         return
 
+    # Если предыдущее сообщение от него, то по следующему сообщению
+    # не выводим его миникарточку
+    #
+    is_previous_his = True
+    if message.chat.id in settings.GROUPS_WITH_CARDS:
+        if tg_user_left or tg_users_new:
+            # Если сообщение о новом, убывшем пользователе, то любое следующее
+            # сообщение будет как бы от нового пользователя
+            is_previous_his = False
+            last_user_in_group[message.chat.id] = None
+        else:
+            previous_user_in_group = last_user_in_group.get(message.chat.id)
+            if previous_user_in_group != message.from_user.id:
+                last_user_in_group[message.chat.id] = message.from_user.id
+                is_previous_his = False
+
     bot_data = await bot.get_me()
     for user_in in a_users_in:
         reply_markup = None
@@ -5904,6 +5926,46 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
         if not tg_user_left and bot_data.id == user_in.id:
             # ЭТОТ бот подключился.
             await Misc.send_pin_group_message(message.chat, bot, bot_data)
+            continue
+
+        if not tg_user_left and not is_previous_his:
+            reply_markup = InlineKeyboardMarkup()
+            reply = Misc.get_deeplink_with_name(response_from, bot_data, plus_trusts=True)
+            dict_reply = dict(
+                keyboard_type=KeyboardType.TRUST_THANK,
+                sep=KeyboardType.SEP,
+                user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
+                message_to_forward_id='',
+                group_id=message.chat.id,
+            )
+            callback_data_template = (
+                    '%(keyboard_type)s%(sep)s'
+                    '%(operation)s%(sep)s'
+                    '%(user_to_uuid_stripped)s%(sep)s'
+                    '%(message_to_forward_id)s%(sep)s'
+                    '%(group_id)s%(sep)s'
+                )
+            dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+            inline_btn_thank = InlineKeyboardButton(
+                'Доверяю',
+                callback_data=callback_data_template % dict_reply,
+            )
+            dict_reply.update(operation=OperationType.MISTRUST)
+            inline_btn_mistrust = InlineKeyboardButton(
+                'Не доверяю',
+                callback_data=callback_data_template % dict_reply,
+            )
+            dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+            inline_btn_nullify_trust = InlineKeyboardButton(
+                'Не знакомы',
+                callback_data=callback_data_template % dict_reply,
+            )
+            reply_markup.row(
+                inline_btn_thank,
+                inline_btn_mistrust,
+                inline_btn_nullify_trust
+            )
+            await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
     for i, response_from in enumerate(a_users_out):
         if response_from.get('created'):

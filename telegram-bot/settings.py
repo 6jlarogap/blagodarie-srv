@@ -162,6 +162,10 @@ REDIS_CONNECT =dict(
 REDIS_MEDIA_GROUP_PREFIX = 'media_group_id_'
 REDIS_MEDIA_GROUP_TTL = 60
 
+# Ид групп, в которые шлем карточки после сообщений участников
+#
+GROUPS_WITH_CARDS = ()
+
 try:
     from local_settings import *
 except ModuleNotFoundError:
