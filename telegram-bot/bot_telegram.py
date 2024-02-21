@@ -5868,12 +5868,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
     #
     is_previous_his = True
     if message.chat.id in settings.GROUPS_WITH_CARDS:
-        if tg_user_left or tg_users_new:
-            # Если сообщение о новом, убывшем пользователе, то любое следующее
-            # сообщение будет как бы от нового пользователя
-            is_previous_his = False
-            last_user_in_group[message.chat.id] = None
-        else:
+        if not tg_user_left and not tg_users_new:
             previous_user_in_group = last_user_in_group.get(message.chat.id)
             if previous_user_in_group != message.from_user.id:
                 last_user_in_group[message.chat.id] = message.from_user.id
@@ -5929,42 +5924,44 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             continue
 
         if not tg_user_left and not is_previous_his:
-            reply_markup = InlineKeyboardMarkup()
+            reply_markup = None
             reply = Misc.get_deeplink_with_name(response_from, bot_data, plus_trusts=True)
-            dict_reply = dict(
-                keyboard_type=KeyboardType.TRUST_THANK,
-                sep=KeyboardType.SEP,
-                user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
-                message_to_forward_id='',
-                group_id=message.chat.id,
-            )
-            callback_data_template = (
-                    '%(keyboard_type)s%(sep)s'
-                    '%(operation)s%(sep)s'
-                    '%(user_to_uuid_stripped)s%(sep)s'
-                    '%(message_to_forward_id)s%(sep)s'
-                    '%(group_id)s%(sep)s'
-                )
-            dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-            inline_btn_thank = InlineKeyboardButton(
-                'Доверяю',
-                callback_data=callback_data_template % dict_reply,
-            )
-            dict_reply.update(operation=OperationType.MISTRUST)
-            inline_btn_mistrust = InlineKeyboardButton(
-                'Не доверяю',
-                callback_data=callback_data_template % dict_reply,
-            )
-            dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-            inline_btn_nullify_trust = InlineKeyboardButton(
-                'Не знакомы',
-                callback_data=callback_data_template % dict_reply,
-            )
-            reply_markup.row(
-                inline_btn_thank,
-                inline_btn_mistrust,
-                inline_btn_nullify_trust
-            )
+            # reply_markup = InlineKeyboardMarkup()
+            # 
+            # dict_reply = dict(
+            #     keyboard_type=KeyboardType.TRUST_THANK,
+            #     sep=KeyboardType.SEP,
+            #     user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
+            #     message_to_forward_id='',
+            #     group_id=message.chat.id,
+            # )
+            # callback_data_template = (
+            #         '%(keyboard_type)s%(sep)s'
+            #         '%(operation)s%(sep)s'
+            #         '%(user_to_uuid_stripped)s%(sep)s'
+            #         '%(message_to_forward_id)s%(sep)s'
+            #         '%(group_id)s%(sep)s'
+            #     )
+            # dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+            # inline_btn_thank = InlineKeyboardButton(
+            #     'Доверяю',
+            #     callback_data=callback_data_template % dict_reply,
+            # )
+            # dict_reply.update(operation=OperationType.MISTRUST)
+            # inline_btn_mistrust = InlineKeyboardButton(
+            #     'Не доверяю',
+            #     callback_data=callback_data_template % dict_reply,
+            # )
+            # dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+            # inline_btn_nullify_trust = InlineKeyboardButton(
+            #     'Не знакомы',
+            #     callback_data=callback_data_template % dict_reply,
+            # )
+            # reply_markup.row(
+            #     inline_btn_thank,
+            #     inline_btn_mistrust,
+            #     inline_btn_nullify_trust
+            # )
             await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
     for i, response_from in enumerate(a_users_out):
