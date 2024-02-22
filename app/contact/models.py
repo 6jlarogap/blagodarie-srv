@@ -77,6 +77,7 @@ class UserDictMixin(object):
     def user_dict(self, user):
         return {
             'id': user.id,
+            'username': user.username,
             'uuid': str(user.profile.uuid),
             'first_name': user.first_name,
         }
