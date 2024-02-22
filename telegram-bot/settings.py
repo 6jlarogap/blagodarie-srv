@@ -148,6 +148,10 @@ VOTE_URL = 'https://6jlarogap.github.io/razum/'
 #       существует, то карточка автора пересылаемоего сообщения
 #       не показывается. Иначе ставится та запись в redis кэше
 #       и бот выводит карточку автора пересылаемоего сообщения.
+#   -   Последний юзер, отправивший сообщение в группу.
+#       Вносится бессрочная запись:
+#           REDIS_LAST_USERIN_GROUP_PREFIX +
+#           group_chat_id
 #
 REDIS_CONNECT =dict(
     # Параметры инициализации redis connection,
@@ -161,6 +165,7 @@ REDIS_CONNECT =dict(
 )
 REDIS_MEDIA_GROUP_PREFIX = 'media_group_id_'
 REDIS_MEDIA_GROUP_TTL = 60
+REDIS_LAST_USERIN_GROUP_PREFIX = 'last_user_in_group_'
 
 # Ид групп, в которые шлем карточки после сообщений участников
 #

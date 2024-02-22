@@ -22,10 +22,6 @@ MorphAnalyzer = pymorphy2.MorphAnalyzer()
 
 storage = MemoryStorage()
 
-# Последний пользователь в группе, который слал сообщение
-#
-last_user_in_group = dict()
-
 class FSMability(StatesGroup):
     ask = State()
 
@@ -5733,7 +5729,6 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
     """
     Обработка сообщений в группу
     """
-
     tg_user_sender = message.from_user
 
     # tg_user_sender.id == 777000:
@@ -5747,13 +5742,17 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             ContentType.NEW_CHAT_TITLE,
             ContentType.DELETE_CHAT_PHOTO,
             ContentType.PINNED_MESSAGE,
+            ContentType.FORUM_TOPIC_CREATED,
+            ContentType.FORUM_TOPIC_CLOSED,
+            ContentType.FORUM_TOPIC_REOPENED,
+            ContentType.FORUM_TOPIC_EDITED,
+            ContentType.GENERAL_FORUM_TOPIC_HIDDEN,
+            ContentType.GENERAL_FORUM_TOPIC_UNHIDDEN,
        ):
         return
 
     if await offer_forwarded_in_group_or_channel(message, state):
         return
-
-    global last_user_in_group
 
     # При преобразовании группы в супергруппу сообщения:
     #   Это если юзер сделал из частной группы публичную:
@@ -5863,18 +5862,24 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
         # Но делаем исключение, когда анонимный владелей
         return
 
-    # Если предыдущее сообщение от него, то по следующему сообщению
-    # не выводим его миникарточку
+    bot_data = await bot.get_me()
+
+    # Предыдущее сообщение в группу было от текущего юзера:
+    #   не выводим миникаточку.
+    #       -   если для группы включена выдача мини карточек
+    #           и предыдущее сообщение в самом деле было от него
+    #       -   для группы НЕ включена выдача мини карточек
     #
     is_previous_his = True
-    if message.chat.id in settings.GROUPS_WITH_CARDS:
-        if not tg_user_left and not tg_users_new:
-            previous_user_in_group = last_user_in_group.get(message.chat.id)
-            if previous_user_in_group != message.from_user.id:
-                last_user_in_group[message.chat.id] = message.from_user.id
+    if message.chat.id in settings.GROUPS_WITH_CARDS and \
+       not tg_user_left and not tg_users_new and message.from_user.id != bot_data.id:
+        if r := redis.Redis(**settings.REDIS_CONNECT):
+            chat_and_topic = settings.REDIS_LAST_USERIN_GROUP_PREFIX + str(message.chat.id)
+            previous_user_in_group = r.get(chat_and_topic)
+            if str(previous_user_in_group) != str(message.from_user.id):
+                r.set(chat_and_topic, message.from_user.id)
                 is_previous_his = False
 
-    bot_data = await bot.get_me()
     for user_in in a_users_in:
         reply_markup = None
         response_from = {}
@@ -5924,45 +5929,8 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             continue
 
         if not tg_user_left and not is_previous_his:
-            reply_markup = None
             reply = Misc.get_deeplink_with_name(response_from, bot_data, plus_trusts=True)
-            # reply_markup = InlineKeyboardMarkup()
-            # 
-            # dict_reply = dict(
-            #     keyboard_type=KeyboardType.TRUST_THANK,
-            #     sep=KeyboardType.SEP,
-            #     user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
-            #     message_to_forward_id='',
-            #     group_id=message.chat.id,
-            # )
-            # callback_data_template = (
-            #         '%(keyboard_type)s%(sep)s'
-            #         '%(operation)s%(sep)s'
-            #         '%(user_to_uuid_stripped)s%(sep)s'
-            #         '%(message_to_forward_id)s%(sep)s'
-            #         '%(group_id)s%(sep)s'
-            #     )
-            # dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-            # inline_btn_thank = InlineKeyboardButton(
-            #     'Доверяю',
-            #     callback_data=callback_data_template % dict_reply,
-            # )
-            # dict_reply.update(operation=OperationType.MISTRUST)
-            # inline_btn_mistrust = InlineKeyboardButton(
-            #     'Не доверяю',
-            #     callback_data=callback_data_template % dict_reply,
-            # )
-            # dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-            # inline_btn_nullify_trust = InlineKeyboardButton(
-            #     'Не знакомы',
-            #     callback_data=callback_data_template % dict_reply,
-            # )
-            # reply_markup.row(
-            #     inline_btn_thank,
-            #     inline_btn_mistrust,
-            #     inline_btn_nullify_trust
-            # )
-            await message.answer(reply, reply_markup=reply_markup, disable_web_page_preview=True)
+            await message.answer(reply, disable_web_page_preview=True)
 
     for i, response_from in enumerate(a_users_out):
         if response_from.get('created'):
@@ -6412,7 +6380,7 @@ if __name__ == '__main__':
     if settings.START_MODE == 'poll':
         start_polling(
             dp,
-            timeout=40,
+            timeout=20,
             skip_updates=True,
             on_startup=on_startup,
         )
