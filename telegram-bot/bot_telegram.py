@@ -5874,10 +5874,10 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
     if message.chat.id in settings.GROUPS_WITH_CARDS and \
        not tg_user_left and not tg_users_new and message.from_user.id != bot_data.id:
         if r := redis.Redis(**settings.REDIS_CONNECT):
-            chat_and_topic = settings.REDIS_LAST_USERIN_GROUP_PREFIX + str(message.chat.id)
-            previous_user_in_group = r.get(chat_and_topic)
+            last_user_in_grop_rec = settings.REDIS_LAST_USERIN_GROUP_PREFIX + str(message.chat.id)
+            previous_user_in_group = r.get(last_user_in_grop_rec)
             if str(previous_user_in_group) != str(message.from_user.id):
-                r.set(chat_and_topic, message.from_user.id)
+                r.set(last_user_in_grop_rec, message.from_user.id)
                 is_previous_his = False
 
     for user_in in a_users_in:
