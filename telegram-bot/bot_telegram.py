@@ -4627,15 +4627,15 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
 
     # Это в группу
     #
-    if operation_done and group_member:
-        try:
-            await bot.send_message(
-                group_member['group_chat_id'],
-                text=text,
-                disable_web_page_preview=True,
-            )
-        except (ChatNotFound, CantInitiateConversation):
-            pass
+    # if operation_done and group_member:
+    #     try:
+    #         await bot.send_message(
+    #             group_member['group_chat_id'],
+    #             text=text,
+    #             disable_web_page_preview=True,
+    #         )
+    #     except (ChatNotFound, CantInitiateConversation):
+    #         pass
 
     # Это получателю благодарности и т.п. или владельцу получателя, если получатель собственный
     #
@@ -5929,8 +5929,43 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             continue
 
         if not tg_user_left and not is_previous_his:
+            reply_markup = InlineKeyboardMarkup()
             reply = Misc.get_deeplink_with_name(response_from, bot_data, plus_trusts=True)
-            await message.answer(reply, disable_web_page_preview=True)
+            dict_reply = dict(
+                keyboard_type=KeyboardType.TRUST_THANK,
+                sep=KeyboardType.SEP,
+                user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
+                message_to_forward_id='',
+                group_id=message.chat.id,
+            )
+            callback_data_template = (
+                    '%(keyboard_type)s%(sep)s'
+                    '%(operation)s%(sep)s'
+                    '%(user_to_uuid_stripped)s%(sep)s'
+                    '%(message_to_forward_id)s%(sep)s'
+                    '%(group_id)s%(sep)s'
+                )
+            dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+            inline_btn_thank = InlineKeyboardButton(
+                'Доверяю',
+                callback_data=callback_data_template % dict_reply,
+            )
+            dict_reply.update(operation=OperationType.MISTRUST)
+            inline_btn_mistrust = InlineKeyboardButton(
+                'Не доверяю',
+                callback_data=callback_data_template % dict_reply,
+            )
+            dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+            reply_markup.row(
+                inline_btn_thank,
+                inline_btn_mistrust,
+            )
+            await message.answer(
+                reply,
+                reply_markup=reply_markup,
+                disable_web_page_preview=True,
+                disable_notification=True
+            )
 
     for i, response_from in enumerate(a_users_out):
         if response_from.get('created'):
