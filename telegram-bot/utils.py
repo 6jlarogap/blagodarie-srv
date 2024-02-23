@@ -1459,7 +1459,7 @@ class Misc(object):
         inline_btn_trusts = InlineKeyboardButton(
             'Схема',
             login_url=cls.make_login_url(
-                redirect_path='%(graph_host)s/?tg_group_chat_id=%(chat_id)s' % dict(
+                redirect_path='%(graph_host)s/?tgr=%(chat_id)s' % dict(
                     graph_host=settings.GRAPH_HOST,
                     chat_id=chat.id,
                 ), keep_user_data='on',
