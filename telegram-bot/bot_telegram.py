@@ -5941,7 +5941,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             await Misc.send_pin_group_message(message.chat, bot, bot_data)
             continue
 
-        if not tg_user_left and not is_previous_his:
+        if not is_previous_his:
             reply_markup = InlineKeyboardMarkup()
             reply = Misc.get_deeplink_with_name(response_from, bot_data, plus_trusts=True)
             dict_reply = dict(
