@@ -4479,6 +4479,7 @@ async def do_process_tn_question(callback_query=None, state=None, message=None, 
         operation_type_id = operation_type_id,
         tg_user_sender_id = tg_user_sender.id,
         message_to_forward_id = message_to_forward_id,
+        callback_query_message=callback_query.message if callback_query else None,
         group_member= group_member,
     )
     if group_member:
@@ -4627,7 +4628,7 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
 
     # Это в группу
     #
-    # if operation_done and group_member:
+    if operation_done and group_member:
     #     try:
     #         await bot.send_message(
     #             group_member['group_chat_id'],
@@ -4636,6 +4637,14 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
     #         )
     #     except (ChatNotFound, CantInitiateConversation):
     #         pass
+        if data.get('callback_query_message'):
+            try:
+                await data['callback_query_message'].edit_text(
+                text=Misc.get_deeplink_with_name(response['profile_to'], bot_data, plus_trusts=True),
+                reply_markup=data['callback_query_message'].reply_markup,
+                )
+            except:
+                pass
 
     # Это получателю благодарности и т.п. или владельцу получателя, если получатель собственный
     #
@@ -5950,17 +5959,8 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 'Доверяю',
                 callback_data=callback_data_template % dict_reply,
             )
-            dict_reply.update(operation=OperationType.MISTRUST)
-            inline_btn_mistrust = InlineKeyboardButton(
-                'Не доверяю',
-                callback_data=callback_data_template % dict_reply,
-            )
-            dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-            reply_markup.row(
-                inline_btn_thank,
-                inline_btn_mistrust,
-            )
-            await message.answer(
+            reply_markup.row(inline_btn_thank)
+            answer = await message.answer(
                 reply,
                 reply_markup=reply_markup,
                 disable_web_page_preview=True,
