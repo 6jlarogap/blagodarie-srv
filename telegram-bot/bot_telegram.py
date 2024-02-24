@@ -17,6 +17,8 @@ from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation, Can
     BadRequest, MessageNotModified, MessageCantBeDeleted, MessageToEditNotFound
 from aiogram.types.message_entity import MessageEntityType
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 import pymorphy2
 MorphAnalyzer = pymorphy2.MorphAnalyzer()
 
@@ -6409,9 +6411,17 @@ async def process_invite_confirm_message(message: types.Message, state: FSMConte
         return
     await message.reply('Ожидается ответ на вопрос о приглашении', disable_web_page_preview=True,)
 
+async def cron_remove_cards_in_group():
+    pass
+
 # ---------------------------------
 
 if __name__ == '__main__':
+
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(cron_remove_cards_in_group, 'cron', day_of_week='mon-sun', hour=3, minute=1,)
+    scheduler.start()
+
     if settings.START_MODE == 'poll':
         start_polling(
             dp,
