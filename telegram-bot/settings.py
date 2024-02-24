@@ -152,6 +152,14 @@ VOTE_URL = 'https://6jlarogap.github.io/razum/'
 #       Вносится бессрочная запись:
 #           REDIS_LAST_USERIN_GROUP_PREFIX +
 #           group_chat_id
+#       со значением telegram user_id пользователя,
+#       отправившего сообщение
+#   -   Карточка, выданная после сообщения пользователя в группе:
+#           REDIS_CARD_IN_GROUP_PREFIX + REDIS_KEY_SEP +
+#           время (int(time.time()))  + REDIS_KEY_SEP +
+#           group_chat_id + REDIS_KEY_SEP +
+#           message.message_id
+#       с любым значением
 #
 REDIS_CONNECT =dict(
     # Параметры инициализации redis connection,
@@ -166,10 +174,15 @@ REDIS_CONNECT =dict(
 REDIS_MEDIA_GROUP_PREFIX = 'media_group_id_'
 REDIS_MEDIA_GROUP_TTL = 60
 REDIS_LAST_USERIN_GROUP_PREFIX = 'last_user_in_group_'
+REDIS_CARD_IN_GROUP_PREFIX = 'card_in_group'
+REDIS_KEY_SEP = '~'
 
-# Ид групп, в которые шлем карточки после сообщений участников
+# Ид групп, в которые шлем карточки после сообщений участников, с параметрами.
+# Например, в группе с таким ид хранить выданные после сообщений карточки
+# keep_hours часов:
+# -1001842039923: dict(keep_hours=6*24),
 #
-GROUPS_WITH_CARDS = ()
+GROUPS_WITH_CARDS = {}
 
 try:
     from local_settings import *

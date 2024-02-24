@@ -54,6 +54,7 @@ class ApiTokenAuthDataMixin(object):
                 value=json.dumps(auth_data),
                 ex=settings.TOKEN_AUTHDATA_EXPIRE,
             )
+            r.close()
         return token
 
 
@@ -3472,6 +3473,7 @@ class ApiTokenUrl(TelegramApiMixin, APIView):
                     value=url,
                     ex=settings.TOKEN_URL_EXPIRE,
                 )
+                r.close()
             else:
                 raise ServiceException('Не удалось подключиться к хранилищу токенов (redis cache)')
             status_code = status.HTTP_200_OK
@@ -3503,6 +3505,7 @@ class ApiTokenUrl(TelegramApiMixin, APIView):
                 # Так быстрее, чем delete, redis в фоне удалит через секунду
                 r.expire(token_in_redis, 1)
                 status_code = status.HTTP_200_OK
+            r.close()
         return Response(data=data, status=status_code)
 
 api_token_url = ApiTokenUrl.as_view()
@@ -3585,6 +3588,7 @@ class ApiTokenAuthData(ApiTokenAuthDataMixin, APIView):
                     pass
                 # Так быстрее, чем delete, redis в фоне удалит через секунду
                 r.expire(token_in_redis, 1)
+            r.close()
         return Response(data=data, status=status_code)
 
 api_token_authdata = ApiTokenAuthData.as_view()
@@ -3669,6 +3673,7 @@ class ApiTokenInvite(UuidMixin, APIView):
                         value=uuid_inviter + self.TOKEN_INVITE_SEP + uuid_to_merge,
                         ex=settings.TOKEN_INVITE_EXPIRE,
                     )
+                    r.close()
                 else:
                     raise ServiceException('Не удалось подключиться к хранилищу токенов (redis cache)')
             elif operation in ('get', 'accept'):
@@ -3726,6 +3731,7 @@ class ApiTokenInvite(UuidMixin, APIView):
                         status_code = status.HTTP_200_OK
                     else:
                         raise ServiceException('Приглашение уже принято')
+                    r.close()
 
             else:
                 raise ServiceException('Неверный вызов апи')

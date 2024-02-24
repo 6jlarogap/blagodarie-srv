@@ -1,4 +1,4 @@
-import base64, re, hashlib, redis
+import base64, re, hashlib, redis, time
 from io import BytesIO
 from urllib.parse import urlparse
 
@@ -1040,6 +1040,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                             value='1',
                             ex=settings.REDIS_MEDIA_GROUP_TTL,
                         )
+                    r.close()
             if show_forwarded_response:
                 a_response_to = [response_to, ]
 
@@ -5890,6 +5891,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             if str(previous_user_in_group) != str(message.from_user.id):
                 r.set(last_user_in_grop_rec, message.from_user.id)
                 is_previous_his = False
+            r.close()
 
     for user_in in a_users_in:
         reply_markup = None
@@ -5968,6 +5970,17 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 disable_web_page_preview=True,
                 disable_notification=True
             )
+            if answer:
+                if r := redis.Redis(**settings.REDIS_CONNECT):
+                    s = (
+                        f'{settings.REDIS_CARD_IN_GROUP_PREFIX}{settings.REDIS_KEY_SEP}'
+                        f'{int(time.time())}{settings.REDIS_KEY_SEP}'
+                        f'{answer.chat.id}{settings.REDIS_KEY_SEP}'
+                        f'{answer.message_id}'
+                    )
+                    r.set(name=s, value='1')
+                    r.close()
+
 
     for i, response_from in enumerate(a_users_out):
         if response_from.get('created'):
