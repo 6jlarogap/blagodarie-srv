@@ -4643,7 +4643,7 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
         if data.get('callback_query_message'):
             try:
                 await data['callback_query_message'].edit_text(
-                text=Misc.get_deeplink_with_name(response['profile_to'], bot_data, plus_trusts=True),
+                text=Misc.get_deeplink_with_name(response['profile_to'], bot_data, plus_mtrusts=True),
                 reply_markup=data['callback_query_message'].reply_markup,
                 )
             except:
@@ -5943,7 +5943,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
         if not is_previous_his:
             reply_markup = InlineKeyboardMarkup()
-            reply = Misc.get_deeplink_with_name(response_from, bot_data, plus_trusts=True)
+            reply = Misc.get_deeplink_with_name(response_from, bot_data, plus_mtrusts=True)
             dict_reply = dict(
                 keyboard_type=KeyboardType.TRUST_THANK,
                 sep=KeyboardType.SEP,

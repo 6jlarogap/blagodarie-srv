@@ -516,12 +516,13 @@ class Misc(object):
 
 
     @classmethod
-    def get_deeplink_with_name(cls, response, bot_data, with_lifetime_years=False, plus_trusts=False):
+    def get_deeplink_with_name(cls, response, bot_data, with_lifetime_years=False, plus_trusts=False, plus_mtrusts=False):
         """
         Получить ссылку типа https://t.me/BotNameBot?start=:uuid с именем
 
         и возможно, с годами жизни (with_lifetime_years=True)
-        и числом доверий (plus_trusts=True)
+        и числом доверий (plus_trusts=True), в скобках
+        или с числом доверий и не доверий, жирно, типа +2 -1
         """
         href = cls.get_deeplink(response, bot_data, https=True)
         iof = response['first_name']
@@ -532,6 +533,12 @@ class Misc(object):
         result = cls.get_html_a(href, iof)
         if plus_trusts:
             result += (' (%s)' % response['trust_count']) if response.get('trust_count') is not None else ''
+            plus_mtrusts = False
+        if plus_mtrusts:
+            trust_count = response['trust_count'] if response.get('trust_count') else 0
+            mistrust_count = response['mistrust_count'] if response.get('mistrust_count') else 0
+            result += f' (<b>+{trust_count}, -{mistrust_count}</b>)'
+            plus_trusts = False
         return result
 
 
