@@ -6191,8 +6191,9 @@ async def offer_forwarded_in_group_or_channel(message: types.Message, state: FSM
     if message.is_forward() and message.content_type == ContentType.TEXT:
         num_links = 0
         for entity in message.entities:
+            m = None
             if entity.type == MessageEntityType.TEXT_LINK:
-                m = re.search(r'(?:start\=offer\-|offer_uuid\=|offer_id=)([\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12})', entity.url, flags=re.I)
+                m = re.search(r'(?:start\=offer\-|offer_uuid\=|offer_id\=)([\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12})', entity.url, flags=re.I)
             if m:
                 num_links += 1
                 offer_uuid = m.group(1)
