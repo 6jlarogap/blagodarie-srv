@@ -5881,7 +5881,8 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
         f'chat_id: {message.chat.id}, '
         f'message_thread_id: {message.message_thread_id}, '
         f'user_from: {message.from_user.first_name} {message.from_user.last_name}, '
-        f'message text: {repr(message.text)}'
+        f'message text: {repr(message.text)}, '
+        f'message caption: {repr(message.caption)}, '
     )
 
     # Предыдущее сообщение в группу было от текущего юзера:
