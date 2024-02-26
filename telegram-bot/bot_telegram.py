@@ -5876,6 +5876,13 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
     bot_data = await bot.get_me()
 
+    logging.info(
+        f'message in group: chat_title: {message.chat.title}, '
+        f'message_thread_id: {message.message_thread_id}, '
+        f'user_from: {message.from_user.first_name} {message.from_user.last_name}, '
+        f'message text: {repr(message.text)}'
+    )
+
     # Предыдущее сообщение в группу было от текущего юзера:
     #   не выводим миникаточку.
     #       -   если для группы включена выдача мини карточек
