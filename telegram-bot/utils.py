@@ -507,9 +507,17 @@ class Misc(object):
     @classmethod
     def get_deeplink(cls, response, bot_data, https=False):
         """
-        Получить ссылку типа http://t.me/BotNameBot?start=:uuid
+        Получить ссылку типа http://t.me/BotNameBot?start=:username
+
+        Если в response нет username, смотрим, есть ли uuid
         """
-        deeplink = f't.me/{bot_data["username"]}?start={response["username"]}'
+        if response.get('username'):
+            response_id = response['username']
+        elif response.get('uuid'):
+            response_id = response['uuid']
+        else:
+            response_id = '-'
+        deeplink = f't.me/{bot_data["username"]}?start={response_id}'
         if https:
             deeplink = 'https://' + deeplink
         return deeplink

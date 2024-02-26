@@ -5878,6 +5878,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
     logging.info(
         f'message in group: chat_title: {message.chat.title}, '
+        f'chat_id: {message.chat.id}, '
         f'message_thread_id: {message.message_thread_id}, '
         f'user_from: {message.from_user.first_name} {message.from_user.last_name}, '
         f'message text: {repr(message.text)}'
@@ -5885,13 +5886,17 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
     # Предыдущее сообщение в группу было от текущего юзера:
     #   не выводим миникаточку.
-    #       -   если для группы включена выдача мини карточек
-    #           и предыдущее сообщение в самом деле было от него
-    #       -   для группы НЕ включена выдача мини карточек
+    #       -   для группы НЕ включена выдача мини карточек,
+    #           нет в settings.GROUPS_WITH_CARDS[message.chat.id]
+    #       -   для группы включена выдача мини карточек,
+    #           но сообщение не в топик из
+    #           settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids']
+    #       -   если предыдущее сообщение было от него
     #
     is_previous_his = True
     if message.chat.id in settings.GROUPS_WITH_CARDS and \
-       not tg_user_left and not tg_users_new and message.from_user.id != bot_data.id:
+       not tg_user_left and not tg_users_new and message.from_user.id != bot_data.id and \
+       message.message_thread_id in settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids']:
         if r := redis.Redis(**settings.REDIS_CONNECT):
             last_user_in_grop_rec = settings.REDIS_LAST_USERIN_GROUP_PREFIX + str(message.chat.id)
             previous_user_in_group = r.get(last_user_in_grop_rec)
