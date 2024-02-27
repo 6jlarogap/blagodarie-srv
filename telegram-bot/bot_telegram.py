@@ -4594,7 +4594,7 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
         trusts_or_thanks = ''
         thanks_count_str = ''
         if text:
-            if post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.TRUST):
+            if post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, ):
                 trusts_or_thanks = 'доверяет'
                 if response.get('previousstate') and response['previousstate']['is_trust']:
                     # точно доверял раньше
@@ -4650,6 +4650,16 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
                 )
             except:
                 pass
+            if post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, ):
+                if response.get('previousstate') and response['previousstate']['is_trust']:
+                    popup_message = 'Благодарность увеличена'
+                else:
+                    popup_message = 'Доверие установлено'
+                await bot.answer_callback_query(
+                    data['callback_query'].id,
+                    text=popup_message,
+                    show_alert=True,
+                )
 
     # Это получателю благодарности и т.п. или владельцу получателя, если получатель собственный
     #
