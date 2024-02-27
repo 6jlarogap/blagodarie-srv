@@ -4625,6 +4625,7 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
                 tg_user_sender.id,
                 text=text,
                 disable_web_page_preview=True,
+                disable_notification=True,
             )
         except (ChatNotFound, CantInitiateConversation):
             pass
@@ -4637,13 +4638,14 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
     #             group_member['group_chat_id'],
     #             text=text,
     #             disable_web_page_preview=True,
+    #             disable_notification=True,
     #         )
     #     except (ChatNotFound, CantInitiateConversation):
     #         pass
         if data.get('callback_query_message'):
             try:
                 await data['callback_query_message'].edit_text(
-                text=Misc.get_deeplink_with_name(response['profile_to'], bot_data, plus_mtrusts=True),
+                text=Misc.get_deeplink_with_name(response['profile_to'], bot_data, plus_trusts=True),
                 reply_markup=data['callback_query_message'].reply_markup,
                 )
             except:
@@ -4668,6 +4670,7 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
                     tgd['tg_uid'],
                     text=text_to_recipient,
                     disable_web_page_preview=True,
+                    disable_notification=True,
                 )
             except (ChatNotFound, CantInitiateConversation):
                 pass
@@ -4677,6 +4680,7 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
                     chat_id=tgd['tg_uid'],
                     from_chat_id=tg_user_sender.id,
                     message_id=data['message_to_forward_id'],
+                    disable_notification=True,
                 )
             except (ChatNotFound, CantInitiateConversation):
                 pass
@@ -4686,6 +4690,7 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
                     tgd['tg_uid'],
                     from_chat_id=comment_message.chat.id,
                     message_id=comment_message.message_id,
+                    disable_notification=True,
                 )
                 comment_delivered = True
             except (ChatNotFound, CantInitiateConversation):
@@ -4704,7 +4709,10 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
                     to_owner,
                     Misc.get_deeplink_with_name(
                         profile_to_whom, bot_data, plus_trusts=True,
-            )))
+                )),
+                disable_web_page_preview=True,
+                disable_notification=True,
+            )
         except (ChatNotFound, CantInitiateConversation):
             pass
 
@@ -5956,7 +5964,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
         if not is_previous_his:
             reply_markup = InlineKeyboardMarkup()
-            reply = Misc.get_deeplink_with_name(response_from, bot_data, plus_mtrusts=True)
+            reply = Misc.get_deeplink_with_name(response_from, bot_data, plus_trusts=True)
             dict_reply = dict(
                 keyboard_type=KeyboardType.TRUST_THANK,
                 sep=KeyboardType.SEP,
