@@ -4482,7 +4482,7 @@ async def do_process_tn_question(callback_query=None, state=None, message=None, 
         operation_type_id = operation_type_id,
         tg_user_sender_id = tg_user_sender.id,
         message_to_forward_id = message_to_forward_id,
-        callback_query_message=callback_query.message if callback_query else None,
+        callback_query=callback_query,
         group_member= group_member,
     )
     if group_member:
@@ -4642,11 +4642,11 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
     #         )
     #     except (ChatNotFound, CantInitiateConversation):
     #         pass
-        if data.get('callback_query_message'):
+        if data.get('callback_query'):
             try:
-                await data['callback_query_message'].edit_text(
+                await data['callback_query'].message.edit_text(
                 text=Misc.get_deeplink_with_name(response['profile_to'], bot_data, plus_trusts=True),
-                reply_markup=data['callback_query_message'].reply_markup,
+                reply_markup=data['callback_query'].message.reply_markup,
                 )
             except:
                 pass
