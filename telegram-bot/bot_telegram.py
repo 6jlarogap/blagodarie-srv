@@ -6492,7 +6492,7 @@ async def cron_remove_cards_in_group():
 if __name__ == '__main__':
 
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(cron_remove_cards_in_group, 'cron', day_of_week='mon-sun', hour='*', minute=21,)
+    scheduler.add_job(cron_remove_cards_in_group, 'cron', day_of_week='mon-sun', hour=0, minute=1,)
     scheduler.start()
 
     if settings.START_MODE == 'poll':
