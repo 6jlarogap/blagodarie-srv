@@ -5522,7 +5522,6 @@ async def do_chat_join(
     to_to_chat = 'в канал' if is_channel else 'в группу'
     k_to_chat = 'к каналу' if is_channel else 'к группе'
 
-    tc_inviter = 0
     if tg_inviter_id:
         pass
         # Сразу доверие c благодарностью от входящего в канал/группу к владельцу канала/группы
@@ -5541,30 +5540,23 @@ async def do_chat_join(
         )
         logging.debug('post operation (chat subscriber thanks inviter), status: %s' % status_op)
         logging.debug('post operation (chat subscriber thanks inviter), response: %s' % response_op)
-        if status_op == 200:
-            tc_inviter = response_op['profile_to']['trust_count']
-        else:
-            # может быть 400: уже доверяет
-            tc_inviter = response_inviter['trust_count']
 
     bot_data = await bot.get_me()
-    dl_subscriber = Misc.get_deeplink_with_name(response_subscriber, bot_data)
-    dl_inviter = Misc.get_deeplink_with_name(response_inviter, bot_data) if tg_inviter_id else ''
+    dl_subscriber = Misc.get_deeplink_with_name(response_subscriber, bot_data, plus_trusts=True)
+    dl_inviter = Misc.get_deeplink_with_name(response_inviter, bot_data, plus_trusts=True) if tg_inviter_id else ''
     msg_dict = dict(
         dl_subscriber=dl_subscriber,
         dl_inviter=dl_inviter,
-        tc_inviter=tc_inviter,
-        tc_subscriber=response_subscriber['trust_count'],
         to_to_chat=to_to_chat,
         k_to_chat=k_to_chat,
         map_link = Misc.get_html_a(href=settings.MAP_HOST, text='карте участников'),
         group_title=data_group['title'],
     )
     msg = (
-            'Ваша заявка на вступление в %(to_to_chat)s %(group_title)s одобрена.\n'
+            'Ваша заявка на вступление %(to_to_chat)s %(group_title)s одобрена.\n'
             'Нажмите /setplace чтобы указать Ваше местоположение на %(map_link)s. \n'
             '\n'
-            '%(dl_subscriber)s (%(tc_subscriber)s) доверяет %(dl_inviter)s (%(tc_inviter)s).'
+            '%(dl_subscriber)s доверяет %(dl_inviter)s.'
         ) %  msg_dict
     if callback_query:
         await callback_query.message.reply(msg, disable_web_page_preview=True,)
@@ -5578,7 +5570,7 @@ async def do_chat_join(
         except CantInitiateConversation:
             pass
     if is_channel:
-        reply = '%(dl_subscriber)s (%(tc_subscriber)s) подключен(а)' % msg_dict
+        reply = '%(dl_subscriber)s подключен(а)' % msg_dict
         await bot.send_message(
             chat_id,
             reply,
@@ -5589,7 +5581,7 @@ async def do_chat_join(
     # Пригласившему сообщение, что ему доверяют
     #
     msg = (
-        '%(dl_subscriber)s (%(tc_subscriber)s) Вам доверяет.\n\n'
+        '%(dl_subscriber)s Вам доверяет.\n\n'
         '(в связи с подключением %(dl_subscriber)s %(k_to_chat)s %(group_title)s).\n'
     ) %  msg_dict
     try:
