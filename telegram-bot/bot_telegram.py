@@ -5518,28 +5518,7 @@ async def do_chat_join(
 
     data_group = response_add_member['group']
     is_channel = data_group['type'] == types.ChatType.CHANNEL
-    in_chat = 'в канале' if is_channel else 'в группе'
     to_to_chat = 'в канал' if is_channel else 'в группу'
-    k_to_chat = 'к каналу' if is_channel else 'к группе'
-
-    if tg_inviter_id:
-        pass
-        # Сразу доверие c благодарностью от входящего в канал/группу к владельцу канала/группы
-        #
-        post_op = dict(
-            tg_token=settings.TOKEN,
-            operation_type_id=OperationType.TRUST_AND_THANK,
-            tg_user_id_from=tg_subscriber_id,
-            user_id_to=response_inviter['uuid'],
-        )
-        logging.debug('post operation (chat subscriber thanks inviter), payload: %s' % post_op)
-        status_op, response_op = await Misc.api_request(
-            path='/api/addoperation',
-            method='post',
-            data=post_op,
-        )
-        logging.debug('post operation (chat subscriber thanks inviter), status: %s' % status_op)
-        logging.debug('post operation (chat subscriber thanks inviter), response: %s' % response_op)
 
     bot_data = await bot.get_me()
     dl_subscriber = Misc.get_deeplink_with_name(response_subscriber, bot_data, plus_trusts=True)
@@ -5548,16 +5527,13 @@ async def do_chat_join(
         dl_subscriber=dl_subscriber,
         dl_inviter=dl_inviter,
         to_to_chat=to_to_chat,
-        k_to_chat=k_to_chat,
         map_link = Misc.get_html_a(href=settings.MAP_HOST, text='карте участников'),
         group_title=data_group['title'],
     )
     msg = (
             'Ваша заявка на вступление %(to_to_chat)s %(group_title)s одобрена.\n'
-            'Нажмите /setplace чтобы указать Ваше местоположение на %(map_link)s. \n'
-            '\n'
-            '%(dl_subscriber)s доверяет %(dl_inviter)s.'
-        ) %  msg_dict
+            'Нажмите /setplace чтобы указать Ваше местоположение на %(map_link)s.'
+    ) %  msg_dict
     if callback_query:
         await callback_query.message.reply(msg, disable_web_page_preview=True,)
     else:
@@ -5577,22 +5553,6 @@ async def do_chat_join(
             disable_notification=True,
             disable_web_page_preview=True,
         )
-
-    # Пригласившему сообщение, что ему доверяют
-    #
-    msg = (
-        '%(dl_subscriber)s Вам доверяет.\n\n'
-        '(в связи с подключением %(dl_subscriber)s %(k_to_chat)s %(group_title)s).\n'
-    ) %  msg_dict
-    try:
-        await bot.send_message(
-            tg_inviter_id,
-            text=msg % msg_dict,
-            disable_web_page_preview=True,
-        )
-    except (ChatNotFound, CantInitiateConversation):
-        pass
-
     if response_subscriber.get('created'):
         await Misc.update_user_photo(bot, tg_subscriber, response_subscriber)
 
