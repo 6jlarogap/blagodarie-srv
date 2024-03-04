@@ -371,11 +371,15 @@ class Misc(object):
         status, response = await cls.get_template('help')
         return response if status == 200 and response else cls.MSG_ERROR_API
 
-
     @classmethod
     async def rules_text(cls):
         status, response = await cls.get_template('rules')
         return response if status == 200 and response else cls.MSG_ERROR_API
+
+    @classmethod
+    async def chat_pin_message_text(cls):
+        status, response = await cls.get_template('chat_pin_message')
+        return response if status == 200 and response else None
 
 
     @classmethod
@@ -1071,7 +1075,7 @@ class Misc(object):
                         sep=KeyboardType.SEP,
                     ))
                     inline_btn_comment = InlineKeyboardButton(
-                        'Коммент',
+                        'О себе' if is_own_account else 'Коммент',
                         callback_data=callback_data_template % dict(
                         keyboard_type=KeyboardType.COMMENT,
                         uuid=response_to['uuid'],
@@ -1450,7 +1454,7 @@ class Misc(object):
         return None
 
     @classmethod
-    def make_pin_group_message(cls, chat, bot, bot_data):
+    async def make_pin_group_message(cls, chat, bot, bot_data):
         """
         Сделать сообщение для последующего закрепления с группе/канале
 
@@ -1459,7 +1463,16 @@ class Misc(object):
 
         Возвращает текст и разметку сообщения
         """
-        text = '@' + bot_data['username']
+        text = await cls.chat_pin_message_text()
+        if text:
+            text = text.replace('$BOT_USERNAME', bot_data['username'])
+            if chat.username:
+                chat_link = f'<a href="https://t.me/{chat.username}">{chat.title}</a>'
+            else:
+                chat_link = f'<u>{chat.title}</u>'
+            text = text.replace('$CHAT_LINK', chat_link)
+        else:
+            text = '@' + bot_data['username']
         inline_btn_map = InlineKeyboardButton(
             'Карта',
             login_url=cls.make_login_url(
@@ -1496,7 +1509,7 @@ class Misc(object):
         Возможно ли переход супергруппа -> группа? Не изестно, но учитываем
         возможность. Для канала изменение ид не замечено.
         """
-        text, reply_markup = cls.make_pin_group_message(chat, bot, bot_data)
+        text, reply_markup = await cls.make_pin_group_message(chat, bot, bot_data)
         try:
             messsage_for_pin = await bot.send_message(
                 chat_id=chat.id,

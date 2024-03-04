@@ -5927,6 +5927,15 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
         if not is_previous_his:
             reply_markup = InlineKeyboardMarkup()
             reply = Misc.get_deeplink_with_name(response_from, bot_data, plus_trusts=True)
+            status, chat_from_api = await TgGroup.get(message.chat.id)
+            if status == 200 and chat_from_api.get('pin_message_id'):
+                chat_id_short = str(message.chat.id)
+                if chat_id_short.startswith('-100'):
+                    chat_id_short = chat_id_short[4:]
+                reply += (
+                    f'\n'
+                    f'<a href="https://t.me/c/{chat_id_short}/{chat_from_api["pin_message_id"]}">Подробнее...</a>'
+                )
             dict_reply = dict(
                 keyboard_type=KeyboardType.TRUST_THANK,
                 sep=KeyboardType.SEP,
