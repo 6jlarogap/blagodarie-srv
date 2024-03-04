@@ -548,6 +548,18 @@ async def echo_stat_to_bot(message: types.Message, state: FSMContext):
     state=None,
 )
 async def echo_feedback(message: types.Message, state: FSMContext):
+    await message.reply(
+        Misc.get_html_a(settings.BOT_CHAT['href'], settings.BOT_CHAT['caption']),
+        disable_web_page_preview=True,
+    )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('feedback_admins',),
+    state=None,
+)
+async def echo_feedback_admins(message: types.Message, state: FSMContext):
     """
     Отправка сообщения администраторам (разработчикам)
     """
@@ -1229,6 +1241,7 @@ commands_dict = {
     'help': echo_help_to_bot,
     'stat': echo_stat_to_bot,
     'feedback': echo_feedback,
+    'feedback_admins': echo_feedback_admins,
     'start': echo_send_to_bot,
     'ya': echo_send_to_bot,
 }

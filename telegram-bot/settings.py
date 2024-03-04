@@ -187,6 +187,8 @@ REDIS_KEY_SEP = '~'
 #
 GROUPS_WITH_CARDS = {}
 
+BOT_CHAT = dict(href='https://t.me/+dpxYzCiAqN41MDEy', caption='Чат бота Доверия')
+
 try:
     from local_settings import *
 except ModuleNotFoundError:
