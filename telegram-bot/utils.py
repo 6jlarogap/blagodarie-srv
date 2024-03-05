@@ -713,7 +713,7 @@ class Misc(object):
         if with_owner_tg_data:
             params.update(with_owner_tg_data='1')
         logging.debug('get_user_profile by uuid, params: %s' % params)
-        status, response = await Misc.api_request(
+        status, response = await cls.api_request(
             path='/api/profile',
             method='get',
             params=params,
@@ -734,7 +734,7 @@ class Misc(object):
         if with_owner_tg_data:
             params.update(with_owner_tg_data='1')
         logging.debug('get_user_profile by sid, params: %s' % params)
-        status, response = await Misc.api_request(
+        status, response = await cls.api_request(
             path='/api/profile',
             method='get',
             params=params,
@@ -751,7 +751,7 @@ class Misc(object):
         """
         params = dict(tg_uids=','.join(map(str, settings.BOT_ADMINS)))
         logging.debug('get_admins, params: %s' % params)
-        status, response = await Misc.api_request(
+        status, response = await cls.api_request(
             path='/api/profile',
             method='get',
             params=params,
@@ -767,7 +767,7 @@ class Misc(object):
         Получить данные пользователя по тедеграм ид
         """
         params = dict(tg_uid=str(tg_uid))
-        status, response = await Misc.api_request(
+        status, response = await cls.api_request(
             path='/api/profile',
             method='get',
             params=params,
@@ -875,7 +875,7 @@ class Misc(object):
                 continue
             else:
                 uuids.append(response['uuid'])
-                reply += Misc.get_deeplink_with_name(response, bot_data, with_lifetime_years=True) +'\n'
+                reply += cls.get_deeplink_with_name(response, bot_data, with_lifetime_years=True) +'\n'
         if reply:
             parts = safe_split_text(reply, split_separator='\n')
             for part in parts:
@@ -1337,7 +1337,7 @@ class Misc(object):
         payload = dict(tg_token=settings.TOKEN,)
         payload.update(**kwargs)
         logging.debug('put user_data, payload: %s' % payload)
-        status, response = await Misc.api_request(
+        status, response = await cls.api_request(
             path='/api/profile',
             method='put',
             data=payload,
@@ -1424,7 +1424,7 @@ class Misc(object):
             payload_query = { what: search_phrase, }
             payload_query.update(**kwargs)
             logging.debug('get users by %s, payload: %s' % (what, payload_query,))
-            status, a_found = await Misc.api_request(
+            status, a_found = await cls.api_request(
                 path='/api/profile',
                 method='get',
                 params=payload_query,
