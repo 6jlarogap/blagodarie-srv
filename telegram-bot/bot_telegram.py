@@ -5859,7 +5859,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
     bot_data = await bot.get_me()
 
-    logging.debug(
+    logging.info(
         f'message in group: chat_title: {message.chat.title}, '
         f'chat_id: {message.chat.id}, '
         f'message_thread_id: {message.message_thread_id}, '
@@ -5969,6 +5969,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 callback_data=callback_data_template % dict_reply,
             )
             reply_markup.row(inline_btn_thank)
+            logging.info('minicard in group text: '+ repr(reply))
             answer = await message.answer(
                 reply,
                 reply_markup=reply_markup,
