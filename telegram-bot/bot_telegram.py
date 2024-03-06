@@ -5947,7 +5947,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                     chat_id_short = chat_id_short[4:]
                 reply += (
                     f'\n'
-                    f'<a href="https://t.me/c/{chat_id_short}/{chat_from_api["pin_message_id"]}">Подробнее...</a>'
+                    f'<a href="https://t.me/c/{chat_id_short}/1/{chat_from_api["pin_message_id"]}">Подробнее...</a>'
                 )
             dict_reply = dict(
                 keyboard_type=KeyboardType.TRUST_THANK,
