@@ -4661,8 +4661,9 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
         if data.get('callback_query'):
             try:
                 await data['callback_query'].message.edit_text(
-                text=Misc.get_deeplink_with_name(response['profile_to'], bot_data, plus_trusts=True),
+                text=await group_minicard_text (response['profile_to'], data['callback_query'].message.chat, bot_data),
                 reply_markup=data['callback_query'].message.reply_markup,
+                disable_web_page_preview=True,
                 )
             except:
                 pass
@@ -5942,17 +5943,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
         if not is_previous_his:
             reply_markup = InlineKeyboardMarkup()
-            reply = Misc.get_deeplink_with_name(response_from, bot_data, plus_trusts=True)
-            status, chat_from_api = await TgGroup.get(message.chat.id)
-            if status == 200 and chat_from_api.get('pin_message_id'):
-                if message.chat.username:
-                    href = f'https://t.me/{message.chat.username}/{chat_from_api["pin_message_id"]}'
-                else:
-                    chat_id_short = str(message.chat.id)
-                    if chat_id_short.startswith('-100'):
-                        chat_id_short = chat_id_short[4:]
-                    href = f'https://t.me/c/{chat_id_short}/{chat_from_api["pin_message_id"]}'
-                reply += f'\n<a href="{href}">Подробнее...</a>'
+            reply = await group_minicard_text (response_from, message.chat, bot_data)
             dict_reply = dict(
                 keyboard_type=KeyboardType.TRUST_THANK,
                 operation=OperationType.TRUST_AND_THANK,
@@ -5995,6 +5986,21 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
     for i, response_from in enumerate(a_users_out):
         if response_from.get('created'):
             await Misc.update_user_photo(bot, a_users_in[i], response_from)
+
+
+async def group_minicard_text (profile, chat, bot_data):
+    reply = Misc.get_deeplink_with_name(profile, bot_data, plus_trusts=True)
+    status, chat_from_api = await TgGroup.get(chat.id)
+    if status == 200 and chat_from_api.get('pin_message_id'):
+        if chat.username:
+            href = f'https://t.me/{chat.username}/{chat_from_api["pin_message_id"]}'
+        else:
+            chat_id_short = str(chat.id)
+            if chat_id_short.startswith('-100'):
+                chat_id_short = chat_id_short[4:]
+            href = f'https://t.me/c/{chat_id_short}/{chat_from_api["pin_message_id"]}'
+        reply += f'\n<a href="{href}">Подробнее...</a>'
+    return reply
 
 
 async def check_user_delete_undelete(callback_query):
