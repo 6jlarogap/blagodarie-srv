@@ -4448,7 +4448,10 @@ async def do_process_tn_question(callback_query=None, state=None, message=None, 
     """
     tg_user_sender = callback_query.from_user if callback_query else message.from_user
     message_ = callback_query.message if callback_query else message
-    status_sender, profile_sender = await Misc.post_tg_user(tg_user_sender)
+    status_sender, profile_sender = await Misc.post_tg_user(
+        tg_user_sender,
+        did_bot_start=message_.chat.type == types.ChatType.PRIVATE,
+    )
     if status_sender != 200 or not profile_sender:
         return
     if callback_query:
@@ -5859,7 +5862,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
 
     bot_data = await bot.get_me()
 
-    logging.info(
+    logging.debug(
         f'message in group: chat_title: {message.chat.title}, '
         f'chat_id: {message.chat.id}, '
         f'message_thread_id: {message.message_thread_id}, '
@@ -5963,13 +5966,12 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                     '%(message_to_forward_id)s%(sep)s'
                     '%(group_id)s%(sep)s'
                 )
-            dict_reply.update(operation=OperationType.TRUST_AND_THANK)
             inline_btn_thank = InlineKeyboardButton(
                 'Доверяю',
                 callback_data=callback_data_template % dict_reply,
             )
             reply_markup.row(inline_btn_thank)
-            logging.info('minicard in group text: '+ repr(reply))
+            logging.debug('minicard in group text: '+ repr(reply))
             answer = await message.answer(
                 reply,
                 reply_markup=reply_markup,
