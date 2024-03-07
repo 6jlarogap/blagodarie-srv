@@ -5953,6 +5953,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                     f'<a href="https://t.me/c/{chat_id_short}/1/{chat_from_api["pin_message_id"]}">Подробнее...</a>'
                 )
             dict_reply = dict(
+                operation=OperationType.TRUST_AND_THANK,
                 keyboard_type=KeyboardType.TRUST_THANK,
                 sep=KeyboardType.SEP,
                 user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
