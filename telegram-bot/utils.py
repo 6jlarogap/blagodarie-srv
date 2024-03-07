@@ -1,4 +1,4 @@
-import base64, re, datetime
+import base64, re, datetime, copy
 from urllib.parse import urlencode
 from uuid import UUID
 
@@ -319,6 +319,17 @@ class Misc(object):
     )
 
     @classmethod
+    def secret(cls, payload):
+        """
+        Скрыть в payload, который отправляем в журнал, секретные параметры 
+        """
+        result = copy.deepcopy(payload)
+        if 'tg_token' in payload:
+            result.update(tg_token='SECRET')
+        return result
+
+
+    @classmethod
     def datetime_string(cls, timestamp, with_timezone=True):
         dt = datetime.datetime.fromtimestamp(timestamp)
         result = dt.strftime(cls.FORMAT_DATE + ' ' + cls.FORMAT_TIME)
@@ -328,6 +339,7 @@ class Misc(object):
                 str_tz = dt.astimezone().tzname()
             result += ' ' + str_tz
         return result
+
 
     @classmethod
     def invalid_search_text(cls):
@@ -691,7 +703,7 @@ class Misc(object):
             activate='1' if activate else '',
             did_bot_start='1' if did_bot_start else '',
         )
-        logging.debug('get_or_create tg_user by tg_uid in api, payload: %s' % payload_sender)
+        logging.debug('get_or_create tg_user by tg_uid in api, payload: %s' % cls.secret(payload_sender))
         status_sender, response_sender = await cls.api_request(
             path='/api/profile',
             method='post',
@@ -1336,7 +1348,7 @@ class Misc(object):
         logging.debug('put tg_user_data...')
         payload = dict(tg_token=settings.TOKEN,)
         payload.update(**kwargs)
-        logging.debug('put user_data, payload: %s' % payload)
+        logging.debug('put user_data, payload: %s' % cls.secret(payload))
         status, response = await cls.api_request(
             path='/api/profile',
             method='put',
@@ -1522,7 +1534,6 @@ class Misc(object):
         if messsage_for_pin and \
            chat.type in (types.ChatType.GROUP, types.ChatType.SUPERGROUP,) :
             payload = {
-                # 'tg_token': settings.TOKEN,
                 'old_chat_id': chat.id,
                 'chat_id': chat.id, 'title': chat.title, 'type': chat.type,
                 'pin_message_id' : messsage_for_pin.message_id,
@@ -1569,7 +1580,7 @@ class TgGroup(object):
     @classmethod
     async def post(cls, chat_id, title, type_):
         payload = {'tg_token': settings.TOKEN, 'chat_id': chat_id, 'title': title, 'type': type_,}
-        logging.debug('post group id, payload: %s' % payload)
+        logging.debug('post group id, payload: %s' % Misc.secret(payload))
         status, response = await Misc.api_request(
             path='/api/bot/group',
             method='post',
@@ -1587,7 +1598,7 @@ class TgGroup(object):
             'chat_id': chat_id, 'title': title, 'type': type_,
             'pin_message_id' : pin_message_id,
         }
-        logging.debug('modify group, payload: %s' % payload)
+        logging.debug('modify group, payload: %s' % Misc.secret(payload))
         status, response = await Misc.api_request(
             path='/api/bot/group',
             method='put',
@@ -1600,7 +1611,7 @@ class TgGroup(object):
     @classmethod
     async def delete(cls, chat_id):
         payload = {'tg_token': settings.TOKEN, 'chat_id': chat_id,}
-        logging.debug('delete group id, payload: %s' % payload)
+        logging.debug('delete group id, payload: %s' % Misc.secret(payload))
         status, response = await Misc.api_request(
             path='/api/bot/group',
             method='delete',
@@ -1634,7 +1645,7 @@ class TgGroupMember(object):
     @classmethod
     async def add(cls, group_chat_id, group_title, group_type, user_tg_uid):
         payload = cls.payload(group_chat_id, group_title, group_type, user_tg_uid)
-        logging.debug('post group member, payload: %s' % payload)
+        logging.debug('post group member, payload: %s' % Misc.secret(payload))
         status, response = await Misc.api_request(
             path='/api/bot/groupmember',
             method='post',
@@ -1647,7 +1658,7 @@ class TgGroupMember(object):
     @classmethod
     async def remove(cls, group_chat_id, group_title, group_type, user_tg_uid):
         payload = cls.payload(group_chat_id, group_title, group_type, user_tg_uid)
-        logging.debug('delete group member, payload: %s' % payload)
+        logging.debug('delete group member, payload: %s' % Misc.secret(payload))
         status, response = await Misc.api_request(
             path='/api/bot/groupmember',
             method='delete',

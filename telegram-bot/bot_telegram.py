@@ -200,7 +200,7 @@ async def process_command_poll(message: types.Message, state: FSMContext):
     )
     poll_message_dict = dict(poll_message)
     poll_message_dict.update(tg_token=settings.TOKEN)
-    logging.debug('create poll in api, payload: %s' % poll_message_dict)
+    logging.debug('create poll in api, payload: %s' % Misc.secret(poll_message_dict))
     status, response = await Misc.api_request(
         path='/api/bot/poll',
         method='post',
@@ -296,7 +296,7 @@ async def process_command_offer(message: types.Message, state: FSMContext):
             answers=answers,
             is_multi=is_multi,
         )
-        logging.debug('create offer in api, payload: %s' % create_offer_dict)
+        logging.debug('create offer in api, payload: %s' % Misc.secret(create_offer_dict))
         status, response = await Misc.api_request(
             path='/api/offer',
             method='post',
@@ -706,7 +706,7 @@ async def service_add_user_to_chat(message: types.Message, state: FSMContext):
             tg_user_id_from=tg_uid,
             user_id_to=response_sender['uuid'],
         )
-        logging.debug('post operation (chat subscriber thanks inviter), payload: %s' % post_op)
+        logging.debug('post operation (chat subscriber thanks inviter), payload: %s' % Misc.secret(post_op))
         status_op, response_op = await Misc.api_request(
             path='/api/addoperation',
             method='post',
@@ -1373,7 +1373,7 @@ async def put_papa_mama(message: types.Message, state: FSMContext):
         user_id_from=user_uuid_from,
         user_id_to=response_sender['response_uuid']['uuid']
     )
-    logging.debug('post operation, payload: %s' % post_op)
+    logging.debug('post operation, payload: %s' % Misc.secret(post_op))
     status, response = await Misc.api_request(
         path='/api/addoperation',
         method='post',
@@ -1454,7 +1454,7 @@ async def put_new_papa_mama(message: types.Message, state: FSMContext):
         link_id=user_uuid_from,
         owner_id=owner['user_id'],
     )
-    logging.debug('post new owned user with link_id, payload: %s' % post_data)
+    logging.debug('post new owned user with link_id, payload: %s' % Misc.secret(post_data))
     status, response = await Misc.api_request(
         path='/api/profile',
         method='post',
@@ -1735,7 +1735,7 @@ async def process_callback_clear_parent_confirmed(callback_query: types.Callback
         user_id_from=response_sender['response_uuid']['uuid'],
         user_id_to=existing_parent_uuid,
     )
-    logging.debug('post operation, payload: %s' % post_op)
+    logging.debug('post operation, payload: %s' % Misc.secret(post_op))
     status, response = await Misc.api_request(
         path='/api/addoperation',
         method='post',
@@ -1907,7 +1907,7 @@ async def process_callback_clear_child_confirmed(callback_query: types.CallbackQ
             user_id_from=data['child_uuid'],
             user_id_to=parent_uuid,
         )
-        logging.debug('post operation, payload: %s' % post_op)
+        logging.debug('post operation, payload: %s' % Misc.secret(post_op))
         status, response = await Misc.api_request(
             path='/api/addoperation',
             method='post',
@@ -2104,7 +2104,7 @@ async def put_child_by_sid(message: types.Message, state: FSMContext):
                     user_id_from=user_uuid_from,
                     user_id_to=data['uuid'],
                 )
-                logging.debug('post operation, payload: %s' % post_op)
+                logging.debug('post operation, payload: %s' % Misc.secret(post_op))
                 status, response = await Misc.api_request(
                     path='/api/addoperation',
                     method='post',
@@ -2186,7 +2186,7 @@ async def put_new_child(message: types.Message, state: FSMContext):
                     owner_id=response_sender['user_id'],
                     gender=data['new_child_gender']
                 )
-                logging.debug('post new child, payload: %s' % post_new_link)
+                logging.debug('post new child, payload: %s' % Misc.secret(post_new_link))
                 status_child, response_child = await Misc.api_request(
                     path='/api/profile',
                     method='post',
@@ -2470,7 +2470,7 @@ async def put_bro_sys_by_uuid(message: types.Message, state: FSMContext):
                             user_id_from=data_bro_sis['uuid'],
                             user_id_to=data_whose['father']['uuid'],
                         )
-                        logging.debug('post operation, payload: %s' % post_op)
+                        logging.debug('post operation, payload: %s' % Misc.secret(post_op))
                         status, response = await Misc.api_request(
                             path='/api/addoperation',
                             method='post',
@@ -2498,7 +2498,7 @@ async def put_bro_sys_by_uuid(message: types.Message, state: FSMContext):
                             user_id_from=data_bro_sis['uuid'],
                             user_id_to=data_whose['mother']['uuid'],
                         )
-                        logging.debug('post operation, payload: %s' % post_op)
+                        logging.debug('post operation, payload: %s' % Misc.secret(post_op))
                         status, response = await Misc.api_request(
                             path='/api/addoperation',
                             method='post',
@@ -2633,7 +2633,7 @@ async def put_new_bro_sis(message: types.Message, state: FSMContext):
                             link_id=data_whose['father']['uuid'],
                             link_relation='link_is_father',
                         )
-                        logging.debug('post new brother or sister & set father payload: %s' % payload_post)
+                        logging.debug('post new brother or sister & set father payload: %s' % Misc.secret(payload_post))
                         status, data_bro_sis = await Misc.api_request(
                             path='/api/profile',
                             method='post',
@@ -2661,7 +2661,7 @@ async def put_new_bro_sis(message: types.Message, state: FSMContext):
                                 user_id_from=data_bro_sis['uuid'],
                                 user_id_to=data_whose['mother']['uuid'],
                             )
-                            logging.debug('post operation, payload: %s' % payload_op)
+                            logging.debug('post operation, payload: %s' % Misc.secret(payload_op))
                             status, response = await Misc.api_request(
                                 path='/api/addoperation',
                                 method='post',
@@ -2691,7 +2691,7 @@ async def put_new_bro_sis(message: types.Message, state: FSMContext):
                                 link_id=data_whose['mother']['uuid'],
                                 link_relation='link_is_mother',
                             )
-                            logging.debug('post new brother or sister & set mother payload: %s' % payload_post)
+                            logging.debug('post new brother or sister & set mother payload: %s' % Misc.secret(payload_post))
                             status, data_bro_sis = await Misc.api_request(
                                 path='/api/profile',
                                 method='post',
@@ -3730,7 +3730,7 @@ async def our_poll_answer_handler(poll_answer: types.PollAnswer):
     if status_sender == 200:
         poll_answer_dict=dict(poll_answer)
         poll_answer_dict.update(tg_token=settings.TOKEN)
-        logging.debug('poll answer to api, payload: %s' % poll_answer_dict)
+        logging.debug('poll answer to api, payload: %s' % Misc.secret(poll_answer_dict))
         status, response = await Misc.api_request(
             path='/api/bot/poll/answer',
             method='post',
@@ -4188,7 +4188,7 @@ async def new_iof_ask_org(message: types.Message, state: FSMContext):
             first_name=first_name,
             is_org='1',
         )
-        logging.debug('post new org, payload: %s' % payload_org)
+        logging.debug('post new org, payload: %s' % Misc.secret(payload_org))
         status, response = await Misc.api_request(
             path='/api/profile',
             method='post',
@@ -4268,7 +4268,7 @@ async def process_callback_new_iof_gender(callback_query: types.CallbackQuery, s
                     first_name=data['first_name'],
                     gender=gender,
                 )
-                logging.debug('post iof, payload: %s' % payload_iof)
+                logging.debug('post iof, payload: %s' % Misc.secret(payload_iof))
                 status, response = await Misc.api_request(
                     path='/api/profile',
                     method='post',
@@ -4575,7 +4575,7 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
             tg_from_chat_id=tg_user_sender.id,
             tg_message_id=data['message_to_forward_id'],
         )
-    logging.debug('post operation, payload: %s' % post_op)
+    logging.debug('post operation, payload: %s' % Misc.secret(post_op))
     status, response = await Misc.api_request(
         path='/api/addoperation',
         method='post',
@@ -5129,7 +5129,7 @@ async def post_offer_answer(offer_uuid, user_from, answers):
         answers=answers,
         user_uuid=user_from and user_from['uuid'] or None,
     )
-    logging.debug('post_offer, payload: %s' % payload)
+    logging.debug('post_offer, payload: %s' % Misc.secret(payload))
     status, response = await Misc.api_request(
         path='/api/offer/answer',
         method='post',
@@ -5280,7 +5280,7 @@ async def got_message_to_send_to_offer(message: types.Message, state: FSMContext
                     user_uuid=data['uuid'],
                     offer_uuid=data['offer_uuid']
                 )
-                logging.debug('/api/offer/voted/tg_users %s' % payload )
+                logging.debug('/api/offer/voted/tg_users %s' % Misc.secret(payload ))
                 status, response = await Misc.api_request(
                     path='/api/offer/voted/tg_users',
                     method='post',
@@ -5926,7 +5926,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                     tg_user_id_from=tg_user_sender.id,
                     user_id_to=response_from['uuid'],
                 )
-                logging.debug('post operation, payload: %s' % post_op)
+                logging.debug('post operation, payload: %s' % Misc.secret(post_op))
                 status, response = await Misc.api_request(
                     path='/api/addoperation',
                     method='post',
@@ -6100,7 +6100,7 @@ async def process_callback_delete_user_confirmed(callback_query: types.CallbackQ
         msg_deleted = 'Профиль <u>%s</u> удалён' % user['first_name']
 
     payload = dict(tg_token=settings.TOKEN, uuid=user['uuid'], owner_id=owner['user_id'])
-    logging.debug(msg_debug + 'payload: %s' % payload)
+    logging.debug(msg_debug + 'payload: %s' % Misc.secret(payload))
     status, response = await Misc.api_request(
         path='/api/profile',
         method='delete',
@@ -6302,7 +6302,7 @@ async def process_callback_invite(callback_query: types.CallbackQuery, state: FS
         uuid_inviter=response_sender['uuid'],
         uuid_to_merge=uuid,
     )
-    logging.debug('post invite (set token), payload: %s' % post_invite_set)
+    logging.debug('post invite (set token), payload: %s' % Misc.secret(post_invite_set))
     status, response = await Misc.api_request(
         path='/api/token/invite/',
         method='post',
@@ -6337,7 +6337,7 @@ async def show_invite(profile, token_invite, message, bot_data):
         token=token_invite,
         uuid_invited=profile['uuid'],
     )
-    logging.debug('post invite ( token), payload: %s' % post_invite_get)
+    logging.debug('post invite ( token), payload: %s' % Misc.secret(post_invite_get))
     status, response = await Misc.api_request(
         path='/api/token/invite/',
         method='post',
@@ -6394,7 +6394,7 @@ async def process_callback_invite_confirm(callback_query: types.CallbackQuery, s
                 token=token_invite,
                 uuid_invited=response_sender['uuid'],
             )
-            logging.debug('post invite (accept token), payload: %s' % post_invite_accept)
+            logging.debug('post invite (accept token), payload: %s' % Misc.secret(post_invite_accept))
             status, response = await Misc.api_request(
                 path='/api/token/invite/',
                 method='post',
