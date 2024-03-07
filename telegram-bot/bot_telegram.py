@@ -5895,7 +5895,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
         if user_in.is_bot:
             a_users_out.append({})
         else:
-            status, response_from = await Misc.post_tg_user(user_in)
+            status, response_from = await Misc.post_tg_user(user_in, did_bot_start=False)
             if status != 200:
                 a_users_out.append({})
                 continue
