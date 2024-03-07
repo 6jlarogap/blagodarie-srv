@@ -5945,16 +5945,17 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             reply = Misc.get_deeplink_with_name(response_from, bot_data, plus_trusts=True)
             status, chat_from_api = await TgGroup.get(message.chat.id)
             if status == 200 and chat_from_api.get('pin_message_id'):
-                chat_id_short = str(message.chat.id)
-                if chat_id_short.startswith('-100'):
-                    chat_id_short = chat_id_short[4:]
-                reply += (
-                    f'\n'
-                    f'<a href="https://t.me/c/{chat_id_short}/1/{chat_from_api["pin_message_id"]}">Подробнее...</a>'
-                )
+                if message.chat.username:
+                    href = f'https://t.me/{message.chat.username}/{chat_from_api["pin_message_id"]}'
+                else:
+                    chat_id_short = str(message.chat.id)
+                    if chat_id_short.startswith('-100'):
+                        chat_id_short = chat_id_short[4:]
+                    href = f'https://t.me/c/{chat_id_short}/{chat_from_api["pin_message_id"]}'
+                reply += f'\n<a href="{href}">Подробнее...</a>'
             dict_reply = dict(
-                operation=OperationType.TRUST_AND_THANK,
                 keyboard_type=KeyboardType.TRUST_THANK,
+                operation=OperationType.TRUST_AND_THANK,
                 sep=KeyboardType.SEP,
                 user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
                 message_to_forward_id='',
@@ -5977,7 +5978,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 reply,
                 reply_markup=reply_markup,
                 disable_web_page_preview=True,
-                disable_notification=True
+                disable_notification=True,
             )
             if answer:
                 if r := redis.Redis(**settings.REDIS_CONNECT):
