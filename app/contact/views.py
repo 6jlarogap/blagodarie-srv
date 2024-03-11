@@ -3879,19 +3879,26 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
 
 api_profile_trust = ApiProfileTrust.as_view()
 
-class ApiTgMessage(UuidMixin, APIView):
+class ApiTgMessageList(UuidMixin, APIView):
 
     MESSAGE_COUNT = 10
 
-    def get(self, request):
+    def post(self, request):
         """
-        Получить self.MESSAGE_COUNT последниех сообщений к uuid
+        Получить self.MESSAGE_COUNT последних сообщений от user_from_uuid к user_to_uuid
         """
         try:
-            user_to, p = self.check_user_uuid(request.GET.get('uuid'), related=[], comment='uuid: ')
+            data = request.data
+            if data.get('tg_token'):
+                if data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                    raise ServiceException('Неверный токен телеграм бота')
+            else:
+                raise NotAuthenticated
+            user_from, p = self.check_user_uuid(data.get('user_from_uuid'), related=[], comment='user_from_uuid: ')
+            user_to, p = self.check_user_uuid(data.get('user_to_uuid'), related=[], comment='user_to_uuid: ')
             data = [
                 tm.data_dict() for tm in TgMessageJournal.objects.filter(
-                    user_to__pk=user_to.pk,
+                    user_from__pk=user_from.pk, user_to__pk=user_to.pk,
                     ).select_related(
                         'user_from', 'user_to', 'user_to_delivered',
                         'user_from__profile', 'user_to__profile', 'user_to_delivered__profile',
@@ -3901,7 +3908,7 @@ class ApiTgMessage(UuidMixin, APIView):
 
             data += [
                 tm.data_dict() for tm in TgJournal.objects.filter(
-                    journal__user_to__pk=user_to.pk,
+                    journal__user_from__pk=user_from.pk, journal__user_to__pk=user_to.pk,
                     ).select_related(
                         'journal__user_from', 'journal__user_to',
                         'journal__user_from__profile', 'journal__user_to__profile',
@@ -3921,6 +3928,10 @@ class ApiTgMessage(UuidMixin, APIView):
             data = dict(message=excpt.args[0])
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
+
+api_tg_message_list = ApiTgMessageList.as_view()
+
+class ApiTgMessage(UuidMixin, APIView):
 
     def post(self, request):
         """

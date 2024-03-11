@@ -3621,16 +3621,25 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
     """
     Показ сообщений
     """
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (user_to_uuid := Misc.getuuid_from_callback(callback_query)):
         return
     tg_user_sender = callback_query.from_user
-    status, response = await Misc.api_request(
-        path='/api/tg_message',
-        method='get',
-        params=dict(uuid=uuid),
+    status_from, profile_from = await Misc.post_tg_user(callback_query.from_user)
+    if status_from != 200:
+        return
+    payload = dict(
+        tg_token=settings.TOKEN,
+        user_from_uuid=profile_from['uuid'],
+        user_to_uuid=user_to_uuid,
     )
-    logging.debug('get_user_messages, uuid=%s, status: %s' % (uuid, status))
-    logging.debug('get_user_messages, uuid=%s, response: %s' % (uuid, response))
+    logging.debug('get_user_messages, payload: %s' % Misc.secret(payload))
+    status, response = await Misc.api_request(
+        path='/api/tg_message/list',
+        method='post',
+        json=payload,
+    )
+    logging.debug('get_user_messages, status: %s' % status)
+    logging.debug('get_user_messages, response: %s' % response)
     if status != 200:
         return
     bot_data = await bot.get_me()
