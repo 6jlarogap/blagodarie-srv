@@ -102,10 +102,6 @@ class FSMtrip(StatesGroup):
     ask_geo = State()
     geo = State()
 
-class FSMtrustThank(StatesGroup):
-    # благодарности, недоверия, не-знакомы
-    ask = State()
-
 class FSMinviteConfirm(StatesGroup):
     # приглашение с объединением собственного
     ask = State()
@@ -1207,7 +1203,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                         tg_user_sender_id = tg_user_sender.id,
                         message_to_forward_id = None,
                     )
-                    await put_thank_etc(tg_user_sender, data, state=state, comment_message=None)
+                    await put_thank_etc(tg_user_sender, data, state=state)
                     return
             code = (KeyboardType.TRUST_THANK, d_trust['operation_type_id'], d_trust['uuid'])
             await do_process_tn_question(callback_query=None, state=state, message=message, code=code)
@@ -4430,7 +4426,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
                 tg_user_sender_id = tg_user_sender.id,
                 message_to_forward_id = message_to_forward_id,
             )
-            await put_thank_etc(tg_user_sender, data, state=state, comment_message=None)
+            await put_thank_etc(tg_user_sender, data, state=state)
             return
     await do_process_tn_question(callback_query=callback_query, state=state, message=None, code=None)
 
@@ -4503,46 +4499,13 @@ async def do_process_tn_question(callback_query=None, state=None, message=None, 
     )
     if group_member:
         group_member.update(user_tg_uid=tg_user_sender.id)
-        await put_thank_etc(tg_user_sender, data=data_, state=None, comment_message=None)
-        return
 
-    if operation_type_id == OperationType.TRUST:
-        msg_what = 'к <u>доверию</u>'
-    if operation_type_id == OperationType.TRUST_AND_THANK:
-        status_relations, response_relations = await Misc.call_response_relations(profile_sender, profile_to)
-        if response_relations and response_relations['from_to']['is_trust'] and response_relations['from_to']['thanks_count']:
-            msg_what = 'к <u>благодарности</u>'
-        else:
-            msg_what = 'к <u>доверию</u> к'
-    elif operation_type_id == OperationType.MISTRUST:
-        msg_what = 'к <u>недоверию</u> для'
-    else:
-        # OperationType.NULLIFY_TRUST
-        msg_what = 'к тому что хотите <b>забыть</b>'
+    # Здесь была постановка вопроса о комментарии!
 
-    async with state.proxy() as data:
-        data.update(data_)
-    callback_data = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
-        keyboard_type=KeyboardType.TRUST_THANK_WO_COMMENT,
-        uuid=uuid,
-        sep=KeyboardType.SEP,
-    )
-    inline_btn_wo_comment = InlineKeyboardButton(
-        'Без комментария',
-        callback_data=callback_data,
-    )
-    reply_markup = InlineKeyboardMarkup()
-    reply_markup.row(inline_btn_wo_comment, Misc.inline_button_cancel())
-    await FSMtrustThank.ask.set()
-    await message_.reply(
-        'Напишите комментарий %(msg_what)s <b>%(name)s</b>' % dict(
-            msg_what=msg_what,
-            name=profile_to['first_name'],
-        ),
-        reply_markup=reply_markup,
-    )
+    await put_thank_etc(tg_user_sender, data=data_, state=None)
 
-async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
+
+async def put_thank_etc(tg_user_sender, data, state=None):
     # Может прийти неколько картинок, .т.е сообщений, чтоб не было
     # много благодарностей и т.п. по нескольким сообщениям
     #
@@ -4680,9 +4643,8 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
 
     # Это получателю благодарности и т.п. или владельцу получателя, если получатель собственный
     #
-    comment_delivered = False
     text_to_recipient = text
-    if operation_done and data.get('message_to_forward_id') or comment_message:
+    if operation_done and data.get('message_to_forward_id'):
         text_to_recipient += ' с комментарием:'
     tg_user_to_notify_tg_data = []
     if profile_to.get('owner'):
@@ -4711,92 +4673,6 @@ async def put_thank_etc(tg_user_sender, data, state=None, comment_message=None):
                 )
             except (ChatNotFound, CantInitiateConversation):
                 pass
-        if comment_message:
-            try:
-                await bot.forward_message(
-                    tgd['tg_uid'],
-                    from_chat_id=comment_message.chat.id,
-                    message_id=comment_message.message_id,
-                    disable_notification=True,
-                )
-                comment_delivered = True
-            except (ChatNotFound, CantInitiateConversation):
-                pass
-    if comment_delivered:
-        if profile_to.get('owner'):
-            profile_to_whom = profile_to['owner']
-            to_owner = Misc.his_her(profile_to) + ' владельцу, '
-        else:
-            profile_to_whom = profile_to
-            to_owner = ''
-        try:
-            await bot.send_message(
-                tg_user_sender.id,
-                text='Ваш комментарий доставлен к %s%s' % (
-                    to_owner,
-                    Misc.get_deeplink_with_name(
-                        profile_to_whom, bot_data, plus_trusts=True,
-                )),
-                disable_web_page_preview=True,
-                disable_notification=True,
-            )
-        except (ChatNotFound, CantInitiateConversation):
-            pass
-
-    # Тоже получателю благодарности и т.п., но это может быть и чей-то собственный
-    #
-    if comment_message:
-        payload_log_message = dict(
-            tg_token=settings.TOKEN,
-            from_chat_id=comment_message.chat.id,
-            message_id=comment_message.message_id,
-            user_from_uuid=profile_from['uuid'],
-            user_to_uuid=profile_to['uuid'],
-            user_to_delivered_uuid=comment_delivered and profile_to['uuid'] or None,
-            operation_type_id=post_op['operation_type_id'],
-        )
-        try:
-            status_log, response_log = await Misc.api_request(
-                path='/api/tg_message',
-                method='post',
-                json=payload_log_message,
-            )
-        except:
-            pass
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    content_types=ContentType.all(),
-    state=FSMtrustThank.ask,
-)
-async def process_callback_thank_comment(message: types.Message, state: FSMContext):
-    async with state.proxy() as data:
-        await put_thank_etc(message.from_user, data, state, comment_message=message)
-
-
-@dp.callback_query_handler(
-    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
-        KeyboardType.TRUST_THANK_WO_COMMENT,
-        KeyboardType.SEP,
-    ), c.data
-    ), state=FSMtrustThank.ask,
-    )
-async def process_callback_thank_wo_comment(callback_query: types.CallbackQuery, state: FSMContext):
-    code = callback_query.data.split(KeyboardType.SEP)
-    tg_user_sender = callback_query.from_user
-    try:
-        try:
-            uuid=code[1]
-        except IndexError:
-            raise ValueError
-        async with state.proxy() as data:
-            if not uuid or not data or data.get('profile_to', {}).get('uuid') != uuid:
-                raise ValueError
-            await put_thank_etc(tg_user_sender, data, state)
-    except ValueError:
-        await Misc.state_finish(state)
-
 
 async def geo(message, state_to_set, uuid=None):
     await state_to_set.set()

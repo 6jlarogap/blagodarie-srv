@@ -176,7 +176,9 @@ class KeyboardType(object):
     #
     FEEDBACK = 42
 
-    TRUST_THANK_WO_COMMENT = 43
+    # Отменили комментарии к благодарностям
+    #
+    # TRUST_THANK_WO_COMMENT = 43
 
     OFFER_ANSWER = 44
 
