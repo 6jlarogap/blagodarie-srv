@@ -6346,15 +6346,11 @@ async def cron_remove_cards_in_group():
                                 await bot.delete_message(chat_id=chat_id, message_id=message_id)
                             except:
                                 pass
-                            r.expire(key, 100)
+                            r.expire(key, 10)
                     except (ValueError, TypeError,):
-                        r.expire(key, 60)
-                # Опасно. Пусть болтаются записи в redis
-                # else:
-                #     r.expire(key, 70)
+                        r.expire(key, 10)
             except ValueError:
-                # NB! expire faster than delete
-                r.expire(key, 80)
+                r.expire(key, 10)
         r.close()
 
 # ---------------------------------
