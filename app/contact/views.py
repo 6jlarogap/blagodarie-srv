@@ -1005,7 +1005,7 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
             connections = []
             q_connections = Q(
                 is_reverse=False,
-                is_trust=True,
+                is_trust__isnull=False,
                 user_to__isnull=False,
             )
             q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
