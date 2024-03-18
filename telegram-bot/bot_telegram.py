@@ -6335,7 +6335,6 @@ async def cron_remove_cards_in_group():
         time_current = int(time.time())
         for key in r.scan_iter(settings.REDIS_CARD_IN_GROUP_PREFIX + '*'):
             try:
-                # card_in_group~1708842070~-1001875308007~440
                 (prefix, tm, chat_id, message_id) = key.split(settings.REDIS_KEY_SEP)
                 tm = int(tm); chat_id = int(chat_id); message_id = int(message_id)
                 if chat_id in settings.GROUPS_WITH_CARDS and settings.GROUPS_WITH_CARDS[chat_id].get('keep_hours'):
@@ -6349,6 +6348,8 @@ async def cron_remove_cards_in_group():
                             r.expire(key, 10)
                     except (ValueError, TypeError,):
                         r.expire(key, 10)
+                else:
+                    r.expire(key, 10)
             except ValueError:
                 r.expire(key, 10)
         r.close()
