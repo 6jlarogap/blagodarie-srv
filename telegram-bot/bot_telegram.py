@@ -521,18 +521,15 @@ async def echo_stat_to_bot(message: types.Message, state: FSMContext):
         reply = (
             '<b>Статистика</b>\n'
             '\n'
-            'Пользователи: %(active)s\n'
-            'Стартовали бот: %(did_bot_start)s\n'
-            'Указали местоположение: %(with_geodata)s\n'
-            'Cозданные профили: %(owned)s\n'
-            'Всего профилей: %(all)s\n'
-        ) % {
-            'active': response['active'],
-            'owned': response['owned'],
-            'all': response['active'] + response['owned'],
-            'did_bot_start': response['did_bot_start'],
-            'with_geodata': response['with_geodata'],
-        }
+            f'Пользователи: {response["active"]}\n'
+            f'Стартовали бот: {response["did_bot_start"]}\n'
+            f'Указали местоположение: {response["with_geodata"]}\n'
+            f'Cозданные профили: {response["owned"]}\n'
+            f'Всего профилей: {response["active"] + response["owned"]}\n'
+            f'Родственных связей: {response["relations"]}\n'
+            f'Доверий: {response["trusts"]}\n'
+            f'Недоверий: {response["mistrusts"]}\n'
+        )
     else:
         reply = 'Произошла ошибка'
     await message.reply(reply)

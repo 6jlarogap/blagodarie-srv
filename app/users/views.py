@@ -1736,6 +1736,9 @@ class ApiBotStat(APIView):
             'owned': Profile.objects.filter(owner__isnull=False).count(),
             'did_bot_start': Profile.objects.filter(did_bot_start=True, owner__isnull=True).count(),
             'with_geodata': Profile.objects.filter(latitude__isnull=False, owner__isnull=True).count(),
+            'relations': CurrentState.objects.filter(is_child=True).count(),
+            'trusts': CurrentState.objects.filter(is_reverse=True, is_trust=True).count(),
+            'mistrusts': CurrentState.objects.filter(is_reverse=True, is_trust=False).count(),
         }
         return Response(data=data, status=200)
 
