@@ -652,9 +652,19 @@ class Misc(object):
         return reply
 
     @classmethod
-    def editable(cls, response):
-        return response.get('owner') and response['owner'] and response['owner']['editable'] or \
-               not response.get('owner') and response.get('editable')
+    def editable(cls, profile, sender=None):
+        """
+        Можно ли sender'у править в карточке profile
+
+        Если sender не задан, полагается, что profile есть профиль sender'а
+        """
+        if not sender:
+            sender = profile
+        return      profile.get('owner') and \
+                        profile['owner']['editable'] and profile['owner']['uuid'] == sender['uuid'] \
+               or \
+                    not profile.get('owner') and \
+                    profile['editable'] and profile['uuid'] == sender['uuid']
 
 
     @classmethod
@@ -934,7 +944,7 @@ class Misc(object):
 
         # профиль пользователя-отправителя из апи, который будет читать карточку
         #
-        response_from={},
+        response_from,
 
         # телеграм- пользователь, который будет читать карточку. Если он в message
         # сам что-то написал, то можно не ставить, это будет message.from_user
@@ -949,7 +959,7 @@ class Misc(object):
         Показать карточки пользователей
         """
         bot_data = await bot.get_me()
-        user_from_id = response_from.get('user_id')
+        user_from_id = response_from['user_id']
 
         # Кому слать? Чаще всего автору сообщения, тогда параметр tg_user_from можно не указывать
         # при вызове. Но если сообщение от бота? Тогда только tg_user_from.id
@@ -957,17 +967,17 @@ class Misc(object):
         tg_user_from_id = tg_user_from.id if tg_user_from else message.from_user.id
 
         for response_to in a_response_to:
-            is_own_account = user_from_id and user_from_id == response_to['user_id']
-            is_owned_account = user_from_id and response_to.get('owner') and response_to['owner']['user_id'] == user_from_id
+            is_own_account = user_from_id == response_to['user_id']
+            is_owned_account = response_to.get('owner') and response_to['owner']['user_id'] == user_from_id
             is_org = response_to.get('is_org')
-            editable = cls.editable(response_to)
+            editable = cls.editable(profile=response_to, sender=response_from)
 
             reply = cls.reply_user_card(
                 response_to,
                 bot_data=bot_data,
             )
             response_relations = {}
-            if user_from_id and user_from_id != response_to['user_id']:
+            if user_from_id != response_to['user_id']:
                 status_relations, response_relations = await cls.call_response_relations(response_from, response_to)
                 if response_relations:
                     reply += cls.reply_relations(response_relations, response_to)
@@ -1243,7 +1253,7 @@ class Misc(object):
                 reply_markup.row(inline_btn_undelete)
 
             send_text_message = True
-            if user_from_id and (response_to['is_active'] or response_to['owner']) and reply:
+            if (response_to['is_active'] or response_to['owner']) and reply:
                 # в бот
                 #
                 if response_to.get('photo') and response_from and response_from.get('tg_data') and reply:

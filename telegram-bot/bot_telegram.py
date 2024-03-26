@@ -332,6 +332,8 @@ async def process_command_wish(message: types.Message, state: FSMContext):
 async def process_command_new_person(message: types.Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
+        if not Misc.editable(response_sender):
+            return
         await FSMnewIOF.ask.set()
         state = dp.current_state()
         await message.reply(Misc.PROMPT_NEW_IOF, reply_markup=Misc.reply_markup_cancel_row())
@@ -347,6 +349,8 @@ async def process_command_new_person(message: types.Message, state: FSMContext):
 async def process_command_new_org(message: types.Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
+        if not Misc.editable(response_sender):
+            return
         await FSMnewOrg.ask.set()
         state = dp.current_state()
         await message.reply(Misc.PROMPT_NEW_ORG, reply_markup=Misc.reply_markup_cancel_row())
@@ -363,6 +367,8 @@ async def process_commands_query(message: types.Message, state: FSMContext):
     message_text = message.text.split()[0].lstrip('/')
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
+        if not Misc.editable(response_sender):
+            return
         await FSMquery.ask.set()
         state = dp.current_state()
         async with state.proxy() as data:
@@ -441,6 +447,8 @@ async def echo_getowned_to_bot(message: types.Message, state: FSMContext):
     tg_user_sender = message.from_user
     status, response_from = await Misc.post_tg_user(tg_user_sender)
     if status == 200:
+        if not Misc.editable(response_from):
+            return
         try:
             status, a_response_to = await Misc.api_request(
                 path='/api/profile',
@@ -3707,23 +3715,35 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
 # ------------------------------------------------------------------------------
 
 async def do_process_ability(message: types.Message, uuid=None):
-    reply_markup = Misc.reply_markup_cancel_row()
-    await FSMability.ask.set()
-    state = dp.current_state()
-    if uuid:
-        async with state.proxy() as data:
-            data['uuid'] = uuid
-    await message.reply(Misc.PROMPT_ABILITY, reply_markup=reply_markup)
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender == 200:
+        if not Misc.editable(response_sender):
+            return
+        reply_markup = Misc.reply_markup_cancel_row()
+        await FSMability.ask.set()
+        state = dp.current_state()
+        if uuid:
+            async with state.proxy() as data:
+                data['uuid'] = uuid
+        await message.reply(Misc.PROMPT_ABILITY, reply_markup=reply_markup)
+        if response_sender.get('created'):
+            await Misc.update_user_photo(bot, message.from_user, response_sender)
 
 
 async def do_process_wish(message: types.Message, uuid=None):
-    reply_markup = Misc.reply_markup_cancel_row()
-    await FSMwish.ask.set()
-    state = dp.current_state()
-    if uuid:
-        async with state.proxy() as data:
-            data['uuid'] = uuid
-    await message.reply(Misc.PROMPT_WISH, reply_markup=reply_markup)
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender == 200:
+        if not Misc.editable(response_sender):
+            return
+        reply_markup = Misc.reply_markup_cancel_row()
+        await FSMwish.ask.set()
+        state = dp.current_state()
+        if uuid:
+            async with state.proxy() as data:
+                data['uuid'] = uuid
+        await message.reply(Misc.PROMPT_WISH, reply_markup=reply_markup)
+        if response_sender.get('created'):
+            await Misc.update_user_photo(bot, message.from_user, response_sender)
 
 
 @dp.poll_answer_handler()
