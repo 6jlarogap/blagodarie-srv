@@ -566,7 +566,7 @@ class Misc(object):
 
 
     @classmethod
-    def reply_user_card(cls, response, editable, bot_data):
+    def reply_user_card(cls, response, bot_data):
         """
         Карточка пользователя, каким он на сайте
 
@@ -606,7 +606,7 @@ class Misc(object):
         )
         keys = []
 
-        if editable and (response['is_active'] or response.get('owner')):
+        if cls.editable(response) and (response['is_active'] or response.get('owner')):
             abilities_text = '\n'.join(
                 ability['text'] for ability in response['abilities']
             ) if response.get('abilities') else 'не заданы'
@@ -650,6 +650,12 @@ class Misc(object):
         reply += (('Контакты:' if len(keys) > 1 else 'Контакт:') + ' %s' % keys_text) + '\n\n'
 
         return reply
+
+    @classmethod
+    def editable(cls, response):
+        return response.get('owner') and response['owner'] and response['owner']['editable'] or \
+               not response.get('owner') and response.get('editable')
+
 
     @classmethod
     def reply_relations(cls, response, response_to):
@@ -954,12 +960,10 @@ class Misc(object):
             is_own_account = user_from_id and user_from_id == response_to['user_id']
             is_owned_account = user_from_id and response_to.get('owner') and response_to['owner']['user_id'] == user_from_id
             is_org = response_to.get('is_org')
-            editable = response_to.get('owner') and response_to['owner'] and response_to['owner']['editable'] or \
-                       not response_to.get('owner') and response_to['editable']
+            editable = cls.editable(response_to)
 
             reply = cls.reply_user_card(
                 response_to,
-                editable,
                 bot_data=bot_data,
             )
             response_relations = {}
