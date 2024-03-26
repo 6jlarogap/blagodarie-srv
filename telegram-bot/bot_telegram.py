@@ -4280,18 +4280,15 @@ async def process_callback_new_iof_gender(callback_query: types.CallbackQuery, s
                 logging.debug('post iof, response: %s' % response)
                 if status == 200:
                     await callback_query.message.reply('Добавлен' if gender == 'm' else 'Добавлена')
-                    try:
-                        status, response = await Misc.get_user_by_uuid(response['uuid'])
-                        if status == 200:
-                            await Misc.show_cards(
-                                [response],
-                                callback_query.message,
-                                bot,
-                                response_from=response_sender,
-                                tg_user_from=callback_query.from_user,
-                            )
-                    except:
-                        pass
+                    status, response = await Misc.get_user_by_uuid(response['uuid'])
+                    if status == 200:
+                        await Misc.show_cards(
+                            [response],
+                            callback_query.message,
+                            bot,
+                            response_from=response_sender,
+                            tg_user_from=callback_query.from_user,
+                        )
     await Misc.state_finish(state)
 
 
