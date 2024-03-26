@@ -734,6 +734,26 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
     Обработка сообщений в бот при state==None, включая команду /start
     """
 
+    # В пересылаемых и других сообщениях могут быть много сообщений.
+    # Чтоб ответ по ним не плодил дубли
+    #
+    show_response = True
+    if getattr(message, 'media_group_id', None):
+        if r := redis.Redis(**settings.REDIS_CONNECT):
+            check_str = (
+                f'{settings.REDIS_MEDIA_GROUP_PREFIX}'
+                f'{message.media_group_id}'
+            )
+            if r.get(check_str):
+                show_response = False
+            else:
+                r.set(
+                    name=check_str,
+                    value='1',
+                    ex=settings.REDIS_MEDIA_GROUP_TTL,
+                )
+            r.close()
+
     tg_user_sender = message.from_user
     reply = ''
     if tg_user_sender.is_bot:
@@ -742,7 +762,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         return
     elif not message.is_forward() and message.content_type != ContentType.TEXT:
         reply = 'Сюда можно слать текст для поиска, включая @username, или пересылать сообщения любого типа'
-    if reply:
+    if reply and show_response:
         await message.reply(reply)
         return
 
@@ -1038,23 +1058,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         status, response_to = await Misc.post_tg_user(tg_user_forwarded)
         if status == 200:
             response_to.update(tg_username=tg_user_forwarded.username)
-            show_forwarded_response = True
-            if getattr(message, 'media_group_id', None):
-                if r := redis.Redis(**settings.REDIS_CONNECT):
-                    check_str = (
-                        f'{settings.REDIS_MEDIA_GROUP_PREFIX}'
-                        f'{message.media_group_id}'
-                    )
-                    if r.get(check_str):
-                        show_forwarded_response = False
-                    else:
-                        r.set(
-                            name=check_str,
-                            value='1',
-                            ex=settings.REDIS_MEDIA_GROUP_TTL,
-                        )
-                    r.close()
-            if show_forwarded_response:
+            if show_response:
                 a_response_to = [response_to, ]
 
     if user_from_id and state_ in ('forwarded_from_other', 'forwarded_from_me'):
@@ -1087,15 +1091,16 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                     response_from = response_photo
                     a_response_to[0] = response_photo
         message_to_forward_id = state_ == 'forwarded_from_other' and message.message_id or ''
-        await Misc.show_cards(
-            a_response_to,
-            message,
-            bot,
-            response_from=response_from,
-            message_to_forward_id=message_to_forward_id,
-        )
+        if show_response:
+            await Misc.show_cards(
+                a_response_to,
+                message,
+                bot,
+                response_from=response_from,
+                message_to_forward_id=message_to_forward_id,
+            )
 
-    elif reply:
+    elif reply and show_response:
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
     if state_ not in (
