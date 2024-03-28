@@ -162,6 +162,10 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 - если текущее IS_TRUST == FALSE, то
                   декрементировать MISTRUST_COUNT и инкрементировать FAME и TRUST_COUNT для пользователя user_id_to;
                 - в таблице tbl_current_state установить IS_TRUST = TRUE;
+            - если тип операции TRUST_AND_THANK:
+                - это ведет себя:
+                    *   как TRUST, если user_from раньше не доверял user_to
+                    *   как THANK, если user_from раньше доверял user_to
             - если тип операции NULLIFY_TRUST:
                 - если есть запись в таблице tbl_current_state для заданных user_id_from и user_id_to;
                     - если значение IS_TRUST == NULL, вернуть ошибку /message/
@@ -352,7 +356,13 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
 
             if not got_tg_token and profile_to.is_notified:
                 message = None
-                if operationtype_id in (OperationType.THANK, OperationType.TRUST_AND_THANK, ):
+                if operationtype_id in (OperationType.TRUST_AND_THANK, ):
+                    if data.get('previousstate') and data['previousstate'].get('is_trust'):
+                        message = 'Получена благодарность от '
+                    else:
+                        message = 'Получено доверие от '
+                    message += self.profile_link(request, user_from.profile)
+                elif operationtype_id in (OperationType.THANK, ):
                     message = 'Получена благодарность от '
                     message += self.profile_link(request, user_from.profile)
                 elif operationtype_id == OperationType.MISTRUST:

@@ -511,7 +511,7 @@ class ApiAddOperationMixin(object):
                 user_to=user_to,
                 defaults=dict(
                     is_trust=True,
-                    thanks_count=1,
+                    thanks_count=0,
             ))
             if not created_:
                 if not currentstate.is_reverse:
@@ -519,7 +519,8 @@ class ApiAddOperationMixin(object):
                 currentstate.update_timestamp = update_timestamp
                 currentstate.is_reverse = False
                 currentstate.is_trust = True
-                currentstate.thanks_count += 1
+                if is_trust_previous:
+                    currentstate.thanks_count += 1
                 currentstate.save()
 
             data.update(previousstate=dict(is_trust=is_trust_previous))
@@ -536,7 +537,8 @@ class ApiAddOperationMixin(object):
                 reverse_cs.is_trust = True
                 reverse_cs.save()
 
-            profile_to.sum_thanks_count += 1
+            if is_trust_previous:
+                profile_to.sum_thanks_count += 1
             profile_to.save()
             profile_to.recount_trust_fame()
             data.update(currentstate=dict(

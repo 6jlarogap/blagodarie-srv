@@ -1001,7 +1001,7 @@ class Misc(object):
 
                 title_thank = 'Доверие'
                 if response_relations:
-                    if response_relations['from_to']['is_trust'] and response_relations['from_to']['thanks_count']:
+                    if response_relations['from_to']['is_trust']:
                         title_thank = 'Благодарить'
                 dict_reply.update(operation=OperationType.TRUST_AND_THANK)
                 inline_btn_trust = InlineKeyboardButton(
