@@ -2189,7 +2189,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             num_trusts_true = num_trusts_false = 0
             def popup_data(profile, color, frame, thumb_size):
                 url_profile = self.profile_url_by_uuid(request, profile.uuid, fmt=self.FMT)
-                url_deeplink = self.get_deeplink_by_uuid(profile.uuid, bot_username) if bot_username else url_profile
+                url_deeplink = self.get_deeplink(profile.user, bot_username) if bot_username else url_profile
                 if profile.latitude and profile.longitude:
                     link_on_map = '<a href="%s/?uuid_trustees=%s" target="_blank">На карте</a><br />' % (
                         settings.MAP_URL, profile.uuid,
@@ -2381,7 +2381,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 ).select_related(
                     'user', 'user__profile'
                 ).values(
-                    'user__id', 'user__first_name',
+                    'user__id', 'user__first_name', 'user__username',
                     'user__profile__photo',
                     'user__profile__gender',
                     'user__profile__uuid',
@@ -2401,6 +2401,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 except ValueError:
                     user_datas.append(dict(
                         full_name = rec['user__first_name'],
+                        username = rec['user__username'],
                         photo=rec['user__profile__photo'],
                         gender=rec['user__profile__gender'],
                         trust_count=rec['user__profile__trust_count'],
@@ -2418,7 +2419,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     lng_sum += user_data['longitude']
                     url_profile = self.profile_url_by_uuid(request, user_data['uuid'], fmt=self.FMT)
                     if bot_username:
-                        url_deeplink = self.get_deeplink_by_uuid(user_data['uuid'], bot_username)
+                        url_deeplink = self.get_deeplink_by_username(user_data['username'], bot_username)
                     else:
                         url_deeplink = url_profile
                     votes = user_data['votes']
@@ -2516,7 +2517,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     user_data = user_datas[ind]
                     url_profile = self.profile_url_by_uuid(request, user_data['uuid'], fmt=self.FMT)
                     if bot_username:
-                        url_deeplink = self.get_deeplink_by_uuid(user_data['uuid'], bot_username)
+                        url_deeplink = self.get_deeplink_by_username(user_data['username'], bot_username)
                     else:
                         url_deeplink = url_profile
                     votes = user_data['votes']
@@ -2546,6 +2547,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         link_on_map = ''
                     popup_ = popup % dict(
                         full_name = user_data['full_name'],
+                        username = user_data['username'],
                         trust_count=user_data['trust_count'],
                         url_deeplink=url_deeplink,
                         url_profile=url_profile,
@@ -2599,7 +2601,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         for profile in (qs if qs else []):
             url_profile = self.profile_url(request, profile, fmt=self.FMT)
             if bot_username:
-                url_deeplink = self.get_deeplink(profile, bot_username)
+                url_deeplink = self.get_deeplink(profile.user, bot_username)
             else:
                 url_deeplink = url_profile
             if profile.latitude is not None and profile.longitude is not None:
@@ -2764,6 +2766,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 for user_data in answer_to_users[i]:
                     popup_ = popup % dict(
                         full_name=user_data['full_name'],
+                        username=user_data['username'],
                         trust_count=user_data['trust_count'],
                         url_deeplink=user_data['url_deeplink'],
                         url_profile=user_data['url_profile'],

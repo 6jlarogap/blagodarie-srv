@@ -961,20 +961,20 @@ class TelegramApiMixin(object):
         else:
             return None
 
-    def get_deeplink_by_uuid(self, uuid, bot_username=None):
+    def get_deeplink_by_username(self, username, bot_username=None):
         result = ''
         if not bot_username:
             bot_username = self.get_bot_username()
         if bot_username:
-            result = 'https://t.me/%s?start=%s' % (bot_username, uuid)
+            result = 'https://t.me/%s?start=%s' % (bot_username, username)
         return result
 
-    def get_deeplink(self, profile, bot_username=None):
-        return self.get_deeplink_by_uuid(profile.uuid, bot_username)
+    def get_deeplink(self, user, bot_username=None):
+        return self.get_deeplink_by_username(user.username, bot_username)
 
-    def get_deeplink_name(self, profile, bot_username=None, target_blank=False):
+    def get_deeplink_name(self, user, bot_username=None, target_blank=False):
         result = ''
-        deeplink = self.get_deeplink(profile, bot_username)
+        deeplink = self.get_deeplink(user, bot_username)
         if deeplink:
             if target_blank:
                 target = ' target="_blank"'
@@ -983,7 +983,7 @@ class TelegramApiMixin(object):
             result = '<a href="%(deeplink)s"%(target)s>%(full_name)s</a>' % dict(
                 deeplink=deeplink,
                 target=target,
-                full_name=profile.user.first_name,
+                full_name=user.first_name,
             )
         return result
 
