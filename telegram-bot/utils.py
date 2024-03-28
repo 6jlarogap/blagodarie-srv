@@ -594,7 +594,7 @@ class Misc(object):
         if not response:
             return ''
         reply = f'<b>{response["first_name"]}</b>\n'
-        if (comment := response.get('comment', '').strip()) and comment:
+        if editable and (comment := response.get('comment', '').strip()) and comment:
             reply += f'{comment}\n'
         if not response.get('is_org'):
             reply += cls.get_lifetime_str(response)
