@@ -354,7 +354,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     profile_to=profile_to_data,
                 )
 
-            if not got_tg_token and profile_to.is_notified:
+            if not got_tg_token and profile_to.is_notified and settings.SEND_TO_TELEGRAM:
                 message = None
                 if operationtype_id in (OperationType.TRUST_AND_THANK, ):
                     if data.get('previousstate') and data['previousstate'].get('is_trust'):

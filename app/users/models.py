@@ -913,7 +913,7 @@ class TelegramApiMixin(object):
 
         uids = []
         if user:
-            uids = [oauth.user_id for oauth in Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)]
+            uids = [oauth.uid for oauth in Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)]
         elif telegram_uid:
             uids = [telegram_uid]
 
