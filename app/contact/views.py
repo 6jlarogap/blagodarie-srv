@@ -354,14 +354,22 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     profile_to=profile_to_data,
                 )
 
-            if not got_tg_token and profile_to.is_notified and settings.SEND_TO_TELEGRAM:
+            if not got_tg_token and profile_to.is_notified and settings.SEND_TO_TELEGRAM and \
+               operationtype_id in (
+                   OperationType.TRUST_AND_THANK,
+                   OperationType.THANK,
+                   OperationType.MISTRUST,
+                   OperationType.TRUST,
+                   OperationType.NULLIFY_TRUST,
+               ):
                 message = None
+                bot_username = self.get_bot_username()
                 dl_from_t = (
-                    f'{self.get_deeplink_name(user_from)} '
+                    f'{self.get_deeplink_name(user_from, bot_username)} '
                     f'(+{profile_from.trust_count}, -{profile_from.mistrust_count})'
                 )
                 dl_to_t = (
-                    f'{self.get_deeplink_name(user_to)} '
+                    f'{self.get_deeplink_name(user_to, bot_username)} '
                     f'(+{profile_to.trust_count}, -{profile_to.mistrust_count})'
                 )
                 if operationtype_id == OperationType.TRUST_AND_THANK:
