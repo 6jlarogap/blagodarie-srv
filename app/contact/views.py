@@ -356,23 +356,27 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
 
             if not got_tg_token and profile_to.is_notified and settings.SEND_TO_TELEGRAM:
                 message = None
-                if operationtype_id in (OperationType.TRUST_AND_THANK, ):
-                    if data.get('previousstate') and data['previousstate'].get('is_trust'):
-                        message = 'Получена благодарность от '
+                dl_from_t = (
+                    f'{self.get_deeplink_name(user_from)} '
+                    f'(+{profile_from.trust_count}, -{profile_from.mistrust_count})'
+                )
+                dl_to_t = (
+                    f'{self.get_deeplink_name(user_to)} '
+                    f'(+{profile_to.trust_count}, -{profile_to.mistrust_count})'
+                )
+                if operationtype_id == OperationType.TRUST_AND_THANK:
+                    if data['previousstate']['is_trust']:
+                        message = f'{dl_from_t} благодарит ({data["currentstate"]["thanks_count"]}) {dl_to_t}'
                     else:
-                        message = 'Получено доверие от '
-                    message += self.profile_link(request, user_from.profile)
-                elif operationtype_id in (OperationType.THANK, ):
-                    message = 'Получена благодарность от '
-                    message += self.profile_link(request, user_from.profile)
+                        message = f'{dl_from_t} доверяет {dl_to_t}'
+                elif operationtype_id == OperationType.THANK:
+                    message = f'{dl_from_t} благодарит ({data["currentstate"]["thanks_count"]}) {dl_to_t}'
                 elif operationtype_id == OperationType.MISTRUST:
-                    message = 'Получена утрата доверия от '
-                    message += self.profile_link(request, user_from.profile)
+                    message = f'{dl_from_t} не доверяет {dl_to_t}'
                 elif operationtype_id == OperationType.TRUST:
-                    message = 'Получено доверие от '
-                    message += self.profile_link(request, user_from.profile)
+                    message = f'{dl_from_t} доверяет {dl_to_t}'
                 elif operationtype_id == OperationType.NULLIFY_TRUST:
-                    message = 'Доверие от ' + self.profile_link(request, user_from.profile) + ' обнулено'
+                    message = f'{dl_from_t} не знаком(а) с {dl_to_t}'
                 if message:
                     self.send_to_telegram(message, user=user_to)
 

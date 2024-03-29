@@ -435,6 +435,9 @@ class ApiAddOperationMixin(object):
                 currentstate.thanks_count += 1
                 currentstate.save()
 
+            data.update(currentstate=dict(
+                thanks_count=currentstate.thanks_count,
+            ))
             profile_to.sum_thanks_count += 1
             profile_to.save()
 

@@ -3670,7 +3670,7 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
             )
             if m['operation_type_id']:
                 if m['operation_type_id'] == OperationType.NULLIFY_TRUST:
-                    msg += 'в связи с тем что забыл(а)\n'
+                    msg += 'в связи с тем что не знаком(а) с\n'
                 elif m['operation_type_id'] == OperationType.MISTRUST:
                     msg += 'в связи с утратой доверия\n'
                 elif m['operation_type_id'] == OperationType.TRUST:
@@ -4574,14 +4574,14 @@ async def put_thank_etc(tg_user_sender, data, state=None):
     )
     logging.debug('post operation, status: %s' % status)
     logging.debug('post operation, response: %s' % response)
-    text = None
+    text = text_popup = None
     operation_done = False
     if status == 200:
         if post_op['operation_type_id'] == OperationType.MISTRUST:
             text = '%(full_name_from_link)s не доверяет %(full_name_to_link)s'
             operation_done = True
         elif post_op['operation_type_id'] == OperationType.NULLIFY_TRUST:
-            text = '%(full_name_from_link)s забыл(а) %(full_name_to_link)s'
+            text = '%(full_name_from_link)s не знаком(а) с %(full_name_to_link)s'
             operation_done = True
         elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.TRUST):
             text = '%(full_name_from_link)s %(trusts_or_thanks)s%(thanks_count_str)s %(full_name_to_link)s'
