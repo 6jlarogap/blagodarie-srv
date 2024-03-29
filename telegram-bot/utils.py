@@ -1019,7 +1019,7 @@ class Misc(object):
                 if not response_relations or response_relations['from_to']['is_trust'] is not None:
                     dict_reply.update(operation=OperationType.NULLIFY_TRUST)
                     inline_btn_nullify_trust = InlineKeyboardButton(
-                        'Забыть',
+                        'Не знакомы',
                         callback_data=callback_data_template % dict_reply,
                     )
                     thank_buttons.append(inline_btn_nullify_trust)

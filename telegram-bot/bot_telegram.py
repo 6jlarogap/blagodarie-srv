@@ -4374,7 +4374,7 @@ async def process_make_query(message: types.Message, state: FSMContext):
 
 def parse_code_tn(callback_query):
     '''
-    Получить необходимое из callback_query.data при (не)доверии, забыть
+    Получить необходимое из callback_query.data при (не)доверии, не знакомы
 
     ValueError, если что-то там неверно
     '''
@@ -4411,7 +4411,7 @@ def parse_code_tn(callback_query):
     )
 async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMContext):
     """
-    Действия по нажатию кнопок доверия, недоверия, забыть
+    Действия по нажатию кнопок доверия, недоверия, не знакомы
 
     На входе строка:
         <KeyboardType.TRUST_THANK>          # 0
