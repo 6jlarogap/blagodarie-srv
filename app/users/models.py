@@ -904,7 +904,7 @@ class TelegramApiMixin(object):
     API_TELEGRAM = 'https://api.telegram.org'
     API_TIMEOUT = 20
 
-    def send_to_telegram(self, message, user=None, telegram_uid=None):
+    def send_to_telegram(self, message, user=None, telegram_uid=None, options={}):
         """
         Сообщение в телеграм или пользователю user, или по telegram uid
         """
@@ -922,11 +922,16 @@ class TelegramApiMixin(object):
             parms = dict(
                 chat_id=uid,
                 parse_mode='html',
-                text=message
+                text=message,
             )
-            url += urlencode(parms)
+            parms.update(options)
             try:
-                req = urllib.request.Request(url)
+                req = urllib.request.Request(
+                    url,
+                    json.dumps(parms).encode(),
+                    headers={"Content-Type":"application/json"},
+                    method='POST',
+                )
                 urllib.request.urlopen(req, timeout=self.API_TIMEOUT)
             except (urllib.error.URLError, ):
                 pass

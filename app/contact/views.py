@@ -378,7 +378,10 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 elif operationtype_id == OperationType.NULLIFY_TRUST:
                     message = f'{dl_from_t} не знаком(а) с {dl_to_t}'
                 if message:
-                    self.send_to_telegram(message, user=user_to)
+                    self.send_to_telegram(message, user=user_to, options=dict(
+                        disable_web_page_preview=True,
+                        disable_notification=True,
+                    ))
 
             status_code = status.HTTP_200_OK
 
