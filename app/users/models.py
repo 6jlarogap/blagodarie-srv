@@ -918,7 +918,7 @@ class TelegramApiMixin(object):
             uids = [telegram_uid]
 
         for uid in uids:
-            url = '%s/bot%s/sendMessage?' % (self.API_TELEGRAM, settings.TELEGRAM_BOT_TOKEN)
+            url = '%s/bot%s/sendMessage' % (self.API_TELEGRAM, settings.TELEGRAM_BOT_TOKEN)
             parms = dict(
                 chat_id=uid,
                 parse_mode='html',
@@ -978,7 +978,7 @@ class TelegramApiMixin(object):
         return self.get_deeplink_by_username(user.username, bot_username)
 
     def get_deeplink_name(self, user, bot_username=None, target_blank=False):
-        result = ''
+        result = user.first_name
         deeplink = self.get_deeplink(user, bot_username)
         if deeplink:
             if target_blank:
