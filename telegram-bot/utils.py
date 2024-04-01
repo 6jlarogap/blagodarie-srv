@@ -45,6 +45,15 @@ class OperationType(object):
             result = 'недоверие'
         return result
 
+
+    # Операции, которые возможны для запуска ссылкой
+    # для телеграма типа:
+    # https://t.me/<bot_username>?start=<start_prefix>-<uuid>
+    # Пока только t: trust and thank, которое устанавливает
+    # доверие от авторизованного юзера, если до этого не было
+    # установлено доверие, или делает благодарность,
+    # если уже установлено доверие
+
     @classmethod
     def start_prefix_to_op(cls, prefix):
         """
@@ -52,8 +61,6 @@ class OperationType(object):
         """
         return dict(
             t=cls.TRUST_AND_THANK,
-            n=cls.MISTRUST,
-            f=cls.NULLIFY_TRUST
         ).get(prefix)
 
 

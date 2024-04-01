@@ -824,7 +824,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             state_ = 'start_setplace'
 
         elif m := re.search(
-                r'^\/start\s+(t|n|f)\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
+                r'^\/start\s+(t)\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
                 message_text,
                 flags=re.I,
           ):
@@ -836,7 +836,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
         elif m := re.search(
                 (
-                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=(t|n|f)\-'
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=(t)\-'
                     '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
                 ) % re.escape(bot_data['username']),
                 message_text,
