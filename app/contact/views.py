@@ -4005,3 +4005,55 @@ class ApiTgMessage(UuidMixin, APIView):
         return Response(data=data, status=status_code)
 
 api_tg_message = ApiTgMessage.as_view()
+
+
+class ApiCancelThank(APIView):
+
+    @transaction.atomic
+    def delete(self, request):
+        """
+        Отменить благодарность. Вызывается только из телеграм бота
+        """
+        try:
+            data = request.data
+            msg_not_found = 'Благодарность не найдена'
+            if data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                raise ServiceException('Неверный токен телеграм бота')
+            try:
+                journal_id = int(data.get('journal_id'))
+            except (TypeError, ValueError,):
+                raise ServiceException('Неверный journal_id')
+            try:
+                journal = Journal.objects.get(pk=journal_id)
+            except Journal.DoesNotExist:
+                raise ServiceException(msg_not_found)
+            if journal.operationtype_id not in (OperationType.TRUST_AND_THANK, OperationType.THANK):
+                raise ServiceException(msg_not_found)
+            try:
+                profile_to = Profile.objects.select_for_update().get(user_id=journal.user_from_id)
+                cs = CurrentState.objects.select_for_update().get(
+                    user_from_id=journal.user_from_id,
+                    user_to_id=journal.user_to_id,
+                    is_reverse = False,
+                )
+            except (Profile.DoesNotExist, CurrentState.DoesNotExist,):
+                raise ServiceException(msg_not_found)
+            cs.thanks_count -= 1
+            if cs.thanks_count < 0:
+                cs.thanks_count = 0
+            cs.update_timestamp = int(time.time())
+            cs.save(update_fields=('thanks_count', 'update_timestamp',))
+            profile_to.sum_thanks_count -= 1
+            if profile_to.sum_thanks_count < 0:
+                profile_to.sum_thanks_count = 0
+            profile_to.save(update_fields=('sum_thanks_count',))
+            journal.delete()
+            status_code = status.HTTP_200_OK
+            data = {}
+        except ServiceException as excpt:
+            transaction.set_rollback(True)
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_cancel_thank = ApiCancelThank.as_view()

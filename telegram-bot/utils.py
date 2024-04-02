@@ -136,7 +136,7 @@ class KeyboardType(object):
     #
     CHILD = 21
 
-    #  22. Свободен, но не занимать не менее полгода с 05.09.23:
+    CANCEL_THANK = 22
 
     NEW_SON = 45
     NEW_DAUGHTER = 46
@@ -305,6 +305,7 @@ class Misc(object):
     RE_KEY_SEP = r'^%s%s'
 
     CALLBACK_DATA_UUID_TEMPLATE = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s'
+    CALLBACK_DATA_ID__TEMPLATE = '%(keyboard_type)s%(sep)s%(id_)s%(sep)s'
     CALLBACK_DATA_KEY_TEMPLATE = '%(keyboard_type)s%(sep)s'
 
     MSG_ERROR_UUID_NOT_VALID = (

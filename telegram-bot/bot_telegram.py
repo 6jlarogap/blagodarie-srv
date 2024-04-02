@@ -4595,6 +4595,7 @@ async def put_thank_etc(tg_user_sender, data, state=None):
             text = 'Вы и так не знакомы'
 
     bot_data = await bot.get_me()
+    do_thank = False
     if operation_done:
         profile_from = response['profile_from']
         profile_to = response['profile_to']
@@ -4606,6 +4607,7 @@ async def put_thank_etc(tg_user_sender, data, state=None):
                 if response.get('previousstate') and response['previousstate']['is_trust']:
                     # точно доверял раньше
                     trusts_or_thanks = 'благодарит'
+                    do_thank = True
                     thanks_count = response.get('currentstate') and response['currentstate'].get('thanks_count') or None
                     if thanks_count is not None:
                         thanks_count_str = ' (%s)' % thanks_count
@@ -4627,12 +4629,24 @@ async def put_thank_etc(tg_user_sender, data, state=None):
     # Это отправителю благодарности и т.п., даже если произошла ошибка
     #
     if text:
+        if do_thank and response.get('journal_id'):
+            reply_markup = InlineKeyboardMarkup()
+            inline_btn_cancel_thank = InlineKeyboardButton('Отменить благодарность',
+                callback_data=Misc.CALLBACK_DATA_ID__TEMPLATE % dict(
+                    keyboard_type=KeyboardType.CANCEL_THANK,
+                    id_=response['journal_id'],
+                    sep=KeyboardType.SEP,
+            ))
+            reply_markup.row(inline_btn_cancel_thank)
+        else:
+            reply_markup = None
         try:
             await bot.send_message(
                 tg_user_sender.id,
                 text=text,
                 disable_web_page_preview=True,
                 disable_notification=True,
+                reply_markup=reply_markup,
             )
         except (ChatNotFound, CantInitiateConversation):
             pass
@@ -4701,6 +4715,44 @@ async def put_thank_etc(tg_user_sender, data, state=None):
                 )
             except (ChatNotFound, CantInitiateConversation):
                 pass
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.CANCEL_THANK,
+        KeyboardType.SEP,
+        # id благодарности в журнале    # 1
+        # KeyboardType.SEP,
+    ), c.data),
+    state = None,
+    )
+async def process_callback_cancel_thank(callback_query: types.CallbackQuery, state: FSMContext):
+    try:
+        journal_id = int(callback_query.data.split(KeyboardType.SEP)[1])
+    except (TypeError, ValueError, IndexError,):
+        return
+    payload = dict(tg_token=settings.TOKEN, journal_id=journal_id)
+    logging.debug('cancel thank in api, payload: %s' % Misc.secret(payload))
+    status, response = await Misc.api_request(
+        path='/api/cancel_thank',
+        method='delete',
+        json=payload
+    )
+    logging.debug('cancel thank in api, status: %s' % status)
+    logging.debug('cancel thank in api, response: %s' % response)
+    reply_markup = callback_query.message.reply_markup
+    if status == 200:
+        text = 'Благодарность отменена'
+        reply_markup = None
+    elif status == 400:
+        text = callback_query.message.text + '\n\n' + response['message']
+    else:
+        text = Misc.MSG_ERROR_API
+    try:
+        await callback_query.message.edit_text(text=text, reply_markup=reply_markup,)
+    except:
+        pass
+
 
 async def geo(message, state_to_set, uuid=None):
     await state_to_set.set()

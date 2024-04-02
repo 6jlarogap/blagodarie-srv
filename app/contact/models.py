@@ -715,6 +715,8 @@ class ApiAddOperationMixin(object):
             insert_timestamp=insert_timestamp,
             comment=comment,
         )
+        data.update(journal_id=journal.pk)
+
         if tg_message_id and tg_from_chat_id:
             TgJournal.objects.create(
                 journal=journal,
