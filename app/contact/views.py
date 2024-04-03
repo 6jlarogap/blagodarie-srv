@@ -4046,7 +4046,6 @@ class ApiCancelThank(APIView):
             profile_to.sum_thanks_count -= 1
             if profile_to.sum_thanks_count < 0:
                 profile_to.sum_thanks_count = 0
-            print(profile_to.sum_thanks_count)
             profile_to.save(update_fields=('sum_thanks_count',))
             journal.delete()
             status_code = status.HTTP_200_OK
