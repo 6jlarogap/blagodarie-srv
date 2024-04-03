@@ -4030,7 +4030,7 @@ class ApiCancelThank(APIView):
             if journal.operationtype_id not in (OperationType.TRUST_AND_THANK, OperationType.THANK):
                 raise ServiceException(msg_not_found)
             try:
-                profile_to = Profile.objects.select_for_update().get(user_id=journal.user_from_id)
+                profile_to = Profile.objects.select_for_update().get(user_id=journal.user_to_id)
                 cs = CurrentState.objects.select_for_update().get(
                     user_from_id=journal.user_from_id,
                     user_to_id=journal.user_to_id,
@@ -4046,6 +4046,7 @@ class ApiCancelThank(APIView):
             profile_to.sum_thanks_count -= 1
             if profile_to.sum_thanks_count < 0:
                 profile_to.sum_thanks_count = 0
+            print(profile_to.sum_thanks_count)
             profile_to.save(update_fields=('sum_thanks_count',))
             journal.delete()
             status_code = status.HTTP_200_OK
