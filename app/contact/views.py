@@ -2187,7 +2187,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     contact_currentstate
                 WHERE
                     is_reverse = false AND
-                    is_trust = true AND
+                    is_trust is not null AND
                     user_to_id IS NOT NULL AND
                     user_from_id = %(user_q_pk)s
                 UNION
