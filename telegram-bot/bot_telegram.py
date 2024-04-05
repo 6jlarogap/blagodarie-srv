@@ -499,15 +499,6 @@ async def echo_graph_to_bot(message: types.Message, state: FSMContext):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
-    commands=('rules',),
-    state=None,
-)
-async def echo_rules_to_bot(message: types.Message, state: FSMContext):
-    await message.reply(await Misc.rules_text(), disable_web_page_preview=True)
-
-
-@dp.message_handler(
-    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     commands=('help',),
     state=None,
 )
@@ -1084,7 +1075,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         'youtube_link', 'start_invite'
        ) and user_from_id and a_response_to:
         if state_ == 'start':
-            await message.reply(await Misc.rules_text(), disable_web_page_preview=True)
+            await message.reply(await Misc.help_text(), disable_web_page_preview=True)
             if a_response_to and not a_response_to[0].get('photo'):
                 status_photo, response_photo = await Misc.update_user_photo(bot, tg_user_sender, response_from)
                 if response_photo:
@@ -1243,7 +1234,6 @@ commands_dict = {
     'getowned': echo_getowned_to_bot,
     'listown': echo_getowned_to_bot,
     'graph': echo_graph_to_bot,
-    'rules': echo_rules_to_bot,
     'help': echo_help_to_bot,
     'stat': echo_stat_to_bot,
     'feedback': echo_feedback,

@@ -394,11 +394,6 @@ class Misc(object):
         return response if status == 200 and response else cls.MSG_ERROR_API
 
     @classmethod
-    async def rules_text(cls):
-        status, response = await cls.get_template('rules')
-        return response if status == 200 and response else cls.MSG_ERROR_API
-
-    @classmethod
     async def chat_pin_message_text(cls):
         status, response = await cls.get_template('chat_pin_message')
         return response if status == 200 and response else None
