@@ -60,7 +60,7 @@
     "model": "contact.operationtype",
     "pk": 4,
     "fields": {
-      "title": "Nullify trust"
+      "title": "Nullify attitude"
     }
   },
   {
@@ -103,6 +103,13 @@
     "pk": 10,
     "fields": {
       "title": "Set Mother"
+    }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 11,
+    "fields": {
+      "title": "Set Acquaintance"
     }
   }
 ]

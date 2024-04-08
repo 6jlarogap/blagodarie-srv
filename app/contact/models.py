@@ -33,13 +33,14 @@ class OperationType(models.Model):
     THANK = 1
     MISTRUST = 2
     TRUST = 3
-    NULLIFY_TRUST = 4
+    NULLIFY_ATTITUDE = 4
     TRUST_AND_THANK = 5
     FATHER = 6
     NOT_PARENT = 7
     MOTHER = 8
     SET_FATHER = 9
     SET_MOTHER = 10
+    ACQ = 11
 
     title = models.CharField(_("Тип операции"), max_length=255, unique=True)
 
@@ -134,6 +135,16 @@ class TgMessageJournal(UserDictMixin, BaseModelInsertTimestamp):
 
 class CurrentState(BaseModelInsertUpdateTimestamp):
 
+    ACQ = 'a'
+    TRUST = 't'
+    MISTRUST = 'mt'
+
+    ATTITUDES = (
+        (ACQ, _('Знаком(а)')),
+        (TRUST, _('Доверяет')),
+        (MISTRUST, _('Не доверяет')),
+    )
+
     user_from = models.ForeignKey('auth.User',
                     verbose_name=_("От кого"), on_delete=models.CASCADE,
                     db_index=True,
@@ -145,7 +156,8 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
     anytext = models.ForeignKey(AnyText,
                     verbose_name=_("Текст"), on_delete=models.CASCADE, null=True)
     thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
-    is_trust = models.BooleanField(_("Доверие"), default=None, null=True)
+    attitude = models.CharField(_("Отношение"), max_length=2, choices=ATTITUDES,
+                    null=True, db_index=True)
 
     is_father = models.BooleanField(_("Отец"), default=False, db_index=True)
     is_mother = models.BooleanField(_("Мать"), default=False, db_index=True)
@@ -169,10 +181,10 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
     #   user_to:        2
     #   user_from:      1
     #   is_reverse      True
-    #   thanks_count, is_trust: из записи, где user_from=1, user_to=2
+    #   thanks_count, attitude: из записи, где user_from=1, user_to=2
     #
     #   Если же 2-й таки отблагодарит 1-го, то is_reverse станет False,
-    #   а thanks_count, is_trust примут действительные значения:
+    #   а thanks_count, attitude примут действительные значения:
     #   числа благодарностей 2-го 1-му и доверия
     #
     is_reverse = models.BooleanField(_("Обратное отношение"), default=False)
@@ -180,8 +192,7 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
     def data_dict(
         self,
         show_child=False,
-        show_parent=False,
-        show_trust=False,
+        show_attitude=False,
         show_id_fio=False,
         fmt='d3js'
     ):
@@ -199,15 +210,10 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
             )
         if show_child:
             result.update(is_child=self.is_child,)
-        if show_trust:
+        if show_attitude:
             result.update(dict(
                 thanks_count=self.thanks_count,
-                is_trust=self.is_trust,
-            ))
-        if show_parent:
-            result.update(dict(
-                is_father=self.is_father,
-                is_mother=self.is_mother,
+                attitude=self.attitude,
             ))
         if show_id_fio:
             result.update(dict(
@@ -437,6 +443,7 @@ class ApiAddOperationMixin(object):
 
             data.update(currentstate=dict(
                 thanks_count=currentstate.thanks_count,
+                attitude=currentstate.attitude,
             ))
             profile_to.sum_thanks_count += 1
             profile_to.save()
@@ -446,17 +453,17 @@ class ApiAddOperationMixin(object):
                 user_from=user_from,
                 user_to=user_to,
                 defaults=dict(
-                    is_trust=False,
+                    attitude=CurrentState.MISTRUST,
             ))
             if not created_:
-                if not currentstate.is_reverse and currentstate.is_trust == False:
+                if not currentstate.is_reverse and currentstate.attitude == CurrentState.MISTRUST:
                     raise ServiceException(
-                        'Вы уже не доверяете пользователю',
+                        'Вы уже не доверяете',
                         already_code,
                     )
                 currentstate.update_timestamp = update_timestamp
                 currentstate.is_reverse = False
-                currentstate.is_trust = False
+                currentstate.attitude = CurrentState.MISTRUST
                 currentstate.save()
 
             reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
@@ -464,12 +471,12 @@ class ApiAddOperationMixin(object):
                 user_from=user_to,
                 defaults=dict(
                     is_reverse=True,
-                    is_trust=False,
+                    attitude=CurrentState.MISTRUST,
             ))
-            if not reverse_created and (reverse_cs.is_reverse or reverse_cs.is_trust == None):
+            if not reverse_created and (reverse_cs.is_reverse or reverse_cs.attitude == None):
                 reverse_cs.update_timestamp = update_timestamp
                 reverse_cs.is_reverse = True
-                reverse_cs.is_trust = False
+                reverse_cs.attitude = CurrentState.MISTRUST
                 reverse_cs.save()
 
             profile_to.recount_trust_fame()
@@ -479,17 +486,17 @@ class ApiAddOperationMixin(object):
                 user_from=user_from,
                 user_to=user_to,
                 defaults=dict(
-                    is_trust=True,
+                    attitude=CurrentState.TRUST,
             ))
             if not created_:
-                if not currentstate.is_reverse and currentstate.is_trust == True:
+                if not currentstate.is_reverse and attitude == CurrentState.TRUST:
                     raise ServiceException(
-                        'Вы уже доверяете пользователю',
+                        'Вы уже доверяете',
                         already_code,
                     )
                 currentstate.update_timestamp = update_timestamp
                 currentstate.is_reverse = False
-                currentstate.is_trust = True
+                currentstate.attitude = CurrentState.TRUST
                 currentstate.save()
 
             reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
@@ -497,59 +504,60 @@ class ApiAddOperationMixin(object):
                 user_from=user_to,
                 defaults=dict(
                     is_reverse=True,
-                    is_trust=True,
+                    attitude=CurrentState.TRUST,
             ))
-            if not reverse_created and (reverse_cs.is_reverse or reverse_cs.is_trust == None):
+            if not reverse_created and (reverse_cs.is_reverse or reverse_cs.attitude == None):
                 reverse_cs.update_timestamp = update_timestamp
                 reverse_cs.is_reverse = True
-                reverse_cs.is_trust = True
+                reverse_cs.attitude = CurrentState.TRUST
                 reverse_cs.save()
 
             profile_to.recount_trust_fame()
 
         elif operationtype_id == OperationType.TRUST_AND_THANK:
-            is_trust_previous = None
+            attitude_previous = None
             currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
                 user_from=user_from,
                 user_to=user_to,
                 defaults=dict(
-                    is_trust=True,
+                    attitude=CurrentState.TRUST,
                     thanks_count=0,
             ))
             if not created_:
                 if not currentstate.is_reverse:
-                    is_trust_previous = currentstate.is_trust
+                    attitude_previous = currentstate.attitude
                 currentstate.update_timestamp = update_timestamp
                 currentstate.is_reverse = False
-                currentstate.is_trust = True
-                if is_trust_previous:
+                currentstate.attitude = CurrentState.TRUST
+                if attitude_previous == CurrentState.TRUST:
                     currentstate.thanks_count += 1
                 currentstate.save()
 
-            data.update(previousstate=dict(is_trust=is_trust_previous))
+            data.update(previousstate=dict(attitude=attitude_previous))
             reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
                 user_to=user_from,
                 user_from=user_to,
                 defaults=dict(
                     is_reverse=True,
-                    is_trust=True,
+                    attitude=CurrentState.TRUST,
             ))
-            if not reverse_created and (reverse_cs.is_reverse or reverse_cs.is_trust == None):
+            if not reverse_created and (reverse_cs.is_reverse or reverse_cs.attitude == None):
                 reverse_cs.update_timestamp = update_timestamp
                 reverse_cs.is_reverse = True
-                reverse_cs.is_trust = True
+                reverse_cs.attitude = CurrentState.TRUST
                 reverse_cs.save()
 
-            if is_trust_previous:
+            if attitude_previous == CurrentState.TRUST:
                 profile_to.sum_thanks_count += 1
             profile_to.save()
             profile_to.recount_trust_fame()
             data.update(currentstate=dict(
                 thanks_count=currentstate.thanks_count,
+                attitude=currentstate.attitude,
             ))
 
-        elif operationtype_id == OperationType.NULLIFY_TRUST:
-            err_message = 'У вас не было ни доверия, ни недоверия к пользователю'
+        elif operationtype_id == OperationType.NULLIFY_ATTITUDE:
+            err_message = 'У вас не было ни никакого отношения'
             try:
                 currentstate = CurrentState.objects.select_for_update().get(
                     user_from=user_from,
@@ -562,35 +570,35 @@ class ApiAddOperationMixin(object):
                 # то же что created
                 raise ServiceException(err_message, already_code)
             else:
-                if currentstate.is_trust == None:
+                if currentstate.attitude == None:
                     raise ServiceException(err_message, already_code)
                 else:
-                    # False or True
-                    # Здесь если есть обратная запись, в которой is_trust not null,
+                    # TRUST, MISTRUST или ACQ
+                    # Здесь если есть обратная запись, в которой attitude not null,
                     #   то:     переводим найденную в is_reverse
-                    #   иначе:  в текущей ставим is_trust = None
+                    #   иначе:  в текущей ставим attitude = None
                     #
                     reverse_cs, reverse_created = CurrentState.objects.get_or_create(
                         user_from=user_to,
                         user_to=user_from,
                         defaults = dict(
                             is_reverse=True,
-                            is_trust=None,
+                            attitude=None,
                     ))
                     currentstate.update_timestamp = update_timestamp
-                    if not reverse_created and not (reverse_cs.is_trust == None) and not reverse_cs.is_reverse:
+                    if not reverse_created and not (reverse_cs.attitude == None) and not reverse_cs.is_reverse:
                         currentstate.is_reverse = True
-                        currentstate.is_trust = reverse_cs.is_trust
+                        currentstate.attitude = reverse_cs.attitude
                     else:
-                        currentstate.is_trust = None
+                        currentstate.attitude = None
                     currentstate.save()
 
             CurrentState.objects.filter(
                 user_to=user_from,
                 user_from=user_to,
                 is_reverse=True,
-                is_trust__isnull=False,
-            ).update(is_trust=None, update_timestamp=update_timestamp)
+                attitude__isnull=False,
+            ).update(attitude=None, update_timestamp=update_timestamp)
 
             profile_to.recount_trust_fame()
 
@@ -673,7 +681,7 @@ class ApiAddOperationMixin(object):
                     is_child=True,
                     is_father=is_father,
                     is_mother=is_mother,
-                    is_trust=currentstate.is_trust,
+                    attitude=currentstate.attitude,
             ))
             if not reverse_created:
                 reverse_cs.update_timestamp = update_timestamp

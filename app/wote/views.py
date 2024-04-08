@@ -339,11 +339,11 @@ class ApiVoteGraph(FromToCountMixin, TelegramApiMixin, APIView):
                     "target": -3,
                     "is_video_vote": true
                 },
-                // Доверия, недоверия от пользователя (source) к пользователю (target)
+                // Доверия, недоверия, знакомства от пользователя (source) к пользователю (target)
                 {
                     "source": 326,
                     "target": 1506,
-                    "is_trust": false
+                    "attitude": false
                 }
             ]
         }
@@ -413,12 +413,12 @@ class ApiVoteGraph(FromToCountMixin, TelegramApiMixin, APIView):
             nodes.append(request.user.profile.data_dict(request=request, fmt='3d-force-graph'))
 
         q_connections = Q(
-            is_trust__isnull=False, is_reverse=False,
+            attitude__isnull=False, is_reverse=False,
             user_from__in=user_pks, user_to__in=user_pks
         )
         for cs in CurrentState.objects.filter(q_connections).select_related(
                     'user_from__profile', 'user_to__profile',).distinct():
-            links.append(dict(source=cs.user_from.pk, target=cs.user_to.pk, is_trust=cs.is_trust))
+            links.append(cs.data_dict(show_attitude=True, fmt='3d-force-graph'))
 
         bot_username = self.get_bot_username()
         data.update(bot_username=bot_username, nodes=nodes, links=links)

@@ -64,16 +64,20 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 THANK = 1
                 MISTRUST = 2
                 TRUST = 3
-                NULLIFY_TRUST = 4
+                NULLIFY_ATTITUDE = 4
                 TRUST_AND_THANK = 5
                 FATHER = 6
                 NOT_PARENT = 7
                 MOTHER = 8
                 SET_FATHER = 9
                 SET_MOTHER = 10
+                ACQ = 11
 
-                В операциях доверия, недоверия реально используются TRUST_AND_THANK, NULLIFY_TRUST, MISTRUST,
-                но отработаны также и TRUST, THANK
+                В операциях доверия, недоверия реально используются:
+                    TRUST_AND_THANK, NULLIFY_ATTITUDE, MISTRUST,
+                    #TODO
+                    ACQ (знаком, пока не отработано)
+                но отработаны также и TRUST, THANK. 
 
                 SET_FATHER, SET_MOTHER, отличие от FATHER, MOTHER:
                     При SET_FATHER, если у человека уже есть другой папа, заменяем папу.
@@ -94,15 +98,16 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 THANK = 1
                 MISTRUST = 2
                 TRUST = 3
-                NULLIFY_TRUST = 4
+                NULLIFY_ATTITUDE = 4
                 TRUST_AND_THANK = 5
                 FATHER = 6
                 NOT_PARENT = 7
                 MOTHER = 8
                 SET_FATHER = 9
                 SET_MOTHER = 10
+                ACQ = 11
 
-                В операциях доверия, недоверия реально используются TRUST_AND_THANK, NULLIFY_TRUST, MISTRUST,
+                В операциях доверия, недоверия реально используются TRUST_AND_THANK, NULLIFY_ATTITUDE, MISTRUST,
                 но отработаны также и TRUST, THANK
 
                 SET_FATHER, SET_MOTHER, отличие от FATHER, MOTHER:
@@ -115,7 +120,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     Если не задан, полагается uuid авторизованного юзера
                     Если задан,
                         -   то в операциях доверия, недоверия
-                            (THANK, MISTRUST, TRUST, NULLIFY_TRUST, TRUST_AND_THANK)
+                            (THANK, MISTRUST, TRUST, NULLIFY_ATTITUDE, TRUST_AND_THANK)
                             должен быть равен uuid авторизованного юзера
                         -   в операциях родства ((SET_)FATHER, (SET_)MOTHER, NOT_PARENT)
                             user_id_from может быть:
@@ -140,42 +145,42 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 - инкрементировать значение столбца thanks_count в таблице tbl_current_state для user_id_from и user_id_to;
             - если тип операции MISTRUST:
                 - если есть запись в таблице tbl_current_state для заданных user_id_from и user_id_to;
-                    - если значение IS_TRUST == FALSE, вернуть ошибку /message/
+                    - если значение attitude == MISTRUST, вернуть ошибку /message/
                       (нельзя утратить доверие, если его и так нет),
                       при этом кроме message, еще передается code='already';
                 - иначе:
                     - создать запись в таблице tbl_current_state;
                 - записать данные в таблицу tbl_journal;
-                - если текущее IS_TRUST == NULL, то инкрементировать FAME и MISTRUST_COUNT для пользователя user_id_to;
-                - если текущее IS_TRUST == TRUE, то
+                - если текущее attitude == NULL, то инкрементировать FAME и MISTRUST_COUNT для пользователя user_id_to;
+                - если текущее attitude == TRUST, то
                   декрементировать TRUST_COUNT и инкрементировать FAME и MISTRUST_COUNT для пользователя user_id_to;
-                - в таблице tbl_current_state установить IS_TRUST = FALSE;
+                - в таблице tbl_current_state установить attitude = MISTRUST;
             - если тип операции TRUST:
                 - если есть запись в таблице tbl_current_state для заданных user_id_from и user_id_to;
-                    - если значение IS_TRUST == TRUE, вернуть ошибку /message/
+                    - если значение attitude == TRUST, вернуть ошибку /message/
                     (нельзя установить доверие, если уже доверяешь);
                       при этом кроме message, еще передается code='already';
                 - иначе:
                     - создать запись в таблице tbl_current_state;
                 - записать данные в таблицу tbl_journal;
-                - если текущее IS_TRUST == NULL, то инкрементировать FAME и TRUST_COUNT для пользователя user_id_to;
-                - если текущее IS_TRUST == FALSE, то
+                - если текущее attitude == NULL, то инкрементировать FAME и TRUST_COUNT для пользователя user_id_to;
+                - если текущее attitude == MISTRUST, то
                   декрементировать MISTRUST_COUNT и инкрементировать FAME и TRUST_COUNT для пользователя user_id_to;
-                - в таблице tbl_current_state установить IS_TRUST = TRUE;
+                - в таблице tbl_current_state установить attitude = TRUST;
             - если тип операции TRUST_AND_THANK:
                 - это ведет себя:
                     *   как TRUST, если user_from раньше не доверял user_to
                     *   как THANK, если user_from раньше доверял user_to
-            - если тип операции NULLIFY_TRUST:
+            - если тип операции NULLIFY_ATTITUDE:
                 - если есть запись в таблице tbl_current_state для заданных user_id_from и user_id_to;
-                    - если значение IS_TRUST == NULL, вернуть ошибку /message/
+                    - если значение attitude == NULL, вернуть ошибку /message/
                       (нельзя обнулить доверие, если оно пустое);
                       при этом кроме message, еще передается code='already';
                     - иначе:
-                        - если текущее IS_TRUST == TRUE, то декрементировать TRUST_COUNT;
-                        - если текущее IS_TRUST == FALSE, то декрементировать MISTRUST_COUNT;
+                        - если текущее attitude == TRUST, то декрементировать TRUST_COUNT;
+                        - если текущее attitude == MISTRUST, то декрементировать MISTRUST_COUNT;
                         - декрементировать FAME для user_id_to;
-                        - установить IS_TRUST = NULL;
+                        - установить attitude = NULL;
                         - записать данные в таблицу tbl_journal;
                     - иначе вернуть ошибку /message/ (нельзя обнулить доверие, если связи нет)
                       при этом кроме message, еще передается code='already';
@@ -341,7 +346,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 profile_to_data.update(tg_data=profile_to.tg_data())
                 if profile_to.owner_id  and operationtype_id in (
                        OperationType.THANK, OperationType.MISTRUST,
-                       OperationType.TRUST, OperationType.NULLIFY_TRUST,
+                       OperationType.TRUST, OperationType.NULLIFY_ATTITUDE,
                        OperationType.TRUST_AND_THANK,
                    ):
                     profile_to_owner = Profile.objects.select_related('user').get(user__pk=profile_to.owner.pk)
@@ -360,7 +365,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                    OperationType.THANK,
                    OperationType.MISTRUST,
                    OperationType.TRUST,
-                   OperationType.NULLIFY_TRUST,
+                   OperationType.NULLIFY_ATTITUDE,
                ):
                 message = None
                 bot_username = self.get_bot_username()
@@ -373,7 +378,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     f'(+{profile_to.trust_count}, -{profile_to.mistrust_count})'
                 )
                 if operationtype_id == OperationType.TRUST_AND_THANK:
-                    if data['previousstate']['is_trust']:
+                    if data['previousstate']['attitude'] == CurrentState.TRUST:
                         message = f'{dl_from_t} благодарит ({data["currentstate"]["thanks_count"]}) {dl_to_t}'
                     else:
                         message = f'{dl_from_t} доверяет {dl_to_t}'
@@ -383,7 +388,9 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     message = f'{dl_from_t} не доверяет {dl_to_t}'
                 elif operationtype_id == OperationType.TRUST:
                     message = f'{dl_from_t} доверяет {dl_to_t}'
-                elif operationtype_id == OperationType.NULLIFY_TRUST:
+                elif operationtype_id == OperationType.ACQ:
+                    message = f'{dl_from_t} знаком(а) с {dl_to_t}'
+                elif operationtype_id == OperationType.NULLIFY_ATTITUDE:
                     message = f'{dl_from_t} не знаком(а) с {dl_to_t}'
                 if message:
                     self.send_to_telegram(message, user=user_to, options=dict(
@@ -412,11 +419,11 @@ class ApiAddTextOperationView(APIView):
     def anytext_recount(self, anytext):
         anytext.trust_count = CurrentState.objects.filter(
             anytext=anytext,
-            is_trust=True,
+            attitude=CurrentState.TRUST,
         ).distinct().count()
         anytext.mistrust_count = CurrentState.objects.filter(
             anytext=anytext,
-            is_trust=False,
+            attitude=CurrentState.MISTRUST,
         ).distinct().count()
         anytext.fame = anytext.trust_count + anytext.mistrust_count
         anytext.save()
@@ -433,32 +440,32 @@ class ApiAddTextOperationView(APIView):
             - инкрементировать значение столбца thanks_count в таблице tbl_current_state для user_id_from и text_id_to;
         - если тип операции MISTRUST:
             - если есть запись в таблице tbl_current_state для заданных user_id_from и text_id_to;
-                - если значение IS_TRUST == FALSE, вернуть ошибку (нельзя утратить доверие, если его и так нет);
+                - если значение attitude == MISTRUST, вернуть ошибку (нельзя утратить доверие, если его и так нет);
             - иначе:
                 - создать запись в таблице tbl_current_state;
             - записать данные в таблицу tbl_journal;
-            - если текущее IS_TRUST == NULL, то инкрементировать FAME и MISTRUST_COUNT для текста text_id_to;
-            - если текущее IS_TRUST == TRUE, то
+            - если текущее attitude == NULL, то инкрементировать FAME и MISTRUST_COUNT для текста text_id_to;
+            - если текущее attitude == TRUST, то
               декрементировать TRUST_COUNT и инкрементировать FAME и MISTRUST_COUNT для текста text_id_to;
-            - в таблице tbl_current_state установить IS_TRUST = FALSE;
+            - в таблице tbl_current_state установить attitude = MISTRUST;
         - если тип операции TRUST:
             - если есть запись в таблице tbl_current_state для заданных user_id_from и text_id_to;
-                - если значение IS_TRUST == TRUE, вернуть ошибку (нельзя установить доверие, если уже доверяешь);
+                - если значение attitude == TRUST, вернуть ошибку (нельзя установить доверие, если уже доверяешь);
             - иначе:
                 - создать запись в таблице tbl_current_state;
             - записать данные в таблицу tbl_journal;
-            - если текущее IS_TRUST == NULL, то инкрементировать FAME и TRUST_COUNT для текста text_id_to;
-            - если текущее IS_TRUST == FALSE, то
+            - если текущее attitude == NULL, то инкрементировать FAME и TRUST_COUNT для текста text_id_to;
+            - если текущее attitude == MISTRUST, то
               декрементировать MISTRUST_COUNT и инкрементировать FAME и TRUST_COUNT для текста text_id_to;
-            - в таблице tbl_current_state установить IS_TRUST = TRUE;
-        - если тип операции NULLIFY_TRUST:
+            - в таблице tbl_current_state установить attitude = MISTRUST;
+        - если тип операции NULLIFY_ATTITUDE:
             - если есть запись в таблице tbl_current_state для заданных user_id_from и text_id_to;
-                - если значение IS_TRUST == NULL, вернуть ошибку (нельзя обнулить доверие, если оно пустое);
+                - если значение attitude == NULL, вернуть ошибку (нельзя обнулить доверие, если оно пустое);
                     - иначе:
-                        - если текущее IS_TRUST == TRUE, то декрементировать TRUST_COUNT;
-                        - если текущее IS_TRUST == FALSE, то декрементировать MISTRUST_COUNT;
+                        - если текущее attitude == TRUST, то декрементировать TRUST_COUNT;
+                        - если текущее attitude == MISTRUST, то декрементировать MISTRUST_COUNT;
                         - декрементировать FAME для text_id_to;
-                        - установить IS_TRUST = NULL;
+                        - установить attitude = NULL;
                         - записать данные в таблицу tbl_journal;
             - иначе вернуть ошибку (нельзя обнулить доверие, если связи нет);
 
@@ -505,7 +512,7 @@ class ApiAddTextOperationView(APIView):
                     raise ServiceException('Не найден текст, text_id_to = "%s"' % text_to_uuid)
             else:
                 # задан только text
-                if operationtype_id == OperationType.NULLIFY_TRUST:
+                if operationtype_id == OperationType.NULLIFY_ATTITUDE:
                     try:
                         anytext = AnyText.objects.select_for_update().get(text=text)
                     except AnyText.DoesNotExist:
@@ -535,14 +542,14 @@ class ApiAddTextOperationView(APIView):
                     user_from=user_from,
                     anytext=anytext,
                     defaults=dict(
-                        is_trust=False,
+                        attitude=CurrentState.MISTRUST,
                 ))
                 if not created_:
-                    if currentstate.is_trust == False:
+                    if currentstate.attitude == CurrentState.MISTRUST:
                         raise ServiceException('Вы уже не доверяете тексту')
-                    currentstate.is_trust = False
+                    currentstate.attitude = CurrentState.MISTRUST
                     currentstate.update_timestamp = update_timestamp
-                    currentstate.save(update_fields=('is_trust', 'update_timestamp'))
+                    currentstate.save(update_fields=('attitude', 'update_timestamp'))
                 self.anytext_recount(anytext)
 
             elif operationtype_id == OperationType.TRUST:
@@ -550,17 +557,17 @@ class ApiAddTextOperationView(APIView):
                     user_from=user_from,
                     anytext=anytext,
                     defaults=dict(
-                        is_trust=True,
+                        attitude=CurrentState.TRUST,
                 ))
                 if not created_:
-                    if currentstate.is_trust == True:
+                    if currentstate.attitude == CurrentState.TRUST:
                         raise ServiceException('Вы уже доверяете тексту')
-                    currentstate.is_trust = True
+                    currentstate.attitude = CurrentState.TRUST
                     currentstate.update_timestamp = update_timestamp
-                    currentstate.save(update_fields=('is_trust', 'update_timestamp'))
+                    currentstate.save(update_fields=('attitude', 'update_timestamp'))
                 self.anytext_recount(anytext)
 
-            elif operationtype_id == OperationType.NULLIFY_TRUST:
+            elif operationtype_id == OperationType.NULLIFY_ATTITUDE:
                 err_message = 'У вас не было ни доверия, ни недоверия к тексту'
                 try:
                     currentstate = CurrentState.objects.select_for_update().get(
@@ -569,11 +576,11 @@ class ApiAddTextOperationView(APIView):
                     )
                 except CurrentState.DoesNotExist:
                     raise ServiceException(err_message)
-                if currentstate.is_trust == None:
+                if currentstate.attitude == None:
                     raise ServiceException(err_message)
-                currentstate.is_trust = None
+                currentstate.attitude = None
                 currentstate.update_timestamp = update_timestamp
-                currentstate.save(update_fields=('is_trust', 'update_timestamp'))
+                currentstate.save(update_fields=('attitude', 'update_timestamp'))
                 self.anytext_recount(anytext)
 
             comment = request.data.get("comment", None)
@@ -611,7 +618,7 @@ class ApiGetTextInfo(SQL_Mixin, APIView):
         То есть информацию из таблицы CurrentState, где user_from =
         id_пользователя_из_токена, а text_id = id_текста_из_запроса.
         Если в CurrentState нет записи по заданным пользователям,
-        то "thanks_count" = null и "is_trust" = null.
+        то thanks_count = null и attitude = null.
         Также нужно возвратить массив пользователей (их фото и UUID),
         которые благодарили текст, о котором запрашивается информация.
         Массив пользователей должен быть отсортирован по убыванию известности пользователей.
@@ -626,7 +633,7 @@ class ApiGetTextInfo(SQL_Mixin, APIView):
             "mistrust_count": 1,
             "trust_count": 2,
             "thanks_count": 12, // только при авторизованном запросе
-            "is_trust": true,   // только при авторизованном запросе
+            "attitude": 't',    // только при авторизованном запросе
             "thanks_users": [
                 {
                 "photo": "photo/url",
@@ -662,19 +669,19 @@ class ApiGetTextInfo(SQL_Mixin, APIView):
             )
             user_from = request.user
             if user_from.is_authenticated:
-                thanks_count = is_trust = None
+                thanks_count = attitude = None
                 try:
                     currentstate = CurrentState.objects.get(
                         user_from=user_from,
                         anytext=anytext,
                     )
                     thanks_count = currentstate.thanks_count
-                    is_trust = currentstate.is_trust
+                    attitude = currentstate.attitude
                 except CurrentState.DoesNotExist:
                     pass
                 data.update(
                     thanks_count=thanks_count,
-                    is_trust=is_trust,
+                    attitude=attitude,
                 )
             thanks_users = []
             req_str = """
@@ -941,7 +948,7 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
             #
             #   без параметров:
             #       список тех пользователей, и связи,
-            #       где есть доверие (currentstate.is_trust == True).
+            #       где есть доверие (currentstate.attitude == CurrentState.TRUST).
             #   с параметром query:
             #       у которых в
             #               имени или
@@ -950,7 +957,7 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
             #               ключах или
             #               желаниях
             #       есть query, и их связи,
-            #       где есть доверие (currentstate.is_trust == True).
+            #       где есть доверие (currentstate.attitude == CurrentState.TRUST).
             #   В любом случае возвращаются в массиве users еще
             #   данные пользователя, если он авторизовался, а также
             #   связи с попавшими в выборку по query и/или в страницу from...
@@ -1030,14 +1037,14 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
             connections = []
             q_connections = Q(
                 is_reverse=False,
-                is_trust__isnull=False,
+                attitude__isnull=False,
                 user_to__isnull=False,
             )
             q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
             for cs in CurrentState.objects.filter(q_connections).select_related(
                     'user_from__profile', 'user_to__profile',
                 ).distinct():
-                connections.append(cs.data_dict(show_trust=True, fmt=fmt))
+                connections.append(cs.data_dict(show_attitude=True, fmt=fmt))
 
             if fmt == '3d-force-graph':
                 bot_username = self.get_bot_username()
@@ -2087,7 +2094,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
             ],
             "links": [
             {
-                "is_trust": true,
+                "attitude": 't',
                 "source": 1228,
                 "target": 436
             },
@@ -2149,7 +2156,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                         "source": "8d2db918-9a81-4537-ab69-1c3d2d19a00d",
                         "target": "1085113f-d4d8-4de6-8d80-916e85576fc6",
                         "thanks_count": 1,
-                        "is_trust": true
+                        "attitude": 't'
                     },
                     ...
             ],
@@ -2187,7 +2194,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     contact_currentstate
                 WHERE
                     is_reverse = false AND
-                    is_trust is not null AND
+                    attitude is not null AND
                     user_to_id IS NOT NULL AND
                     user_from_id = %(user_q_pk)s
                 UNION
@@ -2197,7 +2204,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     contact_currentstate
                 WHERE
                     is_reverse = false AND
-                    is_trust is not null AND
+                    attitude is not null AND
                     user_to_id = %(user_q_pk)s
             """ % dict(
                 user_q_pk=user_q.pk
@@ -2282,11 +2289,11 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     nodes.append(user_a.profile.data_dict(request, fmt=fmt))
                     user_pks.append(user_a.pk)
                 q = Q(user_from__in=user_pks) & Q(user_to__in=user_pks)
-                q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust__isnull=False)
+                q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(attitude__isnull=False)
                 for cs in CurrentState.objects.filter(q).select_related(
                     'user_to__profile', 'user_from__profile',
                     ).distinct():
-                    links.append(cs.data_dict(fmt=fmt, show_trust=True))
+                    links.append(cs.data_dict(fmt=fmt, show_attitude=True))
                 data.update(bot_username=bot_username, nodes=nodes, links=links, root_node=root_node)
                 if tggroup:
                     data.update(tg_group=dict(type=tggroup.type, title=tggroup.title))
@@ -2459,11 +2466,11 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     users.append(user_a.profile.data_dict(request))
                     user_pks.append(user_a.pk)
                 q = Q(user_from__in=user_pks) & Q(user_to__in=user_pks)
-                q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(is_trust__isnull=False)
+                q &= Q(user_to__isnull=False) & Q(is_reverse=False) & Q(attitude__isnull=False)
                 for cs in CurrentState.objects.filter(q).select_related(
                     'user_to__profile', 'user_from__profile',
                     ).distinct():
-                    connections.append(cs.data_dict(show_trust=True))
+                    connections.append(cs.data_dict(show_attitude=True))
 
                 keys = [
                     {
@@ -2915,8 +2922,7 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
     """
     Отдать все профили и все связи
 
-    Возможны форматы выдачи (?fmt= get параметр):
-        - d3js
+    Возможен только форматы выдачи fmt = 3d-force-graph:
         - 3d-force-graph
     Возможные выборки (get параметры):
         - dover :   показать доверия
@@ -2933,7 +2939,7 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
     # permission_classes = (IsAuthenticated,)
 
     def get(self, request):
-        fmt = request.GET.get('fmt', 'd3js')
+        fmt = '3d-force-graph'
         withalone = request.GET.get('withalone')
         dover = request.GET.get('dover')
         rod = request.GET.get('rod')
@@ -2961,7 +2967,7 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
         if rod:
             q_connections = Q(is_child=True)
         if dover:
-            q_connections |= Q(is_trust__isnull=False, user_to__isnull=False, is_reverse=False)
+            q_connections |= Q(attitude__isnull=False, user_to__isnull=False, is_reverse=False)
         if withalone:
             if from_ is None:
                 users = [
@@ -2971,9 +2977,8 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
                 if rod or dover:
                     connections = [
                         cs.data_dict(
-                            show_child=rod and fmt=='3d-force-graph',
-                            show_parent=fmt=='d3js',
-                            show_trust=bool(dover),
+                            show_child=bool(rod),
+                            show_attitude=bool(dover),
                             fmt=fmt
                         ) \
                         for cs in CurrentState.objects.filter(q_connections).select_related(
@@ -2998,9 +3003,8 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
 
                     connections = [
                         cs.data_dict(
-                            show_child=rod and fmt=='3d-force-graph',
-                            show_parent=fmt=='d3js',
-                            show_trust=bool(dover),
+                            show_child=bool(rod),
+                            show_attitude=bool(dover),
                             fmt=fmt
                         ) \
                         for cs in CurrentState.objects.filter(q_connections).select_related(
@@ -3016,9 +3020,8 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
                 for cs in CurrentState.objects.filter(q_connections).select_related(
                             'user_from__profile', 'user_to__profile',).distinct():
                     connections.append(cs.data_dict(
-                        show_child=rod and fmt=='3d-force-graph',
-                        show_parent=fmt=='d3js',
-                        show_trust=bool(dover),
+                        show_child=bool(rod),
+                        show_attitude=bool(dover),
                         fmt=fmt
                     ))
                     if cs.user_from.pk not in user_pks:
@@ -3028,11 +3031,8 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
                         user_pks.add(cs.user_to.pk)
                         users.append(cs.user_to.profile.data_dict(request=request, fmt=fmt))
 
-        if fmt == '3d-force-graph':
-            bot_username = self.get_bot_username()
-            data = dict(bot_username=bot_username, nodes=users, links=connections)
-        else:
-            data = dict(users=users, connections=connections, trust_connections=[])
+        bot_username = self.get_bot_username()
+        data = dict(bot_username=bot_username, nodes=users, links=connections)
         return Response(data=data, status=status.HTTP_200_OK)
 
 api_profile_genesis_all = cache_page(30)(ApiProfileGenesisAll.as_view())
@@ -3260,7 +3260,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 for cs in CurrentState.objects.filter(q_connections).select_related(
                         'user_from__profile', 'user_to__profile',
                     ).distinct():
-                    connections.append(cs.data_dict(show_parent=True))
+                    connections.append(cs.data_dict())
 
                 if request.user.is_authenticated:
                     user = request.user
@@ -3275,17 +3275,6 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                     if d['is_in_page']:
                         participants_on_page += 1
                     users.append(d)
-
-                q_connections = Q(
-                    is_reverse=False,
-                    user_to__isnull=False,
-                    is_trust=True,
-                )
-                q_connections &= Q(user_to__pk__in=user_pks) & Q(user_from__pk__in=user_pks)
-                for cs in CurrentState.objects.filter(q_connections).select_related(
-                        'user_from__profile', 'user_to__profile',
-                    ).distinct():
-                    trust_connections.append(cs.data_dict(show_trust=True))
 
         return dict(users=users, connections=connections, trust_connections=trust_connections, participants_on_page=participants_on_page)
 
@@ -3326,10 +3315,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            if fmt == '3d-force-graph':
-                connections.append(cs.data_dict(show_child=True, fmt=fmt))
-            else:
-                connections.append(cs.data_dict(show_parent=True, fmt=fmt))
+            connections.append(cs.data_dict(show_child=True, fmt=fmt))
 
         users = [
             p.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True)) for p in \
@@ -3727,8 +3713,6 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
                 item = dict(
                     source=UserById[source]['uuid'],
                     target=UserById[target]['uuid'],
-                    is_father=rec['is_father'],
-                    is_mother=rec['is_mother'],
                 )
             connections.append(item)
 
@@ -3746,8 +3730,6 @@ api_profile_genesis = ApiProfileGenesis.as_view()
 class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMixin, APIView):
     """
     Дерево доверия пользователя или путь доверий между пользователями
-
-    Требует авторизацию
 
     Если задан параметр chat_id, то показ связей доверия между участниками
     телеграм группы/канала, возможно опосредованный через иных пользователей
@@ -3812,7 +3794,7 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
 
         connections = []
         q_connections = Q(
-            is_trust=True,
+            attitude__in=(CurrentState.TRUST, CurrentState.ACQ),
             is_reverse=False,
             user_to__isnull=False,
             user_to__pk__in=user_pks,
@@ -3821,7 +3803,7 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
         for cs in CurrentState.objects.filter(q_connections).select_related(
                 'user_from__profile', 'user_to__profile',
             ).distinct():
-            d = cs.data_dict(show_trust=True, fmt=fmt)
+            d = cs.data_dict(show_attitude=True, fmt=fmt)
             if fmt == 'd3js':
                 d.update(
                     # Это ради фронта, который заточен для обработки родственных
@@ -3874,7 +3856,7 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
         for cs in CurrentState.objects.filter(
                 user_from__in=user_pks,
                 user_to__in=user_pks,
-                is_trust=True,
+                attitude__in=(CurrentState.TRUST, CurrentState.ACQ),
                 is_reverse=False,
             ).select_related(
                 'user_from', 'user_from__profile', 'user_from__profile__ability',
@@ -3887,12 +3869,7 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
             pair = '%s/%s' % (cs.user_from_id, cs.user_to_id)
             pair_reverse = '%s/%s' % (cs.user_to_id, cs.user_from_id)
             if pair in pairs or pair_reverse in pairs:
-                d = cs.data_dict(show_trust=True, fmt=fmt)
-                d.update(
-                    # Это ради фронта, который заточен для обработки родственных
-                    # деревьев
-                    is_father=True,
-                )
+                d = cs.data_dict(show_attitude=True, fmt=fmt)
                 connections.append(d)
 
         users = []
@@ -3900,7 +3877,7 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
         for profile in Profile.objects.filter(user__pk__in=user_pks).select_related('user', 'ability'):
             users.append(profile.data_dict(request, fmt=fmt))
 
-        return dict(users=users, connections=connections, trust_connections=[])
+        return dict(users=users, connections=connections,)
 
 api_profile_trust = ApiProfileTrust.as_view()
 

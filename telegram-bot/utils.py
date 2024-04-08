@@ -16,6 +16,25 @@ from settings import logging
 
 TIMEOUT = aiohttp.ClientTimeout(total=settings.HTTP_TIMEOUT)
 
+
+class Attitude(object):
+
+    ACQ = 'a'
+    TRUST = 't'
+    MISTRUST = 'mt'
+
+    @classmethod
+    def text(cls, attitude):
+        result = 'не знакомы'
+        if attitude == Attitude.TRUST:
+            result = 'доверие'
+        elif attitude == Attitude.MISTRUST:
+            result = 'недоверие'
+        elif attitude == Attitude.ACQ:
+            result = 'знакомы'
+        return result
+
+
 class OperationType(object):
     THANK = 1
     MISTRUST = 2
@@ -34,16 +53,6 @@ class OperationType(object):
         '%(user_to_uuid_stripped)s%(sep)s'
         '%(message_to_forward_id)s%(sep)s'
     )
-
-    @classmethod
-    def relation_text(cls, is_trust):
-        if is_trust is None:
-            result = 'не знакомы'
-        elif is_trust:
-            result = 'доверие'
-        else:
-            result = 'недоверие'
-        return result
 
 
     # Операции, которые возможны для запуска ссылкой
@@ -673,10 +682,10 @@ class Misc(object):
     @classmethod
     def reply_relations(cls, response, response_to):
         result = ''
-        arr = ['От Вас: %s' % OperationType.relation_text(response['from_to']['is_trust']),]
+        arr = ['От Вас: %s' % Attitude.text(response['from_to']['attitude']),]
         # Организация может доверять только, если у нее не собственный аккаунт
         if not response_to.get('is_org') and not response_to.get('owner'):
-            arr.append('К Вам: %s' % OperationType.relation_text(response['to_from']['is_trust']))
+            arr.append('К Вам: %s' % Attitude.text(response['to_from']['attitude']))
         arr.append('\n')
         result = '\n'.join(arr)
         return result
@@ -999,12 +1008,12 @@ class Misc(object):
                 )
                 callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE
                 show_inline_btn_nullify_trust = True
-                if response_relations and response_relations['from_to']['is_trust'] is None:
+                if response_relations and response_relations['from_to']['attitude'] is None:
                     show_inline_btn_nullify_trust = False
 
                 title_thank = 'Доверие'
                 if response_relations:
-                    if response_relations['from_to']['is_trust']:
+                    if response_relations['from_to']['attitude'] == Attitude.TRUST:
                         title_thank = 'Благодарить'
                 dict_reply.update(operation=OperationType.TRUST_AND_THANK)
                 inline_btn_trust = InlineKeyboardButton(
@@ -1012,14 +1021,14 @@ class Misc(object):
                     callback_data=callback_data_template % dict_reply,
                 )
                 thank_buttons = [inline_btn_trust]
-                if not response_relations or response_relations['from_to']['is_trust'] != False:
+                if not response_relations or response_relations['from_to']['attitude'] != Attitude.MISTRUST:
                     dict_reply.update(operation=OperationType.MISTRUST)
                     inline_btn_mistrust = InlineKeyboardButton(
                         'Недоверие',
                         callback_data=callback_data_template % dict_reply,
                     )
                     thank_buttons.append(inline_btn_mistrust)
-                if not response_relations or response_relations['from_to']['is_trust'] is not None:
+                if not response_relations or response_relations['from_to']['attitude'] is not None:
                     dict_reply.update(operation=OperationType.NULLIFY_TRUST)
                     inline_btn_nullify_trust = InlineKeyboardButton(
                         'Не знакомы',

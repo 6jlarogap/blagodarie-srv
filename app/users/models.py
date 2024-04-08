@@ -657,12 +657,12 @@ class Profile(PhotoModel, GeoPointAddressModel):
         self.trust_count = CurrentState.objects.filter(
             is_reverse=False,
             user_to=user,
-            is_trust=True,
+            attitude=CurrentState.TRUST,
         ).distinct().count()
         self.mistrust_count = CurrentState.objects.filter(
             is_reverse=False,
             user_to=user,
-            is_trust=False,
+            attitude=CurrentState.MISTRUST,
         ).distinct().count()
         self.fame = self.trust_count + self.mistrust_count
         if do_save:

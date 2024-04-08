@@ -1347,7 +1347,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                         user_from__in=(owner, msg_user_to,),
                         user_to__in=(owner, msg_user_to,),
                         user_to__isnull=False,
-                        is_trust=False,
+                        attitude=CurrentState.MISTRUST,
                        ).exists():
                         if link_profile.owner:
                             msg = '%s предлагает указать родственника для %s' % (
@@ -1636,11 +1636,11 @@ class ApiUserRelations(UuidMixin, APIView):
     Возвращает
         {
         "from_to": {
-            "is_trust": True,
+            "attitude": 't',
             "thanks_count": 2,
             },
         "to_from": {
-            "is_trust": null,
+            "attitude": null,
             "thanks_count": 0,
             },
         }
@@ -1657,8 +1657,8 @@ class ApiUserRelations(UuidMixin, APIView):
                 comment='user_id_to. ',
             )
             data = dict(
-                from_to=dict(is_trust=None, thanks_count=0),
-                to_from=dict(is_trust=None, thanks_count=0),
+                from_to=dict(attitude=None, thanks_count=0),
+                to_from=dict(attitude=None, thanks_count=0),
             )
             users = (user_from, user_to,)
             for cs in CurrentState.objects.filter(
@@ -1667,10 +1667,10 @@ class ApiUserRelations(UuidMixin, APIView):
                 is_reverse=False,
                 ):
                 if cs.user_from == user_from:
-                    data['from_to']['is_trust'] = cs.is_trust
+                    data['from_to']['attitude'] = cs.attitude
                     data['from_to']['thanks_count'] = cs.thanks_count
                 elif cs.user_from == user_to:
-                    data['to_from']['is_trust'] = cs.is_trust
+                    data['to_from']['attitude'] = cs.attitude
                     data['to_from']['thanks_count'] = cs.thanks_count
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
@@ -1737,8 +1737,8 @@ class ApiBotStat(APIView):
             'did_bot_start': Profile.objects.filter(did_bot_start=True, owner__isnull=True).count(),
             'with_geodata': Profile.objects.filter(latitude__isnull=False, owner__isnull=True).count(),
             'relations': CurrentState.objects.filter(is_child=True).count(),
-            'trusts': CurrentState.objects.filter(is_reverse=True, is_trust=True).count(),
-            'mistrusts': CurrentState.objects.filter(is_reverse=True, is_trust=False).count(),
+            'trusts': CurrentState.objects.filter(is_reverse=True, attitude=CurrentState.TRUST).count(),
+            'mistrusts': CurrentState.objects.filter(is_reverse=True, attitude=CurrentState.MISTRUST).count(),
         }
         return Response(data=data, status=200)
 
@@ -2281,21 +2281,21 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 for cs in CurrentState.objects.filter(
                             user_to=found_profile.user,
                             is_reverse=False,
-                            is_trust__isnull=False,
+                            attitude__in=(CurrentState.TRUST, CurrentState.MISTRUST,),
                           ).select_related(
                               'user_from', 'user_from__profile'
                           ).order_by(
                               'user_from__first_name'
                           ):
-                    color = 'green' if cs.is_trust else 'red'
+                    color = 'green' if cs.attitude == CurrentState.TRUST else 'red'
                     legend_tempo= f'<table style="border-spacing: 0;border-top: 2px solid {color};">'
-                    if cs.is_trust and not legend_trust_true:
+                    if cs.attitude == CurrentState.TRUST and not legend_trust_true:
                         legend_trust_true = (
                             f'{legend_trust_true_title}'
                             '<br /><br />'
                             f'{legend_tempo}'
                         )
-                    if not cs.is_trust and not legend_trust_false:
+                    if cs.attitude == CurrentState.MISTRUST and not legend_trust_false:
                         legend_trust_false = (
                             f'{legend_trust_false_title}'
                             '<br /><br />'
@@ -2308,7 +2308,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         self.THUMB_SIZE_LEGEND,
                     )
                     legend_tempo = f'<tr><td style="border-bottom: 2px solid {color};">' + (popup % dict_user) + '</td></tr>'
-                    if cs.is_trust:
+                    if cs.attitude == CurrentState.TRUST:
                         num_trusts_true += 1
                         legend_trust_true += legend_tempo
                     else:
@@ -3079,7 +3079,7 @@ class ApiBotPollResults(TelegramApiMixin, APIView):
             {
                 "source": 326,
                 "target": 1506,
-                "is_trust": false
+                "attitude": "mt"
             }
         ]
     }
@@ -3121,12 +3121,12 @@ class ApiBotPollResults(TelegramApiMixin, APIView):
                         is_poll=True,
                     ))
             q_connections = Q(
-                is_trust__isnull=False, is_reverse=False,
+                attitude__isnull=False, is_reverse=False,
                 user_from__in=user_pks, user_to__in=user_pks
             )
             for cs in CurrentState.objects.filter(q_connections).select_related(
                         'user_from__profile', 'user_to__profile',).distinct():
-                links.append(dict(source=cs.user_from.pk, target=cs.user_to.pk, is_trust=cs.is_trust))
+                links.append(dict(source=cs.user_from.pk, target=cs.user_to.pk, attitude=cs.attitude))
 
             bot_username = self.get_bot_username()
             data.update(bot_username=bot_username, nodes=nodes, links=links)
@@ -3333,12 +3333,12 @@ class ApiOfferResults(TelegramApiMixin, APIView):
                 nodes.append(request.user.profile.data_dict(request, fmt='3d-force-graph'))
 
             q_connections = Q(
-                is_trust__isnull=False, is_reverse=False,
+                attitude__isnull=False, is_reverse=False,
                 user_from__in=user_pks, user_to__in=user_pks
             )
             for cs in CurrentState.objects.filter(q_connections).select_related(
                         'user_from__profile', 'user_to__profile',).distinct():
-                links.append(dict(source=cs.user_from.pk, target=cs.user_to.pk, is_trust=cs.is_trust))
+                links.append(dict(source=cs.user_from.pk, target=cs.user_to.pk, attitude=cs.attitude))
 
             bot_username = self.get_bot_username()
             data.update(bot_username=bot_username, nodes=nodes, links=links)
@@ -3419,7 +3419,7 @@ class ApiVotedTgUsers(APIView):
                             )
                     for cs in CurrentState.objects.filter(
                         is_reverse=False,
-                        is_trust=False,
+                        attitude=CurrentState.MISTRUST,
                         user_from__pk__in=users.keys(),
                         user_to__profile__uuid=user_uuid,
                         ).distinct():
