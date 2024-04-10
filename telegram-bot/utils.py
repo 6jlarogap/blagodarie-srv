@@ -944,10 +944,10 @@ class Misc(object):
 
 
     @classmethod
-    async def show_cards(cls,
-        # Список данных пользователей
+    async def show_card(cls,
+        # Данные пользователя
         #
-        a_response_to,
+        response_to,
 
         # в ответ на какое сообщение
         #
@@ -970,6 +970,8 @@ class Misc(object):
         """
         Показать карточки пользователей
         """
+        if not response_to:
+            return
         bot_data = await bot.get_me()
         user_from_id = response_from['user_id']
 
@@ -978,324 +980,323 @@ class Misc(object):
         #
         tg_user_from_id = tg_user_from.id if tg_user_from else message.from_user.id
 
-        for response_to in a_response_to:
-            is_own_account = user_from_id == response_to['user_id']
-            is_owned_account = response_to.get('owner') and response_to['owner']['user_id'] == user_from_id
-            is_org = response_to.get('is_org')
-            editable = cls.editable(profile=response_to, sender=response_from)
+        is_own_account = user_from_id == response_to['user_id']
+        is_owned_account = response_to.get('owner') and response_to['owner']['user_id'] == user_from_id
+        is_org = response_to.get('is_org')
+        editable = cls.editable(profile=response_to, sender=response_from)
 
-            reply = cls.reply_user_card(
-                response_to,
-                editable,
-                bot_data=bot_data,
+        reply = cls.reply_user_card(
+            response_to,
+            editable,
+            bot_data=bot_data,
+        )
+        response_relations = {}
+        if user_from_id != response_to['user_id']:
+            status_relations, response_relations = await cls.call_response_relations(response_from, response_to)
+            if response_relations:
+                reply += cls.reply_relations(response_relations, response_to)
+        if response_to['owner']:
+            reply += f'Владелец: {cls.get_deeplink_with_name(response_to["owner"], bot_data)}\n'
+
+        reply_markup = InlineKeyboardMarkup()
+
+        if user_from_id != response_to['user_id'] and bot_data.id != tg_user_from_id:
+            dict_reply = dict(
+                keyboard_type=KeyboardType.TRUST_THANK,
+                sep=KeyboardType.SEP,
+                user_to_uuid_stripped=cls.uuid_strip(response_to['uuid']),
+                message_to_forward_id=message_to_forward_id,
             )
-            response_relations = {}
-            if user_from_id != response_to['user_id']:
-                status_relations, response_relations = await cls.call_response_relations(response_from, response_to)
-                if response_relations:
-                    reply += cls.reply_relations(response_relations, response_to)
-            if response_to['owner']:
-                reply += f'Владелец: {cls.get_deeplink_with_name(response_to["owner"], bot_data)}\n'
+            callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE
+            show_inline_btn_nullify_trust = True
+            if response_relations and response_relations['from_to']['attitude'] is None:
+                show_inline_btn_nullify_trust = False
 
-            reply_markup = InlineKeyboardMarkup()
-
-            if user_from_id != response_to['user_id'] and bot_data.id != tg_user_from_id:
-                dict_reply = dict(
-                    keyboard_type=KeyboardType.TRUST_THANK,
-                    sep=KeyboardType.SEP,
-                    user_to_uuid_stripped=cls.uuid_strip(response_to['uuid']),
-                    message_to_forward_id=message_to_forward_id,
-                )
-                callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE
-                show_inline_btn_nullify_trust = True
-                if response_relations and response_relations['from_to']['attitude'] is None:
-                    show_inline_btn_nullify_trust = False
-
-                title_thank = 'Доверие'
-                if response_relations:
-                    if response_relations['from_to']['attitude'] == Attitude.TRUST:
-                        title_thank = 'Благодарить'
-                dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-                inline_btn_trust = InlineKeyboardButton(
-                    title_thank,
+            title_thank = 'Доверие'
+            if response_relations:
+                if response_relations['from_to']['attitude'] == Attitude.TRUST:
+                    title_thank = 'Благодарить'
+            dict_reply.update(operation=OperationType.TRUST_AND_THANK)
+            inline_btn_trust = InlineKeyboardButton(
+                title_thank,
+                callback_data=callback_data_template % dict_reply,
+            )
+            thank_buttons = [inline_btn_trust]
+            if not response_relations or response_relations['from_to']['attitude'] != Attitude.MISTRUST:
+                dict_reply.update(operation=OperationType.MISTRUST)
+                inline_btn_mistrust = InlineKeyboardButton(
+                    'Недоверие',
                     callback_data=callback_data_template % dict_reply,
                 )
-                thank_buttons = [inline_btn_trust]
-                if not response_relations or response_relations['from_to']['attitude'] != Attitude.MISTRUST:
-                    dict_reply.update(operation=OperationType.MISTRUST)
-                    inline_btn_mistrust = InlineKeyboardButton(
-                        'Недоверие',
-                        callback_data=callback_data_template % dict_reply,
-                    )
-                    thank_buttons.append(inline_btn_mistrust)
-                if not response_relations or response_relations['from_to']['attitude'] is not None:
-                    dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-                    inline_btn_nullify_trust = InlineKeyboardButton(
-                        'Не знакомы',
-                        callback_data=callback_data_template % dict_reply,
-                    )
-                    thank_buttons.append(inline_btn_nullify_trust)
-                reply_markup.row(*thank_buttons)
+                thank_buttons.append(inline_btn_mistrust)
+            if not response_relations or response_relations['from_to']['attitude'] is not None:
+                dict_reply.update(operation=OperationType.NULLIFY_TRUST)
+                inline_btn_nullify_trust = InlineKeyboardButton(
+                    'Не знакомы',
+                    callback_data=callback_data_template % dict_reply,
+                )
+                thank_buttons.append(inline_btn_nullify_trust)
+            reply_markup.row(*thank_buttons)
 
-            inline_btn_trusts = InlineKeyboardButton(
-                'Доверия',
+        inline_btn_trusts = InlineKeyboardButton(
+            'Доверия',
+            login_url=cls.make_login_url(
+                redirect_path='%(graph_host)s/?user_uuid_trusts=%(user_uuid)s' % dict(
+                    graph_host=settings.GRAPH_HOST,
+                    user_uuid=response_to['uuid'],
+                ), keep_user_data='on',
+            ))
+        login_url_buttons = [inline_btn_trusts, ]
+
+        if editable and not is_org:
+            inline_btn_genesis = InlineKeyboardButton(
+                'Род',
                 login_url=cls.make_login_url(
-                    redirect_path='%(graph_host)s/?user_uuid_trusts=%(user_uuid)s' % dict(
+                    redirect_path=(
+                            '%(graph_host)s/?user_uuid_genesis_tree=%(user_uuid)s'
+                            '&up=on&down=on&depth=2'
+                        ) % dict(
                         graph_host=settings.GRAPH_HOST,
                         user_uuid=response_to['uuid'],
                     ), keep_user_data='on',
                 ))
-            login_url_buttons = [inline_btn_trusts, ]
+            login_url_buttons.append(inline_btn_genesis)
 
-            if editable and not is_org:
-                inline_btn_genesis = InlineKeyboardButton(
-                    'Род',
-                    login_url=cls.make_login_url(
-                        redirect_path=(
-                                '%(graph_host)s/?user_uuid_genesis_tree=%(user_uuid)s'
-                                '&up=on&down=on&depth=2'
-                            ) % dict(
-                            graph_host=settings.GRAPH_HOST,
-                            user_uuid=response_to['uuid'],
-                        ), keep_user_data='on',
-                    ))
-                login_url_buttons.append(inline_btn_genesis)
+        if response_to.get('latitude') is not None and response_to.get('longitude') is not None:
+            inline_btn_map = InlineKeyboardButton(
+                'Карта',
+                login_url=cls.make_login_url(
+                    redirect_path='%(map_host)s/?uuid_trustees=%(user_uuid)s' % dict(
+                        map_host=settings.MAP_HOST,
+                        user_uuid=response_to['uuid'],
+                    ), keep_user_data='on',
+                ))
+            login_url_buttons.append(inline_btn_map)
+        reply_markup.row(*login_url_buttons)
 
-            if response_to.get('latitude') is not None and response_to.get('longitude') is not None:
-                inline_btn_map = InlineKeyboardButton(
-                    'Карта',
-                    login_url=cls.make_login_url(
-                        redirect_path='%(map_host)s/?uuid_trustees=%(user_uuid)s' % dict(
-                            map_host=settings.MAP_HOST,
-                            user_uuid=response_to['uuid'],
-                        ), keep_user_data='on',
-                    ))
-                login_url_buttons.append(inline_btn_map)
-            reply_markup.row(*login_url_buttons)
-
-            callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE
-            if response_to['is_active'] or response_to['owner']:
-                if is_own_account or is_owned_account:
-                    # Карточка самому пользователю или его родственнику
-                    #
-                    inline_btn_iof = InlineKeyboardButton(
-                        'Название' if is_org else 'ФИО',
+        callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE
+        if response_to['is_active'] or response_to['owner']:
+            if is_own_account or is_owned_account:
+                # Карточка самому пользователю или его родственнику
+                #
+                inline_btn_iof = InlineKeyboardButton(
+                    'Название' if is_org else 'ФИО',
+                    callback_data=callback_data_template % dict(
+                    keyboard_type=KeyboardType.IOF,
+                    uuid=response_to['uuid'],
+                    sep=KeyboardType.SEP,
+                ))
+                inline_btn_photo = InlineKeyboardButton(
+                    'Фото',
+                    callback_data=callback_data_template % dict(
+                    keyboard_type=KeyboardType.PHOTO,
+                    uuid=response_to['uuid'],
+                    sep=KeyboardType.SEP,
+                ))
+                edit_buttons_1 = []
+                if editable:
+                    edit_buttons_1 += [inline_btn_iof, inline_btn_photo,]
+                if not is_org:
+                    inline_btn_gender = InlineKeyboardButton(
+                        'Пол',
                         callback_data=callback_data_template % dict(
-                        keyboard_type=KeyboardType.IOF,
+                        keyboard_type=KeyboardType.GENDER,
                         uuid=response_to['uuid'],
                         sep=KeyboardType.SEP,
                     ))
-                    inline_btn_photo = InlineKeyboardButton(
-                        'Фото',
+                    inline_btn_dates = InlineKeyboardButton(
+                        'Д.р.' if is_own_account else 'Даты',
                         callback_data=callback_data_template % dict(
-                        keyboard_type=KeyboardType.PHOTO,
+                        keyboard_type=KeyboardType.DATES,
                         uuid=response_to['uuid'],
                         sep=KeyboardType.SEP,
                     ))
-                    edit_buttons_1 = []
-                    if editable:
-                        edit_buttons_1 += [inline_btn_iof, inline_btn_photo,]
-                    if not is_org:
-                        inline_btn_gender = InlineKeyboardButton(
-                            'Пол',
-                            callback_data=callback_data_template % dict(
-                            keyboard_type=KeyboardType.GENDER,
-                            uuid=response_to['uuid'],
-                            sep=KeyboardType.SEP,
-                        ))
-                        inline_btn_dates = InlineKeyboardButton(
-                            'Д.р.' if is_own_account else 'Даты',
-                            callback_data=callback_data_template % dict(
-                            keyboard_type=KeyboardType.DATES,
-                            uuid=response_to['uuid'],
-                            sep=KeyboardType.SEP,
-                        ))
-                        edit_buttons_1 += [inline_btn_gender, inline_btn_dates,]
-                    reply_markup.row(*edit_buttons_1)
+                    edit_buttons_1 += [inline_btn_gender, inline_btn_dates,]
+                reply_markup.row(*edit_buttons_1)
 
-                    inline_btn_location = InlineKeyboardButton(
-                        'Место',
-                        callback_data=callback_data_template % dict(
-                        keyboard_type=KeyboardType.LOCATION,
+                inline_btn_location = InlineKeyboardButton(
+                    'Место',
+                    callback_data=callback_data_template % dict(
+                    keyboard_type=KeyboardType.LOCATION,
+                    uuid=response_to['uuid'] if is_owned_account else '',
+                    sep=KeyboardType.SEP,
+                ))
+                inline_btn_comment = InlineKeyboardButton(
+                    'О себе' if is_own_account else 'Коммент',
+                    callback_data=callback_data_template % dict(
+                    keyboard_type=KeyboardType.COMMENT,
+                    uuid=response_to['uuid'],
+                    sep=KeyboardType.SEP,
+                ))
+                edit_buttons_2 = []
+                if editable:
+                    edit_buttons_2 += [inline_btn_location, inline_btn_comment]
+                else:
+                    edit_buttons_1 += [inline_btn_location]
+                if editable and is_owned_account:
+                    dict_change_owner = dict(
+                        keyboard_type=KeyboardType.CHANGE_OWNER,
+                        uuid=response_to['uuid'],
+                        sep=KeyboardType.SEP,
+                    )
+                    inline_btn_change_owner = InlineKeyboardButton(
+                        'Владелец',
+                        callback_data=callback_data_template % dict_change_owner,
+                    )
+                    edit_buttons_2.append(inline_btn_change_owner)
+                    if not response_to['is_dead'] and not is_org:
+                        dict_invite = dict(
+                            keyboard_type=KeyboardType.INVITE,
+                            uuid=response_to['uuid'],
+                            sep=KeyboardType.SEP,
+                        )
+                        inline_btn_invite = InlineKeyboardButton(
+                            'Пригласить',
+                            callback_data=callback_data_template % dict_invite,
+                        )
+                        edit_buttons_2.append(inline_btn_invite)
+                if edit_buttons_2:
+                    reply_markup.row(*edit_buttons_2)
+
+                if editable and not is_org:
+                    dict_papa_mama = dict(
+                        keyboard_type=KeyboardType.FATHER,
+                        uuid=response_to['uuid'],
+                        sep=KeyboardType.SEP,
+                    )
+                    inline_btn_papa = InlineKeyboardButton(
+                        'Папа',
+                        callback_data=callback_data_template % dict_papa_mama,
+                    )
+                    dict_papa_mama.update(keyboard_type=KeyboardType.MOTHER)
+                    inline_btn_mama = InlineKeyboardButton(
+                        'Мама',
+                        callback_data=callback_data_template % dict_papa_mama,
+                    )
+                    dict_child = dict(
+                        keyboard_type=KeyboardType.CHILD,
+                        uuid=response_to['uuid'],
+                        sep=KeyboardType.SEP,
+                    )
+                    inline_btn_child = InlineKeyboardButton(
+                        'Ребёнок',
+                        callback_data=callback_data_template % dict_child,
+                    )
+                    args_relatives = [inline_btn_papa, inline_btn_mama, inline_btn_child, ]
+                    if response_to.get('father') or response_to.get('mother'):
+                        dict_bro_sis = dict(
+                            keyboard_type=KeyboardType.BRO_SIS,
+                            uuid=response_to['uuid'],
+                            sep=KeyboardType.SEP,
+                        )
+                        inline_btn_bro_sis = InlineKeyboardButton(
+                            'Брат/сестра',
+                            callback_data=callback_data_template % dict_bro_sis,
+                        )
+                        args_relatives.append(inline_btn_bro_sis)
+                    reply_markup.row(*args_relatives)
+
+                if editable:
+                    dict_abwishkey = dict(
+                        keyboard_type=KeyboardType.ABILITY,
                         uuid=response_to['uuid'] if is_owned_account else '',
                         sep=KeyboardType.SEP,
-                    ))
-                    inline_btn_comment = InlineKeyboardButton(
-                        'О себе' if is_own_account else 'Коммент',
-                        callback_data=callback_data_template % dict(
-                        keyboard_type=KeyboardType.COMMENT,
-                        uuid=response_to['uuid'],
-                        sep=KeyboardType.SEP,
-                    ))
-                    edit_buttons_2 = []
-                    if editable:
-                        edit_buttons_2 += [inline_btn_location, inline_btn_comment]
-                    else:
-                        edit_buttons_1 += [inline_btn_location]
-                    if editable and is_owned_account:
-                        dict_change_owner = dict(
-                            keyboard_type=KeyboardType.CHANGE_OWNER,
-                            uuid=response_to['uuid'],
-                            sep=KeyboardType.SEP,
-                        )
-                        inline_btn_change_owner = InlineKeyboardButton(
-                            'Владелец',
-                            callback_data=callback_data_template % dict_change_owner,
-                        )
-                        edit_buttons_2.append(inline_btn_change_owner)
-                        if not response_to['is_dead'] and not is_org:
-                            dict_invite = dict(
-                                keyboard_type=KeyboardType.INVITE,
-                                uuid=response_to['uuid'],
-                                sep=KeyboardType.SEP,
+                    )
+                    inline_btn_ability = InlineKeyboardButton(
+                        'Возможности',
+                        callback_data=callback_data_template % dict_abwishkey,
+                    )
+                    dict_abwishkey.update(keyboard_type=KeyboardType.WISH)
+                    inline_btn_wish = InlineKeyboardButton(
+                        'Потребности',
+                        callback_data=callback_data_template % dict_abwishkey,
+                    )
+                    dict_abwishkey.update(keyboard_type=KeyboardType.KEYS, uuid=response_to['uuid'])
+                    inline_btn_keys = InlineKeyboardButton(
+                        'Контакты',
+                        callback_data=callback_data_template % dict_abwishkey,
+                    )
+                    reply_markup.row(inline_btn_ability, inline_btn_wish, inline_btn_keys)
+
+        if editable:
+            dict_message = dict(
+                keyboard_type=KeyboardType.SEND_MESSAGE,
+                uuid=response_to['uuid'],
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_send_message = InlineKeyboardButton(
+                'Написать',
+                callback_data=callback_data_template % dict_message,
+            )
+            dict_message.update(
+                keyboard_type=KeyboardType.SHOW_MESSAGES,
+            )
+            inline_btn_show_messages = InlineKeyboardButton(
+                'Архив',
+                callback_data=callback_data_template % dict_message,
+            )
+            reply_markup.row(inline_btn_send_message, inline_btn_show_messages)
+
+        if is_own_account and response_to['is_active'] or is_owned_account:
+            title_delete = 'Удалить' if is_owned_account else 'Обезличить'
+            callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE + '%(owner_id)s%(sep)s'
+            dict_delete = dict(
+                keyboard_type=KeyboardType.DELETE_USER,
+                uuid=response_to['uuid'],
+                owner_id=user_from_id,
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_delete = InlineKeyboardButton(
+                title_delete,
+                callback_data=callback_data_template % dict_delete,
+            )
+            reply_markup.row(inline_btn_delete)
+
+        if is_own_account and not response_to['is_active']:
+            callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE + '%(owner_id)s%(sep)s'
+            dict_undelete = dict(
+                keyboard_type=KeyboardType.UNDELETE_USER,
+                uuid=response_to['uuid'],
+                owner_id=user_from_id,
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_undelete = InlineKeyboardButton(
+                'Восстановить',
+                callback_data=callback_data_template % dict_undelete,
+            )
+            reply_markup.row(inline_btn_undelete)
+
+        send_text_message = True
+        if (response_to['is_active'] or response_to['owner']) and reply:
+            # в бот
+            #
+            if response_to.get('photo') and response_from and response_from.get('tg_data') and reply:
+                try:
+                    photo = InputFile.from_url(response_to['photo'], filename='1.png')
+                    await bot.send_photo(
+                        chat_id=tg_user_from_id,
+                        photo=photo,
+                        disable_notification=True,
+                        caption=reply,
+                        reply_markup=reply_markup,
+                    )
+                    send_text_message = False
+                except BadRequest as excpt:
+                    if excpt.args[0] == 'Media_caption_too_long':
+                        try:
+                            await bot.send_photo(
+                                chat_id=tg_user_from_id,
+                                photo=photo,
+                                disable_notification=True,
                             )
-                            inline_btn_invite = InlineKeyboardButton(
-                                'Пригласить',
-                                callback_data=callback_data_template % dict_invite,
-                            )
-                            edit_buttons_2.append(inline_btn_invite)
-                    if edit_buttons_2:
-                        reply_markup.row(*edit_buttons_2)
-
-                    if editable and not is_org:
-                        dict_papa_mama = dict(
-                            keyboard_type=KeyboardType.FATHER,
-                            uuid=response_to['uuid'],
-                            sep=KeyboardType.SEP,
-                        )
-                        inline_btn_papa = InlineKeyboardButton(
-                            'Папа',
-                            callback_data=callback_data_template % dict_papa_mama,
-                        )
-                        dict_papa_mama.update(keyboard_type=KeyboardType.MOTHER)
-                        inline_btn_mama = InlineKeyboardButton(
-                            'Мама',
-                            callback_data=callback_data_template % dict_papa_mama,
-                        )
-                        dict_child = dict(
-                            keyboard_type=KeyboardType.CHILD,
-                            uuid=response_to['uuid'],
-                            sep=KeyboardType.SEP,
-                        )
-                        inline_btn_child = InlineKeyboardButton(
-                            'Ребёнок',
-                            callback_data=callback_data_template % dict_child,
-                        )
-                        args_relatives = [inline_btn_papa, inline_btn_mama, inline_btn_child, ]
-                        if response_to.get('father') or response_to.get('mother'):
-                            dict_bro_sis = dict(
-                                keyboard_type=KeyboardType.BRO_SIS,
-                                uuid=response_to['uuid'],
-                                sep=KeyboardType.SEP,
-                            )
-                            inline_btn_bro_sis = InlineKeyboardButton(
-                                'Брат/сестра',
-                                callback_data=callback_data_template % dict_bro_sis,
-                            )
-                            args_relatives.append(inline_btn_bro_sis)
-                        reply_markup.row(*args_relatives)
-
-                    if editable:
-                        dict_abwishkey = dict(
-                            keyboard_type=KeyboardType.ABILITY,
-                            uuid=response_to['uuid'] if is_owned_account else '',
-                            sep=KeyboardType.SEP,
-                        )
-                        inline_btn_ability = InlineKeyboardButton(
-                            'Возможности',
-                            callback_data=callback_data_template % dict_abwishkey,
-                        )
-                        dict_abwishkey.update(keyboard_type=KeyboardType.WISH)
-                        inline_btn_wish = InlineKeyboardButton(
-                            'Потребности',
-                            callback_data=callback_data_template % dict_abwishkey,
-                        )
-                        dict_abwishkey.update(keyboard_type=KeyboardType.KEYS, uuid=response_to['uuid'])
-                        inline_btn_keys = InlineKeyboardButton(
-                            'Контакты',
-                            callback_data=callback_data_template % dict_abwishkey,
-                        )
-                        reply_markup.row(inline_btn_ability, inline_btn_wish, inline_btn_keys)
-
-            if editable:
-                dict_message = dict(
-                    keyboard_type=KeyboardType.SEND_MESSAGE,
-                    uuid=response_to['uuid'],
-                    sep=KeyboardType.SEP,
-                )
-                inline_btn_send_message = InlineKeyboardButton(
-                    'Написать',
-                    callback_data=callback_data_template % dict_message,
-                )
-                dict_message.update(
-                    keyboard_type=KeyboardType.SHOW_MESSAGES,
-                )
-                inline_btn_show_messages = InlineKeyboardButton(
-                    'Архив',
-                    callback_data=callback_data_template % dict_message,
-                )
-                reply_markup.row(inline_btn_send_message, inline_btn_show_messages)
-
-            if is_own_account and response_to['is_active'] or is_owned_account:
-                title_delete = 'Удалить' if is_owned_account else 'Обезличить'
-                callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE + '%(owner_id)s%(sep)s'
-                dict_delete = dict(
-                    keyboard_type=KeyboardType.DELETE_USER,
-                    uuid=response_to['uuid'],
-                    owner_id=user_from_id,
-                    sep=KeyboardType.SEP,
-                )
-                inline_btn_delete = InlineKeyboardButton(
-                    title_delete,
-                    callback_data=callback_data_template % dict_delete,
-                )
-                reply_markup.row(inline_btn_delete)
-
-            if is_own_account and not response_to['is_active']:
-                callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE + '%(owner_id)s%(sep)s'
-                dict_undelete = dict(
-                    keyboard_type=KeyboardType.UNDELETE_USER,
-                    uuid=response_to['uuid'],
-                    owner_id=user_from_id,
-                    sep=KeyboardType.SEP,
-                )
-                inline_btn_undelete = InlineKeyboardButton(
-                    'Восстановить',
-                    callback_data=callback_data_template % dict_undelete,
-                )
-                reply_markup.row(inline_btn_undelete)
-
-            send_text_message = True
-            if (response_to['is_active'] or response_to['owner']) and reply:
-                # в бот
-                #
-                if response_to.get('photo') and response_from and response_from.get('tg_data') and reply:
-                    try:
-                        photo = InputFile.from_url(response_to['photo'], filename='1.png')
-                        await bot.send_photo(
-                            chat_id=tg_user_from_id,
-                            photo=photo,
-                            disable_notification=True,
-                            caption=reply,
-                            reply_markup=reply_markup,
-                        )
-                        send_text_message = False
-                    except BadRequest as excpt:
-                        if excpt.args[0] == 'Media_caption_too_long':
-                            try:
-                                await bot.send_photo(
-                                    chat_id=tg_user_from_id,
-                                    photo=photo,
-                                    disable_notification=True,
-                                )
-                            except:
-                                pass
-                    except:
-                        pass
-            if send_text_message and reply:
-                parts = safe_split_text(reply, split_separator='\n')
-                for part in parts:
-                    await message.answer(part, reply_markup=reply_markup, disable_web_page_preview=True)
+                        except:
+                            pass
+                except:
+                    pass
+        if send_text_message and reply:
+            parts = safe_split_text(reply, split_separator='\n')
+            for part in parts:
+                await message.answer(part, reply_markup=reply_markup, disable_web_page_preview=True)
 
     @classmethod
     def get_lifetime_str(cls, response):

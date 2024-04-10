@@ -347,7 +347,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 if profile_to.owner_id  and operationtype_id in (
                        OperationType.THANK, OperationType.MISTRUST,
                        OperationType.TRUST, OperationType.NULLIFY_ATTITUDE,
-                       OperationType.TRUST_AND_THANK,
+                       OperationType.TRUST_AND_THANK, OperationType.ACQ,
                    ):
                     profile_to_owner = Profile.objects.select_related('user').get(user__pk=profile_to.owner.pk)
                     profile_to_data.update(owner=profile_to_owner.data_dict(short=True))
@@ -366,6 +366,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                    OperationType.MISTRUST,
                    OperationType.TRUST,
                    OperationType.NULLIFY_ATTITUDE,
+                   OperationType.ACQ,
                ):
                 message = None
                 bot_username = self.get_bot_username()

@@ -769,9 +769,8 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
     state_ = ''
 
-    # Кого будут благодарить
-    # или свой профиль в массиве
-    a_response_to = []
+    # Чью карточку будут показывать?
+    profile_card = {}
 
     # массив найденных профилей. По ним только deeplinks
     a_found = []
@@ -1021,14 +1020,14 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                     'start_uuid', 'start_sid', 'start_setplace', 'start_poll',
                     'start_offer', 'start_auth_redirect',
                ) and response_from.get('created'):
-                a_response_to += [response_from, ]
+                profile_card = response_from
 
     if user_from_id and state_ == 'start_sid':
         logging.debug('get tg_user_by_start_sid data in api...')
         try:
             status, response_uuid = await Misc.get_user_by_sid(sid=sid_to_search)
             if status == 200:
-                a_response_to += [response_uuid, ]
+                profile_card = response_uuid
             else:
                 reply = Misc.MSG_USER_NOT_FOUND
         except:
@@ -1039,7 +1038,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         try:
             status, response_uuid = await Misc.get_user_by_uuid(uuid=uuid_to_search)
             if status == 200:
-                a_response_to += [response_uuid, ]
+                profile_card = response_uuid
             else:
                 reply = Misc.MSG_USER_NOT_FOUND
         except:
@@ -1050,7 +1049,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         if status == 200:
             response_to.update(tg_username=tg_user_forwarded.username)
             if show_response:
-                a_response_to = [response_to, ]
+                profile_card = response_to
 
     if user_from_id and state_ in ('forwarded_from_other', 'forwarded_from_me'):
         usernames, text_stripped = Misc.get_text_usernames(message_text)
@@ -1073,18 +1072,18 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         'start_setplace', 'start_poll',
         'start_offer', 'start_trust', 'start_auth_redirect',
         'youtube_link', 'start_invite'
-       ) and user_from_id and a_response_to:
+       ) and user_from_id and profile_card:
         if state_ == 'start':
             await message.reply(await Misc.help_text(), disable_web_page_preview=True)
-            if a_response_to and not a_response_to[0].get('photo'):
+            if not profile_card.get('photo'):
                 status_photo, response_photo = await Misc.update_user_photo(bot, tg_user_sender, response_from)
                 if response_photo:
                     response_from = response_photo
-                    a_response_to[0] = response_photo
+                    profile_card = response_photo
         message_to_forward_id = state_ == 'forwarded_from_other' and message.message_id or ''
         if show_response:
-            await Misc.show_cards(
-                a_response_to,
+            await Misc.show_card(
+                profile_card,
                 message,
                 bot,
                 response_from=response_from,
@@ -1103,9 +1102,9 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         if response_from.get('created') and state_ != 'start':
             await Misc.update_user_photo(bot, tg_user_sender, response_from)
             # Будем показывать карточку нового юзера в таких случаях?
-            #if a_response_to and state_ in ('start_setplace', 'start_poll', 'start_offer', ):
-                #await Misc.show_cards(
-                    #a_response_to,
+            #if profile_card and state_ in ('start_setplace', 'start_poll', 'start_offer', ):
+                #await Misc.show_card(
+                    #profile_card,
                     #message,
                     #bot,
                     #response_from=response_from,
@@ -1182,7 +1181,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 await message.reply('Опрос-предложение не найдено')
         elif state_ == 'youtube_link':
             await answer_youtube_message(message, youtube_id, youtube_link)
-        elif state_ == 'forwarded_from_other' and a_response_to and a_response_to[0].get('created'):
+        elif state_ == 'forwarded_from_other' and profile_card and profile_card.get('created'):
             await Misc.update_user_photo(bot, tg_user_forwarded, response_to)
         elif state_ == 'start_invite':
             await show_invite(response_from, token_invite, message, bot_data)
@@ -1474,8 +1473,8 @@ async def put_new_papa_mama(message: types.Message, state: FSMContext):
                 ),
                 disable_web_page_preview=True,
             )
-            await Misc.show_cards(
-                [response],
+            await Misc.show_card(
+                response,
                 message,
                 bot,
                 response_from=owner,
@@ -2200,8 +2199,8 @@ async def put_new_child(message: types.Message, state: FSMContext):
                                 _a_='' if is_father else 'а',
                                 disable_web_page_preview=True,
                         ))
-                        await Misc.show_cards(
-                            [response_child],
+                        await Misc.show_card(
+                            response_child,
                             message,
                             bot,
                             response_from=response_sender,
@@ -2514,7 +2513,7 @@ async def put_bro_sys_by_uuid(message: types.Message, state: FSMContext):
                         status, response = await Misc.get_user_by_uuid(uuid=data_bro_sis['uuid'])
                         if status == 200:
                             await message.reply(f'{dl_bro_sis} имеет тех же родителей, что и {dl_whose}')
-                            await Misc.show_cards([response], message, bot, response_from=response_whose)
+                            await Misc.show_card(response, message, bot, response_from=response_whose)
             else:
                 await message.reply((
                     'Можно назначать брата или сестру только между Вами '
@@ -2701,7 +2700,7 @@ async def put_new_bro_sis(message: types.Message, state: FSMContext):
                         status, response = await Misc.get_user_by_uuid(uuid=data_bro_sis['uuid'])
                         if status == 200:
                             await message.reply(f'{dl_bro_sis} имеет тех же родителей, что и {dl_whose}')
-                            await Misc.show_cards([response], message, bot, response_from=response_whose)
+                            await Misc.show_card(response, message, bot, response_from=response_whose)
             else:
                 await message.reply((
                     f'Можно назначить {brata_sestru} только Вам '
@@ -2803,8 +2802,8 @@ async def get_keys(message: types.Message, state: FSMContext):
                             await message.reply(response['message'])
                         elif status == 200:
                             await message.reply('Контакты зафиксированы')
-                            await Misc.show_cards(
-                                [response],
+                            await Misc.show_card(
+                                response,
                                 message,
                                 bot,
                                 response_from=response_sender,
@@ -3069,8 +3068,8 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
             )
             if status == 200:
                 await message.reply('Изменено')
-                await Misc.show_cards(
-                    [response],
+                await Misc.show_card(
+                    response,
                     message,
                     bot,
                     response_from=response_sender,
@@ -3321,8 +3320,8 @@ async def put_dates(message, tg_user_sender, state, data):
                 is_dead = '1' if is_dead or dod else '',
             )
             if status == 200 and response:
-                await Misc.show_cards(
-                    [response],
+                await Misc.show_card(
+                    response,
                     message,
                     bot,
                     response_from=response_sender,
@@ -3470,8 +3469,8 @@ async def put_comment(message: types.Message, state: FSMContext):
             if status == 200:
                 await message.reply(
                     f'{"Изменен" if response_sender["response_uuid"]["comment"] else "Добавлен"} комментарий')
-                await Misc.show_cards(
-                    [response],
+                await Misc.show_card(
+                    response,
                     message,
                     bot,
                     response_from=response_sender,
@@ -3862,8 +3861,8 @@ async def put_ability(message: types.Message, state: FSMContext):
             logging.debug('get_user_profile after put ability, status: %s' % status)
             logging.debug('get_user_profile after put ability, response: %s' % response)
             if status_sender == 200:
-                await Misc.show_cards(
-                    [response],
+                await Misc.show_card(
+                    response,
                     message,
                     bot,
                     response_from=response_sender,
@@ -3932,8 +3931,8 @@ async def put_wish(message: types.Message, state: FSMContext):
             logging.debug('get_user_profile after put wish, status: %s' % status)
             logging.debug('get_user_profile after put wish, response: %s' % response)
             if status_sender == 200:
-                await Misc.show_cards(
-                    [response],
+                await Misc.show_card(
+                    response,
                     message,
                     bot,
                     response_from=response_sender,
@@ -3985,8 +3984,8 @@ async def put_photo(message: types.Message, state: FSMContext):
             msg_error = '<b>Ошибка</b>. Фото не внесено.\n'
             if status == 200:
                 await message.reply('%s : фото внесено' % response['first_name'])
-                await Misc.show_cards(
-                    [response],
+                await Misc.show_card(
+                    response,
                     message,
                     bot,
                     response_from=response_sender,
@@ -4108,8 +4107,8 @@ async def process_callback_photo_remove_confirmed(callback_query: types.Callback
         )
         if status == 200:
             await callback_query.message.reply('%s: фото удалено' % response['first_name'])
-            await Misc.show_cards(
-                [response],
+            await Misc.show_card(
+                response,
                 callback_query.message,
                 bot,
                 response_from=response_sender,
@@ -4210,8 +4209,8 @@ async def new_iof_ask_org(message: types.Message, state: FSMContext):
             try:
                 status, response = await Misc.get_user_by_uuid(response['uuid'])
                 if status == 200:
-                    await Misc.show_cards(
-                        [response],
+                    await Misc.show_card(
+                        response,
                         message,
                         bot,
                         response_from=response_sender,
@@ -4289,8 +4288,8 @@ async def process_callback_new_iof_gender(callback_query: types.CallbackQuery, s
                     await callback_query.message.reply('Добавлен' if gender == 'm' else 'Добавлена')
                     status, response = await Misc.get_user_by_uuid(response['uuid'])
                     if status == 200:
-                        await Misc.show_cards(
-                            [response],
+                        await Misc.show_card(
+                            response,
                             callback_query.message,
                             bot,
                             response_from=response_sender,
@@ -4862,8 +4861,8 @@ async def put_location(message, state, show_card=False):
             if status == 200:
                 result = response
                 if show_card:
-                    await Misc.show_cards(
-                        [response],
+                    await Misc.show_card(
+                        response,
                         message,
                         bot,
                         response_from=response_sender,
@@ -6002,8 +6001,8 @@ async def process_callback_delete_user_confirmed(callback_query: types.CallbackQ
     else:
         await callback_query.message.reply(msg_deleted)
         if user['user_id'] == owner['user_id']:
-            await Misc.show_cards(
-                [response],
+            await Misc.show_card(
+                response,
                 callback_query.message,
                 bot,
                 response_from=owner,
@@ -6073,8 +6072,8 @@ async def process_callback_undelete_user_confirmed(callback_query: types.Callbac
         status_photo, response_photo = await Misc.update_user_photo(bot, callback_query.from_user, response)
         if status_photo == 200:
             response = response_photo
-        await Misc.show_cards(
-            [response],
+        await Misc.show_card(
+            response,
             callback_query.message,
             bot,
             response_from=owner,
@@ -6294,8 +6293,8 @@ async def process_callback_invite_confirm(callback_query: types.CallbackQuery, s
                     'Добро пожаловать в родственную сеть',
                     disable_web_page_preview=True,
                 )
-                await Misc.show_cards(
-                    [response['profile']],
+                await Misc.show_card(
+                    response['profile'],
                     callback_query.message,
                     bot,
                     response_from=response_sender,

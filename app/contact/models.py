@@ -449,6 +449,7 @@ class ApiAddOperationMixin(object):
             profile_to.save()
 
         elif operationtype_id == OperationType.MISTRUST:
+            attitude_previous = None
             currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
                 user_from=user_from,
                 user_to=user_to,
@@ -458,14 +459,17 @@ class ApiAddOperationMixin(object):
             if not created_:
                 if not currentstate.is_reverse and currentstate.attitude == CurrentState.MISTRUST:
                     raise ServiceException(
-                        'Вы уже не доверяете',
+                        'Вы уже не доверяете человеку',
                         already_code,
                     )
+                if not currentstate.is_reverse:
+                    attitude_previous = currentstate.attitude
                 currentstate.update_timestamp = update_timestamp
                 currentstate.is_reverse = False
                 currentstate.attitude = CurrentState.MISTRUST
                 currentstate.save()
 
+            data.update(previousstate=dict(attitude=attitude_previous))
             reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
                 user_to=user_from,
                 user_from=user_to,
@@ -480,8 +484,13 @@ class ApiAddOperationMixin(object):
                 reverse_cs.save()
 
             profile_to.recount_trust_fame()
+            data.update(currentstate=dict(
+                thanks_count=currentstate.thanks_count,
+                attitude=currentstate.attitude,
+            ))
 
         elif operationtype_id == OperationType.TRUST:
+            attitude_previous = None
             currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
                 user_from=user_from,
                 user_to=user_to,
@@ -491,14 +500,17 @@ class ApiAddOperationMixin(object):
             if not created_:
                 if not currentstate.is_reverse and attitude == CurrentState.TRUST:
                     raise ServiceException(
-                        'Вы уже доверяете',
+                        'Вы уже доверяете человеку',
                         already_code,
                     )
+                if not currentstate.is_reverse:
+                    attitude_previous = currentstate.attitude
                 currentstate.update_timestamp = update_timestamp
                 currentstate.is_reverse = False
                 currentstate.attitude = CurrentState.TRUST
                 currentstate.save()
 
+            data.update(previousstate=dict(attitude=attitude_previous))
             reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
                 user_to=user_from,
                 user_from=user_to,
@@ -513,6 +525,10 @@ class ApiAddOperationMixin(object):
                 reverse_cs.save()
 
             profile_to.recount_trust_fame()
+            data.update(currentstate=dict(
+                thanks_count=currentstate.thanks_count,
+                attitude=currentstate.attitude,
+            ))
 
         elif operationtype_id == OperationType.TRUST_AND_THANK:
             attitude_previous = None
@@ -557,7 +573,7 @@ class ApiAddOperationMixin(object):
             ))
 
         elif operationtype_id == OperationType.NULLIFY_ATTITUDE:
-            err_message = 'У вас не было ни никакого отношения'
+            err_message = 'Вы и так не знакомы с человеком'
             try:
                 currentstate = CurrentState.objects.select_for_update().get(
                     user_from=user_from,
@@ -569,38 +585,42 @@ class ApiAddOperationMixin(object):
             if currentstate.is_reverse:
                 # то же что created
                 raise ServiceException(err_message, already_code)
+            elif currentstate.attitude == None:
+                raise ServiceException(err_message, already_code)
             else:
-                if currentstate.attitude == None:
-                    raise ServiceException(err_message, already_code)
+                # TRUST, MISTRUST или ACQ
+                # Здесь если есть обратная запись, в которой attitude not null,
+                #   то:     переводим найденную в is_reverse
+                #   иначе:  в текущей ставим attitude = None
+                #
+                data.update(previousstate=dict(attitude=currentstate.attitude))
+                reverse_cs, reverse_created = CurrentState.objects.get_or_create(
+                    user_from=user_to,
+                    user_to=user_from,
+                    defaults = dict(
+                        is_reverse=True,
+                        attitude=None,
+                ))
+                currentstate.update_timestamp = update_timestamp
+                if not reverse_created and not (reverse_cs.attitude == None) and not reverse_cs.is_reverse:
+                    currentstate.is_reverse = True
+                    currentstate.attitude = reverse_cs.attitude
                 else:
-                    # TRUST, MISTRUST или ACQ
-                    # Здесь если есть обратная запись, в которой attitude not null,
-                    #   то:     переводим найденную в is_reverse
-                    #   иначе:  в текущей ставим attitude = None
-                    #
-                    reverse_cs, reverse_created = CurrentState.objects.get_or_create(
-                        user_from=user_to,
-                        user_to=user_from,
-                        defaults = dict(
-                            is_reverse=True,
-                            attitude=None,
-                    ))
-                    currentstate.update_timestamp = update_timestamp
-                    if not reverse_created and not (reverse_cs.attitude == None) and not reverse_cs.is_reverse:
-                        currentstate.is_reverse = True
-                        currentstate.attitude = reverse_cs.attitude
-                    else:
-                        currentstate.attitude = None
-                    currentstate.save()
+                    currentstate.attitude = None
+                currentstate.save()
 
-            CurrentState.objects.filter(
-                user_to=user_from,
-                user_from=user_to,
-                is_reverse=True,
-                attitude__isnull=False,
-            ).update(attitude=None, update_timestamp=update_timestamp)
+                CurrentState.objects.filter(
+                    user_to=user_from,
+                    user_from=user_to,
+                    is_reverse=True,
+                    attitude__isnull=False,
+                ).update(attitude=None, update_timestamp=update_timestamp)
 
-            profile_to.recount_trust_fame()
+                profile_to.recount_trust_fame()
+                data.update(currentstate=dict(
+                    thanks_count=currentstate.thanks_count,
+                    attitude=None,
+                ))
 
         elif operationtype_id in (
                 OperationType.FATHER, OperationType.MOTHER,
