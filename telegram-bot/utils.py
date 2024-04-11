@@ -39,13 +39,15 @@ class OperationType(object):
     THANK = 1
     MISTRUST = 2
     TRUST = 3
-    NULLIFY_TRUST = 4
+    NULLIFY_ATTITUDE = 4
     TRUST_AND_THANK = 5
     FATHER = 6
     NOT_PARENT = 7
     MOTHER = 8
     SET_FATHER = 9
     SET_MOTHER = 10
+    # Acquainted
+    ACQ = 11
 
     CALLBACK_DATA_TEMPLATE = (
         '%(keyboard_type)s%(sep)s'
@@ -673,10 +675,10 @@ class Misc(object):
         if not sender:
             sender = profile
         return      profile.get('owner') and \
-                        profile['owner']['editable'] and profile['owner']['uuid'] == sender['uuid'] \
+                        profile['owner'].get('editable') and profile['owner']['uuid'] == sender['uuid'] \
                or \
                     not profile.get('owner') and \
-                    profile['editable'] and profile['uuid'] == sender['uuid']
+                    profile.get('editable') and profile['uuid'] == sender['uuid']
 
 
     @classmethod
@@ -949,23 +951,23 @@ class Misc(object):
         #
         response_to,
 
-        # в ответ на какое сообщение
-        #
-        message,
         bot,
 
         # профиль пользователя-отправителя из апи, который будет читать карточку
         #
         response_from,
 
-        # телеграм- пользователь, который будет читать карточку. Если он в message
-        # сам что-то написал, то можно не ставить, это будет message.from_user
+        # телеграм- пользователь, который будет читать карточку.
         #
-        tg_user_from=None,
+        tg_user_from,
 
         # Ид сообщения, которое включить в кнопки, чтобы его потом перенаправить
         #
         message_to_forward_id='',
+
+        # Сообщение с карточкой, которое надо подправить, а не слать новую карточку
+        #
+        card_message=None,
     ):
         """
         Показать карточки пользователей
@@ -974,11 +976,7 @@ class Misc(object):
             return
         bot_data = await bot.get_me()
         user_from_id = response_from['user_id']
-
-        # Кому слать? Чаще всего автору сообщения, тогда параметр tg_user_from можно не указывать
-        # при вызове. Но если сообщение от бота? Тогда только tg_user_from.id
-        #
-        tg_user_from_id = tg_user_from.id if tg_user_from else message.from_user.id
+        tg_user_from_id = tg_user_from.id
 
         is_own_account = user_from_id == response_to['user_id']
         is_owned_account = response_to.get('owner') and response_to['owner']['user_id'] == user_from_id
@@ -1008,38 +1006,52 @@ class Misc(object):
                 message_to_forward_id=message_to_forward_id,
             )
             callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE
-            show_inline_btn_nullify_trust = True
-            if response_relations and response_relations['from_to']['attitude'] is None:
-                show_inline_btn_nullify_trust = False
+            trust_buttons = []
 
-            title_thank = 'Доверие'
-            if response_relations:
-                if response_relations['from_to']['attitude'] == Attitude.TRUST:
-                    title_thank = 'Благодарить'
-            dict_reply.update(operation=OperationType.TRUST_AND_THANK)
-            inline_btn_trust = InlineKeyboardButton(
-                title_thank,
+            dict_reply.update(operation=OperationType.ACQ)
+            inline_btn_acq = InlineKeyboardButton(
+                'Знакомы',
                 callback_data=callback_data_template % dict_reply,
             )
-            thank_buttons = [inline_btn_trust]
-            if not response_relations or response_relations['from_to']['attitude'] != Attitude.MISTRUST:
-                dict_reply.update(operation=OperationType.MISTRUST)
-                inline_btn_mistrust = InlineKeyboardButton(
-                    'Недоверие',
-                    callback_data=callback_data_template % dict_reply,
-                )
-                thank_buttons.append(inline_btn_mistrust)
-            if not response_relations or response_relations['from_to']['attitude'] is not None:
-                dict_reply.update(operation=OperationType.NULLIFY_TRUST)
-                inline_btn_nullify_trust = InlineKeyboardButton(
-                    'Не знакомы',
-                    callback_data=callback_data_template % dict_reply,
-                )
-                thank_buttons.append(inline_btn_nullify_trust)
-            reply_markup.row(*thank_buttons)
+
+            dict_reply.update(operation=OperationType.TRUST)
+            inline_btn_trust = InlineKeyboardButton(
+                'Доверяю',
+                callback_data=callback_data_template % dict_reply,
+            )
+
+            dict_reply.update(operation=OperationType.MISTRUST)
+            inline_btn_mistrust = InlineKeyboardButton(
+                'Не доверяю',
+                callback_data=callback_data_template % dict_reply,
+            )
+
+            dict_reply.update(operation=OperationType.NULLIFY_ATTITUDE)
+            inline_btn_nullify_attitude = InlineKeyboardButton(
+                'Не знакомы',
+                callback_data=callback_data_template % dict_reply,
+            )
+            if response_relations:
+                attitude = response_relations['from_to']['attitude']
+                if attitude == None:
+                    trust_buttons = (inline_btn_acq, inline_btn_trust, inline_btn_mistrust, )
+                elif attitude == Attitude.ACQ:
+                    trust_buttons = (inline_btn_nullify_attitude, inline_btn_trust, inline_btn_mistrust, )
+                elif attitude == Attitude.TRUST:
+                    trust_buttons = (inline_btn_acq, inline_btn_nullify_attitude, inline_btn_mistrust, )
+                elif attitude == Attitude.MISTRUST:
+                    trust_buttons = (inline_btn_acq, inline_btn_trust, inline_btn_nullify_attitude, )
+                reply_markup.row(*trust_buttons)
+
+            dict_reply.update(operation=OperationType.THANK)
+            inline_btn_thank = InlineKeyboardButton(
+                'Благодарить',
+                callback_data=callback_data_template % dict_reply,
+            )
+            reply_markup.row(inline_btn_thank)
 
         inline_btn_trusts = InlineKeyboardButton(
-            'Доверия',
+            'Сеть доверия',
             login_url=cls.make_login_url(
                 redirect_path='%(graph_host)s/?user_uuid_trusts=%(user_uuid)s' % dict(
                     graph_host=settings.GRAPH_HOST,
@@ -1273,16 +1285,24 @@ class Misc(object):
             if response_to.get('photo') and response_from and response_from.get('tg_data') and reply:
                 try:
                     photo = InputFile.from_url(response_to['photo'], filename='1.png')
-                    await bot.send_photo(
-                        chat_id=tg_user_from_id,
-                        photo=photo,
-                        disable_notification=True,
-                        caption=reply,
-                        reply_markup=reply_markup,
-                    )
+                    if card_message:
+                        await bot.edit_message_caption(
+                            chat_id=tg_user_from_id,
+                            message_id=card_message.message_id,
+                            caption=reply,
+                            reply_markup=reply_markup,
+                        )
+                    else:
+                        await bot.send_photo(
+                            chat_id=tg_user_from_id,
+                            photo=photo,
+                            disable_notification=True,
+                            caption=reply,
+                            reply_markup=reply_markup,
+                        )
                     send_text_message = False
                 except BadRequest as excpt:
-                    if excpt.args[0] == 'Media_caption_too_long':
+                    if excpt.args[0] == 'Media_caption_too_long' and not card_message:
                         try:
                             await bot.send_photo(
                                 chat_id=tg_user_from_id,
@@ -1292,11 +1312,24 @@ class Misc(object):
                         except:
                             pass
                 except:
-                    pass
+                    raise
         if send_text_message and reply:
-            parts = safe_split_text(reply, split_separator='\n')
-            for part in parts:
-                await message.answer(part, reply_markup=reply_markup, disable_web_page_preview=True)
+            if card_message:
+                try:
+                    await bot.edit_message_text(
+                        chat_id=tg_user_from_id,
+                        message_id=card_message.message_id,
+                        text=reply,
+                        reply_markup=reply_markup,
+                        disable_web_page_preview=True,
+                    )
+                except:
+                    pass
+            else:
+                parts = safe_split_text(reply, split_separator='\n')
+                for part in parts:
+                    await bot.send_message(tg_user_from_id, part, reply_markup=reply_markup, disable_web_page_preview=True)
+
 
     @classmethod
     def get_lifetime_str(cls, response):

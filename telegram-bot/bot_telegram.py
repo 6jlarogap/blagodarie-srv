@@ -1084,9 +1084,9 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         if show_response:
             await Misc.show_card(
                 profile_card,
-                message,
                 bot,
                 response_from=response_from,
+                tg_user_from=message.from_user,
                 message_to_forward_id=message_to_forward_id,
             )
 
@@ -1105,9 +1105,9 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             #if profile_card and state_ in ('start_setplace', 'start_poll', 'start_offer', ):
                 #await Misc.show_card(
                     #profile_card,
-                    #message,
                     #bot,
                     #response_from=response_from,
+                    #tg_user_from=message.from_user,
                 #)
         if state_ == 'start_setplace':
             await geo(message, state_to_set=FSMgeo.geo)
@@ -1475,9 +1475,9 @@ async def put_new_papa_mama(message: types.Message, state: FSMContext):
             )
             await Misc.show_card(
                 response,
-                message,
                 bot,
                 response_from=owner,
+                tg_user_from=message.from_user,
             )
         else:
             await message.reply('Родитель внесен в данные')
@@ -2201,9 +2201,9 @@ async def put_new_child(message: types.Message, state: FSMContext):
                         ))
                         await Misc.show_card(
                             response_child,
-                            message,
                             bot,
                             response_from=response_sender,
+                            tg_user_from=message.from_user,
                         )
                     else:
                         await message.reply('Ребёнок внесен в данные')
@@ -2513,7 +2513,12 @@ async def put_bro_sys_by_uuid(message: types.Message, state: FSMContext):
                         status, response = await Misc.get_user_by_uuid(uuid=data_bro_sis['uuid'])
                         if status == 200:
                             await message.reply(f'{dl_bro_sis} имеет тех же родителей, что и {dl_whose}')
-                            await Misc.show_card(response, message, bot, response_from=response_whose)
+                            await Misc.show_card(
+                                response,
+                                bot,
+                                response_from=response_whose,
+                                tg_user_from=message.from_user,
+                            )
             else:
                 await message.reply((
                     'Можно назначать брата или сестру только между Вами '
@@ -2700,7 +2705,12 @@ async def put_new_bro_sis(message: types.Message, state: FSMContext):
                         status, response = await Misc.get_user_by_uuid(uuid=data_bro_sis['uuid'])
                         if status == 200:
                             await message.reply(f'{dl_bro_sis} имеет тех же родителей, что и {dl_whose}')
-                            await Misc.show_card(response, message, bot, response_from=response_whose)
+                            await Misc.show_card(
+                                response,
+                                bot,
+                                response_from=response_whose,
+                                tg_user_from=message.from_user,
+                            )
             else:
                 await message.reply((
                     f'Можно назначить {brata_sestru} только Вам '
@@ -2804,9 +2814,9 @@ async def get_keys(message: types.Message, state: FSMContext):
                             await message.reply('Контакты зафиксированы')
                             await Misc.show_card(
                                 response,
-                                message,
                                 bot,
                                 response_from=response_sender,
+                                tg_user_from=message.from_user,
                             )
                     except:
                         pass
@@ -3070,9 +3080,9 @@ async def put_change_existing_iof(message: types.Message, state: FSMContext):
                 await message.reply('Изменено')
                 await Misc.show_card(
                     response,
-                    message,
                     bot,
                     response_from=response_sender,
+                    tg_user_from=message.from_user,
                 )
     await Misc.state_finish(state)
 
@@ -3322,7 +3332,6 @@ async def put_dates(message, tg_user_sender, state, data):
             if status == 200 and response:
                 await Misc.show_card(
                     response,
-                    message,
                     bot,
                     response_from=response_sender,
                     tg_user_from=tg_user_sender,
@@ -3471,9 +3480,9 @@ async def put_comment(message: types.Message, state: FSMContext):
                     f'{"Изменен" if response_sender["response_uuid"]["comment"] else "Добавлен"} комментарий')
                 await Misc.show_card(
                     response,
-                    message,
                     bot,
                     response_from=response_sender,
+                    tg_user_from=message.from_user,
                 )
     await Misc.state_finish(state)
 
@@ -3650,8 +3659,10 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
                 'От %(user_from)s к %(user_to)s\n'
             )
             if m['operation_type_id']:
-                if m['operation_type_id'] == OperationType.NULLIFY_TRUST:
+                if m['operation_type_id'] == OperationType.NULLIFY_ATTITUDE:
                     msg += 'в связи с тем что не знаком(а) с\n'
+                if m['operation_type_id'] == OperationType.NULLIFY_ACQ:
+                    msg += 'в связи с установкой знакомства с\n'
                 elif m['operation_type_id'] == OperationType.MISTRUST:
                     msg += 'в связи с утратой доверия\n'
                 elif m['operation_type_id'] == OperationType.TRUST:
@@ -3863,9 +3874,9 @@ async def put_ability(message: types.Message, state: FSMContext):
             if status_sender == 200:
                 await Misc.show_card(
                     response,
-                    message,
                     bot,
                     response_from=response_sender,
+                    tg_user_from=message.from_user,
                 )
             else:
                 await message.reply(Misc.MSG_ERROR_API)
@@ -3933,9 +3944,9 @@ async def put_wish(message: types.Message, state: FSMContext):
             if status_sender == 200:
                 await Misc.show_card(
                     response,
-                    message,
                     bot,
                     response_from=response_sender,
+                    tg_user_from=message.from_user,
                 )
             else:
                 await message.reply(Misc.MSG_ERROR_API)
@@ -3986,9 +3997,9 @@ async def put_photo(message: types.Message, state: FSMContext):
                 await message.reply('%s : фото внесено' % response['first_name'])
                 await Misc.show_card(
                     response,
-                    message,
                     bot,
                     response_from=response_sender,
+                    tg_user_from=message.from_user,
                 )
             elif status == 400:
                 if response.get('message'):
@@ -4109,17 +4120,17 @@ async def process_callback_photo_remove_confirmed(callback_query: types.Callback
             await callback_query.message.reply('%s: фото удалено' % response['first_name'])
             await Misc.show_card(
                 response,
-                callback_query.message,
                 bot,
                 response_from=response_sender,
+                tg_user_from=callback_query.from_user,
             )
         elif status == 400:
             if response.get('message'):
-                await message.reply(response['message'])
+                await callback_query.message.reply(response['message'])
             else:
-                await message.reply(Misc.MSG_ERROR_API)
+                await callback_query.message.reply(Misc.MSG_ERROR_API)
         else:
-            await message.reply(Misc.MSG_ERROR_API)
+            await callback_query.message.reply(Misc.MSG_ERROR_API)
     else:
         await message.reply(Misc.MSG_ERROR_API)
     await Misc.state_finish(state)
@@ -4211,7 +4222,6 @@ async def new_iof_ask_org(message: types.Message, state: FSMContext):
                 if status == 200:
                     await Misc.show_card(
                         response,
-                        message,
                         bot,
                         response_from=response_sender,
                         tg_user_from=message.from_user,
@@ -4290,7 +4300,6 @@ async def process_callback_new_iof_gender(callback_query: types.CallbackQuery, s
                     if status == 200:
                         await Misc.show_card(
                             response,
-                            callback_query.message,
                             bot,
                             response_from=response_sender,
                             tg_user_from=callback_query.from_user,
@@ -4419,7 +4428,8 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         return
     if not operation_type_id or operation_type_id not in (
             OperationType.TRUST_AND_THANK, OperationType.TRUST,
-            OperationType.MISTRUST, OperationType.NULLIFY_TRUST,
+            OperationType.MISTRUST, OperationType.NULLIFY_ATTITUDE,
+            OperationType.ACQ, OperationType.THANK,
         ):
         return
     status_to, profile_to = await Misc.get_user_by_uuid(uuid)
@@ -4500,47 +4510,54 @@ async def put_thank_etc(tg_user_sender, data, state=None):
     logging.debug('post operation, response: %s' % response)
     text = text_popup = None
     operation_done = False
+    do_thank = False
     if status == 200:
+        operation_done = True
+        trusts_or_thanks = ''
+        thanks_count_str = ''
+        thanks_count = response.get('currentstate') and response['currentstate'].get('thanks_count') or None
+        if thanks_count is not None:
+            thanks_count_str = ' (%s)' % thanks_count
+        if post_op['operation_type_id'] == OperationType.THANK:
+            text = '%(full_name_from_link)s благодарит%(thanks_count_str)s %(full_name_to_link)s'
+            do_thank = True
+        if post_op['operation_type_id'] == OperationType.ACQ:
+            text = '%(full_name_from_link)s знаком(а) с %(full_name_to_link)s'
         if post_op['operation_type_id'] == OperationType.MISTRUST:
             text = '%(full_name_from_link)s не доверяет %(full_name_to_link)s'
-            operation_done = True
-        elif post_op['operation_type_id'] == OperationType.NULLIFY_TRUST:
+        elif post_op['operation_type_id'] == OperationType.NULLIFY_ATTITUDE:
             text = '%(full_name_from_link)s не знаком(а) с %(full_name_to_link)s'
-            operation_done = True
-        elif post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, OperationType.TRUST):
+        elif post_op['operation_type_id'] == OperationType.TRUST:
+            text = '%(full_name_from_link)s доверяет %(full_name_to_link)s'
+        elif post_op['operation_type_id'] == OperationType.TRUST_AND_THANK:
             text = '%(full_name_from_link)s %(trusts_or_thanks)s%(thanks_count_str)s %(full_name_to_link)s'
-            operation_done = True
+            thanks_count_str = ' (%s)' % thanks_count
+            trusts_or_thanks = 'доверяет'
+            if response.get('previousstate') and response['previousstate']['attitude'] == Attitude.TRUST:
+                # точно доверял раньше
+                trusts_or_thanks = 'благодарит'
+                do_thank = True
+        profile_from = response['profile_from']
+        profile_to = response['profile_to']
+
     elif status == 400 and response.get('code', '') == 'already':
         if post_op['operation_type_id'] == OperationType.TRUST:
             text = 'Уже установлено доверие'
         elif post_op['operation_type_id'] == OperationType.MISTRUST:
             text = 'Уже установлено недоверие'
-        elif post_op['operation_type_id'] == OperationType.NULLIFY_TRUST:
+        elif post_op['operation_type_id'] == OperationType.NULLIFY_ATTITUDE:
             text = 'Вы и так не знакомы'
+        elif post_op['operation_type_id'] == OperationType.ACQ:
+            text = 'Вы и так знакомы'
 
     bot_data = await bot.get_me()
-    do_thank = False
-    if operation_done:
-        profile_from = response['profile_from']
-        profile_to = response['profile_to']
-        trusts_or_thanks = ''
-        thanks_count_str = ''
-        if text:
-            if post_op['operation_type_id'] in (OperationType.TRUST_AND_THANK, ):
-                trusts_or_thanks = 'доверяет'
-                if response.get('previousstate') and response['previousstate']['attitude'] == Attitude.TRUST:
-                    # точно доверял раньше
-                    trusts_or_thanks = 'благодарит'
-                    do_thank = True
-                    thanks_count = response.get('currentstate') and response['currentstate'].get('thanks_count') or None
-                    if thanks_count is not None:
-                        thanks_count_str = ' (%s)' % thanks_count
-            text = text % dict(
-                full_name_from_link=Misc.get_deeplink_with_name(profile_from, bot_data, plus_trusts=True),
-                full_name_to_link=Misc.get_deeplink_with_name(profile_to, bot_data, plus_trusts=True),
-                trusts_or_thanks=trusts_or_thanks,
-                thanks_count_str=thanks_count_str,
-            )
+    if operation_done and text:
+        text = text % dict(
+            full_name_from_link=Misc.get_deeplink_with_name(profile_from, bot_data, plus_trusts=True),
+            full_name_to_link=Misc.get_deeplink_with_name(profile_to, bot_data, plus_trusts=True),
+            trusts_or_thanks=trusts_or_thanks,
+            thanks_count_str=thanks_count_str,
+        )
 
     if not text and not operation_done:
         if status == 200:
@@ -4574,6 +4591,14 @@ async def put_thank_etc(tg_user_sender, data, state=None):
             )
         except (ChatNotFound, CantInitiateConversation):
             pass
+        if operation_done and data.get('callback_query') and not group_member:
+            await Misc.show_card(
+                profile_to,
+                bot=bot,
+                response_from=profile_from,
+                tg_user_from=tg_user_sender,
+                card_message=data['callback_query'].message,
+            )
 
     # Это в группу
     #
@@ -4863,9 +4888,9 @@ async def put_location(message, state, show_card=False):
                 if show_card:
                     await Misc.show_card(
                         response,
-                        message,
                         bot,
                         response_from=response_sender,
+                        tg_user_from=message.from_user,
                     )
                     await message.reply('Координаты записаны', reply_markup=reply_markup)
             else:
@@ -6003,7 +6028,6 @@ async def process_callback_delete_user_confirmed(callback_query: types.CallbackQ
         if user['user_id'] == owner['user_id']:
             await Misc.show_card(
                 response,
-                callback_query.message,
                 bot,
                 response_from=owner,
                 tg_user_from=callback_query.from_user
@@ -6074,7 +6098,6 @@ async def process_callback_undelete_user_confirmed(callback_query: types.Callbac
             response = response_photo
         await Misc.show_card(
             response,
-            callback_query.message,
             bot,
             response_from=owner,
             tg_user_from=callback_query.from_user
@@ -6295,7 +6318,6 @@ async def process_callback_invite_confirm(callback_query: types.CallbackQuery, s
                 )
                 await Misc.show_card(
                     response['profile'],
-                    callback_query.message,
                     bot,
                     response_from=response_sender,
                     tg_user_from=callback_query.from_user

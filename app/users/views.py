@@ -2186,7 +2186,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 qs = offer = None
 
         elif uuid_trustees:
-            num_trusts_true = num_trusts_false = 0
+            num_attitude_trust = num_attitude_mistrust = num_attitude_acq = 0
             def popup_data(profile, color, frame, thumb_size):
                 url_profile = self.profile_url_by_uuid(request, profile.uuid, fmt=self.FMT)
                 url_deeplink = self.get_deeplink(profile.user, bot_username) if bot_username else url_profile
@@ -2197,7 +2197,8 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 else:
                     link_on_map = ''
                 return dict(
-                    full_name = profile.user.first_name,
+                    full_name=profile.user.first_name,
+                    username=profile.user.username,
                     trust_count=profile.trust_count,
                     is_org=profile.is_org,
                     url_profile = url_profile,
@@ -2265,39 +2266,51 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         ),
                         size_icon=self.THUMB_SIZE_ICON_FOUND + frame * 2,
                     ))
-                legend_trust_true = legend_trust_false = ''
-                legend_trust_true_title = 'Доверяют:'
-                legend_trust_false_title = 'Не доверяют:'
+                legend_attitude_trust = legend_attitude_mistrust = legend_attitude_acq = ''
+                legend_attitude_trust_title = 'Доверяют:'
+                legend_attitude_mistrust_title = 'Не доверяют:'
+                legend_attitude_acq_title = 'Знакомы:'
                 if not found_profile.is_org:
                     if found_profile.gender == GenderMixin.GENDER_FEMALE:
-                        legend_trust_true_title = 'Ей доверяют:'
+                        legend_attitude_trust_title = 'Ей доверяют:'
+                        legend_attitude_mistrust_title = 'Ей не доверяют:'
+                        legend_attitude_acq_title = 'С ней знакомы:'
                     elif found_profile.gender == GenderMixin.GENDER_MALE:
-                        legend_trust_true_title = 'Ему доверяют:'
-                    if found_profile.gender == GenderMixin.GENDER_FEMALE:
-                        legend_trust_false_title = 'Ей не доверяют:'
-                    elif found_profile.gender == GenderMixin.GENDER_MALE:
-                        legend_trust_false_title = 'Ему не доверяют:'
+                        legend_attitude_trust_title = 'Ему доверяют:'
+                        legend_attitude_mistrust_title = 'Ему не доверяют:'
+                        legend_attitude_acq_title = 'С ним знакомы:'
                 title_template = '%(full_name)s (%(trust_count)s)'
                 for cs in CurrentState.objects.filter(
                             user_to=found_profile.user,
                             is_reverse=False,
-                            attitude__in=(CurrentState.TRUST, CurrentState.MISTRUST,),
+                            attitude__in=(CurrentState.TRUST, CurrentState.MISTRUST, CurrentState.ACQ, ),
                           ).select_related(
                               'user_from', 'user_from__profile'
                           ).order_by(
                               'user_from__first_name'
                           ):
-                    color = 'green' if cs.attitude == CurrentState.TRUST else 'red'
+                    if cs.attitude == CurrentState.TRUST:
+                        color = 'darkgreen'
+                    elif cs.attitude == CurrentState.MISTRUST:
+                        color = 'red'
+                    else:
+                        color = 'yellowgreen'
                     legend_tempo= f'<table style="border-spacing: 0;border-top: 2px solid {color};">'
-                    if cs.attitude == CurrentState.TRUST and not legend_trust_true:
-                        legend_trust_true = (
-                            f'{legend_trust_true_title}'
+                    if cs.attitude == CurrentState.TRUST and not legend_attitude_trust:
+                        legend_attitude_trust = (
+                            f'{legend_attitude_trust_title}'
                             '<br /><br />'
                             f'{legend_tempo}'
                         )
-                    if cs.attitude == CurrentState.MISTRUST and not legend_trust_false:
-                        legend_trust_false = (
-                            f'{legend_trust_false_title}'
+                    if cs.attitude == CurrentState.MISTRUST and not legend_attitude_mistrust:
+                        legend_attitude_mistrust = (
+                            f'{legend_attitude_mistrust_title}'
+                            '<br /><br />'
+                            f'{legend_tempo}'
+                        )
+                    if cs.attitude == CurrentState.ACQ and not legend_attitude_acq:
+                        legend_attitude_acq = (
+                            f'{legend_attitude_acq_title}'
                             '<br /><br />'
                             f'{legend_tempo}'
                         )
@@ -2309,11 +2322,14 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     )
                     legend_tempo = f'<tr><td style="border-bottom: 2px solid {color};">' + (popup % dict_user) + '</td></tr>'
                     if cs.attitude == CurrentState.TRUST:
-                        num_trusts_true += 1
-                        legend_trust_true += legend_tempo
+                        num_attitude_trust += 1
+                        legend_attitude_trust += legend_tempo
+                    elif cs.attitude == CurrentState.MISTRUST:
+                        num_attitude_mistrust += 1
+                        legend_attitude_mistrust += legend_tempo
                     else:
-                        num_trusts_false += 1
-                        legend_trust_false += legend_tempo
+                        num_attitude_acq += 1
+                        legend_attitude_acq += legend_tempo
                     if cs.user_from.profile.latitude and cs.user_from.profile.longitude:
                         if not found_coordinates:
                             lat_sum += cs.user_from.profile.latitude
@@ -2342,15 +2358,19 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                             size_icon=self.THUMB_SIZE_ICON_FOUND + frame * 2,
                         ))
 
-                if legend_trust_true:
-                    legend_trust_true += '</table><br />'
+                if legend_attitude_trust:
+                    legend_attitude_trust += '</table><br />'
                 else:
-                    legend_trust_true += 'Кто доверяет: не найдены<br /><br />'
-                if legend_trust_false:
-                    legend_trust_false += '</table><br /><br />'
+                    legend_attitude_trust += 'Кто доверяет: не найдены<br /><br />'
+                if legend_attitude_mistrust:
+                    legend_attitude_mistrust += '</table><br /><br />'
                 else:
-                    legend_trust_false += 'Кто не доверяет: не найдены<br /><br />'
-                legend += legend_trust_true + legend_trust_false
+                    legend_attitude_mistrust += 'Кто не доверяет: не найдены<br /><br />'
+                if legend_attitude_acq:
+                    legend_attitude_acq += '</table><br /><br />'
+                else:
+                    legend_attitude_acq += 'Кто знаком: не найдены<br /><br />'
+                legend += legend_attitude_trust + legend_attitude_mistrust + legend_attitude_acq
 
             except SkipException:
                 pass
@@ -2616,6 +2636,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 answer_numbers = offer_dict['user_answered'].get(profile.user.pk, dict(answers=[0]))['answers']
                 user_data = dict(
                     full_name = profile.user.first_name,
+                    username=profile.user.username,
                     trust_count=profile.trust_count,
                     url_deeplink=url_deeplink,
                     url_profile=url_profile,
@@ -2670,9 +2691,10 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     method = 'crop'
                 answer_text=''
                 title_template = '(%(trust_count)s) %(full_name)s'
-            if profile.latitude is not None and profile.longitude is not None:
+            if offer_id or profile.latitude is not None and profile.longitude is not None:
                 dict_user = dict(
-                    full_name = profile.user.first_name,
+                    full_name=profile.user.first_name,
+                    username=profile.user.username,
                     trust_count=profile.trust_count,
                     url_deeplink=url_deeplink,
                     url_profile=url_profile,
@@ -2691,43 +2713,44 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     video_reply_html=video_reply_html,
                     link_on_map=link_on_map,
                 )
-                point = dict(
-                    latitude=profile.latitude,
-                    longitude=profile.longitude,
-                    title=title_template % dict_user,
-                    popup=popup % dict_user,
-                )
-                if (found_coordinates and profile == found_profile) or \
-                (offer_question and offer_dict['owner']['id'] == profile.user.pk):
-                    point.update(
-                        is_of_found_user=True,
-                        icon=profile.choose_thumb(
-                            request,
-                            method=method,
-                            width=self.THUMB_SIZE_ICON_FOUND + frame * 2,
-                            height=self.THUMB_SIZE_ICON_FOUND + frame * 2,
-                            put_default_avatar=True,
-                            default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
-                        ),
-                        size_icon=self.THUMB_SIZE_ICON_FOUND + frame * 2,
+                if profile.latitude is not None and profile.longitude is not None:
+                    point = dict(
+                        latitude=profile.latitude,
+                        longitude=profile.longitude,
+                        title=title_template % dict_user,
+                        popup=popup % dict_user,
                     )
-                else:
-                    point.update(
-                        is_of_found_user=False,
-                        icon=profile.choose_thumb(
-                            request,
-                            method=method,
-                            width=self.THUMB_SIZE_ICON + frame * 2,
-                            height=self.THUMB_SIZE_ICON + frame * 2,
-                            put_default_avatar=True,
-                            default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
-                        ),
-                        size_icon=self.THUMB_SIZE_ICON + frame * 2,
-                    )
-                points.append(point)
-                if not found_coordinates:
-                    lat_sum += profile.latitude
-                    lng_sum += profile.longitude
+                    if (found_coordinates and profile == found_profile) or \
+                    (offer_question and offer_dict['owner']['id'] == profile.user.pk):
+                        point.update(
+                            is_of_found_user=True,
+                            icon=profile.choose_thumb(
+                                request,
+                                method=method,
+                                width=self.THUMB_SIZE_ICON_FOUND + frame * 2,
+                                height=self.THUMB_SIZE_ICON_FOUND + frame * 2,
+                                put_default_avatar=True,
+                                default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
+                            ),
+                            size_icon=self.THUMB_SIZE_ICON_FOUND + frame * 2,
+                        )
+                    else:
+                        point.update(
+                            is_of_found_user=False,
+                            icon=profile.choose_thumb(
+                                request,
+                                method=method,
+                                width=self.THUMB_SIZE_ICON + frame * 2,
+                                height=self.THUMB_SIZE_ICON + frame * 2,
+                                put_default_avatar=True,
+                                default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
+                            ),
+                            size_icon=self.THUMB_SIZE_ICON + frame * 2,
+                        )
+                    points.append(point)
+                    if not found_coordinates:
+                        lat_sum += profile.latitude
+                        lng_sum += profile.longitude
 
         if offer_question:
             legend = '<br><table style="border-spacing: 0;border-bottom: 2px solid black;">'
@@ -2801,8 +2824,9 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         )
         if uuid_trustees:
             data.update(
-                num_trusts_false=num_trusts_false,
-                num_trusts_true=num_trusts_true,
+                num_attitude_mistrust=num_attitude_mistrust,
+                num_attitude_trust=num_attitude_trust,
+                num_attitude_acq=num_attitude_acq,
             )
         return Response(data=data, status=200)
 

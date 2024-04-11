@@ -294,7 +294,7 @@ def scale_and_crop(
         белое окно заданной ширины, высоты по центру.
 
         Также может быть crop-WellKnowColor (WellKnowColor - это, например,
-        blue, ... из https://www.w3.org/TR/2002/WD-css3-color-20020418/#x11-color)
+        blue, ... из https://www.w3.org/TR/css-color-3/)
         или crop-rgb<6-hex-digits>,
         тогда получившаяся миниатюра впихивается в окно указанного цвета
 

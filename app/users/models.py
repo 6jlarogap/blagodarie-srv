@@ -428,6 +428,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 username=user.username,
                 first_name=user.first_name,
                 trust_count=self.trust_count,
+                editable=self.editable,
             )
         else:
             result.update(

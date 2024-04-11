@@ -349,9 +349,13 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                        OperationType.TRUST, OperationType.NULLIFY_ATTITUDE,
                        OperationType.TRUST_AND_THANK, OperationType.ACQ,
                    ):
+                    # Для перерисовки карточки
+                    #
                     profile_to_owner = Profile.objects.select_related('user').get(user__pk=profile_to.owner.pk)
                     profile_to_data.update(owner=profile_to_owner.data_dict(short=True))
                     profile_to_data['owner'].update(tg_data=profile_to_owner.tg_data())
+                    profile_to_data.update(profile_to.parents_dict(request))
+                    profile_to_data.update(profile_to.data_WAK())
                 else:
                     profile_to_data.update(owner={})
                 data.update(
