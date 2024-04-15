@@ -815,7 +815,31 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             state_ = 'start_setplace'
 
         elif m := re.search(
-                r'^\/start\s+(t)\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
+                r'^\/start\s+(t|m)\-([0-9a-z]{10})$',
+                message_text,
+                flags=re.I,
+          ):
+            d_trust = dict(
+                operation_type_id=OperationType.start_prefix_to_op(m.group(1).lower()),
+                sid=m.group(2)
+            )
+            state_ = 'start_trust'
+
+        elif m := re.search(
+                (
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=(t|m)\-([0-9a-z]{10})$'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            d_trust = dict(
+                operation_type_id=OperationType.start_prefix_to_op(m.group(1).lower()),
+                sid=m.group(2)
+            )
+            state_ = 'start_trust'
+
+        elif m := re.search(
+                r'^\/start\s+(t|m)\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
                 message_text,
                 flags=re.I,
           ):
@@ -827,7 +851,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
         elif m := re.search(
                 (
-                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=(t)\-'
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=(t|m)\-'
                     '([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$'
                 ) % re.escape(bot_data['username']),
                 message_text,
@@ -1187,7 +1211,12 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         elif state_ == 'start_invite':
             await show_invite(response_from, token_invite, message, bot_data)
         elif state_ == 'start_trust':
-            status_to, profile_to = await Misc.get_user_by_uuid(d_trust['uuid'])
+            if d_trust.get('sid'):
+                status_to, profile_to = await Misc.get_user_by_sid(d_trust['sid'])
+            elif d_trust.get('uuid'):
+                status_to, profile_to = await Misc.get_user_by_uuid(d_trust['uuid'])
+            else:
+                status_to = 500
             if status_to != 200:
                 return
             data = dict(

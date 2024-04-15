@@ -2238,6 +2238,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                         distinct auth_user.id as id,
                         auth_user.is_active,
                         auth_user.first_name,
+                        auth_user.username,
                         users_profile.uuid,
                         users_profile.photo,
                         users_profile.gender,
@@ -2265,6 +2266,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                     uuid=user_q.profile.uuid,
                     gender=user_q.profile.gender,
                     first_name=user_q.first_name,
+                    username=user_q.username,
                     photo=Profile.image_thumb(
                         request, user_q.profile.photo,
                         method='crop-green-frame-4',
@@ -2280,6 +2282,7 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
                             id=rec['id'],
                             uuid=rec['uuid'],
                             first_name=rec['first_name'],
+                            username=rec['username'],
                             photo=Profile.image_thumb(request, rec['photo'], mark_dead=rec['is_dead']),
                             gender=rec['gender'],
                             is_dead=rec['is_dead'],

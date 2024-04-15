@@ -72,6 +72,7 @@ class OperationType(object):
         """
         return dict(
             t=cls.TRUST_AND_THANK,
+            m=cls.ACQ,
         ).get(prefix)
 
 
