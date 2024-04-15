@@ -1739,6 +1739,7 @@ class ApiBotStat(APIView):
             'relations': CurrentState.objects.filter(is_child=True).count(),
             'trusts': CurrentState.objects.filter(is_reverse=True, attitude=CurrentState.TRUST).count(),
             'mistrusts': CurrentState.objects.filter(is_reverse=True, attitude=CurrentState.MISTRUST).count(),
+            'acqs': CurrentState.objects.filter(is_reverse=True, attitude=CurrentState.ACQ).count(),
         }
         return Response(data=data, status=200)
 

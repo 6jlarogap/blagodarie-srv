@@ -528,6 +528,7 @@ async def echo_stat_to_bot(message: types.Message, state: FSMContext):
             f'Родственных связей: {response["relations"]}\n'
             f'Доверий: {response["trusts"]}\n'
             f'Недоверий: {response["mistrusts"]}\n'
+            f'Знакомств: {response["acqs"]}\n'
         )
     else:
         reply = 'Произошла ошибка'
@@ -4511,6 +4512,7 @@ async def put_thank_etc(tg_user_sender, data, state=None):
     text = text_popup = None
     operation_done = False
     do_thank = False
+    bot_data = await bot.get_me()
     if status == 200:
         operation_done = True
         trusts_or_thanks = ''
@@ -4541,16 +4543,16 @@ async def put_thank_etc(tg_user_sender, data, state=None):
         profile_to = response['profile_to']
 
     elif status == 400 and response.get('code', '') == 'already':
+        full_name_to_link = Misc.get_deeplink_with_name(profile_to, bot_data, plus_trusts=True)
         if post_op['operation_type_id'] == OperationType.TRUST:
-            text = 'Уже установлено доверие'
+            text = f'Вы уже доверяете {full_name_to_link}'
         elif post_op['operation_type_id'] == OperationType.MISTRUST:
-            text = 'Уже установлено недоверие'
+            text = f'Вы уже установили недоверие к {full_name_to_link}'
         elif post_op['operation_type_id'] == OperationType.NULLIFY_ATTITUDE:
-            text = 'Вы и так не знакомы'
+            text = f'Вы и так не знакомы с {full_name_to_link}'
         elif post_op['operation_type_id'] == OperationType.ACQ:
-            text = 'Вы и так знакомы'
+            text = f'Вы уже знакомы с {full_name_to_link}'
 
-    bot_data = await bot.get_me()
     if operation_done and text:
         text = text % dict(
             full_name_from_link=Misc.get_deeplink_with_name(profile_from, bot_data, plus_trusts=True),
@@ -4591,7 +4593,9 @@ async def put_thank_etc(tg_user_sender, data, state=None):
             )
         except (ChatNotFound, CantInitiateConversation):
             pass
-        if operation_done and data.get('callback_query') and not group_member:
+        if not group_member and data.get('callback_query') and \
+           (operation_done  or \
+            status == 400 and response.get('code', '') == 'already'):
             await Misc.show_card(
                 profile_to,
                 bot=bot,
