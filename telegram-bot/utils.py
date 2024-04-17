@@ -1629,7 +1629,7 @@ class Misc(object):
         """
         text = await cls.chat_pin_message_text()
         if text:
-            text = text.replace('$BOT_USERNAME', bot_data['username'])
+            text = text.replace('$BOT_USERNAME$', bot_data['username'])
             if chat.username:
                 chat_link = f'<a href="https://t.me/{chat.username}">{chat.title}</a>'
             else:
