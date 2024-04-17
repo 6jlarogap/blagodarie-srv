@@ -2,3 +2,5 @@ aiogram==2.25.2
 pymorphy2
 redis
 APScheduler
+Pillow
+qrcode

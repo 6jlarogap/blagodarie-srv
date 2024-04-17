@@ -1,6 +1,9 @@
 import base64, re, datetime, copy
 from urllib.parse import urlencode
 from uuid import UUID
+import qrcode
+from PIL import Image
+from io import BytesIO
 
 from aiogram import types
 from aiogram.types.login_url import LoginUrl
@@ -1330,6 +1333,24 @@ class Misc(object):
                 parts = safe_split_text(reply, split_separator='\n')
                 for part in parts:
                     await bot.send_message(tg_user_from_id, part, reply_markup=reply_markup, disable_web_page_preview=True)
+
+
+    @classmethod
+    async def get_qrcode(cls, profile, bot_data, https=True):
+        """
+        Получить qrcode профиля (байты картинки). По возможности вставить туда фото профиля 
+        """
+        qr_code = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_H)
+        url = f't.me/{bot_data["username"]}?start=m-{profile["username"]}'
+        if https:
+            deeplink = 'https://' + url
+        qr_code.add_data(url)
+        image = qr_code.make_image(fill_color='black', back_color='white').convert('RGB')
+        bytes_io = BytesIO()
+        bytes_io.name = f'{profile["username"]}.jpg'
+        image.save(bytes_io, format='JPEG')
+        bytes_io.seek(0)
+        return bytes_io
 
 
     @classmethod

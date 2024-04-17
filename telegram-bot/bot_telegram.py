@@ -508,6 +508,23 @@ async def echo_help_to_bot(message: types.Message, state: FSMContext):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('meet',),
+    state=None,
+)
+async def echo_meet(message: types.Message, state: FSMContext):
+    status, profile = await Misc.post_tg_user(message.from_user)
+    if status == 200:
+        bot_data = await bot.get_me()
+        bytes_io = await Misc.get_qrcode(profile, bot_data)
+        await bot.send_photo(
+            chat_id=message.from_user.id,
+            photo=bytes_io,
+            caption=f'Знакомьтесь: {Misc.get_deeplink_with_name(profile, bot_data)}'
+        )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     commands=('stat',),
     state=None,
 )
@@ -1226,6 +1243,7 @@ commands_dict = {
     'listown': echo_getowned_to_bot,
     'graph': echo_graph_to_bot,
     'help': echo_help_to_bot,
+    'meet': echo_meet,
     'stat': echo_stat_to_bot,
     'feedback': echo_feedback,
     'feedback_admins': echo_feedback_admins,
