@@ -343,6 +343,7 @@ class Misc(object):
         'нажмите Отмена'
     )
 
+
     @classmethod
     def secret(cls, payload):
         """
@@ -1336,10 +1337,36 @@ class Misc(object):
 
 
     @classmethod
+    def url_photo_to_thumbnail(cls, photo, width, height=None, fill_color='white', frame_width=0):
+        """
+        Преобразовать url фото в thumbnail url
+
+        Например, из:
+            http://api.blagoroda.bsuir.by/media/profile-photo/2024/04/11/326/photo.jpg
+        сделать:
+            http://api.blagoroda.bsuir.by/thumb/profile-photo/2024/04/11/326/photo.jpg/100x100~crop-white-frame-2~12.jpg
+        """
+        if not height:
+            height = width
+        result = photo.lower()
+        if width and photo:
+            result = result.replace('/media/', '/thumb/', 1)
+            result += f'/{width}x{height}~crop-{fill_color}-frame-{frame_width}~12.jpg'
+        return result
+
+
+    @classmethod
     async def get_qrcode(cls, profile, bot_data, https=True):
         """
         Получить qrcode профиля (байты картинки). По возможности вставить туда фото профиля 
+
+        Возвращает BytesIO qrcod'a, установленный на нулевую позицию
         """
+
+        PHOTO_WIDTH = 100
+        PHOTO_FRAME_WIDTH = 2
+        PHOTO_FILL_COLOR = 'white'
+
         qr_code = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_H)
         url = f't.me/{bot_data["username"]}?start=m-{profile["username"]}'
         if https:
@@ -1348,6 +1375,34 @@ class Misc(object):
         image = qr_code.make_image(fill_color='black', back_color='white').convert('RGB')
         bytes_io = BytesIO()
         bytes_io.name = f'{profile["username"]}.jpg'
+
+        if profile.get('photo'):
+            thumbnail = cls.url_photo_to_thumbnail(
+                profile['photo'],
+                width=PHOTO_WIDTH,
+                fill_color=PHOTO_FILL_COLOR,
+                frame_width=PHOTO_FRAME_WIDTH,
+            )
+            status = photo = None
+            async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
+                try:
+                    async with session.request('GET', thumbnail,) as response:
+                        status = response.status
+                        photo = Image.open(BytesIO(await response.read()))
+                except:
+                    pass
+                if status == 200 and photo:
+                    photo_width = PHOTO_WIDTH + PHOTO_FRAME_WIDTH * 2
+                    wpercent = photo_width / float(photo.size[0])
+                    photo_height = int((float(photo.size[1]) * float(wpercent)))
+                    if photo.size[0] != photo_width or photo.size[1] != photo_height:
+                        photo = photo.resize((photo_width, photo_height), Image.LANCZOS)
+                    pos = (
+                        (image.size[0] - photo.size[0]) // 2,
+                        (image.size[1] - photo.size[1]) // 2,
+                    )
+                    image.paste(photo, pos)
+
         image.save(bytes_io, format='JPEG')
         bytes_io.seek(0)
         return bytes_io
