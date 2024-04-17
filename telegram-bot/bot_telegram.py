@@ -516,10 +516,16 @@ async def echo_meet(message: types.Message, state: FSMContext):
     if status == 200:
         bot_data = await bot.get_me()
         bytes_io = await Misc.get_qrcode(profile, bot_data)
+        status, caption = await Misc.get_template('meet')
+        dl = Misc.get_deeplink_with_name(profile, bot_data)
+        if status == 200 and caption:
+            caption = caption.replace('$DEEPLINK$', dl)
+        else:
+            caption=f'Знакомьтесь: {dl}'
         await bot.send_photo(
             chat_id=message.from_user.id,
             photo=bytes_io,
-            caption=f'Знакомьтесь: {Misc.get_deeplink_with_name(profile, bot_data)}'
+            caption=caption,
         )
 
 
