@@ -1356,11 +1356,11 @@ class Misc(object):
 
 
     @classmethod
-    async def get_qrcode(cls, profile, bot_data, https=True):
+    async def get_qrcode(cls, profile, bot_data, https=False):
         """
         Получить qrcode профиля (байты картинки). По возможности вставить туда фото профиля 
 
-        Возвращает BytesIO qrcod'a, установленный на нулевую позицию
+        Возвращает BytesIO qrcod'a, установленный на нулевую позицию, а также ссылку в qrcod'e
         """
 
         PHOTO_WIDTH = 100
@@ -1370,7 +1370,7 @@ class Misc(object):
         qr_code = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_H)
         url = f't.me/{bot_data["username"]}?start=m-{profile["username"]}'
         if https:
-            deeplink = 'https://' + url
+            url = 'https://' + url
         qr_code.add_data(url)
         image = qr_code.make_image(fill_color='black', back_color='white').convert('RGB')
         bytes_io = BytesIO()
@@ -1405,7 +1405,7 @@ class Misc(object):
 
         image.save(bytes_io, format='JPEG')
         bytes_io.seek(0)
-        return bytes_io
+        return bytes_io, url
 
 
     @classmethod
