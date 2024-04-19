@@ -86,6 +86,7 @@ class ApiGetProfileInfo(UuidMixin, APIView):
             "mistrust_count": 1,
             "is_notified": True,
             "trust_count": 3,
+            "acq_count": 1,
             "is_active": true,
         }
         """
@@ -2201,6 +2202,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     full_name=profile.user.first_name,
                     username=profile.user.username,
                     trust_count=profile.trust_count,
+                    acq_count=profile.acq_count,
                     is_org=profile.is_org,
                     url_profile = url_profile,
                     url_deeplink=url_deeplink,
@@ -2407,6 +2409,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     'user__profile__gender',
                     'user__profile__uuid',
                     'user__profile__trust_count',
+                    'user__profile__acq_count',
                     'user__profile__latitude', 'user__profile__longitude',
                     'button'
                 ).distinct('user', 'button'):
@@ -2426,6 +2429,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         photo=rec['user__profile__photo'],
                         gender=rec['user__profile__gender'],
                         trust_count=rec['user__profile__trust_count'],
+                        acq_count=rec['user__profile__acq_count'],
                         uuid=rec['user__profile__uuid'],
                         latitude=rec['user__profile__latitude'],
                         longitude=rec['user__profile__longitude'],
@@ -2476,6 +2480,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     popup_ = popup % dict(
                         full_name = user_data['full_name'],
                         trust_count=user_data['trust_count'],
+                        acq_count=user_data['acq_count'],
                         url_deeplink=url_deeplink,
                         url_profile=url_profile,
                         url_photo_popup=Profile.image_thumb(
@@ -2570,6 +2575,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         full_name = user_data['full_name'],
                         username = user_data['username'],
                         trust_count=user_data['trust_count'],
+                        acq_count=user_data['acq_count'],
                         url_deeplink=url_deeplink,
                         url_profile=url_profile,
                         url_photo_popup=Profile.image_thumb(
@@ -2639,6 +2645,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     full_name = profile.user.first_name,
                     username=profile.user.username,
                     trust_count=profile.trust_count,
+                    acq_count=profile.acq_count,
                     url_deeplink=url_deeplink,
                     url_profile=url_profile,
                     link_on_map=link_on_map
@@ -2697,6 +2704,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     full_name=profile.user.first_name,
                     username=profile.user.username,
                     trust_count=profile.trust_count,
+                    acq_count=profile.acq_count,
                     url_deeplink=url_deeplink,
                     url_profile=url_profile,
                     url_photo_popup=profile.choose_thumb(
@@ -2792,6 +2800,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         full_name=user_data['full_name'],
                         username=user_data['username'],
                         trust_count=user_data['trust_count'],
+                        acq_count=user_data['acq_count'],
                         url_deeplink=user_data['url_deeplink'],
                         url_profile=user_data['url_profile'],
                         offer_reply_html=user_data['offer_reply_html'],

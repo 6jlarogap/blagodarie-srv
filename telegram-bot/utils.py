@@ -599,7 +599,7 @@ class Misc(object):
         д/с - ....
         Доверий:
         Благодарностей:
-        Недоверий:
+        Знакомств:
 
         Возможности: водитель Камаз шашлык виноград курага изюм
 
@@ -621,6 +621,7 @@ class Misc(object):
             '\n'
             f'Доверий: {response["trust_count"]}\n'
             f'Благодарностей: {response["sum_thanks_count"]}\n'
+            f'Знакомств: {response["acq_count"]}\n'
             '\n'
         )
         keys = []

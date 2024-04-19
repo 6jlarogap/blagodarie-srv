@@ -369,6 +369,8 @@ class Profile(PhotoModel, GeoPointAddressModel):
     sum_thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
     trust_count = models.PositiveIntegerField(_("Число оказанных доверий"), default=0)
     mistrust_count = models.PositiveIntegerField(_("Число утрат доверия"), default=0)
+    acq_count = models.PositiveIntegerField(_("Число тех кто с ним (с ней) знаком)"), default=0)
+    did_meet = models.BooleanField(_("Устанавливал ли с кем знакомство"), default=False)
     did_bot_start = models.BooleanField(_("Стартовал телеграм бот"), default=False)
     is_org = models.BooleanField(_("Организация"), default=False)
     ability = models.ForeignKey('contact.Ability', verbose_name=_("Способность"), null=True, on_delete=models.SET_NULL)
@@ -428,6 +430,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 username=user.username,
                 first_name=user.first_name,
                 trust_count=self.trust_count,
+                acq_count=self.acq_count,
                 editable=self.editable,
             )
         else:
@@ -445,6 +448,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 fame=self.fame,
                 mistrust_count=self.mistrust_count,
                 trust_count=self.trust_count,
+                acq_count=self.acq_count,
                 is_active=user.is_active,
                 latitude=self.latitude,
                 longitude=self.longitude,
@@ -665,9 +669,14 @@ class Profile(PhotoModel, GeoPointAddressModel):
             user_to=user,
             attitude=CurrentState.MISTRUST,
         ).distinct().count()
-        self.fame = self.trust_count + self.mistrust_count
+        self.acq_count = CurrentState.objects.filter(
+            is_reverse=False,
+            user_to=user,
+            attitude=CurrentState.ACQ,
+        ).distinct().count()
+        self.fame = self.trust_count + self.mistrust_count + self.acq_count
         if do_save:
-            self.save(update_fields=('fame', 'trust_count', 'mistrust_count',))
+            self.save(update_fields=('fame', 'trust_count', 'mistrust_count', 'acq_count', ))
 
     @classmethod
     def make_first_name(cls, last_name, first_name, middle_name=''):
