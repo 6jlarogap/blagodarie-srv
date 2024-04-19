@@ -449,6 +449,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 mistrust_count=self.mistrust_count,
                 trust_count=self.trust_count,
                 acq_count=self.acq_count,
+                did_meet=self.did_meet,
                 is_active=user.is_active,
                 latitude=self.latitude,
                 longitude=self.longitude,
