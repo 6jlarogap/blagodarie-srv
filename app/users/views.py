@@ -1740,9 +1740,9 @@ class ApiBotStat(APIView):
             'did_bot_start': Profile.objects.filter(did_bot_start=True, owner__isnull=True).count(),
             'with_geodata': Profile.objects.filter(latitude__isnull=False, owner__isnull=True).count(),
             'relations': CurrentState.objects.filter(is_child=True).count(),
-            'trusts': CurrentState.objects.filter(is_reverse=True, attitude=CurrentState.TRUST).count(),
-            'mistrusts': CurrentState.objects.filter(is_reverse=True, attitude=CurrentState.MISTRUST).count(),
-            'acqs': CurrentState.objects.filter(is_reverse=True, attitude=CurrentState.ACQ).count(),
+            'trusts': CurrentState.objects.filter(is_reverse=False, attitude=CurrentState.TRUST).count(),
+            'mistrusts': CurrentState.objects.filter(is_reverse=False, attitude=CurrentState.MISTRUST).count(),
+            'acqs': CurrentState.objects.filter(is_reverse=False, attitude=CurrentState.ACQ).count(),
         }
         return Response(data=data, status=200)
 
