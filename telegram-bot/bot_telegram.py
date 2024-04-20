@@ -4589,12 +4589,6 @@ async def put_thank_etc(tg_user_sender, data, state=None):
             trusts_or_thanks=trusts_or_thanks,
             thanks_count_str=thanks_count_str,
         )
-        if data.get('message_after_meet'):
-            status_template, message_after_meet = await Misc.get_template('message_after_meet')
-            if status_template != 200 or not message_after_meet:
-                message_after_meet = 'Добро пожаловать!'
-            text += f'\n\n{message_after_meet}'
-            await Misc.put_user_properties(uuid=response['profile_from']['uuid'], did_meet='1')
 
     if not text and not operation_done:
         if status == 200:
@@ -4618,16 +4612,26 @@ async def put_thank_etc(tg_user_sender, data, state=None):
             reply_markup.row(inline_btn_cancel_thank)
         else:
             reply_markup = None
+
+        text_to_sender = text
+        if operation_done and data.get('message_after_meet'):
+            status_template, message_after_meet = await Misc.get_template('message_after_meet')
+            if status_template != 200 or not message_after_meet:
+                message_after_meet = 'Добро пожаловать!'
+            text_to_sender += f'\n\n{message_after_meet}'
+            await Misc.put_user_properties(uuid=response['profile_from']['uuid'], did_meet='1')
+
         try:
             await bot.send_message(
                 tg_user_sender.id,
-                text=text,
+                text=text_to_sender,
                 disable_web_page_preview=True,
                 disable_notification=True,
                 reply_markup=reply_markup,
             )
         except (ChatNotFound, CantInitiateConversation):
             pass
+
         if not group_member and data.get('callback_query') and \
            (operation_done  or \
             status == 400 and response.get('code', '') == 'already'):
