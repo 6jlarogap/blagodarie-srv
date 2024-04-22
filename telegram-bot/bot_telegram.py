@@ -521,10 +521,7 @@ async def echo_meet(message: types.Message, state: FSMContext):
             link = 'https://' + link
         link = f'<a href="{link}">{profile["first_name"]}</a>'
         status, caption = await Misc.get_template('meet')
-        if status == 200 and caption:
-            caption = caption.replace('$DEEPLINK_MEET$', link)
-        else:
-            caption=f'Знакомьтесь: {link}'
+        caption=f'Знакомьтесь: {link}'
         await bot.send_photo(
             chat_id=message.from_user.id,
             photo=bytes_io,
@@ -841,7 +838,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             state_ = 'start_setplace'
 
         elif m := re.search(
-                r'^\/start\s+(t|m)\-([0-9a-z]{10})$',
+                r'^\/start\s+(t|m|th)\-([0-9a-z]{10})$',
                 message_text,
                 flags=re.I,
           ):
@@ -853,7 +850,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
         elif m := re.search(
                 (
-                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=(t|m)\-([0-9a-z]{10})$'
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=(t|m|th)\-([0-9a-z]{10})$'
                 ) % re.escape(bot_data['username']),
                 message_text,
                 flags=re.I,
