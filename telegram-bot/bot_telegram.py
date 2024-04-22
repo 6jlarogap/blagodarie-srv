@@ -512,7 +512,7 @@ async def echo_help_to_bot(message: types.Message, state: FSMContext):
     state=None,
 )
 async def echo_meet(message: types.Message, state: FSMContext):
-    command = message.text.strip('/').strip()
+    command = message.text.strip('/').strip().lower()
     status, profile = await Misc.post_tg_user(message.from_user)
     command_to_data = dict(
         meet= dict(prefix='m',  caption='Знакомьтесь: %(link)s'),
