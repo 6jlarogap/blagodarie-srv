@@ -34,7 +34,7 @@ class OperationType(models.Model):
     MISTRUST = 2
     TRUST = 3
     NULLIFY_ATTITUDE = 4
-    TRUST_AND_THANK = 5
+    TRUST_OR_THANK = 5
     FATHER = 6
     NOT_PARENT = 7
     MOTHER = 8
@@ -572,7 +572,7 @@ class ApiAddOperationMixin(object):
                 attitude=currentstate.attitude,
             ))
 
-        elif operationtype_id == OperationType.TRUST_AND_THANK:
+        elif operationtype_id == OperationType.TRUST_OR_THANK:
             attitude_previous = None
             currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
                 user_from=user_from,

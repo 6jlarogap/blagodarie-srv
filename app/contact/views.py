@@ -65,7 +65,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 MISTRUST = 2
                 TRUST = 3
                 NULLIFY_ATTITUDE = 4
-                TRUST_AND_THANK = 5
+                TRUST_OR_THANK = 5
                 FATHER = 6
                 NOT_PARENT = 7
                 MOTHER = 8
@@ -74,7 +74,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 ACQ = 11
 
                 В операциях доверия, недоверия реально используются:
-                    TRUST_AND_THANK, NULLIFY_ATTITUDE, MISTRUST,
+                    TRUST_OR_THANK, NULLIFY_ATTITUDE, MISTRUST,
                     #TODO
                     ACQ (знаком, пока не отработано)
                 но отработаны также и TRUST, THANK. 
@@ -99,7 +99,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 MISTRUST = 2
                 TRUST = 3
                 NULLIFY_ATTITUDE = 4
-                TRUST_AND_THANK = 5
+                TRUST_OR_THANK = 5
                 FATHER = 6
                 NOT_PARENT = 7
                 MOTHER = 8
@@ -107,7 +107,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 SET_MOTHER = 10
                 ACQ = 11
 
-                В операциях доверия, недоверия реально используются TRUST_AND_THANK, NULLIFY_ATTITUDE, MISTRUST,
+                В операциях доверия, недоверия реально используются TRUST_OR_THANK, NULLIFY_ATTITUDE, MISTRUST,
                 но отработаны также и TRUST, THANK
 
                 SET_FATHER, SET_MOTHER, отличие от FATHER, MOTHER:
@@ -120,7 +120,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     Если не задан, полагается uuid авторизованного юзера
                     Если задан,
                         -   то в операциях доверия, недоверия
-                            (THANK, MISTRUST, TRUST, NULLIFY_ATTITUDE, TRUST_AND_THANK)
+                            (THANK, MISTRUST, TRUST, NULLIFY_ATTITUDE, TRUST_OR_THANK)
                             должен быть равен uuid авторизованного юзера
                         -   в операциях родства ((SET_)FATHER, (SET_)MOTHER, NOT_PARENT)
                             user_id_from может быть:
@@ -167,7 +167,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 - если текущее attitude == MISTRUST, то
                   декрементировать MISTRUST_COUNT и инкрементировать FAME и TRUST_COUNT для пользователя user_id_to;
                 - в таблице tbl_current_state установить attitude = TRUST;
-            - если тип операции TRUST_AND_THANK:
+            - если тип операции TRUST_OR_THANK:
                 - это ведет себя:
                     *   как TRUST, если user_from раньше не доверял user_to
                     *   как THANK, если user_from раньше доверял user_to
@@ -347,7 +347,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 if profile_to.owner_id  and operationtype_id in (
                        OperationType.THANK, OperationType.MISTRUST,
                        OperationType.TRUST, OperationType.NULLIFY_ATTITUDE,
-                       OperationType.TRUST_AND_THANK, OperationType.ACQ,
+                       OperationType.TRUST_OR_THANK, OperationType.ACQ,
                    ):
                     # Для перерисовки карточки
                     #
@@ -365,7 +365,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
 
             if not got_tg_token and profile_to.is_notified and settings.SEND_TO_TELEGRAM and \
                operationtype_id in (
-                   OperationType.TRUST_AND_THANK,
+                   OperationType.TRUST_OR_THANK,
                    OperationType.THANK,
                    OperationType.MISTRUST,
                    OperationType.TRUST,
@@ -382,7 +382,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     f'{self.get_deeplink_name(user_to, bot_username)} '
                     f'(+{profile_to.trust_count}, -{profile_to.mistrust_count})'
                 )
-                if operationtype_id == OperationType.TRUST_AND_THANK:
+                if operationtype_id == OperationType.TRUST_OR_THANK:
                     if data['previousstate']['attitude'] == CurrentState.TRUST:
                         message = f'{dl_from_t} благодарит ({data["currentstate"]["thanks_count"]}) {dl_to_t}'
                     else:
@@ -2870,7 +2870,7 @@ class ApiInviteUseToken(ApiAddOperationMixin, TelegramApiMixin, FrontendMixin, A
             self.add_operation(
                 user_from,
                 profile_to,
-                operationtype_id=OperationType.TRUST_AND_THANK,
+                operationtype_id=OperationType.TRUST_OR_THANK,
                 comment=None,
                 insert_timestamp=int(time.time()),
             )
@@ -4012,7 +4012,7 @@ class ApiCancelThank(APIView):
                 journal = Journal.objects.get(pk=journal_id)
             except Journal.DoesNotExist:
                 raise ServiceException(msg_not_found)
-            if journal.operationtype_id not in (OperationType.TRUST_AND_THANK, OperationType.THANK):
+            if journal.operationtype_id not in (OperationType.TRUST_OR_THANK, OperationType.THANK):
                 raise ServiceException(msg_not_found)
             try:
                 profile_to = Profile.objects.select_for_update().get(user_id=journal.user_to_id)
