@@ -4578,9 +4578,11 @@ async def put_thank_etc(tg_user_sender, data, state=None):
             text = f'Вы уже знакомы с {full_name_to_link}'
 
     if operation_done and text:
+        full_name_from_link = Misc.get_deeplink_with_name(profile_from, bot_data, plus_trusts=True)
+        full_name_to_link = Misc.get_deeplink_with_name(profile_to, bot_data, plus_trusts=True)
         text = text % dict(
-            full_name_from_link=Misc.get_deeplink_with_name(profile_from, bot_data, plus_trusts=True),
-            full_name_to_link=Misc.get_deeplink_with_name(profile_to, bot_data, plus_trusts=True),
+            full_name_from_link=full_name_from_link,
+            full_name_to_link=full_name_to_link,
             trusts_or_thanks=trusts_or_thanks,
             thanks_count_str=thanks_count_str,
         )
@@ -4593,22 +4595,46 @@ async def put_thank_etc(tg_user_sender, data, state=None):
         else:
             text = 'Простите, произошла ошибка'
 
+    text_set_acq = ''
+
     # Это отправителю благодарности и т.п., даже если произошла ошибка
     #
     if text:
-        if do_thank and response.get('journal_id'):
-            reply_markup = InlineKeyboardMarkup()
-            inline_btn_cancel_thank = InlineKeyboardButton('Отменить благодарность',
-                callback_data=Misc.CALLBACK_DATA_ID__TEMPLATE % dict(
-                    keyboard_type=KeyboardType.CANCEL_THANK,
-                    id_=response['journal_id'],
-                    sep=KeyboardType.SEP,
-            ))
-            reply_markup.row(inline_btn_cancel_thank)
-        else:
-            reply_markup = None
-
+        reply_markup = None
         text_to_sender = text
+        if do_thank:
+            if response.get('journal_id'):
+                reply_markup = InlineKeyboardMarkup()
+                inline_btn_cancel_thank = InlineKeyboardButton('Отменить благодарность',
+                    callback_data=Misc.CALLBACK_DATA_ID__TEMPLATE % dict(
+                        keyboard_type=KeyboardType.CANCEL_THANK,
+                        id_=response['journal_id'],
+                        sep=KeyboardType.SEP,
+                ))
+                reply_markup.row(inline_btn_cancel_thank)
+
+            # Делаем знакомство если поблагодарил и не знаком
+            #
+            if response.get('currentstate') and response['currentstate'].get('attitude', '') == None:
+                post_op_acq = dict(
+                    tg_token=settings.TOKEN,
+                    operation_type_id=OperationType.ACQ,
+                    tg_user_id_from=str(tg_user_sender.id),
+                    user_id_to=profile_to['uuid'],
+                )
+                logging.debug('post operation, meet after thank, payload: %s' % Misc.secret(post_op_acq))
+                status_acq, response_acq = await Misc.api_request(
+                    path='/api/addoperation',
+                    method='post',
+                    data=post_op_acq,
+                )
+                logging.debug('post operation, meet after thank, status: %s' % status_acq)
+                logging.debug('post operation, meet after thank, response: %s' % response_acq)
+                if status_acq == 200:
+                    text_set_acq = f'Установлено знакомство {full_name_from_link} к {full_name_to_link}'
+                    text_to_sender += f'\n\n{text_set_acq}'
+
+
         if operation_done and data.get('message_after_meet'):
             status_template, message_after_meet = await Misc.get_template('message_after_meet')
             if status_template != 200 or not message_after_meet:
@@ -4664,36 +4690,39 @@ async def put_thank_etc(tg_user_sender, data, state=None):
 
     # Это получателю благодарности и т.п. или владельцу получателя, если получатель собственный
     #
-    text_to_recipient = text
-    if operation_done and data.get('message_to_forward_id'):
-        text_to_recipient += ' с комментарием:'
-    tg_user_to_notify_tg_data = []
-    if profile_to.get('owner'):
-        if profile_to['owner']['uuid'] != profile_from['uuid']:
-            tg_user_to_notify_tg_data = profile_to['owner'].get('tg_data', [])
-    else:
-        tg_user_to_notify_tg_data = profile_to.get('tg_data', [])
-    for tgd in tg_user_to_notify_tg_data:
-        if operation_done:
-            try:
-                await bot.send_message(
-                    tgd['tg_uid'],
-                    text=text_to_recipient,
-                    disable_web_page_preview=True,
-                    disable_notification=True,
-                )
-            except (ChatNotFound, CantInitiateConversation):
-                pass
-        if operation_done and not profile_to.get('owner') and data.get('message_to_forward_id'):
-            try:
-                await bot.forward_message(
-                    chat_id=tgd['tg_uid'],
-                    from_chat_id=tg_user_sender.id,
-                    message_id=data['message_to_forward_id'],
-                    disable_notification=True,
-                )
-            except (ChatNotFound, CantInitiateConversation):
-                pass
+    if text:
+        text_to_recipient = text
+        if operation_done and data.get('message_to_forward_id'):
+            text_to_recipient += ' в связи с сообщением, см. ниже...'
+        if text_set_acq:
+            text_to_recipient += f'\n\n{text_set_acq}'
+        tg_user_to_notify_tg_data = []
+        if profile_to.get('owner'):
+            if profile_to['owner']['uuid'] != profile_from['uuid']:
+                tg_user_to_notify_tg_data = profile_to['owner'].get('tg_data', [])
+        else:
+            tg_user_to_notify_tg_data = profile_to.get('tg_data', [])
+        for tgd in tg_user_to_notify_tg_data:
+            if operation_done:
+                try:
+                    await bot.send_message(
+                        tgd['tg_uid'],
+                        text=text_to_recipient,
+                        disable_web_page_preview=True,
+                        disable_notification=True,
+                    )
+                except (ChatNotFound, CantInitiateConversation):
+                    pass
+            if operation_done and not profile_to.get('owner') and data.get('message_to_forward_id'):
+                try:
+                    await bot.forward_message(
+                        chat_id=tgd['tg_uid'],
+                        from_chat_id=tg_user_sender.id,
+                        message_id=data['message_to_forward_id'],
+                        disable_notification=True,
+                    )
+                except (ChatNotFound, CantInitiateConversation):
+                    pass
 
 
 @dp.callback_query_handler(
