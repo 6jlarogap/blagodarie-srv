@@ -516,7 +516,7 @@ async def echo_meet(message: types.Message, state: FSMContext):
     status, profile = await Misc.post_tg_user(message.from_user)
     command_to_data = dict(
         meet= dict(prefix='m',  caption='Знакомьтесь: %(link)s'),
-        trust=dict(prefix='tr',  caption='Доверяю %(link)s'),
+        trust=dict(prefix='t',  caption='Доверяю %(link)s'),
         thank=dict(prefix='th', caption='Благодарю %(link)s'),
     )
     if status == 200:
@@ -844,7 +844,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             state_ = 'start_setplace'
 
         elif m := re.search(
-                r'^\/start\s+(t|m|th|tr)\-([0-9a-z]{10})$',
+                r'^\/start\s+(t|m|th)\-([0-9a-z]{10})$',
                 message_text,
                 flags=re.I,
           ):
@@ -856,7 +856,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
 
         elif m := re.search(
                 (
-                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=(t|m|th|tr)\-([0-9a-z]{10})$'
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=(t|m|th)\-([0-9a-z]{10})$'
                 ) % re.escape(bot_data['username']),
                 message_text,
                 flags=re.I,
@@ -3700,8 +3700,8 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
                     msg += 'в связи с утратой доверия\n'
                 elif m['operation_type_id'] == OperationType.TRUST:
                     msg += 'в связи с тем что доверяет\n'
-                elif m['operation_type_id'] in (OperationType.THANK, OperationType.TRUST_OR_THANK,):
-                    msg += 'с доверием или благодарностью\n'
+                elif m['operation_type_id'] == OperationType.THANK:
+                    msg += 'с благодарностью\n'
             user_to_delivered = None
             if m['user_to_delivered']:
                 msg += 'Доставлено'
@@ -4460,7 +4460,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
     if status_sender != 200 or not profile_sender:
         return
     if not operation_type_id or operation_type_id not in (
-            OperationType.TRUST_OR_THANK, OperationType.TRUST,
+            OperationType.TRUST,
             OperationType.MISTRUST, OperationType.NULLIFY_ATTITUDE,
             OperationType.ACQ, OperationType.THANK,
         ):
@@ -4471,8 +4471,8 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
     if profile_sender['uuid'] == profile_to['uuid']:
         text_same = 'Операция на себя не позволяется'
         if group_member:
-            if operation_type_id in (OperationType.TRUST_OR_THANK, OperationType.TRUST):
-                text_same ='Благодарности и доверия самому себе не предусмотрены'
+            if operation_type_id == OperationType.TRUST:
+                text_same ='Доверие самому себе не предусмотрено'
             try:
                 await bot.answer_callback_query(
                         callback_query.id,
@@ -4563,14 +4563,6 @@ async def put_thank_etc(tg_user_sender, data, state=None):
             text = '%(full_name_from_link)s не знаком(а) с %(full_name_to_link)s'
         elif post_op['operation_type_id'] == OperationType.TRUST:
             text = '%(full_name_from_link)s доверяет %(full_name_to_link)s'
-        elif post_op['operation_type_id'] == OperationType.TRUST_OR_THANK:
-            text = '%(full_name_from_link)s %(trusts_or_thanks)s%(thanks_count_str)s %(full_name_to_link)s'
-            thanks_count_str = ' (%s)' % thanks_count
-            trusts_or_thanks = 'доверяет'
-            if response.get('previousstate') and response['previousstate']['attitude'] == Attitude.TRUST:
-                # точно доверял раньше
-                trusts_or_thanks = 'благодарит'
-                do_thank = True
         profile_from = response['profile_from']
         profile_to = response['profile_to']
 
@@ -4648,35 +4640,27 @@ async def put_thank_etc(tg_user_sender, data, state=None):
 
     # Это в группу
     #
-    if operation_done and group_member:
-    #     try:
-    #         await bot.send_message(
-    #             group_member['group_chat_id'],
-    #             text=text,
-    #             disable_web_page_preview=True,
-    #             disable_notification=True,
-    #         )
-    #     except (ChatNotFound, CantInitiateConversation):
-    #         pass
-        if data.get('callback_query'):
-            try:
-                await data['callback_query'].message.edit_text(
-                text=await group_minicard_text (response['profile_to'], data['callback_query'].message.chat, bot_data),
-                reply_markup=data['callback_query'].message.reply_markup,
-                disable_web_page_preview=True,
-                )
-            except:
-                pass
-            if post_op['operation_type_id'] in (OperationType.TRUST_OR_THANK, ):
-                if response.get('previousstate') and response['previousstate']['attitude'] == Attitude.TRUST:
-                    popup_message = 'Добавлена благодарность'
-                else:
-                    popup_message = 'Доверие установлено'
-                await bot.answer_callback_query(
-                    data['callback_query'].id,
-                    text=popup_message,
-                    show_alert=True,
-                )
+    if group_member and data.get('callback_query') and \
+       (operation_done  or \
+       status == 400 and response.get('code', '') == 'already'):
+        try:
+            await data['callback_query'].message.edit_text(
+            text=await group_minicard_text (response['profile_to'], data['callback_query'].message.chat, bot_data),
+            reply_markup=data['callback_query'].message.reply_markup,
+            disable_web_page_preview=True,
+            )
+        except:
+            pass
+        if post_op['operation_type_id'] == OperationType.TRUST:
+            if operation_done:
+                popup_message = 'Доверие установлено'
+            else:
+                popup_message = 'Доверие уже было установлено'
+            await bot.answer_callback_query(
+                data['callback_query'].id,
+                text=popup_message,
+                show_alert=True,
+            )
 
     # Это получателю благодарности и т.п. или владельцу получателя, если получатель собственный
     #
@@ -5874,7 +5858,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 # Сразу доверие c благодарностью добавляемому пользователю
                 post_op = dict(
                     tg_token=settings.TOKEN,
-                    operation_type_id=OperationType.TRUST_OR_THANK,
+                    operation_type_id=OperationType.TRUST,
                     tg_user_id_from=tg_user_sender.id,
                     user_id_to=response_from['uuid'],
                 )
@@ -5897,7 +5881,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             reply = await group_minicard_text (response_from, message.chat, bot_data)
             dict_reply = dict(
                 keyboard_type=KeyboardType.TRUST_THANK,
-                operation=OperationType.TRUST_OR_THANK,
+                operation=OperationType.TRUST,
                 sep=KeyboardType.SEP,
                 user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
                 message_to_forward_id='',

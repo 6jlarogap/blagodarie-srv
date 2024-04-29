@@ -43,7 +43,6 @@ class OperationType(object):
     MISTRUST = 2
     TRUST = 3
     NULLIFY_ATTITUDE = 4
-    TRUST_OR_THANK = 5
     FATHER = 6
     NOT_PARENT = 7
     MOTHER = 8
@@ -74,8 +73,7 @@ class OperationType(object):
         Префикс команды /start <prefix>-<uuid> --> операция
         """
         return dict(
-            t=cls.TRUST_OR_THANK,
-            tr=cls.TRUST,
+            t=cls.TRUST,
             m=cls.ACQ,
             th=cls.THANK,
         ).get(prefix)
