@@ -537,6 +537,21 @@ async def echo_meet(message: types.Message, state: FSMContext):
 
 @dp.message_handler(
     ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('quit',),
+    state=None,
+)
+async def anonymize(message: types.Message, state: FSMContext):
+    status, profile = await Misc.post_tg_user(message.from_user)
+    if status == 200:
+        if not profile['is_active']:
+            await message.reply('Вы уже обезличены', disable_web_page_preview=True, disable_notification=True)
+            return
+        owner = profile
+        await do_confirm_delete_profile(message, profile, owner)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
     commands=('stat',),
     state=None,
 )
@@ -1262,6 +1277,7 @@ commands_dict = {
     'stat': echo_stat_to_bot,
     'feedback': echo_feedback,
     'feedback_admins': echo_feedback_admins,
+    'quit': anonymize,
     'start': echo_send_to_bot,
     'ya': echo_send_to_bot,
 }
@@ -6001,12 +6017,17 @@ async def check_user_delete_undelete(callback_query):
     ), state=None,
     )
 async def process_callback_delete_user(callback_query: types.CallbackQuery, state: FSMContext):
-    user, owner = await check_user_delete_undelete(callback_query)
+    profile, owner = await check_user_delete_undelete(callback_query)
     #   owner:  Кто удаляет (если собственного) или обезличивает (сам себя)
     #   user:   его удаляем или обезличиваем
-    if not user or not (user['is_active'] or user['owner']):
+
+    await do_confirm_delete_profile(callback_query.message, profile, owner)
+
+
+async def do_confirm_delete_profile(message, profile, owner):
+    if not profile or not (profile['is_active'] or profile['owner']):
         return
-    if user['user_id'] == owner['user_id']:
+    if profile['user_id'] == owner['user_id']:
         # Себя обезличиваем
         prompt = (
             '<b>%(name)s</b>\n'
@@ -6018,13 +6039,13 @@ async def process_callback_delete_user(callback_query: types.CallbackQuery, stat
         ) % dict(name = owner['first_name'])
     else:
         p_udalen = 'удалён'
-        if user.get('is_org'):
-            name = user['first_name']
+        if profile.get('is_org'):
+            name = profile['first_name']
             p_udalen = 'удалена организация:'
         else:
             bot_data = await bot.get_me()
-            name = Misc.get_deeplink_with_name(user, bot_data, with_lifetime_years=True,)
-            if user.get('gender') == 'f':
+            name = Misc.get_deeplink_with_name(profile, bot_data, with_lifetime_years=True,)
+            if profile.get('gender') == 'f':
                 p_udalen = 'удалена'
         prompt = (
             f'Будет {p_udalen} {name}!\n\n'
@@ -6032,7 +6053,7 @@ async def process_callback_delete_user(callback_query: types.CallbackQuery, stat
         )
     callback_data = (Misc.CALLBACK_DATA_UUID_TEMPLATE + '%(owner_id)s%(sep)s') % dict(
         keyboard_type=KeyboardType.DELETE_USER_CONFIRMED,
-        uuid=user['uuid'],
+        uuid=profile['uuid'],
         sep=KeyboardType.SEP,
         owner_id=owner['user_id']
     )
@@ -6043,7 +6064,7 @@ async def process_callback_delete_user(callback_query: types.CallbackQuery, stat
     reply_markup = InlineKeyboardMarkup()
     reply_markup.row(inline_btn_go, Misc.inline_button_cancel())
     await FSMdelete.ask.set()
-    await callback_query.message.reply(prompt, reply_markup=reply_markup, disable_web_page_preview=True,)
+    await message.reply(prompt, reply_markup=reply_markup, disable_web_page_preview=True,)
 
 
 @dp.callback_query_handler(
