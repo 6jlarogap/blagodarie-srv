@@ -517,7 +517,7 @@ async def echo_meet(message: types.Message, state: FSMContext):
     command_to_data = dict(
         meet= dict(prefix='m',  caption='Знакомьтесь: %(link)s'),
         trust=dict(prefix='t',  caption='Доверяю %(link)s'),
-        thank=dict(prefix='th', caption='Благодарю %(link)s'),
+        thank=dict(prefix='th', caption='Благодарить %(link)s'),
     )
     if status == 200:
         bot_data = await bot.get_me()
