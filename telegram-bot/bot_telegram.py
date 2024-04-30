@@ -561,7 +561,7 @@ async def echo_stat_to_bot(message: types.Message, state: FSMContext):
         )
     else:
         reply = 'Произошла ошибка'
-    await message.reply(reply)
+    await message.answer(reply)
 
 
 @dp.message_handler(
