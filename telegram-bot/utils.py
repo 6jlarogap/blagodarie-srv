@@ -1284,42 +1284,45 @@ class Misc(object):
             )
             reply_markup.row(inline_btn_undelete)
 
+        if reply:
+            await cls.send_or_edit_card(bot, reply, reply_markup, response_to, tg_user_from_id, card_message)
+
+
+    @classmethod
+    async def send_or_edit_card(cls, bot, reply, reply_markup, response_to, tg_user_from_id, card_message=None,):
         send_text_message = True
-        if (response_to['is_active'] or response_to['owner']) and reply:
-            # в бот
-            #
-            if response_to.get('photo') and response_from and response_from.get('tg_data') and reply:
-                try:
-                    photo = InputFile.from_url(response_to['photo'], filename='1.png')
-                    if card_message:
-                        await bot.edit_message_caption(
-                            chat_id=tg_user_from_id,
-                            message_id=card_message.message_id,
-                            caption=reply,
-                            reply_markup=reply_markup,
-                        )
-                    else:
+        if response_to.get('photo') and (response_to['is_active'] or response_to['owner']):
+            try:
+                photo = InputFile.from_url(response_to['photo'], filename='1.png')
+                if card_message:
+                    await bot.edit_message_caption(
+                        chat_id=tg_user_from_id,
+                        message_id=card_message.message_id,
+                        caption=reply,
+                        reply_markup=reply_markup,
+                    )
+                else:
+                    await bot.send_photo(
+                        chat_id=tg_user_from_id,
+                        photo=photo,
+                        disable_notification=True,
+                        caption=reply,
+                        reply_markup=reply_markup,
+                    )
+                send_text_message = False
+            except BadRequest as excpt:
+                if excpt.args[0] == 'Media_caption_too_long' and not card_message:
+                    try:
                         await bot.send_photo(
                             chat_id=tg_user_from_id,
                             photo=photo,
                             disable_notification=True,
-                            caption=reply,
-                            reply_markup=reply_markup,
                         )
-                    send_text_message = False
-                except BadRequest as excpt:
-                    if excpt.args[0] == 'Media_caption_too_long' and not card_message:
-                        try:
-                            await bot.send_photo(
-                                chat_id=tg_user_from_id,
-                                photo=photo,
-                                disable_notification=True,
-                            )
-                        except:
-                            pass
-                except:
-                    raise
-        if send_text_message and reply:
+                    except:
+                        pass
+            except:
+                raise
+        if send_text_message:
             if card_message:
                 try:
                     await bot.edit_message_text(

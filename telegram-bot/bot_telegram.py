@@ -4429,6 +4429,10 @@ def parse_code_tn(callback_query):
         message_to_forward_id = int(code[3])
     except (ValueError, IndexError,):
         message_to_forward_id = None
+    try:
+        is_thank_card = bool(code[4])
+    except (IndexError,):
+        is_thank_card = False
     message_ = callback_query.message
     group_member = \
         message_.chat.type in (types.ChatType.GROUP, types.ChatType.SUPERGROUP) and \
@@ -4438,7 +4442,7 @@ def parse_code_tn(callback_query):
                 group_type=message_.chat.type,
         ) \
         or None
-    return operation_type_id, uuid, message_to_forward_id, group_member
+    return operation_type_id, uuid, message_to_forward_id, group_member, is_thank_card
 
 
 @dp.callback_query_handler(
@@ -4461,9 +4465,11 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         <KeyboardType.SEP>
         <message_to_forward_id>             # 3
         <KeyboardType.SEP>
+        <thank_card>                        # 4, отправлено из карточки после благодарности
+        <KeyboardType.SEP>
     """
     try:
-        operation_type_id, uuid, message_to_forward_id, group_member = parse_code_tn(callback_query)
+        operation_type_id, uuid, message_to_forward_id, group_member, is_thank_card = parse_code_tn(callback_query)
     except ValueError:
         return
 
@@ -4510,6 +4516,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
         message_to_forward_id = message_to_forward_id,
         callback_query=callback_query,
         group_member=group_member,
+        is_thank_card=is_thank_card,
     )
     if group_member:
         group_member.update(user_tg_uid=tg_user_sender.id)
@@ -4611,8 +4618,6 @@ async def put_thank_etc(tg_user_sender, data, state=None):
         else:
             text = 'Простите, произошла ошибка'
 
-    text_set_acq = ''
-
     # Это отправителю благодарности и т.п., даже если произошла ошибка
     #
     if text:
@@ -4628,28 +4633,6 @@ async def put_thank_etc(tg_user_sender, data, state=None):
                         sep=KeyboardType.SEP,
                 ))
                 reply_markup.row(inline_btn_cancel_thank)
-
-            # Делаем знакомство если поблагодарил и не знаком
-            #
-            if response.get('currentstate') and response['currentstate'].get('attitude', '') == None:
-                post_op_acq = dict(
-                    tg_token=settings.TOKEN,
-                    operation_type_id=OperationType.ACQ,
-                    tg_user_id_from=str(tg_user_sender.id),
-                    user_id_to=profile_to['uuid'],
-                )
-                logging.debug('post operation, meet after thank, payload: %s' % Misc.secret(post_op_acq))
-                status_acq, response_acq = await Misc.api_request(
-                    path='/api/addoperation',
-                    method='post',
-                    data=post_op_acq,
-                )
-                logging.debug('post operation, meet after thank, status: %s' % status_acq)
-                logging.debug('post operation, meet after thank, response: %s' % response_acq)
-                if status_acq == 200:
-                    text_set_acq = f'Установлено знакомство {full_name_from_link} к {full_name_to_link}'
-                    text_to_sender += f'\n\n{text_set_acq}'
-
 
         if operation_done and data.get('message_after_meet'):
             status_template, message_after_meet = await Misc.get_template('message_after_meet')
@@ -4672,12 +4655,26 @@ async def put_thank_etc(tg_user_sender, data, state=None):
         if not group_member and data.get('callback_query') and \
            (operation_done  or \
             status == 400 and response.get('code', '') == 'already'):
-            await Misc.show_card(
-                profile_to,
-                bot=bot,
-                response_from=profile_from,
-                tg_user_from=tg_user_sender,
-                card_message=data['callback_query'].message,
+            if data.get('is_thank_card'):
+                await quest_after_thank_if_no_attitude(
+                    f'Установите отношение к {full_name_to_link}:',
+                    profile_from, profile_to, tg_user_sender,
+                    card_message=data['callback_query'].message,
+                )
+            else:
+                await Misc.show_card(
+                    profile_to,
+                    bot=bot,
+                    response_from=profile_from,
+                    tg_user_from=tg_user_sender,
+                    card_message=data['callback_query'].message,
+                )
+
+        if do_thank and response.get('currentstate') and response['currentstate'].get('attitude', '') == None:
+            # Благодарность незнакомому. Нужен вопрос, как он к этому незнакомому
+            await quest_after_thank_if_no_attitude(
+                f'Установите отношение к {full_name_to_link}:',
+                profile_from, profile_to, tg_user_sender, card_message=None,
             )
 
     # Это в группу
@@ -4710,8 +4707,6 @@ async def put_thank_etc(tg_user_sender, data, state=None):
         text_to_recipient = text
         if operation_done and data.get('message_to_forward_id'):
             text_to_recipient += ' в связи с сообщением, см. ниже...'
-        if text_set_acq:
-            text_to_recipient += f'\n\n{text_set_acq}'
         tg_user_to_notify_tg_data = []
         if profile_to.get('owner'):
             if profile_to['owner']['uuid'] != profile_from['uuid']:
@@ -4739,6 +4734,60 @@ async def put_thank_etc(tg_user_sender, data, state=None):
                     )
                 except (ChatNotFound, CantInitiateConversation):
                     pass
+
+
+async def quest_after_thank_if_no_attitude(text, profile_from, profile_to, tg_user_from, card_message=None,):
+    """
+    Карточка юзера в бот, когда того благодарят, но благодаривший с ним не знаком
+
+    -   text:           текст в карточке
+    -   profile_to:     кого благодарят
+    -   tg_user_from:   кто благодарит
+    -   card_message:   сообщение с карточкой, которое надо подправить, а не слать новую карточку
+    """
+
+    reply_markup = InlineKeyboardMarkup()
+    attitude = None
+    status_relations, response_relations = await Misc.call_response_relations(profile_from, profile_to)
+    if status_relations == 200:
+        attitude = response_relations['from_to']['attitude']
+
+    dict_reply = dict(
+        keyboard_type=KeyboardType.TRUST_THANK,
+        sep=KeyboardType.SEP,
+        user_to_uuid_stripped=Misc.uuid_strip(profile_to['uuid']),
+        message_to_forward_id='',
+        is_thank_card='1',
+    )
+    callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE + '%(is_thank_card)s%(sep)s'
+    asterisk = ' (*)'
+
+    dict_reply.update(operation=OperationType.ACQ)
+    inline_btn_acq = InlineKeyboardButton(
+        'Знакомы' + (asterisk if attitude == Attitude.ACQ else ''),
+        callback_data=callback_data_template % dict_reply,
+    )
+
+    dict_reply.update(operation=OperationType.TRUST)
+    inline_btn_trust = InlineKeyboardButton(
+        'Доверяю' + (asterisk if attitude == Attitude.TRUST else ''),
+        callback_data=callback_data_template % dict_reply,
+    )
+
+    dict_reply.update(operation=OperationType.MISTRUST)
+    inline_btn_mistrust = InlineKeyboardButton(
+        'Не доверяю' + (asterisk if attitude == Attitude.MISTRUST else ''),
+        callback_data=callback_data_template % dict_reply,
+    )
+
+    dict_reply.update(operation=OperationType.NULLIFY_ATTITUDE)
+    inline_btn_nullify_attitude = InlineKeyboardButton(
+        'Не знакомы' + (asterisk if not attitude else ''),
+        callback_data=callback_data_template % dict_reply,
+    )
+    reply_markup.row(inline_btn_acq, inline_btn_trust)
+    reply_markup.row(inline_btn_nullify_attitude, inline_btn_mistrust)
+    await Misc.send_or_edit_card(bot, text, reply_markup, profile_to, tg_user_from.id, card_message)
 
 
 @dp.callback_query_handler(
