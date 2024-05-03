@@ -4641,16 +4641,17 @@ async def put_thank_etc(tg_user_sender, data, state=None):
             text_to_sender += f'\n\n{message_after_meet}'
             await Misc.put_user_properties(uuid=response['profile_from']['uuid'], did_meet='1')
 
-        try:
-            await bot.send_message(
-                tg_user_sender.id,
-                text=text_to_sender,
-                disable_web_page_preview=True,
-                disable_notification=True,
-                reply_markup=reply_markup,
-            )
-        except (ChatNotFound, CantInitiateConversation):
-            pass
+        if operation_done or not group_member:
+            try:
+                await bot.send_message(
+                    tg_user_sender.id,
+                    text=text_to_sender,
+                    disable_web_page_preview=True,
+                    disable_notification=True,
+                    reply_markup=reply_markup,
+                )
+            except (ChatNotFound, CantInitiateConversation):
+                pass
 
         if not group_member and data.get('callback_query') and \
            (operation_done  or \
@@ -5902,20 +5903,34 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
     )
 
     # Предыдущее сообщение в группу было от текущего юзера:
-    #   не выводим миникаточку.
-    #       -   для группы НЕ включена выдача мини карточек,
-    #           нет в settings.GROUPS_WITH_CARDS[message.chat.id]
+    #   Выводим миникаточку, если
     #       -   для группы включена выдача мини карточек,
-    #           но сообщение не в топик из
-    #           settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids']
+    #           message.chat.id в settings.GROUPS_WITH_CARDS
+    #       -   для группы включена выдача мини карточек,
+    #       -   сообщение не из топика General
+    #           сообщение удовлетворяет одному из условий:
+    #           *   в списке settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids']
+    #               есть message.message_thread_id
+    #           *   в списке settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids']
+    #               есть слово 'topic_messages'
     #       -   если предыдущее сообщение было от него
     #
     is_previous_his = True
+    message.is_topic_message
     if message.chat.id in settings.GROUPS_WITH_CARDS and \
        not tg_user_left and not tg_users_new and message.from_user.id != bot_data.id and \
-       message.message_thread_id in settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids']:
+       message.is_topic_message and message.message_thread_id and \
+       (
+        message.message_thread_id in settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids'] or
+        'topic_messages' in settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids']
+       ):
         if r := redis.Redis(**settings.REDIS_CONNECT):
-            last_user_in_grop_rec = settings.REDIS_LAST_USERIN_GROUP_PREFIX + str(message.chat.id)
+            last_user_in_grop_rec = (
+                settings.REDIS_LAST_USERIN_GROUP_PREFIX + \
+                str(message.chat.id) + \
+                settings.REDIS_KEY_SEP + \
+                str(message.message_thread_id)
+            )
             previous_user_in_group = r.get(last_user_in_grop_rec)
             if str(previous_user_in_group) != str(message.from_user.id):
                 r.set(last_user_in_grop_rec, message.from_user.id)

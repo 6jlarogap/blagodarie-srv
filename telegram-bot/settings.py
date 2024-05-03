@@ -151,7 +151,8 @@ VOTE_URL = 'https://6jlarogap.github.io/razum/'
 #   -   Последний юзер, отправивший сообщение в группу.
 #       Вносится бессрочная запись:
 #           REDIS_LAST_USERIN_GROUP_PREFIX +
-#           group_chat_id
+#           group_chat_id  + REDIS_KEY_SEP +
+#           message.message_thread_id
 #       со значением telegram user_id пользователя,
 #       отправившего сообщение
 #   -   Карточка, выданная после сообщения пользователя в группе:
