@@ -4565,8 +4565,7 @@ async def put_thank_etc(tg_user_sender, data, state=None):
     logging.debug('post operation, status: %s' % status)
     logging.debug('post operation, response: %s' % response)
     text = text_popup = None
-    operation_done = False
-    do_thank = False
+    operation_done = operation_already = do_thank = False
     bot_data = await bot.get_me()
     if status == 200:
         operation_done = True
@@ -4590,6 +4589,7 @@ async def put_thank_etc(tg_user_sender, data, state=None):
         profile_to = response['profile_to']
 
     elif status == 400 and response.get('code', '') == 'already':
+        operation_already = True
         full_name_to_link = Misc.get_deeplink_with_name(profile_to, bot_data, plus_trusts=True)
         if post_op['operation_type_id'] == OperationType.TRUST:
             text = f'Вы уже доверяете {full_name_to_link}'
@@ -4641,7 +4641,31 @@ async def put_thank_etc(tg_user_sender, data, state=None):
             text_to_sender += f'\n\n{message_after_meet}'
             await Misc.put_user_properties(uuid=response['profile_from']['uuid'], did_meet='1')
 
-        if operation_done or not group_member:
+        if not group_member and (operation_done or operation_already):
+            if reply_markup is None:
+                reply_markup = InlineKeyboardMarkup()
+            inline_btn_trusts = InlineKeyboardButton(
+                'Сеть доверия',
+                login_url=Misc.make_login_url(
+                    redirect_path='%(graph_host)s/?user_uuid_trusts=%(user_uuid)s' % dict(
+                        graph_host=settings.GRAPH_HOST,
+                        user_uuid=profile_to['uuid'],
+                    ), keep_user_data='on',
+                ))
+            login_url_buttons = [inline_btn_trusts, ]
+
+            if profile_to.get('latitude') is not None and profile_to.get('longitude') is not None:
+                inline_btn_map = InlineKeyboardButton(
+                    'Карта',
+                    login_url=Misc.make_login_url(
+                        redirect_path='%(map_host)s/?uuid_trustees=%(user_uuid)s' % dict(
+                            map_host=settings.MAP_HOST,
+                            user_uuid=profile_to['uuid'],
+                        ), keep_user_data='on',
+                    ))
+                login_url_buttons.append(inline_btn_map)
+            reply_markup.row(*login_url_buttons)
+
             try:
                 await bot.send_message(
                     tg_user_sender.id,
@@ -4654,8 +4678,7 @@ async def put_thank_etc(tg_user_sender, data, state=None):
                 pass
 
         if not group_member and data.get('callback_query') and \
-           (operation_done  or \
-            status == 400 and response.get('code', '') == 'already'):
+           (operation_done  or operation_already):
             if data.get('is_thank_card'):
                 await quest_after_thank_if_no_attitude(
                     f'Установите отношение к {full_name_to_link}:',
@@ -4681,8 +4704,7 @@ async def put_thank_etc(tg_user_sender, data, state=None):
     # Это в группу
     #
     if group_member and data.get('callback_query') and \
-       (operation_done  or \
-       status == 400 and response.get('code', '') == 'already'):
+       (operation_done  or operation_already):
         try:
             await data['callback_query'].message.edit_text(
             text=await group_minicard_text (response['profile_to'], data['callback_query'].message.chat, bot_data),
