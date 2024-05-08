@@ -1463,7 +1463,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
             else:
                 user, profile = self.check_user_or_owned_uuid(request, need_uuid=True)
 
-            bool_fields = ('did_bot_start', 'did_meet', )
+            bool_fields = ('did_bot_start',)
             for f in bool_fields:
                 if f in request.data:
                     setattr(profile, f, bool(request.data[f]))

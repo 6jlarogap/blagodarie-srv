@@ -1241,8 +1241,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 message_to_forward_id = None,
                 group_member=None,
                 message_after_meet=bool(
-                    d_trust['operation_type_id'] == OperationType.ACQ and \
-                    response_from.get('did_meet') == False
+                    d_trust['operation_type_id'] == OperationType.ACQ
             ))
             await put_thank_etc(tg_user_sender, data, state=state)
             return
@@ -4639,7 +4638,6 @@ async def put_thank_etc(tg_user_sender, data, state=None):
             if status_template != 200 or not message_after_meet:
                 message_after_meet = 'Добро пожаловать!'
             text_to_sender += f'\n\n{message_after_meet}'
-            await Misc.put_user_properties(uuid=response['profile_from']['uuid'], did_meet='1')
 
         if not group_member and (operation_done or operation_already):
             if reply_markup is None:
