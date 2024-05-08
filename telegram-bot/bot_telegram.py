@@ -5938,6 +5938,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
     #       -   если предыдущее сообщение было от него
     #
     is_previous_his = True
+    keep_hours = None
     message.is_topic_message
     if message.chat.id in settings.GROUPS_WITH_CARDS and \
        not tg_user_left and not tg_users_new and message.from_user.id != bot_data.id and \
@@ -5957,6 +5958,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
             if str(previous_user_in_group) != str(message.from_user.id):
                 r.set(last_user_in_grop_rec, message.from_user.id)
                 is_previous_his = False
+                keep_hours = settings.GROUPS_WITH_CARDS[message.chat.id].get('keep_hours')
             r.close()
 
     for user_in in a_users_in:
@@ -6037,7 +6039,7 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                 disable_web_page_preview=True,
                 disable_notification=True,
             )
-            if answer:
+            if answer and keep_hours:
                 if r := redis.Redis(**settings.REDIS_CONNECT):
                     s = (
                         f'{settings.REDIS_CARD_IN_GROUP_PREFIX}{settings.REDIS_KEY_SEP}'
