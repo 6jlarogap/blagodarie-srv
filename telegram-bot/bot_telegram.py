@@ -4664,6 +4664,7 @@ async def put_thank_etc(tg_user_sender, data, state=None):
                 login_url_buttons.append(inline_btn_map)
             reply_markup.row(*login_url_buttons)
 
+        if not group_member:
             try:
                 await bot.send_message(
                     tg_user_sender.id,
