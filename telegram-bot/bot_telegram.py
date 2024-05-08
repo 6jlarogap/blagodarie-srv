@@ -4652,17 +4652,15 @@ async def put_thank_etc(tg_user_sender, data, state=None):
                 ))
             login_url_buttons = [inline_btn_trusts, ]
 
-            if profile_to.get('latitude') is not None and profile_to.get('longitude') is not None:
-                inline_btn_map = InlineKeyboardButton(
-                    'Карта',
-                    login_url=Misc.make_login_url(
-                        redirect_path='%(map_host)s/?uuid_trustees=%(user_uuid)s' % dict(
-                            map_host=settings.MAP_HOST,
-                            user_uuid=profile_to['uuid'],
-                        ), keep_user_data='on',
-                    ))
-                login_url_buttons.append(inline_btn_map)
-            reply_markup.row(*login_url_buttons)
+            inline_btn_map = InlineKeyboardButton(
+                'Карта',
+                login_url=Misc.make_login_url(
+                    redirect_path='%(map_host)s/?uuid_trustees=%(user_uuid)s' % dict(
+                        map_host=settings.MAP_HOST,
+                        user_uuid=profile_to['uuid'],
+                    ), keep_user_data='on',
+                ))
+            reply_markup.row(inline_btn_trusts, inline_btn_map)
 
         if not group_member:
             try:
