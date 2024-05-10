@@ -4642,12 +4642,15 @@ async def put_thank_etc(tg_user_sender, data, state=None):
         if not group_member and (operation_done or operation_already):
             if reply_markup is None:
                 reply_markup = InlineKeyboardMarkup()
+            link_profile = profile_to
+            if post_op['operation_type_id'] == OperationType.ACQ:
+                link_profile = profile_from
             inline_btn_trusts = InlineKeyboardButton(
                 'Сеть доверия',
                 login_url=Misc.make_login_url(
                     redirect_path='%(graph_host)s/?user_uuid_trusts=%(user_uuid)s' % dict(
                         graph_host=settings.GRAPH_HOST,
-                        user_uuid=profile_to['uuid'],
+                        user_uuid=link_profile['uuid'],
                     ), keep_user_data='on',
                 ))
             login_url_buttons = [inline_btn_trusts, ]
@@ -4657,7 +4660,7 @@ async def put_thank_etc(tg_user_sender, data, state=None):
                 login_url=Misc.make_login_url(
                     redirect_path='%(map_host)s/?uuid_trustees=%(user_uuid)s' % dict(
                         map_host=settings.MAP_HOST,
-                        user_uuid=profile_to['uuid'],
+                        user_uuid=link_profile['uuid'],
                     ), keep_user_data='on',
                 ))
             reply_markup.row(inline_btn_trusts, inline_btn_map)
