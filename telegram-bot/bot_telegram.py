@@ -2402,6 +2402,8 @@ async def process_callback_bro_sis(callback_query: types.CallbackQuery, state: F
     if not response_sender:
         return
     response_uuid = response_sender['response_uuid']
+    if not (response_uuid.get('father') or response_uuid.get('mother')):
+        return
     state = dp.current_state()
     reply_markup = None
     async with state.proxy() as data:
@@ -2413,13 +2415,18 @@ async def process_callback_bro_sis(callback_query: types.CallbackQuery, state: F
             'вида t.me/%(bot_data_username)s?start=...\n'
             '\n'
             'Или нажмите <b><u>Новый брат</u></b> или <b><u>Новая сестра</u></b> для ввода нового родственника, '
-            'который станет %(his_her)s братом или сестрой\n'
+            'который станет %(his_her)s братом или сестрой; родители брата (сестры):\n'
         )
         prompt_bro_sis = prompt_bro_sis % dict(
             bot_data_username=bot_data['username'],
             name=response_uuid['first_name'],
             his_her=Misc.his_her(response_uuid),
         )
+        if response_uuid.get('father'):
+            prompt_bro_sis += f'папа: {response_uuid["father"]["first_name"]}\n'
+        if response_uuid.get('mother'):
+            prompt_bro_sis += f'мама: {response_uuid["mother"]["first_name"]}\n'
+
         new_bro_sis_dict = dict(
             keyboard_type=KeyboardType.NEW_BRO,
             uuid=data['uuid'],
