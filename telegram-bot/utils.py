@@ -726,6 +726,37 @@ class Misc(object):
             parms=parms,
         ))
 
+    @classmethod
+    def make_login_url_(cls, redirect_path, bot_username, **kwargs):
+        """
+        Сформировать ссылку, которая будет открываться авторизованным пользователем
+
+        Пример результата:
+        https://blagoroda.org/auth/telegram/?redirect_path=https%3A%2F%2Fblagoroda.org%2F%3Ff%3D0%26q%3D25
+
+        где:
+            https://blagoroda.org/ (в начале)
+                прописан /setdomain в боте
+            redirect_path
+                куда после авторизации уходим. В этом примере, после расшифровки,
+                это https://blagoroda.org/f=0&q=50
+
+        kwargs:
+            дополнительные параметры, которые могут быть добавлены в результат
+        """
+        parms = dict(redirect_path=redirect_path)
+        parms.update(**kwargs)
+        parms = urlencode(parms)
+        frontend_auth_path = settings.FRONTEND_AUTH_PATH.strip('/')
+        return LoginUrl(
+            url='%(frontend_host)s/%(frontend_auth_path)s/?%(parms)s' % dict(
+                frontend_host=settings.FRONTEND_HOST,
+                frontend_auth_path=frontend_auth_path,
+                parms=parms,
+            ),
+            bot_username=bot_username,
+        )
+
 
     @classmethod
     async def post_tg_user(cls, tg_user_sender, activate=False, did_bot_start=True):
@@ -1640,19 +1671,23 @@ class Misc(object):
             text = '@' + bot_data['username']
         inline_btn_map = InlineKeyboardButton(
             'Карта',
-            login_url=cls.make_login_url(
+            login_url=cls.make_login_url_(
                 redirect_path='%(map_host)s/?chat_id=%(chat_id)s' % dict(
                     map_host=settings.MAP_HOST,
                     chat_id=chat.id,
-                ), keep_user_data='on',
+                ),
+                bot_username=bot_data['username'],
+                keep_user_data='on',
             ))
         inline_btn_trusts = InlineKeyboardButton(
             'Схема',
-            login_url=cls.make_login_url(
+            login_url=cls.make_login_url_(
                 redirect_path='%(graph_host)s/?tgr=%(chat_id)s' % dict(
                     graph_host=settings.GRAPH_HOST,
                     chat_id=chat.id,
-                ), keep_user_data='on',
+                ),
+                bot_username=bot_data['username'],
+                keep_user_data='on',
             ))
         reply_markup = InlineKeyboardMarkup()
         reply_markup.row(inline_btn_map, inline_btn_trusts,)
