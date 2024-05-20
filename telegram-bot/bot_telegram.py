@@ -475,17 +475,20 @@ async def echo_getowned_to_bot(message: types.Message, state: FSMContext):
     state=None,
 )
 async def echo_graph_to_bot(message: types.Message, state: FSMContext):
+    bot_data = await bot.get_me()
     reply_markup = InlineKeyboardMarkup()
     inline_btn_all_users = InlineKeyboardButton(
         'Отношения участников',
         login_url=Misc.make_login_url(
             redirect_path=settings.GRAPH_HOST + '/?rod=on&dover=on&withalone=on',
+            bot_username=bot_data["username"],
             keep_user_data='on'
     ))
     inline_btn_recent = InlineKeyboardButton(
         'Недавно добавленные',
         login_url=Misc.make_login_url(
             redirect_path=settings.GRAPH_HOST + '/?f=0&q=50',
+            bot_username=bot_data["username"],
             keep_user_data='on'
     ))
     reply_markup.row(inline_btn_all_users)
@@ -1165,7 +1168,11 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 reply_markup = InlineKeyboardMarkup()
                 inline_btn_redirect = InlineKeyboardButton(
                     'Продолжить',
-                    login_url=Misc.make_login_url(redirect_path=redirect_path, keep_user_data='on'),
+                    login_url=Misc.make_login_url(
+                        redirect_path=redirect_path,
+                        bot_sername=bot_data['username'],
+                        keep_user_data='on'
+                    ),
                 )
                 reply_markup.row(inline_btn_redirect)
                 if redirect_path.lower().startswith(settings.VOTE_URL):
@@ -4658,7 +4665,9 @@ async def put_thank_etc(tg_user_sender, data, state=None):
                     redirect_path='%(graph_host)s/?user_uuid_trusts=%(user_uuid)s' % dict(
                         graph_host=settings.GRAPH_HOST,
                         user_uuid=link_profile['uuid'],
-                    ), keep_user_data='on',
+                    ),
+                    bot_username=bot_data['username'],
+                    keep_user_data='on',
                 ))
             login_url_buttons = [inline_btn_trusts, ]
 
@@ -4668,7 +4677,9 @@ async def put_thank_etc(tg_user_sender, data, state=None):
                     redirect_path='%(map_host)s/?uuid_trustees=%(user_uuid)s' % dict(
                         map_host=settings.MAP_HOST,
                         user_uuid=link_profile['uuid'],
-                    ), keep_user_data='on',
+                    ),
+                    bot_username=bot_data['username'],
+                    keep_user_data='on',
                 ))
             reply_markup.row(inline_btn_trusts, inline_btn_map)
 
@@ -5158,10 +5169,14 @@ async def answer_youtube_message(message, youtube_id, youtube_link):
     reply = 'Коллективный разум:\n' + youtube_link
     redirect_path = settings.VOTE_URL + '#' + youtube_link
     reply_markup = InlineKeyboardMarkup()
+    bot_data = await bot.get_me()
     inline_btn_redirect = InlineKeyboardButton(
         'Продолжить',
-        login_url=Misc.make_login_url(redirect_path=redirect_path, keep_user_data='on'),
-    )
+        login_url=Misc.make_login_url(
+            redirect_path=redirect_path,
+            bot_username=bot_data["username"],
+            keep_user_data='on'
+    ))
     reply_markup.row(inline_btn_redirect)
     inline_btn_scheme = InlineKeyboardButton(
         'Схема',
@@ -5169,7 +5184,9 @@ async def answer_youtube_message(message, youtube_id, youtube_link):
             redirect_path='%(graph_host)s/?videoid=%(youtube_id)s&source=yt' % dict(
                 graph_host=settings.GRAPH_HOST,
                 youtube_id=youtube_id,
-            ), keep_user_data='on',
+            ),
+            bot_username=bot_data['username'],
+            keep_user_data='on',
         ))
     inline_btn_map = InlineKeyboardButton(
         'Карта',
@@ -5177,7 +5194,9 @@ async def answer_youtube_message(message, youtube_id, youtube_link):
             redirect_path='%(map_host)s/?videoid=%(youtube_id)s&source=yt' % dict(
                 map_host=settings.MAP_HOST,
                 youtube_id=youtube_id,
-            ), keep_user_data='on',
+            ),
+            bot_username=bot_data['username'],
+            keep_user_data='on',
         ))
     reply_markup.row(inline_btn_scheme, inline_btn_map)
     await message.reply(reply, reply_markup=reply_markup,)

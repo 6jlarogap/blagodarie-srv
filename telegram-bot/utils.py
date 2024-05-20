@@ -699,35 +699,7 @@ class Misc(object):
         return result
 
     @classmethod
-    def make_login_url(cls, redirect_path, **kwargs):
-        """
-        Сформировать ссылку, которая будет открываться авторизованным пользователем
-
-        Пример результата:
-        https://blagoroda.org/auth/telegram/?redirect_path=https%3A%2F%2Fblagoroda.org%2F%3Ff%3D0%26q%3D25
-
-        где:
-            https://blagoroda.org/ (в начале)
-                прописан /setdomain в боте
-            redirect_path
-                куда после авторизации уходим. В этом примере, после расшифровки,
-                это https://blagoroda.org/f=0&q=50
-
-        kwargs:
-            дополнительные параметры, которые могут быть добавлены в результат
-        """
-        parms = dict(redirect_path=redirect_path)
-        parms.update(**kwargs)
-        parms = urlencode(parms)
-        frontend_auth_path = settings.FRONTEND_AUTH_PATH.strip('/')
-        return LoginUrl('%(frontend_host)s/%(frontend_auth_path)s/?%(parms)s' % dict(
-            frontend_host=settings.FRONTEND_HOST,
-            frontend_auth_path=frontend_auth_path,
-            parms=parms,
-        ))
-
-    @classmethod
-    def make_login_url_(cls, redirect_path, bot_username, **kwargs):
+    def make_login_url(cls, redirect_path, bot_username, **kwargs):
         """
         Сформировать ссылку, которая будет открываться авторизованным пользователем
 
@@ -1091,9 +1063,11 @@ class Misc(object):
             'Сеть доверия',
             login_url=cls.make_login_url(
                 redirect_path='%(graph_host)s/?user_uuid_trusts=%(user_uuid)s' % dict(
-                    graph_host=settings.GRAPH_HOST,
-                    user_uuid=response_to['uuid'],
-                ), keep_user_data='on',
+                        graph_host=settings.GRAPH_HOST,
+                        user_uuid=response_to['uuid'],
+                    ),
+                bot_username=bot_data["username"],
+                keep_user_data='on',
             ))
         login_url_buttons = [inline_btn_trusts, ]
 
@@ -1107,7 +1081,9 @@ class Misc(object):
                         ) % dict(
                         graph_host=settings.GRAPH_HOST,
                         user_uuid=response_to['uuid'],
-                    ), keep_user_data='on',
+                    ),
+                    bot_username=bot_data["username"],
+                    keep_user_data='on',
                 ))
             login_url_buttons.append(inline_btn_genesis)
 
@@ -1118,8 +1094,10 @@ class Misc(object):
                     redirect_path='%(map_host)s/?uuid_trustees=%(user_uuid)s' % dict(
                         map_host=settings.MAP_HOST,
                         user_uuid=response_to['uuid'],
-                    ), keep_user_data='on',
-                ))
+                    ),
+                bot_username=bot_data["username"],
+                keep_user_data='on',
+            ))
             login_url_buttons.append(inline_btn_map)
         reply_markup.row(*login_url_buttons)
 
@@ -1671,7 +1649,7 @@ class Misc(object):
             text = '@' + bot_data['username']
         inline_btn_map = InlineKeyboardButton(
             'Карта',
-            login_url=cls.make_login_url_(
+            login_url=cls.make_login_url(
                 redirect_path='%(map_host)s/?chat_id=%(chat_id)s' % dict(
                     map_host=settings.MAP_HOST,
                     chat_id=chat.id,
@@ -1681,7 +1659,7 @@ class Misc(object):
             ))
         inline_btn_trusts = InlineKeyboardButton(
             'Схема',
-            login_url=cls.make_login_url_(
+            login_url=cls.make_login_url(
                 redirect_path='%(graph_host)s/?tgr=%(chat_id)s' % dict(
                     graph_host=settings.GRAPH_HOST,
                     chat_id=chat.id,
