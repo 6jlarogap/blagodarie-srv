@@ -1,6 +1,9 @@
 # handler_bot.py
 #
 # Команды и сообщения в бот
+#
+# Все команды в бот должны быть здесь. После команд в бот идет обработка
+# любого сообщения
 
 import re, redis
 
@@ -13,10 +16,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command, StateFilter, CommandStart, CommandObject
 
 import settings, me
+from settings import logging
 
 from common import Misc
+from common import FSMnewPerson
 
 router = Router()
+dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('graph'))
 async def cmd_graph(message: Message, state: FSMContext):
@@ -56,31 +62,41 @@ async def cmd_help(message: Message, state: FSMContext):
     await message.reply(await Misc.help_text(), disable_web_page_preview=True)
 
 
-
-@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), CommandStart(deep_link=True))
-async def cmd_start_deeplink(message: Message, command: CommandObject, state: FSMContext):
-    arg = command.args if type(command.args) == str else args[0]
-    print('With arg')
-    await message.answer(f'With arg: {arg}')
-
-
-# Просто /start без аргументов. Должно идти после cmd_start_deeplink
-#
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('start'))
-async def cmd_start_empty(message: Message, state: FSMContext):
+async def cmd_start(message: Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
-    await message.reply(await Misc.help_text(), disable_web_page_preview=True)
-    await Misc.show_card(
-        profile=response_sender,
-        profile_sender=response_sender,
-        tg_user_sender=message.from_user,
-    )
+    arg = Misc.arg_deeplink(message.text)
+    if not arg:
+        # команда /start
+        if m := re.search(r'^\s*\/start\s+(.+)', message.text, flags=re.I):
+            arg = m.group(1)
+    if not arg:
+        # Просто /start
+        await message.reply(await Misc.help_text(), disable_web_page_preview=True)
+        await Misc.show_card(
+            profile=response_sender,
+            profile_sender=response_sender,
+            tg_user_sender=message.from_user,
+        )
+    else:
+        await message.reply(f'arg: ~{arg}~')
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command(re.compile('new|new_person')))
+async def cmd_new_person(message: Message, state: FSMContext):
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender == 200:
+        if not Misc.editable(response_sender):
+            return
+        await state.set_state(FSMnewPerson.ask)
+        await state.update_data(uuid=response_sender['uuid'])
+        await message.reply(Misc.PROMPT_NEW_IOF, reply_markup=Misc.reply_markup_cancel_row())
+
 
 # Команды в бот закончились.
 # Просто сообщение в бот. Должно здесь идти после всех команд в бот
 
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None))
-async def cmd_message_to_bot(message: Message, state: FSMContext):
+async def message_to_bot(message: Message, state: FSMContext):
     show_response = True
     if message.media_group_id:
         if r := redis.Redis(**settings.REDIS_CONNECT):
@@ -144,5 +160,36 @@ async def cmd_message_to_bot(message: Message, state: FSMContext):
         return
 
 
-async def is_it_command():
-    return ':yes_it_is'
+commands_dict = {
+    'graph': cmd_graph,
+    'ya': cmd_ya,
+    'help': cmd_help,
+    'new': cmd_new_person,
+    'new_person': cmd_new_person,
+    'start': cmd_start,
+}
+
+async def is_it_command(message: Message, state: FSMContext, excepts=[]):
+    """
+    Проверка, не обнаружилась ли команда, когда от пользователя ждут данных
+
+    Если обнаружилась, то состояние обнуляется,
+    сообщение пользователю, вызов функции, выполняющей команду
+    """
+    result = False
+    if message.content_type == ContentType.TEXT:
+        message_text = Misc.strip_text(message.text).lower()
+        m = re.search(r'^\/(\S+)', message_text)
+        if m:
+            command = m.group(1)
+            if command in commands_dict and command not in excepts:
+                if state:
+                    await state.clear()
+                await message.reply('%s\n%s /%s' % (
+                     Misc.MSG_YOU_CANCELLED_INPUT,
+                     'Выполняю команду',
+                     command
+                ))
+                result = True
+                await commands_dict[command](message, state)
+    return result

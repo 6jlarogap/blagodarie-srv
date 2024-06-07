@@ -14,12 +14,23 @@ from aiogram.types.login_url import LoginUrl
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.types.input_file import URLInputFile
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.fsm.state import StatesGroup, State
+
 import aiohttp
 
 import settings, me
 from settings import logging
 
 TIMEOUT = aiohttp.ClientTimeout(total=settings.HTTP_TIMEOUT)
+
+dp, bot, bot_data = me.dp, me.bot, me.bot_data
+
+# Контексты, используемые в разных местах
+
+class FSMnewPerson(StatesGroup):
+    ask = State()
+    ask_gender = State()
+
 
 class Attitude(object):
 
@@ -343,7 +354,7 @@ class Misc(object):
         'название организации - напишите ещё раз название организации или '
         'нажмите Отмена'
     )
-
+    MAX_MESSAGE_LENGTH = 4096
 
     @classmethod
     def secret(cls, payload):
@@ -461,7 +472,7 @@ class Misc(object):
                             file_id = f.file_id
                     break
         if file_id:
-            photo_path = await me.bot.get_file(file_id)
+            photo_path = await bot.get_file(file_id)
             photo_path = photo_path and photo_path.file_path or ''
             photo_path = photo_path.rstrip('/') or None
         else:
@@ -555,7 +566,7 @@ class Misc(object):
             response_id = response['uuid']
         else:
             response_id = '-'
-        deeplink = f't.me/{me.bot_data.username}?start={response_id}'
+        deeplink = f't.me/{bot_data.username}?start={response_id}'
         if https:
             deeplink = 'https://' + deeplink
         return deeplink
@@ -726,7 +737,7 @@ class Misc(object):
                 frontend_auth_path=frontend_auth_path,
                 parms=parms,
             ),
-            bot_username=me.bot_data.username,
+            bot_username=bot_data.username,
         )
 
 
@@ -931,7 +942,7 @@ class Misc(object):
                 uuids.append(response['uuid'])
                 reply += cls.get_deeplink_with_name(response, with_lifetime_years=True) +'\n'
         if reply:
-            parts = safe_split_text(reply, split_separator='\n')
+            parts = cls.safe_split_text(reply, split_separator='\n')
             for part in parts:
                 await message.reply(part, disable_web_page_preview=True)
 
@@ -1002,7 +1013,7 @@ class Misc(object):
 
         buttons = []
 
-        if user_from_id != profile['user_id'] and me.bot_data.id != tg_user_sender.id:
+        if user_from_id != profile['user_id'] and bot_data.id != tg_user_sender.id:
             dict_reply = dict(
                 keyboard_type=KeyboardType.TRUST_THANK,
                 sep=KeyboardType.SEP,
@@ -1298,14 +1309,14 @@ class Misc(object):
             try:
                 photo = URLInputFile(url=profile['photo'], filename='1.png')
                 if card_message:
-                    await me.bot.edit_message_caption(
+                    await bot.edit_message_caption(
                         chat_id=tg_user_sender.id,
                         message_id=card_message.message_id,
                         caption=reply,
                         reply_markup=reply_markup,
                     )
                 else:
-                    await me.bot.send_photo(
+                    await bot.send_photo(
                         chat_id=tg_user_sender.id,
                         photo=photo,
                         disable_notification=True,
@@ -1316,7 +1327,7 @@ class Misc(object):
             except TelegramBadRequest as excpt:
                 if excpt.args[0] == 'Media_caption_too_long' and not card_message:
                     try:
-                        await me.bot.send_photo(
+                        await bot.send_photo(
                             chat_id=tg_user_sender.id,
                             photo=photo,
                             disable_notification=True,
@@ -1328,7 +1339,7 @@ class Misc(object):
         if send_text_message:
             if card_message:
                 try:
-                    await me.bot.edit_message_text(
+                    await bot.edit_message_text(
                         chat_id=tg_user_sender.id,
                         message_id=card_message.message_id,
                         text=reply,
@@ -1338,9 +1349,9 @@ class Misc(object):
                 except:
                     pass
             else:
-                parts = safe_split_text(reply, split_separator='\n')
+                parts = cls.safe_split_text(reply, split_separator='\n')
                 for part in parts:
-                    await me.bot.send_message(tg_user_sender.id, part, reply_markup=reply_markup, disable_web_page_preview=True)
+                    await bot.send_message(tg_user_sender.id, part, reply_markup=reply_markup, disable_web_page_preview=True)
 
 
     @classmethod
@@ -1493,7 +1504,7 @@ class Misc(object):
         Ряд с одна inline кнопкой с 'Отмена'
         """
         inline_btn_cancel = cls.inline_button_cancel()
-        reply_markup = InlineKeyboardMarkup([[inline_btn_cancel]])
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=[[inline_btn_cancel]])
         return reply_markup
 
 
@@ -1632,14 +1643,14 @@ class Misc(object):
         """
         text = await cls.chat_pin_message_text()
         if text:
-            text = text.replace('$BOT_USERNAME$', me.bot_data.username)
+            text = text.replace('$BOT_USERNAME$', bot_data.username)
             if chat.username:
                 chat_link = f'<a href="https://t.me/{chat.username}">{chat.title}</a>'
             else:
                 chat_link = f'<u>{chat.title}</u>'
             text = text.replace('$CHAT_LINK', chat_link)
         else:
-            text = '@' + me.bot_data.username
+            text = '@' + bot_data.username
         inline_btn_map = InlineKeyboardButton(
             text='Карта',
             login_url=cls.make_login_url(
@@ -1658,7 +1669,7 @@ class Misc(object):
                 ),
                 keep_user_data='on',
             ))
-        reply_markup = InlineKeyboardMarkup([inline_btn_map, inline_btn_trusts])
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=[inline_btn_map, inline_btn_trusts])
         return text, reply_markup
 
     @classmethod
@@ -1679,7 +1690,7 @@ class Misc(object):
         """
         text, reply_markup = await cls.make_pin_group_message(chat)
         try:
-            messsage_for_pin = await me.bot.send_message(
+            messsage_for_pin = await bot.send_message(
                 chat_id=chat.id,
                 text=text,
                 reply_markup=reply_markup,
@@ -1745,6 +1756,44 @@ class Misc(object):
             ))
         buttons.append([inline_btn_scheme, inline_btn_map])
         await message.reply(reply, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+
+
+    @classmethod
+    def arg_deeplink(cls, message_text):
+        """
+        Если текст является диплинком, вернуть аругмент команды /start
+        """
+        result = ''
+        if m := re.search(
+            r'^(?:https?\:\/\/)?t\.me\/%s\?start\=(\S+)' % re.escape(bot_data.username),
+            message_text,
+            flags=re.I,
+        ):
+            result = m.group(1)
+        return result
+
+
+    @classmethod
+    def safe_split_text(cls, text, length=MAX_MESSAGE_LENGTH, split_separator=' '):
+        """
+        Split long text
+        """
+        temp_text = text
+        parts = []
+        while temp_text:
+            if len(temp_text) > length:
+                try:
+                    split_pos = temp_text[:length].rindex(split_separator)
+                except ValueError:
+                    split_pos = length
+                if split_pos < length // 4 * 3:
+                    split_pos = length
+                parts.append(temp_text[:split_pos])
+                temp_text = temp_text[split_pos:].lstrip()
+            else:
+                parts.append(temp_text)
+                break
+        return parts
 
 
 class TgGroup(object):
