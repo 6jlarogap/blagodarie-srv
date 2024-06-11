@@ -1,5 +1,6 @@
 local_settings.py
 settings_local.py
+client_secrets.json
 
 __pycache__/
 *.pyc

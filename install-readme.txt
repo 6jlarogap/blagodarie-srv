@@ -310,8 +310,8 @@ install-readme.txt
     cd telegram-bot
     sudo ln -s /home/LINUX-USER-NAME/venv/telegram-bot ENV
     sudo chown -R www-data:www-data .
-    # В local_settings.py подправить параметры
-    sudo chmod 0600 local_settings.py
+    # В settings_local.py подправить параметры
+    sudo chmod 0600 settings_local.py
 
     # Запуск telegram-bot-server через systemd
     # ----------------------------------------
@@ -327,6 +327,7 @@ install-readme.txt
     Type=simple
     Restart=always
     User=www-data
+    WorkingDirectory=/home/www-data/django/api_blagodarie_org/telegram-bot
     ExecStart=/home/www-data/django/api_blagodarie_org/telegram-bot/ENV/bin/python3 /home/www-data/django/api_blagodarie_org/telegram-bot/bot_run.py
     
     # /home/www-data/django/api_blagodarie_org/telegram-bot/ENV/bin/python3 :
@@ -356,8 +357,90 @@ install-readme.txt
 
         SSLEngine On
         SSLProxyEngine On
-        # Здесь порт 3001 должен быть согласован с local_settings.py
+        # Здесь порт 3001 должен быть согласован с settings_local.py
         ProxyPass / http://127.0.0.1:3001/
         ProxyPassReverse / http://127.0.0.1:3001/
 
     </VirtualHost>
+
+    # telegram-bot: настройка авторизации на Youtube
+    # ----------------------------------------------
+
+    (
+        -   Пропустите, если не используете передачу видео из топика группы в Youtube.
+        -   Видео инструкция: https://www.youtube.com/watch?v=t0RKgHskYwI, по ней в точности,
+            за исключением scope, здесь: https://www.googleapis.com/auth/youtube.upload 
+    )
+
+    -   Пользователь Google:
+            *   у него в https://console.cloud.google.com/apis/credentials должен быть проект
+            *   к проекту (https://console.cloud.google.com/apis/library) подключена
+                библиотека YouTube Data API v3
+            *   https://console.cloud.google.com/apis/credentials/consent
+                !   ВАЖНО. Иначе refresh_token перестанет быть действительным через неделю:
+                    publishing status: in production
+            *   https://console.cloud.google.com/apis/credentials:
+                -   Create Credentials... Oauth client ID... Web Application
+                -   Authorized redirect URIs: (полагаю, что работает) http://localhost
+                -   Download Oauth client... Download JSON...
+                    Сохранить в telegram-bot/client_secrets.json
+
+    -   В адресной строке браузера (в одной строке, здесь несколько для наглядности),
+        в браузере вы зарегистрированы пользователем Google:
+            https://accounts.google.com/o/oauth2/auth?
+                client_id=<client_id>&
+                redirect_uri=http://localhost&
+                response_type=code&
+                scope=https://www.googleapis.com/auth/youtube.upload&
+                access_type=offline
+            Будут вопросы:
+                -   каким пользователем Google регистрируетесь?
+                -   небезопасно, эксперты Google не проверяли
+                    приложение, тогда Дополнительно..., соглашайтесь
+                -   на остальное соглашайтесь
+            Должны получить в адресной строке браузера:
+                http://localhost/?code=<code>&scope=https://www.googleapis.com/auth/youtube.upload
+
+    -   Например, из консоли Linux (опять таки, в одной строке, но пробел перед и после "..."):
+            curl --request POST --data
+                "code=<code>&
+                 client_id=<client_id>&
+                 client_secret=<client_secret>&
+                 redirect_uri=http://localhost&
+                 grant_type=authorization_code"
+                https://oauth2.googleapis.com/token
+            Результат:
+                {
+                    "access_token": "<текуший_access_token>",
+                    "expires_in": 3599,
+                    "refresh_token": "<вечный_refresh_token>",
+                    "scope": "https://www.googleapis.com/auth/youtube.upload",
+                    "token_type": "Bearer"
+                }
+            Будет письмо от Google пользователю с темой
+            "Оповещение системы безопасности для аккаунта <user>@gmail.com"
+            Игнорируйте. В дальнейшем таких писем не будет.
+
+    !   Для YouTube video upload получено всё необходимое:
+            *   client_id
+            *   client_secret
+            *   refresh_token
+        Это надо занести в словарь YOUTUBE_CREDENTIALS в telegram-bot/settings_local.py
+
+    !   Справочно, это реализовано в коде telegram- боте перед загрузкой очередного
+        видео.
+        Получение нового access_token взамен прежнего, время жизни которого 1 час.
+        Например, с помощью curl:
+            curl --request POST --data
+                "client_id=<client_id>&
+                 client_secret=<client_secret>&
+                 refresh_token=<вечный_refresh_token>&
+                 grant_type=refresh_token"
+                https://oauth2.googleapis.com/token
+        Результат:
+            {
+                "access_token": "<текущий_access_token>",
+                "expires_in": 3599,
+                "scope": "https://www.googleapis.com/auth/youtube.upload",
+                "token_type": "Bearer"
+            }
