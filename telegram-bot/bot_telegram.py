@@ -1,4 +1,4 @@
-import base64, re, hashlib, redis, time
+import base64, re, hashlib, redis, time, tempfile
 from io import BytesIO
 from urllib.parse import urlparse
 
@@ -6076,6 +6076,41 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                     r.set(name=s, value='1')
                     r.close()
 
+
+        if message.is_topic_message and \
+           message.chat.id in settings.GROUPS_WITH_YOUTUBE_UPLOAD and \
+           message.message_thread_id and \
+           message.message_thread_id == \
+           settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]['message_thread_id']:
+            if message.content_type == ContentType.VIDEO and message.caption:
+                try:
+                    f = tempfile.NamedTemporaryFile(
+                        dir=settings.DIR_TMP, suffix='.video', delete=False,
+                    )
+                    fname = f.name
+                    f.close()
+                except OSError:
+                    await message.reply(
+                        'Не могу отправить видео. Проблема в обработчике бота. '
+                        'Не могу создать временный файл'
+                    )
+                else:
+                    try:
+                        tg_file = await bot.get_file(message.video.file_id)
+                        await bot.download_file(tg_file.file_path, fname)
+                    except:
+                        await message.reply('Ошибка скачивания видео. Не удалил ли его кто?')
+                    else:
+                        #TODO Авторизация в Youtube
+                        #TODO Отправка видео в Youtube
+                        #TODO Действия после отправки
+                        pass
+                    # os.unlink(fname)
+            else:
+                await message.reply(
+                    'Здесь допускаются только <b>видео</b>, <u>обязательно с заголовком</u>, '
+                    'для отправки в Youtube'
+                )
 
     for i, response_from in enumerate(a_users_out):
         if response_from.get('created'):

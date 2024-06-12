@@ -192,6 +192,26 @@ GROUPS_WITH_CARDS = {}
 
 BOT_CHAT = dict(href='https://t.me/+dpxYzCiAqN41MDEy', caption='Чат бота Доверия')
 
+# Ид групп, в которых есть топик, куда кладут видео для их загрузки в youtube.
+#
+GROUPS_WITH_YOUTUBE_UPLOAD = {}
+#
+# Например:
+# GROUPS_WITH_YOUTUBE_UPLOAD = {
+#     # sevGroupTest
+#     -1001842039923: dict(
+#         auth=dict(
+#             client_id='client_id',
+#             client_secret='client_secret',
+#             refresh_token='refresh_token'
+#         ),
+#         message_thread_id=-1234567890,
+# )}
+
+# Каталог для временных файлов. Должен существовать
+#
+DIR_TMP = './tmp'
+
 try:
     from local_settings import *
 except ModuleNotFoundError:
