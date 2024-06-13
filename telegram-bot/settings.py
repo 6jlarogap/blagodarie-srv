@@ -206,6 +206,7 @@ GROUPS_WITH_YOUTUBE_UPLOAD = {}
 #             refresh_token='refresh_token'
 #         ),
 #         message_thread_id=-1234567890,
+#         url_group='https://t.me/+LcTcCWzvjUJmMTMy'
 # )}
 
 # Каталог для временных файлов. Должен существовать
