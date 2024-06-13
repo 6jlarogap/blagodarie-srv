@@ -6086,15 +6086,26 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
            settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]['message_thread_id']:
             if message.content_type == ContentType.VIDEO:
                 if message.caption:
-                    f = tempfile.NamedTemporaryFile(
-                        dir=settings.DIR_TMP, suffix='.video', delete=False,
-                    )
-                    fname = f.name
-                    f.close()
-                    try:
-                        tg_file = await bot.get_file(message.video.file_id)
-                        await bot.download_file(tg_file.file_path, fname)
-                    except:
+                    fname = None
+                    if settings.LOCAL_SERVER:
+                        try:
+                            tg_file = await bot.get_file(message.video.file_id)
+                            fname = tg_file.file_path
+                        except:
+                            pass
+                    else:
+                        f = tempfile.NamedTemporaryFile(
+                            dir=settings.DIR_TMP, suffix='.video', delete=False,
+                        )
+                        fname = f.name
+                        f.close()
+                        try:
+                            tg_file = await bot.get_file(message.video.file_id)
+                            await bot.download_file(tg_file.file_path, fname)
+                        except:
+                            os.unlink(fname)
+                            fname = None
+                    if not fname:
                         await message.reply('Ошибка скачивания из сообщения. Не слишком ли большой файл?')
                     else:
                         description = (
@@ -6114,17 +6125,18 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                             await message.reply(f'Ошибка загрузки видео\n.{error}')
                         else:
                             href = f'https://www.youtube.com/watch?v={response["id"]}'
-                            await message.answer(
+                            await bot.send_message(
+                                tg_user_sender.id, (
                                 f'Видео {Misc.get_html_a(href, message.caption)} загружено.\n'
                                 f'Автор: {Misc.get_deeplink_with_name(response_from, bot_data, plus_trusts=True)}'
-                            )
+                            ))
                             try:
                                 await message.delete()
                             except:
                                 pass
-                    os.unlink(fname)
+                    if not settings.LOCAL_SERVER and fname:
+                        os.unlink(fname)
                 else:
-                    pass
                     await message.reply(
                         'Здесь допускаются <b>видео</b>, <u>обязательно <b>с заголовком</b></u>, '
                         'для отправки в Youtube'
