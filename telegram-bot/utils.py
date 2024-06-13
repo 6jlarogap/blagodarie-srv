@@ -447,39 +447,21 @@ class Misc(object):
         #)
         #]
 
-        file_id = None
+        file_ = None
         first = True
         for o in photos_output:
             if o[0] == 'photos':
                 for p in o[1]:
                     for f in p:
                         if first:
-                            file_id = f['file_id']
+                            file_ = f
                             first = False
                         elif f.get('width') and f.get('height') and f['width'] * f['height'] <= settings.PHOTO_MAX_SIZE:
-                            file_id = f['file_id']
+                            file_ = f
                     break
-        if file_id:
-            photo_path = await bot.get_file(file_id)
-            photo_path = photo_path and photo_path.file_path or ''
-            photo_path = photo_path.rstrip('/') or None
-        else:
-            photo_path = None
-
-        if photo_path:
-            async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
-                try:
-                    async with session.get(
-                        "https://api.telegram.org/file/bot%s/%s" % (settings.TOKEN, photo_path,),
-                    ) as resp:
-                        try:
-                            status = int(resp.status)
-                            if status == 200:
-                                result = base64.b64encode(await resp.read()).decode('UTF-8')
-                        except ValueError:
-                            pass
-                except:
-                    pass
+        if file_:
+            image = await Misc.get_file_bytes(file_, bot)
+            result = base64.b64encode(image).decode('UTF-8')
         return result
 
 
@@ -490,9 +472,12 @@ class Misc(object):
 
         f:
             может быть message.photo[-1] при ContentType.PHOTO или фото тг юзера.
-            У него обязан быть атрибут file_id
+            У него обязан быть атрибут file_id или ключ file_id
         """
-        tg_file = await bot.get_file(f.file_id)
+        file_id = getattr(f, 'file_id', None)
+        if not file_id:
+            file_id = f['file_id']
+        tg_file = await bot.get_file(file_id)
         if settings.LOCAL_SERVER:
             fd = open(tg_file.file_path, 'rb')
             image = fd.read()
