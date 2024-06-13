@@ -484,6 +484,27 @@ class Misc(object):
 
 
     @classmethod
+    async def get_file_bytes(cls, f, bot):
+        """
+        Получить байты из телеграм- файла
+
+        f:
+            может быть message.photo[-1] при ContentType.PHOTO или фото тг юзера.
+            У него обязан быть атрибут file_id
+        """
+        tg_file = await bot.get_file(f.file_id)
+        if settings.LOCAL_SERVER:
+            fd = open(tg_file.file_path, 'rb')
+            image = fd.read()
+        else:
+            fd = BytesIO()
+            await bot.download_file(tg_file.file_path, fd)
+            image = fd.read()
+        fd.close()
+        return image
+
+
+    @classmethod
     async def put_tg_user_photo(cls, photo, response):
         status_photo, response_photo = None, None
         if photo and response and response.get('uuid'):

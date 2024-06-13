@@ -1,5 +1,4 @@
 import base64, re, hashlib, redis, time, tempfile
-from io import BytesIO
 from urllib.parse import urlparse
 
 import settings
@@ -4033,7 +4032,7 @@ async def put_wish(message: types.Message, state: FSMContext):
     state=FSMphoto.ask,
 )
 async def put_photo(message: types.Message, state: FSMContext):
-    if message.content_type not in (ContentType.PHOTO, ContentType.DOCUMENT):
+    if message.content_type != ContentType.PHOTO:
         reply_markup = Misc.reply_markup_cancel_row()
         await message.reply(
             Misc.MSG_ERROR_PHOTO_ONLY + '\n\n' + \
@@ -4051,13 +4050,8 @@ async def put_photo(message: types.Message, state: FSMContext):
                 user_uuid = data['uuid']
             data['uuid'] = ''
         if user_uuid:
-            image = BytesIO()
-            if message.content_type == ContentType.PHOTO:
-                await message.photo[-1].download(destination_file=image)
-            else:
-                # document
-                await message.document.download(destination_file=image)
-            image = base64.b64encode(image.read()).decode('UTF-8')
+            image = await Misc.get_file_bytes(message.photo[-1], bot)
+            image = base64.b64encode(image).decode('UTF-8')
             status, response = await Misc.put_user_properties(
                 uuid=user_uuid,
                 photo=image,
