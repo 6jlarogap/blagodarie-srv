@@ -372,6 +372,9 @@ install-readme.txt
             за исключением scope, здесь: https://www.googleapis.com/auth/youtube.upload 
     )
 
+    -   Каталог для временных файлов. Должен существовать.
+        Cм. settings.DIR_TEMP, создайте такой каталог или
+        укажите в settings_local.py и создайте что указали.
     -   Пользователь Google:
             *   у него в https://console.cloud.google.com/apis/credentials должен быть проект
             *   к проекту (https://console.cloud.google.com/apis/library) подключена
@@ -425,7 +428,8 @@ install-readme.txt
             *   client_id
             *   client_secret
             *   refresh_token
-        Это надо занести в словарь YOUTUBE_CREDENTIALS в telegram-bot/settings_local.py
+        Это надо занести в данные ключа (ид группы) словаря
+        GROUPS_WITH_YOUTUBE_UPLOAD в telegram-bot/settings_local.py
 
     !   Справочно, это реализовано в коде telegram- боте перед загрузкой очередного
         видео.

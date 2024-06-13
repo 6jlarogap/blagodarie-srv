@@ -16,8 +16,11 @@ from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation, CantTalkWithBots, \
     BadRequest, MessageNotModified, MessageCantBeDeleted, MessageToEditNotFound
 from aiogram.types.message_entity import MessageEntityType
+from aiogram.bot.api import TelegramAPIServer
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+from youtube_upload import upload_video
 
 import pymorphy2
 MorphAnalyzer = pymorphy2.MorphAnalyzer()
@@ -106,10 +109,15 @@ class FSMinviteConfirm(StatesGroup):
     # приглашение с объединением собственного
     ask = State()
 
-bot = Bot(
+kwargs_bot_start = dict(
     token=settings.TOKEN,
     parse_mode=types.ParseMode.HTML,
 )
+if settings.LOCAL_SERVER:
+    local_server = TelegramAPIServer.from_base(settings.LOCAL_SERVER)
+    kwargs_bot_start.update(server=local_server)
+bot = Bot(**kwargs_bot_start)
+
 dp = Dispatcher(bot, storage=storage)
 
 async def on_startup(dp):
@@ -6099,13 +6107,16 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                         tg_file = await bot.get_file(message.video.file_id)
                         await bot.download_file(tg_file.file_path, fname)
                     except:
-                        await message.reply('Ошибка скачивания видео. Не удалил ли его кто?')
+                        await message.reply('Ошибка скачивания видео. Не удалил ли его кто? Не слишком ли большой файл?')
                     else:
-                        #TODO Авторизация в Youtube
-                        #TODO Отправка видео в Youtube
-                        #TODO Действия после отправки
-                        pass
-                    # os.unlink(fname)
+                        response, error = upload_video(
+                            fname=fname,
+                            auth_data=settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]['auth_data'],
+                            snippet=dict(
+                                title=message.caption,
+                                description='Test Description'
+                        ))
+                    os.unlink(fname)
             else:
                 await message.reply(
                     'Здесь допускаются только <b>видео</b>, <u>обязательно с заголовком</u>, '

@@ -4,7 +4,7 @@ client_secrets.json
 
 __pycache__/
 *.pyc
-
+**/tmp/
 ENV
 app/media
 app/static

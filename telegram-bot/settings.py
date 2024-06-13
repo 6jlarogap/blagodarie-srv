@@ -200,7 +200,7 @@ GROUPS_WITH_YOUTUBE_UPLOAD = {}
 # GROUPS_WITH_YOUTUBE_UPLOAD = {
 #     # sevGroupTest
 #     -1001842039923: dict(
-#         auth=dict(
+#         auth_data=dict(
 #             client_id='client_id',
 #             client_secret='client_secret',
 #             refresh_token='refresh_token'
@@ -211,6 +211,11 @@ GROUPS_WITH_YOUTUBE_UPLOAD = {}
 # Каталог для временных файлов. Должен существовать
 #
 DIR_TMP = './tmp'
+
+# Запуск через Telegram API Server,
+# например, 'http://localhost:8081'
+#
+LOCAL_SERVER = None
 
 try:
     from local_settings import *
