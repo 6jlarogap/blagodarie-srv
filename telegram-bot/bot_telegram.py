@@ -6090,38 +6090,51 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
            message.message_thread_id and \
            message.message_thread_id == \
            settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]['message_thread_id']:
-            if message.content_type == ContentType.VIDEO and message.caption:
-                try:
+            if message.content_type == ContentType.VIDEO:
+                if message.caption:
                     f = tempfile.NamedTemporaryFile(
                         dir=settings.DIR_TMP, suffix='.video', delete=False,
                     )
                     fname = f.name
                     f.close()
-                except OSError:
-                    await message.reply(
-                        'Не могу отправить видео. Проблема в обработчике бота. '
-                        'Не могу создать временный файл'
-                    )
-                else:
                     try:
                         tg_file = await bot.get_file(message.video.file_id)
                         await bot.download_file(tg_file.file_path, fname)
                     except:
-                        await message.reply('Ошибка скачивания видео. Не удалил ли его кто? Не слишком ли большой файл?')
+                        await message.reply('Ошибка скачивания из сообщения. Не слишком ли большой файл?')
                     else:
+                        description = (
+                            f'Профиль автора: {response_from["first_name"]}, '
+                            f'{Misc.get_deeplink(response_from, bot_data, https=True)}\n'
+                            f'Группа телеграм: '
+                            f'{settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]["url_group"]}'
+                        )
                         response, error = upload_video(
                             fname=fname,
                             auth_data=settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]['auth_data'],
                             snippet=dict(
                                 title=message.caption,
-                                description='Test Description'
+                                description=description,
                         ))
+                        if error:
+                            await message.reply(f'Ошибка загрузки видео\n.{error}')
+                        else:
+                            href = f'https://www.youtube.com/watch?v={response["id"]}'
+                            await message.answer(
+                                f'Видео {Misc.get_html_a(href, message.caption)} загружено.\n'
+                                f'Автор: {Misc.get_deeplink_with_name(response_from, bot_data, plus_trusts=True)}'
+                            )
+                            try:
+                                await message.delete()
+                            except:
+                                pass
                     os.unlink(fname)
-            else:
-                await message.reply(
-                    'Здесь допускаются только <b>видео</b>, <u>обязательно с заголовком</u>, '
-                    'для отправки в Youtube'
-                )
+                else:
+                    pass
+                    await message.reply(
+                        'Здесь допускаются <b>видео</b>, <u>обязательно <b>с заголовком</b></u>, '
+                        'для отправки в Youtube'
+                    )
 
     for i, response_from in enumerate(a_users_out):
         if response_from.get('created'):
