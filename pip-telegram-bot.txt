@@ -4,3 +4,10 @@ redis
 APScheduler
 Pillow
 qrcode
+
+# pillar-youtube-upload
+
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
+oauth2client
