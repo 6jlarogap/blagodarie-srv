@@ -6125,11 +6125,14 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                             await message.reply(f'Ошибка загрузки видео\n.{error}')
                         else:
                             href = f'https://www.youtube.com/watch?v={response["id"]}'
-                            await bot.send_message(
-                                tg_user_sender.id, (
-                                f'Видео {Misc.get_html_a(href, message.caption)} загружено.\n'
-                                f'Автор: {Misc.get_deeplink_with_name(response_from, bot_data, plus_trusts=True)}'
-                            ))
+                            try:
+                                await bot.send_message(
+                                    tg_user_sender.id, (
+                                    f'Видео {Misc.get_html_a(href, message.caption)} загружено.\n'
+                                    f'Автор: {Misc.get_deeplink_with_name(response_from, bot_data, plus_trusts=True)}'
+                                ))
+                            except:
+                                pass
                             try:
                                 await message.delete()
                             except:
