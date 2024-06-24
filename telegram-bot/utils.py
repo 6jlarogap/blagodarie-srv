@@ -1068,7 +1068,7 @@ class Misc(object):
         inline_btn_trusts = InlineKeyboardButton(
             'Сеть доверия',
             login_url=cls.make_login_url(
-                redirect_path='%(graph_host)s/?user_uuid_trusts=%(user_uuid)s' % dict(
+                redirect_path=f'{settings.GRAPH_HOST}/?user_trusts={response_to["username"]}' % dict(
                         graph_host=settings.GRAPH_HOST,
                         user_uuid=response_to['uuid'],
                     ),
@@ -1081,13 +1081,10 @@ class Misc(object):
             inline_btn_genesis = InlineKeyboardButton(
                 'Род',
                 login_url=cls.make_login_url(
-                    redirect_path=(
-                            '%(graph_host)s/?user_uuid_genesis_tree=%(user_uuid)s'
-                            '&up=on&down=on&depth=2'
-                        ) % dict(
-                        graph_host=settings.GRAPH_HOST,
-                        user_uuid=response_to['uuid'],
-                    ),
+                    redirect_path=((
+                            f'{settings.GRAPH_HOST}/?user_genesis_tree={response_to["username"]}'
+                            f'&up=on&down=on&depth=2'
+                        )),
                     bot_username=bot_data["username"],
                     keep_user_data='on',
                 ))

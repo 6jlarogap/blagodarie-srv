@@ -345,9 +345,6 @@ class Misc(object):
     FORMAT_DATE = '%d.%m.%Y'
     FORMAT_TIME = '%H:%M:%S'
 
-    PROMPT_CANCEL_LOCATION = 'Отмена'
-    PROMPT_LOCATION = 'Отправить местоположение'
-
     PROMPT_IOF_INCORRECT = 'Некорректные ФИО - напишите ещё раз имя отчество и фамилию или Отмена'
     PROMPT_ORG_INCORRECT = (
         'Некорректное или слишком короткое, меньше 5 символов, '

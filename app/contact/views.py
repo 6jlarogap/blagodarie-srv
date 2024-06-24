@@ -2190,8 +2190,11 @@ class ApiProfileGraph(UuidMixin, SQL_Mixin, ApiTgGroupConnectionsMixin, Telegram
             data = dict()
             status_code = status.HTTP_200_OK
             fmt = request.GET.get('fmt')
-            uuid = request.GET.get('uuid')
-            user_q, profile_q = self.check_user_uuid(uuid)
+            id_ = request.GET.get('id') or request.GET.get('uuid')
+            if self.is_uuid(id_):
+                user_q, profile_q = self.check_user_uuid(id_)
+            else:
+                user_q, profile_q = self.check_user_username(id_)
             req_union = """
                 SELECT
                     DISTINCT user_to_id as id
@@ -2898,23 +2901,25 @@ class GetTrustGenesisMixin(object):
             except (TypeError, ValueError,):
                 recursion_depth = 0
 
-            uuid = request.GET.get('uuid', '').strip(' ,')
+            # Это или короткий ID (user.username) или uuid (profile.uuid)
+            id_ = request.GET.get('id', '') or request.GET.get('uuid', '') or ''
+            id_ = id_.strip(' ,')
             chat_id = is_request_genesis and request.GET.get('chat_id')
             max_recursion_depth = settings.MAX_RECURSION_DEPTH_IN_GROUP if chat_id else settings.MAX_RECURSION_DEPTH
             if recursion_depth <= 0 or recursion_depth > max_recursion_depth:
                 recursion_depth = max_recursion_depth
-            if uuid:
-                uuids = re.split(r'[, ]+', uuid)
-                len_uuids = len(uuids)
-                if len_uuids == 1:
+            if id_:
+                ids = re.split(r'[, ]+', id_)
+                len_ids = len(ids)
+                if len_ids == 1:
                     if is_request_genesis and request.GET.get('new'):
-                        data = self.get_tree_new(request, uuids[0], recursion_depth, fmt)
+                        data = self.get_tree_new(request, ids[0], recursion_depth, fmt)
                     else:
-                        data = self.get_tree(request, uuids[0], recursion_depth, fmt)
-                elif len_uuids == 2:
-                    data = self.get_shortest_path(request, uuids, recursion_depth, fmt)
+                        data = self.get_tree(request, ids[0], recursion_depth, fmt)
+                elif len_ids == 2:
+                    data = self.get_shortest_path(request, ids, recursion_depth, fmt)
                 else:
-                    raise ServiceException("Допускается  uuid (дерево) или 2 uuid's (найти путь между)")
+                    raise ServiceException("Допускается  id (дерево) или 2 id's (найти путь между)")
             elif chat_id:
                 data = self.get_chat_mesh(request, chat_id, recursion_depth)
             else:
@@ -3286,13 +3291,16 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
 
         return dict(users=users, connections=connections, trust_connections=trust_connections, participants_on_page=participants_on_page)
 
-    def get_shortest_path(self, request, uuids, recursion_depth, fmt='d3js'):
+    def get_shortest_path(self, request, ids, recursion_depth, fmt='d3js'):
         """
-        Кратчайший путь родства от uuids[0] к uuids[1]
+        Кратчайший путь родства от uuids[0] к uuids[1] или от short_id(username)[0] к short_id(username)[1]
         """
         user_pks = []
         try:
-            user_pks = [int(profile.user.pk) for profile in Profile.objects.filter(uuid__in=uuids)]
+            if self.is_uuid(ids[0]) and self.is_uuid(ids[1]):
+                user_pks = [int(profile.user.pk) for profile in Profile.objects.filter(uuid__in=ids)]
+            else:
+                user_pks = [int(profile.user.pk) for profile in Profile.objects.filter(user__username__in=ids)]
         except ValidationError:
             pass
         if len(user_pks) != 2:
@@ -3335,12 +3343,15 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
         else:
             return dict(users=users, connections=connections, trust_connections=[])
 
-    def get_tree_new(self, request, uuid, recursion_depth, fmt='d3js'):
+    def get_tree_new(self, request, id_, recursion_depth, fmt='d3js'):
         """
         Дерево родственных связей от пользователя
         """
         related = ('user', 'owner', 'ability',)
-        user_q, profile_q = self.check_user_uuid(uuid, related=related)
+        if self.is_uuid(id_):
+            user_q, profile_q = self.check_user_uuid(id_, related=related)
+        else:
+            user_q, profile_q = self.check_user_username(id_, related=related)
         auth_user_pk = request.user.pk if request.user.is_authenticated else -1
 
         nodes_by_id = dict()
@@ -3613,12 +3624,15 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
 
         return dict(nodes_by_id=nodes_by_id, root_node=root_node, bot_username = self.get_bot_username())
 
-    def get_tree(self, request, uuid, recursion_depth, fmt='d3js'):
+    def get_tree(self, request, id_, recursion_depth, fmt='d3js'):
         """
         Дерево родственных связей от пользователя
         """
         related = ('user', 'owner', 'ability',)
-        user_q, profile_q = self.check_user_uuid(uuid, related=related)
+        if self.is_uuid(id_):
+            user_q, profile_q = self.check_user_uuid(id_, related=related)
+        else:
+            user_q, profile_q = self.check_user_username(id_, related=related)
 
         v_up = bool(request.GET.get('up'))
         v_down = bool(request.GET.get('down'))
@@ -3767,15 +3781,19 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
     """
     # permission_classes = (IsAuthenticated,)
 
-    def get_shortest_path(self, request, uuids, recursion_depth, fmt='d3js'):
+    def get_shortest_path(self, request, ids, recursion_depth, fmt='d3js'):
         """
         Кратчайший путь доверий между двумя пользователями
 
         Реализована для двух форматов на фронте
         """
         try:
-            user_from_id = Profile.objects.get(uuid=uuids[0]).user_id
-            user_to_id = Profile.objects.get(uuid=uuids[1]).user_id
+            if self.is_uuid(ids[0]) and self.is_uuid(ids[1]):
+                user_from_id = Profile.objects.get(uuid=ids[0]).user_id
+                user_to_id = Profile.objects.get(uuid=ids[1]).user_id
+            else:
+                user_from_id = Profile.objects.get(user__username=ids[0]).user_id
+                user_to_id = Profile.objects.get(user__username=ids[1]).user_id
         except (ValidationError, Profile.DoesNotExist, IndexError,):
             raise ServiceException('Один или несколько uuid неверны или не существуют')
         if user_from_id == user_to_id:
@@ -3832,14 +3850,16 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
         else:
             return dict(users=users, connections=connections, trust_connections=[])
 
-    def get_tree(self, request, uuid, recursion_depth, fmt='d3js'):
+    def get_tree(self, request, id_, recursion_depth, fmt='d3js'):
         """
         Дерево доверий
 
         Пока нигде не используется на фронте
         """
-
-        user_q, profile_q = self.check_user_uuid(uuid, related=[])
+        if self.is_uuid(id_):
+            user_q, profile_q = self.check_user_uuid(id_, related=[])
+        else:
+            user_q, profile_q = self.check_user_username(id_, related=[])
 
         sql_req_dict = dict(
                 user_id=user_q.pk,
