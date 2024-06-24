@@ -4664,7 +4664,7 @@ async def put_thank_etc(tg_user_sender, data, state=None):
             inline_btn_trusts = InlineKeyboardButton(
                 'Сеть доверия',
                 login_url=Misc.make_login_url(
-                    redirect_path='%(graph_host)s/?user_uuid_trusts=%(user_uuid)s' % dict(
+                    redirect_path=f'{settings.GRAPH_HOST}/?user_trusts={link_profile["username"]}' % dict(
                         graph_host=settings.GRAPH_HOST,
                         user_uuid=link_profile['uuid'],
                     ),
