@@ -6106,7 +6106,10 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                             os.unlink(fname)
                             fname = None
                     if not fname:
-                        await message.reply('Ошибка скачивания из сообщения. Не слишком ли большой файл?')
+                        await bot.send_message(
+                            tg_user_sender.id,
+                            'Ошибка скачивания видео из сообщения. Не слишком ли большой файл?'
+                        )
                     else:
                         description = (
                             f'Профиль автора: {response_from["first_name"]}, '
@@ -6122,12 +6125,14 @@ async def echo_send_to_group(message: types.Message, state: FSMContext):
                                 description=description,
                         ))
                         if error:
-                            await message.reply(f'Ошибка загрузки видео\n.{error}')
+                            await bot.send_message(
+                                tg_user_sender.id,
+                                f'Ошибка загрузки видео:\n{error}'
+                            )
                         else:
                             href = f'https://www.youtube.com/watch?v={response["id"]}'
                             try:
-                                await bot.send_message(
-                                    tg_user_sender.id, (
+                                await message.answer((
                                     f'Видео {Misc.get_html_a(href, message.caption)} загружено.\n'
                                     f'Автор: {Misc.get_deeplink_with_name(response_from, bot_data, plus_trusts=True)}'
                                 ))

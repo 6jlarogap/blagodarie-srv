@@ -109,29 +109,38 @@ def resumable_upload(insert_request):
     response = None
     error = None
     retry = 0
+    msg_unknown = 'Неизвестная ошибка'
     while response is None:
+        retriable = False
         try:
             status, response = insert_request.next_chunk()
             if response is not None:
                 if 'id' not in response:
-                    error = "The upload failed with an unexpected response: %s" % response
+                    error = msg_unknown
         except HttpError as e:
             if e.resp.status in RETRIABLE_STATUS_CODES:
-                error = "A retriable HTTP error %d occurred:\n%s" % (e.resp.status,
-                                                                     e.content)
+                error = e.reason if e.reason else msg_unknown
+                error = f'Статус {e.resp.status}:\n{error}'
+                retriable = True
             else:
-                raise
+                error = e.reason if e.reason else msg_unknown
         except RETRIABLE_EXCEPTIONS as e:
-            error = "A retriable error occurred: %s" % e
+            error = e
+            retriable = True
+        except:
+            error = e
 
-        if error is not None:
-            retry += 1
-            if retry > MAX_RETRIES:
-                return response, error
+        if retriable:
+            if error is not None:
+                retry += 1
+                if retry > MAX_RETRIES:
+                    return response, error
 
-            max_sleep = 2 ** retry
-            sleep_seconds = random.random() * max_sleep
-            time.sleep(sleep_seconds)
+                max_sleep = 2 ** retry
+                sleep_seconds = random.random() * max_sleep
+                time.sleep(sleep_seconds)
+        else:
+            break
     return response, error
 
 def upload_video(
