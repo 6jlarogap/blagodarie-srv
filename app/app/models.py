@@ -209,7 +209,7 @@ class UnclearDate:
         """
         months = ('jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec',)
         pattern_month = '(' + '|'.join(months) + ')'
-        pattern = r'^(\d{1,2})\s+' + pattern_month + '\s+(\d{4})$'
+        pattern = r'^(\d{1,2})\s+%s\s+(\d{4})$' % pattern_month
         s = s.strip()
         m = re.search(pattern, s, flags=re.I)
         if m:
@@ -217,7 +217,7 @@ class UnclearDate:
             month = months.index(m.group(2).lower()) + 1
             day = int(m.group(1))
         else:
-            pattern = r'^' + pattern_month + '\s+(\d{4})$'
+            pattern = r'^%s\s+(\d{4})$' % pattern_month
             m = re.search(pattern, s, flags=re.I)
             if m:
                 year = int(m.group(2))
