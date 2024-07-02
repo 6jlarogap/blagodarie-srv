@@ -1,3 +1,9 @@
+#
+# youtube_upload.py
+#
+# Credits to:
+#   https://medium.com/@nijmehar16/uploading-videos-to-youtube-via-the-youtube-api-programmatically-which-uses-oauth-2-0-7317ec72411e
+
 import http.client as httplib
 import httplib2
 import os

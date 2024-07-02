@@ -126,9 +126,9 @@ install-readme.txt
 Настройка сервера Apache:
 
     * Должны быть установлены mod_wsgi и mod_xsendfile.
-        sudo apt install libapache2-mod-wsgi-py3
+        sudo apt install libapache2-mod-wsgi-py3 libapache2-mod-xsendfile
 
-    * sudo a2enmod ssl rewrite wsgi
+    * sudo a2enmod ssl rewrite wsgi headers
 
     * пример настройки виртуального хоста Apache
 
