@@ -1247,6 +1247,22 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             status_to, profile_to = await Misc.get_user_by_sid(d_trust['sid'])
             if status_to != 200:
                 return
+            message_after_meet = False
+            if d_trust['operation_type_id'] == OperationType.ACQ:
+                # Надо посмотреть отношения. Если уже доверяет, то не устанавливаем
+                # знакомство, сообщение, уходим.
+                status_relations, response_relations = await Misc.call_response_relations(response_from, profile_to)
+                if status_relations != 200:
+                    return
+                if response_relations['from_to']['attitude'] == Attitude.TRUST:
+                    await message.answer(
+                        text=f'Вы уже знакомы и доверяете {Misc.get_deeplink_with_name(profile_to, bot_data)}',
+                        disable_web_page_preview=True,
+                        disable_notification=True,
+                        reply_markup=reply_markup_after_trust_etc(profile_to, bot_data),
+                    )
+                    return
+                message_after_meet = True
             data = dict(
                 profile_from = response_from,
                 profile_to = profile_to,
@@ -1254,9 +1270,8 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 tg_user_sender_id = tg_user_sender.id,
                 message_to_forward_id = None,
                 group_member=None,
-                message_after_meet=bool(
-                    d_trust['operation_type_id'] == OperationType.ACQ
-            ))
+                message_after_meet=message_after_meet
+            )
             await put_thank_etc(tg_user_sender, data, state=state)
             return
 
@@ -4656,31 +4671,11 @@ async def put_thank_etc(tg_user_sender, data, state=None):
             text_to_sender += f'\n\n{message_after_meet}'
 
         if not group_member and (operation_done or operation_already):
-            if reply_markup is None:
-                reply_markup = InlineKeyboardMarkup()
             link_profile = profile_to
             if post_op['operation_type_id'] == OperationType.ACQ:
                 link_profile = profile_from
-            inline_btn_trusts = InlineKeyboardButton(
-                'Сеть доверия',
-                login_url=Misc.make_login_url(
-                    redirect_path=f'{settings.GRAPH_HOST}/?user_trusts={link_profile["username"]}',
-                    bot_username=bot_data['username'],
-                    keep_user_data='on',
-                ))
-            login_url_buttons = [inline_btn_trusts, ]
-
-            inline_btn_map = InlineKeyboardButton(
-                'Карта',
-                login_url=Misc.make_login_url(
-                    redirect_path='%(map_host)s/?uuid_trustees=%(user_uuid)s' % dict(
-                        map_host=settings.MAP_HOST,
-                        user_uuid=link_profile['uuid'],
-                    ),
-                    bot_username=bot_data['username'],
-                    keep_user_data='on',
-                ))
-            reply_markup.row(inline_btn_trusts, inline_btn_map)
+            if reply_markup is None:
+                reply_markup = reply_markup_after_trust_etc(link_profile, bot_data)
 
         if not group_member:
             try:
@@ -4774,6 +4769,29 @@ async def put_thank_etc(tg_user_sender, data, state=None):
                     )
                 except (ChatNotFound, CantInitiateConversation):
                     pass
+
+
+def reply_markup_after_trust_etc(profile, bot_data):
+    reply_markup = InlineKeyboardMarkup()
+    inline_btn_trusts = InlineKeyboardButton(
+        'Сеть доверия',
+        login_url=Misc.make_login_url(
+            redirect_path=f'{settings.GRAPH_HOST}/?user_trusts={profile["username"]}',
+            bot_username=bot_data['username'],
+            keep_user_data='on',
+        ))
+    inline_btn_map = InlineKeyboardButton(
+        'Карта',
+        login_url=Misc.make_login_url(
+            redirect_path='%(map_host)s/?uuid_trustees=%(user_uuid)s' % dict(
+                map_host=settings.MAP_HOST,
+                user_uuid=profile['uuid'],
+            ),
+            bot_username=bot_data['username'],
+            keep_user_data='on',
+        ))
+    reply_markup.row(inline_btn_trusts, inline_btn_map)
+    return reply_markup
 
 
 async def quest_after_thank_if_no_attitude(text, profile_from, profile_to, tg_user_from, card_message=None,):
