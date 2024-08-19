@@ -1424,22 +1424,27 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
 
             profile = user.profile
             self.save_photo(request, profile)
-            data = profile.data_dict(request)
-            data.update(profile.owner_dict())
-            data.update(tg_data=profile.tg_data())
-            data.update(profile.data_WAK())
-            data.update(profile.parents_dict(request))
-            if got_tg_token and link_id and relation in ('new_is_father', 'new_is_mother',):
-                user_from = link_user_from
-                profile_from = user_from.profile
-                profile_from_data=profile_from.data_dict(request)
-                profile_from_data.update(profile_from.owner_dict())
-                profile_from_data.update(tg_data=profile_from.tg_data())
-                profile_from_data.update(profile_from.data_WAK())
-                profile_from_data.update(profile_from.parents_dict(request))
-                data.update(
-                    profile_from=profile_from_data,
-                )
+            fmt = request.data.get('fmt')
+            if relation in ('new_is_father', 'new_is_mother', 'link_is_father', 'link_is_mother') and \
+               fmt == '3d-force-graph':
+                data = profile.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True))
+            else:
+                data = profile.data_dict(request)
+                data.update(profile.owner_dict())
+                data.update(tg_data=profile.tg_data())
+                data.update(profile.data_WAK())
+                data.update(profile.parents_dict(request))
+                if got_tg_token and link_id and relation in ('new_is_father', 'new_is_mother',):
+                    user_from = link_user_from
+                    profile_from = user_from.profile
+                    profile_from_data=profile_from.data_dict(request)
+                    profile_from_data.update(profile_from.owner_dict())
+                    profile_from_data.update(tg_data=profile_from.tg_data())
+                    profile_from_data.update(profile_from.data_WAK())
+                    profile_from_data.update(profile_from.parents_dict(request))
+                    data.update(
+                        profile_from=profile_from_data,
+                    )
         except SkipException:
             pass
         except ServiceException as excpt:
