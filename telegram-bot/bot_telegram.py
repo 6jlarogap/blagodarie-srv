@@ -104,6 +104,11 @@ class FSMtrip(StatesGroup):
     ask_geo = State()
     geo = State()
 
+class FSMmeet(StatesGroup):
+    ask_gender = State()
+    ask_dob = State()
+    ask_geo = State()
+
 class FSMinviteConfirm(StatesGroup):
     # приглашение с объединением собственного
     ask = State()
@@ -1247,22 +1252,13 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             status_to, profile_to = await Misc.get_user_by_sid(d_trust['sid'])
             if status_to != 200:
                 return
-            message_after_meet = False
             if d_trust['operation_type_id'] == OperationType.ACQ:
                 # Надо посмотреть отношения. Если уже доверяет, то не устанавливаем
                 # знакомство, сообщение, уходим.
                 status_relations, response_relations = await Misc.call_response_relations(response_from, profile_to)
                 if status_relations != 200:
                     return
-                if response_relations['from_to']['attitude'] == Attitude.TRUST:
-                    await message.answer(
-                        text=f'Вы уже знакомы и доверяете {Misc.get_deeplink_with_name(profile_to, bot_data)}',
-                        disable_web_page_preview=True,
-                        disable_notification=True,
-                        reply_markup=reply_markup_after_trust_etc(profile_to, bot_data),
-                    )
-                    return
-                message_after_meet = True
+                attitude_current = response_relations['from_to']['attitude']
             data = dict(
                 profile_from = response_from,
                 profile_to = profile_to,
@@ -1270,7 +1266,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 tg_user_sender_id = tg_user_sender.id,
                 message_to_forward_id = None,
                 group_member=None,
-                message_after_meet=message_after_meet
+                attitude_current=attitude_current
             )
             await put_thank_etc(tg_user_sender, data, state=state)
             return
@@ -1717,7 +1713,7 @@ async def process_callback_clear_parent(callback_query: types.CallbackQuery, sta
     """
     Действия по обнулению папы, мамы
     """
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         await Misc.state_finish(state)
         return
     response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
@@ -1774,7 +1770,7 @@ async def process_callback_clear_parent_confirmed(callback_query: types.Callback
     """
     Действия по обнулению папы, мамы
     """
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         await Misc.state_finish(state)
         return
     message = callback_query.message
@@ -1946,7 +1942,7 @@ async def process_callback_clear_child_confirmed(callback_query: types.CallbackQ
     """
     Действия по вопросу об обнулении ребенка
     """
-    if not (parent_uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (parent_uuid := Misc.get_uuid_from_callback(callback_query)):
         await Misc.state_finish(state)
         return
     message = callback_query.message
@@ -2020,7 +2016,7 @@ async def process_callback_clear_child(callback_query: types.CallbackQuery, stat
     """
     Действия по вопросу об обнулении ребенка
     """
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         await Misc.state_finish(state)
         return
     message = callback_query.message
@@ -2300,7 +2296,7 @@ async def process_callback_child(callback_query: types.CallbackQuery, state: FSM
     """
     Действия по заданию папы, мамы для ребенка
     """
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         return
     response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
     if not response_sender:
@@ -2391,7 +2387,7 @@ async def process_callback_child_unknown_parent_gender(callback_query: types.Cal
     state = FSMchild.ask,
     )
 async def process_callback_new_child_gender(callback_query: types.CallbackQuery, state: FSMContext):
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         await Misc.state_finish(state)
         return
     async with state.proxy() as data:
@@ -2425,7 +2421,7 @@ async def process_callback_bro_sis(callback_query: types.CallbackQuery, state: F
     """
     Действия по заданию брата или сестры
     """
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         return
     response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
     if not response_sender:
@@ -2622,7 +2618,7 @@ async def put_bro_sys_by_uuid(message: types.Message, state: FSMContext):
     state = FSMbroSis.ask,
     )
 async def process_callback_new_bro_sis_gender(callback_query: types.CallbackQuery, state: FSMContext):
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         await Misc.state_finish(state)
         return
     async with state.proxy() as data:
@@ -2817,7 +2813,7 @@ async def process_callback_keys(callback_query: types.CallbackQuery, state: FSMC
 
     (В апи контакты - это keys)
     """
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         return
     response_sender = await Misc.check_owner_by_uuid(
         owner_tg_user=callback_query.from_user,
@@ -3037,7 +3033,7 @@ async def process_callback_change_owner_confirmed(callback_query: types.Callback
     """
     Заменить владельца. Подтверждение получено
     """
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         await Misc.state_finish(state)
         return
     response_sender = await Misc.check_owner_by_uuid(
@@ -3109,7 +3105,7 @@ async def process_callback_iof(callback_query: types.CallbackQuery, state: FSMCo
     """
     Заменить имя, фамилию, отчество
     """
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         return
     response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
     if not response_sender:
@@ -3185,7 +3181,7 @@ async def process_callback_gender(callback_query: types.CallbackQuery, state: FS
     """
     Задать пол
     """
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         return
     response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
     if not response_sender:
@@ -3226,7 +3222,7 @@ async def got_gender_text(message: types.Message, state: FSMContext):
     if await is_it_command(message, state):
         return
     await message.reply(
-        'Ожидается выбор пола, нажатием одной из кнопок, в сообщении выше',
+        Misc.PROMPT_MESSAGE_INSTEAD_OF_GENDER,
         reply_markup=Misc.reply_markup_cancel_row(),
     )
 
@@ -3284,7 +3280,7 @@ async def process_callback_dates(callback_query: types.CallbackQuery, state: FSM
     """
     Задать пол
     """
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         return
     response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
     if not response_sender:
@@ -3520,7 +3516,7 @@ async def get_dod(message: types.Message, state: FSMContext):
     ), state=None,
     )
 async def process_callback_comment(callback_query: types.CallbackQuery, state: FSMContext):
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         return
     response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback_query.from_user, uuid=uuid)
     if not response_sender:
@@ -3586,7 +3582,7 @@ async def process_callback_send_message(callback_query: types.CallbackQuery, sta
     """
     Отправка сообщения
     """
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         return
     status_to, profile_to = await Misc.get_user_by_uuid(uuid)
     if status_to != 200:
@@ -3705,7 +3701,7 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
     """
     Показ сообщений
     """
-    if not (user_to_uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (user_to_uuid := Misc.get_uuid_from_callback(callback_query)):
         return
     tg_user_sender = callback_query.from_user
     status_from, profile_from = await Misc.post_tg_user(callback_query.from_user)
@@ -3900,6 +3896,7 @@ async def process_callback_cancel_any(callback_query: types.CallbackQuery, state
     if current_state:
         await Misc.state_finish(state)
         await callback_query.message.reply(Misc.MSG_YOU_CANCELLED_INPUT)
+        await callback_query.answer()
 
 
 @dp.message_handler(
@@ -4146,7 +4143,7 @@ async def process_callback_photo(callback_query: types.CallbackQuery, state: FSM
     ),
     state=FSMphoto.ask)
 async def process_callback_photo_remove(callback_query: types.CallbackQuery, state: FSMContext):
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         await Misc.state_finish(state)
         return
     status, response = await Misc.get_user_by_uuid(uuid)
@@ -4184,7 +4181,7 @@ async def process_callback_photo_remove(callback_query: types.CallbackQuery, sta
     ),
     state=FSMphoto.remove)
 async def process_callback_photo_remove_confirmed(callback_query: types.CallbackQuery, state: FSMContext):
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         await Misc.state_finish(state)
         return
     logging.debug('put (remove) photo: post tg_user data')
@@ -4553,6 +4550,293 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
     await put_thank_etc(tg_user_sender, data=data_, state=None)
 
 
+async def process_meet_from_deeplink(tg_user_sender, data, bot_data):
+    # Вызывается только из meet deeplink'a
+    #
+    profile_from = data['profile_from']
+    profile_to = data['profile_to']
+    full_name_to_link = Misc.get_deeplink_with_name(profile_to, bot_data, plus_trusts=True)
+    if data['attitude_current'] == Attitude.ACQ:
+        text1 = f'Вы уже знакомы с {full_name_to_link}'
+    elif data['attitude_current'] == Attitude.TRUST:
+        text1 = f'Вы уже знакомы и доверяете {full_name_to_link}'
+    else:
+        text1 = f'Вы установили знакомство с {full_name_to_link}'
+    if profile_from['did_meet']:
+        status_template, text2 = await Misc.get_template('message_meet_revoke')
+        if status_template != 200 or not text2:
+            text2 = 'Чтобы прекратить участие в игре знакомств, нажмите "Выйти"'
+    else:
+        status_template, text2 = await Misc.get_template('message_meet_do')
+        if status_template != 200 or not text2:
+            text2 = 'Добро пожаловать в игру знакомств. Чтобы участвовать, нажмите кнопку'
+    callback_data_template = Misc.CALLBACK_DATA_SID_TEMPLATE + '%(sid2)s%(sep)s'
+    reply_markup = InlineKeyboardMarkup()
+    inline_btn = InlineKeyboardButton(
+        'Выйти' if profile_from['did_meet'] else 'Участвовать',
+        callback_data=callback_data_template % dict(
+        keyboard_type=KeyboardType.MEET_REVOKE if profile_from['did_meet'] else KeyboardType.MEET_DO,
+        sid=profile_from['username'],
+        sid2=profile_to['username'],
+        sep=KeyboardType.SEP,
+    ))
+    reply_markup.row(inline_btn)
+    await bot.send_message(
+        tg_user_sender.id,
+        text=f'{text1}\n\n{text2}',
+        disable_web_page_preview=True,
+        reply_markup=reply_markup,
+    )
+
+async def meet_quest_gender(state, data):
+    callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
+    callback_data_male = callback_data_template % dict(
+        keyboard_type=KeyboardType.MEET_GENDER_MALE,
+        sep=KeyboardType.SEP,
+    )
+    inline_btn_male = InlineKeyboardButton('Муж', callback_data=callback_data_male)
+    callback_data_female = callback_data_template % dict(
+        keyboard_type=KeyboardType.MEET_GENDER_FEMALE,
+        sep=KeyboardType.SEP,
+    )
+    inline_btn_female = InlineKeyboardButton('Жен', callback_data=callback_data_female)
+    reply_markup = InlineKeyboardMarkup()
+    reply_markup.row(inline_btn_male, inline_btn_female, Misc.inline_button_cancel())
+    await bot.send_message(
+        chat_id=data['tg_user_sender_id'],
+        text='Укажите Ваш пол',
+        reply_markup=reply_markup,
+        disable_web_page_preview=True,
+        reply_to_message_id=data['message_id'],
+    )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=ContentType.all(),
+    state=FSMmeet.ask_gender,
+)
+async def meet_got_gender_text(message: types.Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    await message.reply(
+        Misc.PROMPT_MESSAGE_INSTEAD_OF_GENDER,
+        reply_markup=Misc.reply_markup_cancel_row(),
+    )
+
+async def meet_quest_dob(state, data_this, error_message=None):
+    async with state.proxy() as data:
+        data.update(**data_this)
+        text = f'Укажите, когда Вы родилсь, ' + Misc.PROMPT_DATE_FORMAT
+        if error_message:
+            text = f'{error_message}\n\n{text}'
+        await bot.send_message(
+            chat_id=data['tg_user_sender_id'],
+            text=text,
+            disable_web_page_preview=True,
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=(ContentType.TEXT,),
+    state=FSMmeet.ask_dob,
+)
+async def process_message_meet_dob(message: types.Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    async with state.proxy() as data:
+        status_from, profile_from = await Misc.post_tg_user(message.from_user)
+        if status_from != 200 or profile_from['uuid'] != data['uuid']:
+            await state.finish()
+            return
+        dob = message.text.strip()
+        status, response = await Misc.api_request(
+            path='/api/check/date',
+            method='get',
+            params=dict(date=dob, min_age='10', max_age='100')
+        )
+        if status == 400:
+            await meet_quest_dob(state, data, error_message=response['message'])
+        elif status == 200:
+            data['dob'] = dob
+            if data['latitude'] is not None and data['longitude'] is not None:
+                await state.finish()
+                await meet_do_or_revoke(data)
+            else:
+                await FSMmeet.ask_geo.set()
+                await meet_quest_geo(state, data)
+        else:
+            await state.finish()
+
+
+async def meet_quest_geo(state, data_this, error_message=None):
+    async with state.proxy() as data:
+        data.update(**data_this)
+        text = Misc.MSG_LOCATION_MANDAT
+        if error_message:
+            text = f'{error_message}\n\n{text}'
+        await bot.send_message(
+            chat_id=data['tg_user_sender_id'],
+            text=text,
+            disable_web_page_preview=True,
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=(ContentType.TEXT,),
+    state=FSMmeet.ask_geo,
+)
+async def process_message_meet_geo(message: types.Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    async with state.proxy() as data:
+        status_from, profile_from = await Misc.post_tg_user(message.from_user)
+        if status_from != 200 or profile_from['uuid'] != data['uuid']:
+            await state.finish()
+            return
+        latitude, longitude = Misc.check_location_str(message.text)
+        if latitude is None or longitude is None:
+            error_message = (
+                'Ожидались: координаты <u><i>широта, долгота</i></u>, '
+                'где <i>широта</i> и <i>долгота</i> - числа, возможные для координат'
+            )
+            await meet_quest_geo(state, data, error_message=error_message)
+            return
+        data['latitude'], data['longitude'] = latitude, longitude
+        await state.finish()
+        await meet_do_or_revoke(data)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        f'{KeyboardType.MEET_DO}|{KeyboardType.MEET_REVOKE}',
+        KeyboardType.SEP,
+        # sid_from         # 1
+        # KeyboardType.SEP,
+        # sid_to           # 2
+    ), c.data),
+    state = None,
+    )
+async def process_callback_meet_do_or_revoke(callback_query: types.CallbackQuery, state: FSMContext):
+    await callback_query.answer()
+    if not (username_from := Misc.get_sid_from_callback(callback_query)):
+        return
+    code = callback_query.data.split(KeyboardType.SEP)
+    what = int(code[0])
+    status_from, profile_from = await Misc.post_tg_user(callback_query.from_user)
+    if status_from != 200 or profile_from['username'] != username_from:
+        return
+    text_scram = ''
+    if profile_from['did_meet'] and what == KeyboardType.MEET_DO:
+        text_scram = 'Вы уже участвуете в игре знакомств'
+    elif not profile_from['did_meet'] and what == KeyboardType.MEET_REVOKE:
+        text_scram = 'Вы и так не участвуете в игре знакомств'
+    if text_scram:
+        await callback_query.message.reply(
+            text=text_scram,
+            disable_web_page_preview=True,
+        )
+        return
+    username_to = ''
+    try:
+        username_to = code[2]
+    except IndexError:
+        pass
+    if not username_to:
+        return
+    data_this = dict(
+        what=what,
+        uuid=profile_from['uuid'],
+        username_to=username_to,
+        gender=profile_from['gender'],
+        dob=profile_from['dob'],
+        latitude=profile_from['latitude'],
+        longitude=profile_from['longitude'],
+        tg_user_sender_id=callback_query.from_user.id,
+        message_id=callback_query.message.message_id,
+    )
+    if what == KeyboardType.MEET_DO:
+        if profile_from['gender'] and profile_from['dob'] and \
+           profile_from['latitude'] is not None and profile_from['longitude'] is not None:
+            await meet_do_or_revoke(data_this)
+        else:
+            if not profile_from['gender']:
+                await FSMmeet.ask_gender.set()
+                next_proc = meet_quest_gender
+            elif not profile_from['dob']:
+                await FSMmeet.ask_dob.set()
+                next_proc = meet_quest_dob
+            elif not (profile_from['latitude'] and profile_from['longitude']):
+                await FSMmeet.ask_geo.set()
+                next_proc = meet_quest_geo
+            state = dp.current_state()
+            async with state.proxy() as data:
+                data.update(**data_this)
+                await next_proc(state, data)
+    else:
+        await meet_do_or_revoke(data_this)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        f'{KeyboardType.MEET_GENDER_FEMALE}|{KeyboardType.MEET_GENDER_MALE}',
+        KeyboardType.SEP,
+    ), c.data),
+    state = FSMmeet.ask_gender,
+    )
+async def process_callback_meet_do_ask_gender(callback_query: types.CallbackQuery, state: FSMContext):
+    await callback_query.answer()
+    status_sender, response_sender = await Misc.post_tg_user(callback_query.from_user)
+    async with state.proxy() as data:
+        if status_sender != 200 and data.get('uuid') != response_sender['uuid']:
+            await state.finish()
+            return
+    code = callback_query.data.split(KeyboardType.SEP)
+    next_proc = None
+    if not response_sender['dob']:
+        await FSMmeet.ask_dob.set()
+        next_proc = meet_quest_dob
+    elif response_sender['latitude'] is None or response_sender['longitude'] is None:
+        await FSMmeet.ask_geo.set()
+        next_proc = meet_quest_geo
+    state = dp.current_state()
+    async with state.proxy() as data:
+        data['gender'] = 'm' if int(code[0]) == KeyboardType.MEET_GENDER_MALE else 'f'
+        if next_proc:
+            await next_proc(state, data)
+        else:
+            await state.finish()
+            await meet_do_or_revoke(data)
+
+
+async def meet_do_or_revoke(data):
+    if data['what'] == KeyboardType.MEET_DO:
+        text_to_sender = 'Поздравляем! Вы стали участником игры знакомств'
+        did_meet='1',
+    else:
+        text_to_sender = 'Вы вышли из игры знакомств. Нам вас будет не хватать.'
+        did_meet='',
+    parms = dict(did_meet=did_meet)
+    if data['what'] == KeyboardType.MEET_DO:
+        fields = ('uuid', 'username_to', 'gender', 'dob', 'latitude', 'longitude',)
+    else:
+        fields = ('uuid', 'username_to',)
+    for k in fields:
+        if k in data:
+            parms[k] = data[k]
+    status, response = await Misc.put_user_properties(**parms)
+    if status == 200:
+        await bot.send_message(
+            data['tg_user_sender_id'],
+            text=text_to_sender,
+            disable_web_page_preview=True,
+        )
+
+
 async def put_thank_etc(tg_user_sender, data, state=None):
     # Может прийти неколько картинок, .т.е сообщений, чтоб не было
     # много благодарностей и т.п. по нескольким сообщениям
@@ -4568,6 +4852,15 @@ async def put_thank_etc(tg_user_sender, data, state=None):
             raise ValueError
     except ValueError:
         return
+
+    bot_data = await bot.get_me()
+    if attitude_current:= data.get('attitude_current'):
+        # Это может быть установлено только из диплинка
+        if data['operation_type_id'] == OperationType.ACQ and \
+           attitude_current in (Attitude.ACQ, Attitude.TRUST):
+            # А если из meet, то там своя специфика
+            await process_meet_from_deeplink(tg_user_sender, data, bot_data)
+            return
 
     profile_from = data['profile_from']
     group_member = data.get('group_member')
@@ -4596,7 +4889,6 @@ async def put_thank_etc(tg_user_sender, data, state=None):
     logging.debug('post operation, response: %s' % response)
     text = text_popup = None
     operation_done = operation_already = do_thank = False
-    bot_data = await bot.get_me()
     if status == 200:
         operation_done = True
         trusts_or_thanks = ''
@@ -4629,6 +4921,15 @@ async def put_thank_etc(tg_user_sender, data, state=None):
             text = f'Вы и так не знакомы с {full_name_to_link}'
         elif post_op['operation_type_id'] == OperationType.ACQ:
             text = f'Вы уже знакомы с {full_name_to_link}'
+
+    if (operation_done or operation_already) and \
+       'attitude_current' in data and \
+       data['operation_type_id'] == OperationType.ACQ:
+        if operation_done:
+            data['profile_from'] = response['profile_from']
+            data['profile_to'] = response['profile_to']
+        await process_meet_from_deeplink(tg_user_sender, data, bot_data)
+        return
 
     if operation_done and text:
         full_name_from_link = Misc.get_deeplink_with_name(profile_from, bot_data, plus_trusts=True)
@@ -4663,12 +4964,6 @@ async def put_thank_etc(tg_user_sender, data, state=None):
                         sep=KeyboardType.SEP,
                 ))
                 reply_markup.row(inline_btn_cancel_thank)
-
-        if operation_done and data.get('message_after_meet'):
-            status_template, message_after_meet = await Misc.get_template('message_after_meet')
-            if status_template != 200 or not message_after_meet:
-                message_after_meet = 'Добро пожаловать!'
-            text_to_sender += f'\n\n{message_after_meet}'
 
         if not group_member and (operation_done or operation_already):
             link_profile = profile_to
@@ -4891,65 +5186,10 @@ async def geo(message, state_to_set, uuid=None):
     if uuid:
         async with state.proxy() as data:
             data['uuid'] = uuid
-    msg_location = (
-        'Пожалуйста, отправьте мне координаты вида \'74.188586, 95.790195\' '
-        '(широта,долгота - удобно скопировать из приложения карт Яндекса/Гугла) '
-        'или нажмите Отмена. ВНИМАНИЕ! Отправленные координаты будут опубликованы!\n'
-        '\n'
-        'Отправленное местоположение будет использовано для отображение профиля '
-        'на картах участников голосований, опросов и на общей карте участников проекта '
-        '- точное местоположение не требуется - '
-        'можно выбрать ближнюю/дальнюю остановку транспорта, рынок или парк.'
-    )
     await bot.send_message(
         message.chat.id,
-        msg_location,
+        Misc.MSG_LOCATION,
         reply_markup=Misc.reply_markup_cancel_row(),
-    )
-
-async def geo_with_location(message, state_to_set, uuid=None):
-
-    # Старая функция geo(), в которой заточено получение координат
-    # от мобильного устройства
-
-    # Здесь вынужден отказаться от параметра , one_time_keyboard=True
-    # Не убирает телеграм "нижнюю" клавиатуру в мобильных клиентах!
-    # Убираю "вручную", потом: собщением с reply_markup=types.reply_keyboard.ReplyKeyboardRemove()
-    #
-    keyboard = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True, one_time_keyboard=False)
-    button_geo = types.KeyboardButton(text=Misc.PROMPT_LOCATION, request_location=True)
-    button_cancel = types.KeyboardButton(text=Misc.PROMPT_CANCEL_LOCATION)
-    keyboard.add(button_geo, button_cancel)
-    await state_to_set.set()
-    state = dp.current_state()
-    if uuid:
-        async with state.proxy() as data:
-            data['uuid'] = uuid
-    await bot.send_message(
-        message.chat.id,(
-            'Пожалуйста, отправьте мне координаты вида \'74.188586, 95.790195\' '
-            '(широта,долгота - удобно скопировать из приложения карт Яндекса/Гугла) '
-            'или нажмите Отмена. ВНИМАНИЕ! Отправленные координаты будут опубликованы!\n'
-            '\n'
-            'Отправленное местоположение будет использовано для отображение профиля '
-            'на картах участников голосований, опросов и на общей карте участников проекта '
-            '- точное местоположение не требуется - '
-            'можно выбрать ближнюю/дальнюю остановку транспорта, рынок или парк.'
-
-            #'Пожалуйста, отправьте мне координаты вида \'74.188586, 95.790195\' '
-            #'(<i>широта</i>,<i>долгота</i>, '
-            #'удобно скопировать из приложения карт).\n'
-            #'\n'
-            #'Или нажмите на кнопку "%(prompt_location)s" внизу '
-            #'(на некоторых устройствах кнопка может отсутствовать).\n'
-            #'\n'
-            #'Чтобы отказаться - нажмите на кнопку "%(prompt_cancel_location)s" внизу '
-            #'(если есть кнопка) или наберите <u>%(prompt_cancel_location)s</u>'
-        ) % dict(
-            prompt_location=Misc.PROMPT_LOCATION,
-            prompt_cancel_location=Misc.PROMPT_CANCEL_LOCATION,
-        ),
-        reply_markup=keyboard
     )
 
 
@@ -5034,32 +5274,17 @@ async def put_location(message, state, show_card=False):
                 )
             else:
                 message_text = message_text.strip()
-                m = re.search(r'([\-\+]?\d+(?:\.\d*)?)\s*\,\s*([\-\+]?\d+(?:\.\d*)?)', message_text)
-                if m:
-                    try:
-                        latitude_ = float(m.group(1))
-                        longitude_ = float(m.group(2))
-                        if -90 <= latitude_ <= 90 and -180 <= longitude_ <= 180:
-                            latitude = latitude_
-                            longitude = longitude_
-                        else:
-                            raise ValueError
-                    except ValueError:
-                        pass
-                if latitude and longitude:
-                    pass
-                else:
+                latitude, longitude = Misc.check_location_str(message_text)
+                if latitude is None or longitude is None:
                     await message.reply((
-                            'Надо было:\n'
-                            '- или что-то выбрать: <u>%s</u> или <u>%s</u>, из кнопок снизу.\n'
-                            '- или вводить координаты <u><i>широта, долгота</i></u>, '
+                            'Ожидались: координаты <u><i>широта, долгота</i></u>, '
                             'где <i>широта</i> и <i>долгота</i> - числа, возможные для координат\n'
                             '<b>Повторите сначала!</b>'
                         )
                         % (Misc.PROMPT_LOCATION, Misc.PROMPT_CANCEL_LOCATION,),
                         reply_markup=reply_markup
                     )
-        if latitude and longitude:
+        if latitude is not None and longitude is not None:
             status, response = await Misc.put_user_properties(
                 uuid=user_uuid,
                 latitude = latitude,
@@ -6479,7 +6704,7 @@ async def process_callback_invite(callback_query: types.CallbackQuery, state: FS
     от которого мы хотим, чтоб он объединил себя с собственным
     профилем нажавшего кнопку
     """
-    if not (uuid := Misc.getuuid_from_callback(callback_query)):
+    if not (uuid := Misc.get_uuid_from_callback(callback_query)):
         return
     message = callback_query.message
     response_sender = await Misc.check_owner_by_uuid(
@@ -6576,7 +6801,7 @@ async def process_callback_invite_confirm(callback_query: types.CallbackQuery, s
     В токене есть всё необходимое
     """
     reply = None
-    if token_invite := Misc.getuuid_from_callback(callback_query):
+    if token_invite := Misc.get_uuid_from_callback(callback_query):
         status_sender, response_sender = await Misc.post_tg_user(callback_query.from_user)
         if status_sender == 200:
             post_invite_accept = dict(

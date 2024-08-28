@@ -226,6 +226,15 @@ class KeyboardType(object):
     # В вопросе, не желает ли принять приглашение
     INVITE_CONFIRM = 56
 
+    # Участие и отказ от участия в игре знакомств
+    #
+    MEET_DO = 57
+    MEET_REVOKE = 58
+
+    MEET_GENDER_MALE = 59
+    MEET_GENDER_FEMALE = 60
+
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -238,6 +247,26 @@ class Misc(object):
     MSG_YOU_GOT_MESSAGE = 'Вам сообщение от <b>%s</b>'
     MSG_YOU_CANCELLED_INPUT = 'Вы отказались от ввода данных'
     MSG_USER_NOT_FOUND = 'Пользователь не найден'
+
+    MSG_LOCATION = (
+        'Пожалуйста, отправьте мне координаты вида \'74.188586, 95.790195\' '
+        '(широта,долгота - удобно скопировать из приложения карт Яндекса/Гугла) '
+        'или нажмите Отмена. ВНИМАНИЕ! Отправленные координаты будут опубликованы!\n'
+        '\n'
+        'Отправленное местоположение будет использовано для отображение профиля '
+        'на картах участников голосований, опросов и на общей карте участников проекта '
+        '- точное местоположение не требуется - '
+        'можно выбрать ближнюю/дальнюю остановку транспорта, рынок или парк.'
+    )
+
+    MSG_LOCATION_MANDAT = (
+        'Пожалуйста, отправьте мне координаты вида \'74.188586, 95.790195\' '
+        '(широта,долгота - удобно скопировать из приложения карт Яндекса/Гугла) '
+        'ВНИМАНИЕ! Отправленные координаты будут опубликованы!\n'
+        '\n'
+        '- точное местоположение не требуется - '
+        'можно выбрать ближнюю/дальнюю остановку транспорта, рынок или парк.'
+    )
 
     PROMPT_SEARCH_TEXT_TOO_SHORT = 'Минимальное число символов в тексте для поиска: %s\n' % settings.MIN_LEN_SEARCHED_TEXT
     PROMPT_SEARCH_PHRASE_TOO_SHORT = 'Недостаточно для поиска: короткие слова или текст вообще без слов и т.п.'
@@ -258,6 +287,7 @@ class Misc(object):
     PROMPT_EXISTING_IOF = "Укажите для\n\n%(name)s\n\nдругие имя отчество и фамилию - в одной строке, например: 'Иван Иванович Иванов'"
 
     PROMPT_DATE_FORMAT = 'в формате ДД.ММ.ГГГГ или ММ.ГГГГ или ГГГГ'
+    PROMPT_MESSAGE_INSTEAD_OF_GENDER = 'Ожидается выбор пола, нажатием одной из кнопок, в сообщении выше'
 
     PROMPT_PAPA_MAMA_OF_CHILD = (
         'Укажите пол %(name)s'
@@ -315,10 +345,12 @@ class Misc(object):
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE
 
     RE_UUID = re.compile(r'[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}', re.IGNORECASE)
+    RE_SID = re.compile(r'^[0-9a-z]{10}$', re.IGNORECASE)
 
     # Никакого re.compile! :
     RE_KEY_SEP = r'^%s%s'
 
+    CALLBACK_DATA_SID_TEMPLATE = '%(keyboard_type)s%(sep)s%(sid)s%(sep)s'
     CALLBACK_DATA_UUID_TEMPLATE = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s'
     CALLBACK_DATA_ID__TEMPLATE = '%(keyboard_type)s%(sep)s%(id_)s%(sep)s'
     CALLBACK_DATA_KEY_TEMPLATE = '%(keyboard_type)s%(sep)s'
@@ -1715,7 +1747,7 @@ class Misc(object):
 
 
     @classmethod
-    def getuuid_from_callback(cls, callback_query):
+    def get_uuid_from_callback(cls, callback_query):
         """
         Получить uuid из самых распространенных callback_query
         """
@@ -1724,9 +1756,43 @@ class Misc(object):
             code = (callback_query.data or '').split(KeyboardType.SEP)
             try:
                 result = code[1]
+                UUID(result)
+            except (IndexError, ValueError,):
+                pass
+        return result
+
+    @classmethod
+    def get_sid_from_callback(cls, callback_query):
+        """
+        Получить username из самых распространенных callback_query
+        """
+        result = None
+        if getattr(callback_query, 'message', None) and getattr(callback_query, 'data', None):
+            code = (callback_query.data or '').split(KeyboardType.SEP)
+            try:
+                result = code[1]
+                if not re.search(cls.RE_SID, result):
+                    result = None
             except IndexError:
                 pass
         return result
+
+    @classmethod
+    def check_location_str(cls, message_text):
+        latitude, longitude = None, None
+        m = re.search(r'([\-\+]?\d+(?:\.\d*)?)\s*\,\s*([\-\+]?\d+(?:\.\d*)?)', message_text)
+        if m:
+            try:
+                latitude_ = float(m.group(1))
+                longitude_ = float(m.group(2))
+                if -90 <= latitude_ <= 90 and -180 <= longitude_ <= 180:
+                    latitude = latitude_
+                    longitude = longitude_
+                else:
+                    raise ValueError
+            except ValueError:
+                pass
+        return latitude, longitude
 
 
 class TgGroup(object):

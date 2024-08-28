@@ -111,5 +111,19 @@
     "fields": {
       "title": "Set Acquaintance"
     }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 12,
+    "fields": {
+      "title": "Took Part in Acquaintance Game"
+    }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 13,
+    "fields": {
+      "title": "Revoked Part in Acquaintance Game"
+    }
   }
 ]

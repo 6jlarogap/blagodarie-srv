@@ -42,6 +42,13 @@ class OperationType(models.Model):
     SET_MOTHER = 10
     # Acquainted
     ACQ = 11
+    # Took Part in Acquaintance Game
+    # В этом случае journal.user_to: с кем установил занкомство
+    DID_MEET = 12
+    # Revoked Part in Acquaintance Game
+    # В этом случае journal.user_to: с кем установил занкомство, но
+    # отказался от игры знакомств
+    REVOKED_MEET = 13
 
     title = models.CharField(_("Тип операции"), max_length=255, unique=True)
 

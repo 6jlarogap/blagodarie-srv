@@ -1,4 +1,4 @@
-import os, re, hmac, hashlib, json, time
+import os, re, hmac, hashlib, json, time, datetime
 import uuid, redis
 import urllib.request, urllib.error, urllib.parse
 from urllib.parse import urlparse
@@ -32,7 +32,8 @@ from django.contrib.auth.models import User
 from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TgGroup, \
     TempToken, UuidMixin, TelegramApiMixin, \
     TgPoll, TgPollAnswer, Offer, OfferAnswer
-from contact.models import Key, KeyType, CurrentState, OperationType, Wish, Ability, ApiAddOperationMixin
+from contact.models import Key, KeyType, CurrentState, OperationType, Wish, Ability, \
+                           ApiAddOperationMixin, Journal
 from wote.models import Video, Vote
 
 class ApiTokenAuthDataMixin(object):
@@ -1502,7 +1503,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 user.first_name = first_name
 
             # Поля с возможным null, может прийти 'значение' или ''
-            for f in ('comment', 'gender', ):
+            for f in ('comment', 'gender',):
                 if f in  request.data:
                     setattr(profile, f, request.data[f] or None)
             # Булевы поля, может прийти '1' или ''
@@ -1526,6 +1527,27 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                     profile.delete_from_media()
                     profile.photo = None
                     profile.photo_original_filename = ''
+            if 'did_meet' in request.data:
+                did_meet = request.data.get('did_meet')
+                unix_time_now = int(time.time())
+                profile.did_meet = unix_time_now if did_meet else None
+                operationtype_id = OperationType.DID_MEET if did_meet else OperationType.REVOKED_MEET
+                user_to = None
+                if username_to := request.data.get('username_to'):
+                    try:
+                        user_to = User.objects.get(username=username_to)
+                    except User.DoesNotExist:
+                        pass
+                if user_to:
+                    Journal.objects.create(
+                        user_from=user,
+                        operationtype_id=operationtype_id,
+                        insert_timestamp=unix_time_now,
+                        user_to=user_to
+                    )
+                else:
+                    raise ServiceException('Не задан или найден с кем познакомился')
+
             user.save()
             profile.save()
             data = profile.data_dict(request)
@@ -3800,3 +3822,36 @@ class ApiShortIdView(View):
         return redirect(settings.SHORT_ID_URL % user.profile.uuid)
 
 api_short_id = ApiShortIdView.as_view()
+
+class ApiCheckDateView(APIView):
+
+    def get(self, request):
+        try:
+            date = request.GET.get('date', '').strip()
+            if not date:
+                raise ServiceException('Не задана дата')
+            m = UnclearDate.check_safe_str(date, check_today=True)
+            if m:
+                raise ServiceException(m)
+            y, m, d = UnclearDate.from_str_dmy(date)
+            y_current = datetime.date.today().year
+            try:
+                min_age = int(request.GET.get('min_age', ''))
+            except ValueError:
+                min_age = None
+            try:
+                max_age = int(request.GET.get('max_age', ''))
+            except ValueError:
+                max_age = None
+            if min_age and y_current - y < min_age:
+                raise ServiceException('Слишком недавняя дата')
+            if max_age and y_current - y > max_age:
+                raise ServiceException('Слишком древняя дата')
+            data=dict(date=date)
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_check_date = ApiCheckDateView.as_view()

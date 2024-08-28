@@ -385,6 +385,8 @@ class Profile(PhotoModel, GeoPointAddressModel):
     comment = models.TextField(verbose_name=_("Примечание"), null=True)
     offer_answers = models.ManyToManyField('users.OfferAnswer', verbose_name=_("Ответы на опросы/предложения"))
 
+    did_meet = models.BigIntegerField(_("Установил знакомство (принял участие в игре знакомств)"), null=True)
+
     class Meta:
         ordering = ('user__first_name', )
 
@@ -431,6 +433,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 trust_count=self.trust_count,
                 acq_count=self.acq_count,
                 editable=self.editable,
+                did_meet=self.did_meet,
             )
         else:
             result.update(
@@ -459,6 +462,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 is_dead=self.is_dead or bool(self.dod),
                 dod=self.dod and self.dod.str_safe() or None,
                 comment=self.comment or '',
+                did_meet=self.did_meet,
             )
         return result
 

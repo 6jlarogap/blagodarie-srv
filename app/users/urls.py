@@ -25,6 +25,7 @@ urlpatterns = [
     re_path(r'^api/invite/gettoken/?$', views.api_invite_get_token),
 
     re_path(r'^api/profile/?$', views.api_profile),
+    re_path(r'^api/check/date/?$', views.api_check_date),
 
     re_path(r'^api/user/relations/?$', views.api_user_relations),
     re_path(r'^api/user/points/?$', views.api_user_points),
