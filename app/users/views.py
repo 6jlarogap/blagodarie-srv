@@ -2026,6 +2026,37 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
     #
     FMT = '3d-force-graph'
 
+    def popup_data(self, profile, color, frame, thumb_size):
+        url_profile = self.profile_url_by_uuid(self.request, profile.uuid, fmt=self.FMT)
+        url_deeplink = self.get_deeplink(profile.user, self.bot_username) if self.bot_username else url_profile
+        if profile.latitude and profile.longitude:
+            link_on_map = '<a href="%s/?uuid_trustees=%s" target="_blank">На карте</a><br />' % (
+                settings.MAP_URL, profile.uuid,
+            )
+        else:
+            link_on_map = ''
+        return dict(
+            full_name=profile.user.first_name,
+            username=profile.user.username,
+            trust_count=profile.trust_count,
+            acq_count=profile.acq_count,
+            is_org=profile.is_org,
+            url_profile = url_profile,
+            url_deeplink=url_deeplink,
+            url_photo_popup=Profile.image_thumb(
+                self.request, profile.photo,
+                method='crop-%s-frame-%s' % (color, frame, ),
+                width=thumb_size + frame * 2,
+                height=thumb_size + frame * 2,
+                put_default_avatar=True,
+                default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
+            ),
+            thumb_size_popup = thumb_size,
+            video_reply_html='',
+            offer_reply_html='',
+            link_on_map=link_on_map,
+        )
+
     def get(self, request):
         """
         Вернуть список координат пользователей
@@ -2127,6 +2158,11 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         }
         Если не нашли никого, что показать на карте, она центрируется по Москве
         """
+
+        bot_username = self.get_bot_username()
+        self.bot_username = bot_username
+        self.request = request
+
         lat_avg = 55.7522200
         lng_avg = 37.6155600
 
@@ -2184,7 +2220,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         elif request.GET.get('videoid'):
             videoid = request.GET['videoid']
             source = request.GET.get('source', 'yt')
-        bot_username = self.get_bot_username()
         lat_sum = lng_sum = 0
         points = []
         q = Q(
@@ -2218,36 +2253,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
 
         elif uuid_trustees:
             num_attitude_trust = num_attitude_mistrust = num_attitude_acq = 0
-            def popup_data(profile, color, frame, thumb_size):
-                url_profile = self.profile_url_by_uuid(request, profile.uuid, fmt=self.FMT)
-                url_deeplink = self.get_deeplink(profile.user, bot_username) if bot_username else url_profile
-                if profile.latitude and profile.longitude:
-                    link_on_map = '<a href="%s/?uuid_trustees=%s" target="_blank">На карте</a><br />' % (
-                        settings.MAP_URL, profile.uuid,
-                    )
-                else:
-                    link_on_map = ''
-                return dict(
-                    full_name=profile.user.first_name,
-                    username=profile.user.username,
-                    trust_count=profile.trust_count,
-                    acq_count=profile.acq_count,
-                    is_org=profile.is_org,
-                    url_profile = url_profile,
-                    url_deeplink=url_deeplink,
-                    url_photo_popup=Profile.image_thumb(
-                        request, profile.photo,
-                        method='crop-%s-frame-%s' % (color, frame, ),
-                        width=thumb_size + frame * 2,
-                        height=thumb_size + frame * 2,
-                        put_default_avatar=True,
-                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
-                    ),
-                    thumb_size_popup = thumb_size,
-                    video_reply_html='',
-                    offer_reply_html='',
-                    link_on_map=link_on_map,
-                )
             try:
                 try:
                     found_user, found_profile = self.check_user_uuid(uuid_trustees, related=('user',))
@@ -2265,7 +2270,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 color = 'black' if found_profile.is_dead or found_profile.dod else 'blue'
                 legend = f'<br><table style="border-spacing: 0;border-top: 2px solid {color};border-bottom: 2px solid {color};">'
                 legend += '<tr><td>'
-                dict_user = popup_data(
+                dict_user = self.popup_data(
                     found_profile,
                     color,
                     self.USER_TRUSTEEE_FRAME_LEGEND,
@@ -2276,7 +2281,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 legend += '</table><br />'
                 if found_coordinates:
                     frame = self.USER_TRUSTEE_FRAME_MAP
-                    dict_user = popup_data(
+                    dict_user = self.popup_data(
                         found_profile,
                         color,
                         frame,
@@ -2346,7 +2351,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                             '<br /><br />'
                             f'{legend_tempo}'
                         )
-                    dict_user = popup_data(
+                    dict_user = self.popup_data(
                         cs.user_from.profile,
                         color,
                         self.USER_TRUSTEEE_FRAME_LEGEND,
@@ -2367,7 +2372,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                             lat_sum += cs.user_from.profile.latitude
                             lng_sum += cs.user_from.profile.longitude
                         frame = self.USER_TRUSTEE_FRAME_MAP
-                        dict_user = popup_data(
+                        dict_user = self.popup_data(
                             cs.user_from.profile,
                             color,
                             frame,
