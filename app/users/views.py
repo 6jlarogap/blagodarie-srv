@@ -1979,7 +1979,108 @@ class ApiBotGroupMember(ApiBotGroupMixin, APIView):
 
 api_bot_groupmember = ApiBotGroupMember.as_view()
 
-class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin, APIView):
+class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin, GenderMixin, APIView):
+    """
+    Вернуть список координат пользователей
+
+    На входе:
+    без параметров:
+        на выходе пустой список
+    возможные параметры
+    (в порядке их анализа):
+        chat_id         ид группы/канала в телеграме,
+                        показать участников этой группы/канала
+
+        meet            on или другое не пустое, участники игры знакомств
+
+        offer_id        ид опроса- предложения в телеграме,
+                        показать участников опроса, как они голосовали,
+                        каждый из участников на карте будет в рамке цвета,
+                        назначенного ответу (settings.OFFER_ANSWER_COLOR_MAP).
+                        Если подал несколько ответов, то без рамки
+
+        uuid_trustees   uuid пользователя. Показать тех, кто ему доверяет
+                        или не доверяет
+
+        videoid         ид видео, по которым голосуют
+                        показать участников голосания по видео,
+                        каждый из участников на карте будет в рамке цвета,
+                        назначенного голосу (Vote.VOTES_IMAGE[<голос>][color]).
+                        Если подал несколько голосов, то без рамки
+            Вместе с videoid может прийти:
+                source, по умолчанию 'yt' (youtube)
+
+        uuid            показать координаты пользователя с этим uuid.
+                        Вместе с этим в выводе могут быть, при наличии параметров
+                        participants и/или owned и другие пользователи
+        participants    (on или пусто)
+                        показать активных пользователей (не родственников, точнее
+                        not owned профили)
+        owned          (on или пусто)
+                        показать не активных пользователей (например, родственников, точнее
+                        owned профили)
+
+    Пример выходных данных:
+    {
+        "first_name": "",                   // имя запрошенного пользователя, при параметре uuid
+                                            // или uuid_trustees
+        "found_coordinates": false,         // нашелся ли пользователь, при параметре uuid
+                                            // или uuid_trustees
+        "address": null,                    // текстовый адрес пользователя, при параметре uuid
+                                            // или uuid_trustees
+        "lat_avg": 50.94895896995098,       // где центрировать карту. При параметре uuid это
+        "lng_avg": 33.90609824676903,       // адрес найденного с координатами пользователя с uuid,
+                                            // иначе центр относительно всех найденных
+
+        "chat_title": null,                 // Название телеграм группы/канала, где ищем пользователей
+        "chat_type": null,                  // тип телеграм группы/канала, где ищем пользоватей,
+                                            // группа или канал
+        "offer_question": null,             // вопрос телеграм опроса- предложения (offer)
+        "offer_deeplink": null,             // ссылка на опроса- предложение (offer) в телеграме
+        "legend": "строка",                 // если задан offer_id:
+                                            //      html таблица легенды для цветов ответов, две колонки:
+                                            //          - фото неизвестного в рамке цвета
+                                            //          - ответ, соответствующий цвету
+                                            // если задан uuid_trustees:
+                                            //      пользователи:
+                                            //          - опрашиваемый пользователь
+                                            //          - те, кто ему доверяет
+                                            //          - те, кто ему не доверяет
+                                            // если задан videoid:
+                                            //      html таблица легенды для цветов голосов, две колонки:
+                                            //          - фото неизвестного в рамке цвета
+                                            //          - голос, соответствующий цвету
+        "video_title",                      // заголовок видео: ссылка на голосование по видео
+                Возможны еще параметры:
+                    from:   с такой секунды видео начинать
+                    to:     по какую секунду видео показывать
+
+        "points": [
+            {
+                // Информация по каждому найденному пользователю с координатами
+                "latitude": 54.208471,
+                "longitude": 28.500346,
+                // имя фамилия
+                "title": "(0) Eugene S",
+                // что выскочит на карте при щелчке по пользователю
+                "popup": "<table>
+                            <tr>
+                                <td><img src=\"http://api.x.org/thumb/profile-photo/2023/04/12/1484/photo_cUfiWNv.jpg/64x64~crop~12.jpg\" width=64 height=64></td>
+                                <td> Eugene S (0)<br /> <a href=\"https://t.me/DevBlagoBot?start=cf047bf6-ade6-4167-82e1-a266b43b96e0\" target=\"_blank\">Профиль</a>
+                                    <br /><br /> <a href=\"http://x.org/genesis/relations?user_uuid_trusts=cf047bf6-ade6-4167-82e1-a266b43b96e0\" target=\"_blank\">Доверия</a>
+                                    </td>
+                                </tr></table>",
+                // это пользователь, которого искали с параметром uuid?
+                "is_of_found_user": false,
+                "icon": "http://api.x.org/thumb/profile-photo/2023/04/12/1484/photo.jpg/32x32~crop~12.jpg",
+                "size_icon": 32
+            },
+            ...
+        ]
+    }
+    Если не нашли никого, что показать на карте, она центрируется по Москве
+    """
+
     # permission_classes = (IsAuthenticated,)
 
     # Фото пользователя, когда в карте щелкаешь на балун
@@ -2018,7 +2119,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
     #
     USER_TRUSTEEE_FRAME_LEGEND = 5
 
-    # Ширина рамки для тех, кто довереют, не доверяют uuid_trustees
+    # Ширина рамки для тех, кто доверяют, не доверяют uuid_trustees
     #
     USER_TRUSTEE_FRAME_MAP = 3
 
@@ -2026,7 +2127,12 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
     #
     FMT = '3d-force-graph'
 
-    def popup_data(self, profile, color, frame, thumb_size):
+    def popup_data(self, profile,
+            color=None,
+            frame=0,
+            thumb_size=THUMB_SIZE_POPUP,
+            thumb_size_icon=THUMB_SIZE_ICON
+        ):
         url_profile = self.profile_url_by_uuid(self.request, profile.uuid, fmt=self.FMT)
         url_deeplink = self.get_deeplink(profile.user, self.bot_username) if self.bot_username else url_profile
         if profile.latitude and profile.longitude:
@@ -2035,19 +2141,37 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             )
         else:
             link_on_map = ''
+        method_template = 'crop-%s-frame-%s'
+        if color and frame:
+            method = method_template % (color, frame,)
+        elif not color and frame:
+            method = method_template % ('black', frame,)
+        elif color and not frame:
+            method = method_template % (color, 3,)
+        elif not color and not frame:
+            method = 'crop'
         return dict(
             full_name=profile.user.first_name,
             username=profile.user.username,
             trust_count=profile.trust_count,
             acq_count=profile.acq_count,
+            dob=str(profile.dob) if profile.dob else '',
             is_org=profile.is_org,
             url_profile = url_profile,
             url_deeplink=url_deeplink,
             url_photo_popup=Profile.image_thumb(
                 self.request, profile.photo,
-                method='crop-%s-frame-%s' % (color, frame, ),
+                method=method,
                 width=thumb_size + frame * 2,
                 height=thumb_size + frame * 2,
+                put_default_avatar=True,
+                default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
+            ),
+            url_photo_icon=Profile.image_thumb(
+                self.request, profile.photo,
+                method=method,
+                width=thumb_size_icon + frame * 2,
+                height=thumb_size_icon + frame * 2,
                 put_default_avatar=True,
                 default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
             ),
@@ -2058,106 +2182,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         )
 
     def get(self, request):
-        """
-        Вернуть список координат пользователей
-
-        Требует авторизацию!
-
-        На входе:
-        без параметров:
-            на выходе пустой список
-        возможные параметры
-        (в порядке их анализа):
-            chat_id         ид группы/канала в телеграме,
-                            показать участников этой группы/канала
-
-            offer_id        ид опроса- предложения в телеграме,
-                            показать участников опроса, как они голосовали,
-                            каждый из участников на карте будет в рамке цвета,
-                            назначенного ответу (settings.OFFER_ANSWER_COLOR_MAP).
-                            Если подал несколько ответов, то без рамки
-
-            uuid_trustees   uuid пользователя. Показать тех, кто ему доверяет
-                            или не доверяет
-
-            videoid         ид видео, по которым голосуют
-                            показать участников голосания по видео,
-                            каждый из участников на карте будет в рамке цвета,
-                            назначенного голосу (Vote.VOTES_IMAGE[<голос>][color]).
-                            Если подал несколько голосов, то без рамки
-                Вместе с videoid может прийти:
-                    source, по умолчанию 'yt' (youtube)
-
-            uuid            показать координаты пользователя с этим uuid.
-                            Вместе с этим в выводе могут быть, при наличии параметров
-                            participants и/или owned и другие пользователи
-            participants    (on или пусто)
-                            показать активных пользователей (не родственников, точнее
-                            not owned профили)
-            owned          (on или пусто)
-                            показать не активных пользователей (например, родственников, точнее
-                            owned профили)
-
-        Пример выходных данных:
-        {
-            "first_name": "",                   // имя запрошенного пользователя, при параметре uuid
-                                                // или uuid_trustees
-            "found_coordinates": false,         // нашелся ли пользователь, при параметре uuid
-                                                // или uuid_trustees
-            "address": null,                    // текстовый адрес пользователя, при параметре uuid
-                                                // или uuid_trustees
-            "lat_avg": 50.94895896995098,       // где центрировать карту. При параметре uuid это
-            "lng_avg": 33.90609824676903,       // адрес найденного с координатами пользователя с uuid,
-                                                // иначе центр относительно всех найденных
-
-            "chat_title": null,                 // Название телеграм группы/канала, где ищем пользователей
-            "chat_type": null,                  // тип телеграм группы/канала, где ищем пользоватей,
-                                                // группа или канал
-            "offer_question": null,             // вопрос телеграм опроса- предложения (offer)
-            "offer_deeplink": null,             // ссылка на опроса- предложение (offer) в телеграме
-            "legend": "строка",                 // если задан offer_id:
-                                                //      html таблица легенды для цветов ответов, две колонки:
-                                                //          - фото неизвестного в рамке цвета
-                                                //          - ответ, соответствующий цвету
-                                                // если задан uuid_trustees:
-                                                //      пользователи:
-                                                //          - опрашиваемый пользователь
-                                                //          - те, кто ему доверяет
-                                                //          - те, кто ему не доверяет
-                                                // если задан videoid:
-                                                //      html таблица легенды для цветов голосов, две колонки:
-                                                //          - фото неизвестного в рамке цвета
-                                                //          - голос, соответствующий цвету
-            "video_title",                      // заголовок видео: ссылка на голосование по видео
-                    Возможны еще параметры:
-                        from:   с такой секунды видео начинать
-                        to:     по какую секунду видео показывать
-
-            "points": [
-                {
-                    // Информация по каждому найденному пользователю с координатами
-                    "latitude": 54.208471,
-                    "longitude": 28.500346,
-                    // имя фамилия
-                    "title": "(0) Eugene S",
-                    // что выскочит на карте при щелчке по пользователю
-                    "popup": "<table>
-                                <tr>
-                                    <td><img src=\"http://api.x.org/thumb/profile-photo/2023/04/12/1484/photo_cUfiWNv.jpg/64x64~crop~12.jpg\" width=64 height=64></td>
-                                    <td> Eugene S (0)<br /> <a href=\"https://t.me/DevBlagoBot?start=cf047bf6-ade6-4167-82e1-a266b43b96e0\" target=\"_blank\">Профиль</a>
-                                        <br /><br /> <a href=\"http://x.org/genesis/relations?user_uuid_trusts=cf047bf6-ade6-4167-82e1-a266b43b96e0\" target=\"_blank\">Доверия</a>
-                                        </td>
-                                    </tr></table>",
-                    // это пользователь, которого искали с параметром uuid?
-                    "is_of_found_user": false,
-                    "icon": "http://api.x.org/thumb/profile-photo/2023/04/12/1484/photo.jpg/32x32~crop~12.jpg",
-                    "size_icon": 32
-                },
-                ...
-            ]
-        }
-        Если не нашли никого, что показать на карте, она центрируется по Москве
-        """
 
         bot_username = self.get_bot_username()
         self.bot_username = bot_username
@@ -2170,6 +2194,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         #
         found_coordinates = False
 
+        meet = False
         first_name = ''
         gender = ''
         address = None
@@ -2182,6 +2207,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         offer_reply_html = video_reply_html = ''
         uuid_trustees = None
         qs = None
+        title_template = '%(full_name)s (%(trust_count)s)'
         popup = (
             '<table>'
             '<tr>'
@@ -2213,6 +2239,8 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 pass
         elif request.GET.get('chat_id'):
             chat_id = request.GET['chat_id']
+        elif request.GET.get('meet'):
+            meet = True
         elif request.GET.get('offer_id'):
             offer_id = request.GET['offer_id']
         elif request.GET.get('uuid_trustees'):
@@ -2237,6 +2265,70 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         if chat_id and chat_title:
             qs = Profile.objects.filter(q).select_related('user').distinct()
 
+        elif meet:
+            list_m = []
+            list_f = []
+            # Участники игры должны указывать пол, д.р. и место
+            #
+            for p in Profile.objects.filter(
+                    did_meet__isnull=False,
+                    dob__isnull=False,
+                    gender__isnull=False,
+                    latitude__isnull=False,
+                    longitude__isnull=False,
+                ).order_by('dob').select_related('user').distinct():
+                dict_user = self.popup_data(p)
+                points.append(dict(
+                    latitude=p.latitude,
+                    longitude=p.longitude,
+                    title=title_template % dict_user,
+                    popup=popup % dict_user,
+                    icon=dict_user['url_photo_icon'],
+                    is_of_found_user=False,
+                ))
+                if p.gender == GenderMixin.GENDER_MALE:
+                    list_m.append(dict_user)
+                elif p.gender == GenderMixin.GENDER_FEMALE:
+                    list_f.append(dict_user)
+                else:
+                    # fool proof
+                    continue
+            len_m = len(list_m)
+            len_f = len(list_f)
+            if len_m or len_f:
+                legend = (
+                    '<br />'
+                    '<table style="border-spacing: 0;border-top: 2px solid;width: 100%;">'
+                    '<col width="40%" />'
+                    '<col width="10%" />'
+                    '<col width="10%" />'
+                    '<col width="40%" />'
+                    '<tr>'
+                        '<td style="text-align:center;border-bottom: 2px solid";">М</td>'
+                        '<td style="text-align:center;border-bottom: 2px solid;border-right: 1px solid;"></td>'
+                        '<td style="text-align:center;border-bottom: 2px solid";"></td>'
+                        '<td style="text-align:center;border-bottom: 2px solid;">Ж</td>'
+                    '</tr>'
+                )
+                legend_user = (
+                    '<tr style="border-bottom: 2px solid">'
+                        '<td align="left" style="border-bottom: 2px solid;">%(m)s</td>'
+                        '<td style="text-align:center;border-bottom: 2px solid;border-right: 1px solid;">%(m_dob)s</td>'
+                        '<td style="text-align:center;border-bottom: 2px solid;">%(f_dob)s</td>'
+                        '<td align="right" style="border-bottom: 2px solid;"">%(f)s</td>'
+                    '</tr>'
+                )
+
+                for i in range(max(len_m, len_f)):
+                    d = dict(m='', m_dob='', f='', f_dob='')
+                    if i < len_m:
+                        d['m'] = popup % list_m[i]
+                        d['m_dob'] = list_m[i]['dob']
+                    if i < len_f:
+                        d['f'] = popup % list_f[i]
+                        d['f_dob'] = list_f[i]['dob']
+                    legend += legend_user % d
+                legend += '</table><br /><br />'
         elif offer_id:
             try:
                 offer = Offer.objects.select_related('owner', 'owner__profile').get(uuid=offer_id)
@@ -2260,7 +2352,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     raise SkipException
                 first_name = found_user.first_name
                 gender = found_profile.gender
-                title_template = '(%(trust_count)s) %(full_name)s'
                 found_coordinates = bool(found_profile.latitude and found_profile.longitude)
                 if found_coordinates:
                     lat_avg = found_profile.latitude
@@ -2316,7 +2407,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         legend_attitude_trust_title = 'Ему доверяют:'
                         legend_attitude_mistrust_title = 'Ему не доверяют:'
                         legend_attitude_acq_title = 'С ним знакомы:'
-                title_template = '%(full_name)s (%(trust_count)s)'
                 for cs in CurrentState.objects.filter(
                             user_to=found_profile.user,
                             is_reverse=False,
@@ -2732,7 +2822,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     frame = 0
                     method = 'crop'
                 answer_text=''
-                title_template = '(%(trust_count)s) %(full_name)s'
             if offer_id or profile.latitude is not None and profile.longitude is not None:
                 dict_user = dict(
                     full_name=profile.user.first_name,
