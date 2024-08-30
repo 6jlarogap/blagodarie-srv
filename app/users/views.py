@@ -2195,6 +2195,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         found_coordinates = False
 
         meet = False
+        num_all = 0
         first_name = ''
         gender = ''
         address = None
@@ -2273,19 +2274,17 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             for p in Profile.objects.filter(
                     did_meet__isnull=False,
                     dob__isnull=False,
-                    gender__isnull=False,
-                    latitude__isnull=False,
-                    longitude__isnull=False,
                 ).order_by('dob').select_related('user').distinct():
                 dict_user = self.popup_data(p)
-                points.append(dict(
-                    latitude=p.latitude,
-                    longitude=p.longitude,
-                    title=title_template % dict_user,
-                    popup=popup % dict_user,
-                    icon=dict_user['url_photo_icon'],
-                    is_of_found_user=False,
-                ))
+                if p.latitude is not None and p.longitude is not None:
+                    points.append(dict(
+                        latitude=p.latitude,
+                        longitude=p.longitude,
+                        title=title_template % dict_user,
+                        popup=popup % dict_user,
+                        icon=dict_user['url_photo_icon'],
+                        is_of_found_user=False,
+                    ))
                 if p.gender == GenderMixin.GENDER_MALE:
                     list_m.append(dict_user)
                 elif p.gender == GenderMixin.GENDER_FEMALE:
@@ -2293,6 +2292,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 else:
                     # fool proof
                     continue
+                num_all += 1
             len_m = len(list_m)
             len_f = len(list_f)
             if len_m or len_f:
@@ -2954,6 +2954,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             offer_deeplink=offer_deeplink,
             legend=legend,
             video_title=video_title,
+            num_all=num_all,
         )
         if uuid_trustees:
             data.update(
