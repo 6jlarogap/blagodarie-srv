@@ -1426,8 +1426,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
             profile = user.profile
             self.save_photo(request, profile)
             fmt = request.data.get('fmt')
-            if relation in ('new_is_father', 'new_is_mother', 'link_is_father', 'link_is_mother') and \
-               fmt == '3d-force-graph':
+            if link_id and fmt == '3d-force-graph':
                 data = profile.data_dict(request, fmt=fmt, thumb=dict(mark_dead=True))
             else:
                 data = profile.data_dict(request)
