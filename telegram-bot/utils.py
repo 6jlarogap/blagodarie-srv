@@ -1780,11 +1780,11 @@ class Misc(object):
     @classmethod
     def check_location_str(cls, message_text):
         latitude, longitude = None, None
-        m = re.search(r'([\-\+]?\d+(?:\.\d*)?)\s*\,\s*([\-\+]?\d+(?:\.\d*)?)', message_text)
+        m = re.search(r'([\-\+]?\d+(?:[\.\,]\d*)?)\s*\,\s*([\-\+]?\d+(?:[\.\,]\d*)?)', message_text)
         if m:
             try:
-                latitude_ = float(m.group(1))
-                longitude_ = float(m.group(2))
+                latitude_ = float(m.group(1).replace(',', '.'))
+                longitude_ = float(m.group(2).replace(',', '.'))
                 if -90 <= latitude_ <= 90 and -180 <= longitude_ <= 180:
                     latitude = latitude_
                     longitude = longitude_

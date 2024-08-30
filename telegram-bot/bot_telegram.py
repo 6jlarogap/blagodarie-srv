@@ -4815,7 +4815,7 @@ async def process_callback_meet_do_ask_gender(callback_query: types.CallbackQuer
 
 async def meet_do_or_revoke(data):
     if data['what'] == KeyboardType.MEET_DO:
-        text_to_sender = 'Поздравляем! Вы стали участником игры знакомств'
+        text_to_sender = 'Вы участвуете в игре знакомств!'
         did_meet='1',
     else:
         text_to_sender = 'Вы вышли из игры знакомств. Нам вас будет не хватать.'
@@ -5280,8 +5280,7 @@ async def put_location(message, state, show_card=False):
                             'Ожидались: координаты <u><i>широта, долгота</i></u>, '
                             'где <i>широта</i> и <i>долгота</i> - числа, возможные для координат\n'
                             '<b>Повторите сначала!</b>'
-                        )
-                        % (Misc.PROMPT_LOCATION, Misc.PROMPT_CANCEL_LOCATION,),
+                        ),
                         reply_markup=reply_markup
                     )
         if latitude is not None and longitude is not None:
