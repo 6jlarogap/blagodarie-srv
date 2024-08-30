@@ -2269,11 +2269,12 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         elif meet:
             list_m = []
             list_f = []
-            # Участники игры должны указывать пол, д.р. и место
+            # Участники игры должны указывать пол, д.р. и место,
+            # однако не исключаем, что место и д.р. затёрли
             #
             for p in Profile.objects.filter(
                     did_meet__isnull=False,
-                    dob__isnull=False,
+                    gender__isnull=False,
                 ).order_by('dob').select_related('user').distinct():
                 dict_user = self.popup_data(p)
                 if p.latitude is not None and p.longitude is not None:
