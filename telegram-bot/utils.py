@@ -234,6 +234,7 @@ class KeyboardType(object):
     MEET_GENDER_MALE = 59
     MEET_GENDER_FEMALE = 60
 
+    MEET_INVITE = 61
 
     # Разделитель данных в call back data
     #

@@ -529,25 +529,28 @@ async def echo_help_to_bot(message: types.Message, state: FSMContext):
 async def echo_meet(message: types.Message, state: FSMContext):
     command = message.text.strip('/').strip().lower()
     status, profile = await Misc.post_tg_user(message.from_user)
-    command_to_data = dict(
-        meet= dict(prefix='m',  caption='Знакомьтесь: %(link)s'),
-        trust=dict(prefix='t',  caption='Доверяю %(link)s'),
-        thank=dict(prefix='th', caption='Благодарить %(link)s'),
-    )
     if status == 200:
         bot_data = await bot.get_me()
-        url = (
-            f'https://t.me/{bot_data["username"]}'
-            f'?start={command_to_data[command]["prefix"]}-{profile["username"]}'
-        )
-        link = f'<a href="{url}">{profile["first_name"]}</a>'
-        caption = command_to_data[command]["caption"] % dict(link=link)
-        bytes_io = await Misc.get_qrcode(profile, url)
-        await bot.send_photo(
-            chat_id=message.from_user.id,
-            photo=bytes_io,
-            caption=caption,
-        )
+        if command == 'meet':
+            data = dict(profile_from = profile)
+            await process_meet_from_deeplink_and_command(message.from_user, data, bot_data)
+        else:
+            command_to_data = dict(
+                trust=dict(prefix='t',  caption='Доверяю %(link)s'),
+                thank=dict(prefix='th', caption='Благодарить %(link)s'),
+            )
+            url = (
+                f'https://t.me/{bot_data["username"]}'
+                f'?start={command_to_data[command]["prefix"]}-{profile["username"]}'
+            )
+            link = f'<a href="{url}">{profile["first_name"]}</a>'
+            caption = command_to_data[command]["caption"] % dict(link=link)
+            bytes_io = await Misc.get_qrcode(profile, url)
+            await bot.send_photo(
+                chat_id=message.from_user.id,
+                photo=bytes_io,
+                caption=caption,
+            )
 
 
 @dp.message_handler(
@@ -3201,10 +3204,10 @@ async def process_callback_gender(callback_query: types.CallbackQuery, state: FS
     state = dp.current_state()
     async with state.proxy() as data:
         data['uuid'] = uuid
-    his_her = Misc.his_her(response_uuid) if response_uuid['owner'] else 'Ваш'
+    your = '' if response_uuid['owner'] else 'Ваш '
     prompt_gender = (
         f'<b>{response_uuid["first_name"]}</b>.\n\n'
-        f'Уточните {his_her} пол:'
+        f'Уточните {your}пол:'
     )
     await callback_query.message.reply(
         prompt_gender,
@@ -4550,26 +4553,38 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
     await put_thank_etc(tg_user_sender, data=data_, state=None)
 
 
-async def process_meet_from_deeplink(tg_user_sender, data, bot_data):
-    # Вызывается только из meet deeplink'a
+async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data):
+    # Вызывается из meet deeplink'a и команды /meet
     #
     profile_from = data['profile_from']
-    profile_to = data['profile_to']
-    full_name_to_link = Misc.get_deeplink_with_name(profile_to, bot_data, plus_trusts=True)
-    if data['attitude_current'] == Attitude.ACQ:
-        text1 = f'Вы уже знакомы с {full_name_to_link}'
-    elif data['attitude_current'] == Attitude.TRUST:
-        text1 = f'Вы уже знакомы и доверяете {full_name_to_link}'
-    else:
-        text1 = f'Вы установили знакомство с {full_name_to_link}'
+    profile_to = data.get('profile_to')
+    text1 = ''
+    if profile_to and 'attitude_current' in data:
+        # Это из meet диплинка
+        full_name_to_link = Misc.get_deeplink_with_name(profile_to, bot_data, plus_trusts=True)
+        if data['attitude_current'] == Attitude.ACQ:
+            text1 = f'Вы уже знакомы с {full_name_to_link}'
+        elif data['attitude_current'] == Attitude.TRUST:
+            text1 = f'Вы уже знакомы и доверяете {full_name_to_link}'
+        else:
+            text1 = f'Вы установили знакомство с {full_name_to_link}'
     if profile_from['did_meet']:
-        status_template, text2 = await Misc.get_template('message_meet_revoke')
-        if status_template != 200 or not text2:
-            text2 = 'Чтобы прекратить участие в игре знакомств, нажмите "Выйти"'
+        text2 = 'Вы являетесь участником игры знакомств. Чтобы выйти из игры - нажмите "Выйти"'
     else:
-        status_template, text2 = await Misc.get_template('message_meet_do')
-        if status_template != 200 or not text2:
-            text2 = 'Добро пожаловать в игру знакомств. Чтобы участвовать, нажмите кнопку'
+        text2 = (
+            'Добро пожаловать в игру знакомств!\n'
+            'Цель игры - соединить одиноких людей.\n\n'
+            'Чтобы войти в игру - нажмите "Участвовать" '
+        )
+        if not profile_from['gender'] or not profile_from['dob'] or \
+            profile_from['latitude'] is None or profile_from['longitude'] is None:
+            text2 += '- Вам будет предложено заполнить анкетные данные - '
+        text2 += (
+            'и Вы станете получать предложения новых встреч!\n\n'
+            'Чтобы победить в игре - нужно посещать встречи знакомств - '
+            'и там найти свою вторую половинку!\n\n'
+            'Успехов!'
+        )
     callback_data_template = Misc.CALLBACK_DATA_SID_TEMPLATE + '%(sid2)s%(sep)s'
     reply_markup = InlineKeyboardMarkup()
     inline_btn = InlineKeyboardButton(
@@ -4577,13 +4592,13 @@ async def process_meet_from_deeplink(tg_user_sender, data, bot_data):
         callback_data=callback_data_template % dict(
         keyboard_type=KeyboardType.MEET_REVOKE if profile_from['did_meet'] else KeyboardType.MEET_DO,
         sid=profile_from['username'],
-        sid2=profile_to['username'],
+        sid2=profile_to['username'] if profile_to else '',
         sep=KeyboardType.SEP,
     ))
     reply_markup.row(inline_btn)
     await bot.send_message(
         tg_user_sender.id,
-        text=f'{text1}\n\n{text2}',
+        text=f'{text1}\n\n{text2}' if text1 else text2,
         disable_web_page_preview=True,
         reply_markup=reply_markup,
     )
@@ -4746,11 +4761,10 @@ async def process_callback_meet_do_or_revoke(callback_query: types.CallbackQuery
         username_to = code[2]
     except IndexError:
         pass
-    if not username_to:
-        return
     data_this = dict(
         what=what,
         uuid=profile_from['uuid'],
+        username_from=profile_from['username'],
         username_to=username_to,
         gender=profile_from['gender'],
         dob=profile_from['dob'],
@@ -4815,11 +4829,20 @@ async def process_callback_meet_do_ask_gender(callback_query: types.CallbackQuer
 
 async def meet_do_or_revoke(data):
     if data['what'] == KeyboardType.MEET_DO:
-        text_to_sender = 'Вы участвуете в игре знакомств!'
-        did_meet='1',
+        text_to_sender = (
+            'Вы участвуете в игре знакомств!\n\n'
+            'Вы можете пригласить в игру знакомого Вам человека, '
+            'нажав на "Пригласить в игру": получите сообщение, '
+            'которое можете ему (ей) переслать\n\n'
+            'Для выхода из игры нажмите "Выйти"'
+        )
+        did_meet = '1'
     else:
-        text_to_sender = 'Вы вышли из игры знакомств. Нам вас будет не хватать.'
-        did_meet='',
+        text_to_sender = (
+            'Вы вышли из игры знакомств. Нам вас будет не хватать.\n\n'
+            'Для участия в игре знакомств: команда /meet'
+        )
+        did_meet = ''
     parms = dict(did_meet=did_meet)
     if data['what'] == KeyboardType.MEET_DO:
         fields = ('uuid', 'username_to', 'gender', 'dob', 'latitude', 'longitude',)
@@ -4830,10 +4853,52 @@ async def meet_do_or_revoke(data):
             parms[k] = data[k]
     status, response = await Misc.put_user_properties(**parms)
     if status == 200:
+        reply_markup = None
+        if did_meet:
+            reply_markup = InlineKeyboardMarkup()
+            callback_data_template = Misc.CALLBACK_DATA_SID_TEMPLATE + '%(sid2)s%(sep)s'
+            inline_btn_quit = InlineKeyboardButton(
+                'Выйти',
+                callback_data=callback_data_template % dict(
+                keyboard_type=KeyboardType.MEET_REVOKE,
+                sid=data['username_from'],
+                sid2=data['username_to'],
+                sep=KeyboardType.SEP,
+            ))
+            inline_btn_invite = InlineKeyboardButton(
+                'Пригласить в игру',
+                callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
+                keyboard_type=KeyboardType.MEET_INVITE,
+                sep=KeyboardType.SEP,
+            ))
+            reply_markup.row(inline_btn_invite, inline_btn_quit, )
         await bot.send_message(
             data['tg_user_sender_id'],
             text=text_to_sender,
             disable_web_page_preview=True,
+            reply_markup=reply_markup,
+        )
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.MEET_INVITE,
+        KeyboardType.SEP,
+    ), c.data),
+    state=None,
+    )
+async def process_callback_meet_invite(callback_query: types.CallbackQuery, state: FSMContext):
+    status, profile = await Misc.post_tg_user(callback_query.from_user)
+    if status == 200:
+        bot_data = await bot.get_me()
+        url = f'https://t.me/{bot_data["username"]}?start=m-{profile["username"]}'
+        link = Misc.get_html_a(url, 'Перейти')
+        caption = f'{profile["first_name"]} приглашает Вас с игру знакомств. {link}'
+        bytes_io = await Misc.get_qrcode(profile, url)
+        await bot.send_photo(
+            chat_id=callback_query.from_user.id,
+            photo=bytes_io,
+            caption=caption,
         )
 
 
@@ -4859,7 +4924,7 @@ async def put_thank_etc(tg_user_sender, data, state=None):
         if data['operation_type_id'] == OperationType.ACQ and \
            attitude_current in (Attitude.ACQ, Attitude.TRUST):
             # А если из meet, то там своя специфика
-            await process_meet_from_deeplink(tg_user_sender, data, bot_data)
+            await process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
             return
 
     profile_from = data['profile_from']
@@ -4922,15 +4987,6 @@ async def put_thank_etc(tg_user_sender, data, state=None):
         elif post_op['operation_type_id'] == OperationType.ACQ:
             text = f'Вы уже знакомы с {full_name_to_link}'
 
-    if (operation_done or operation_already) and \
-       'attitude_current' in data and \
-       data['operation_type_id'] == OperationType.ACQ:
-        if operation_done:
-            data['profile_from'] = response['profile_from']
-            data['profile_to'] = response['profile_to']
-        await process_meet_from_deeplink(tg_user_sender, data, bot_data)
-        return
-
     if operation_done and text:
         full_name_from_link = Misc.get_deeplink_with_name(profile_from, bot_data, plus_trusts=True)
         full_name_to_link = Misc.get_deeplink_with_name(profile_to, bot_data, plus_trusts=True)
@@ -4940,6 +4996,25 @@ async def put_thank_etc(tg_user_sender, data, state=None):
             trusts_or_thanks=trusts_or_thanks,
             thanks_count_str=thanks_count_str,
         )
+
+    if (operation_done or operation_already) and \
+       'attitude_current' in data and \
+       data['operation_type_id'] == OperationType.ACQ:
+        if operation_done and text:
+            data['profile_from'] = response['profile_from']
+            data['profile_to'] = response['profile_to']
+            for tgd in data['profile_to']['tg_data']:
+                try:
+                    await bot.send_message(
+                        tgd['tg_uid'],
+                        text,
+                        disable_web_page_preview=True,
+                        disable_notification=True,
+                    )
+                except (ChatNotFound, CantInitiateConversation):
+                    pass
+        await process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
+        return
 
     if not text and not operation_done:
         if status == 200:

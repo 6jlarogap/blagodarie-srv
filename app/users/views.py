@@ -1537,15 +1537,12 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                         user_to = User.objects.get(username=username_to)
                     except User.DoesNotExist:
                         pass
-                if user_to:
-                    Journal.objects.create(
-                        user_from=user,
-                        operationtype_id=operationtype_id,
-                        insert_timestamp=unix_time_now,
-                        user_to=user_to
+                Journal.objects.create(
+                    user_from=user,
+                    operationtype_id=operationtype_id,
+                    insert_timestamp=unix_time_now,
+                    user_to=user_to
                     )
-                else:
-                    raise ServiceException('Не задан или найден с кем познакомился')
 
             user.save()
             profile.save()
