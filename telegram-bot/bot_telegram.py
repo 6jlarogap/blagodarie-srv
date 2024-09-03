@@ -4569,7 +4569,7 @@ async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
         else:
             text1 = f'Вы установили знакомство с {full_name_to_link}'
     if profile_from['did_meet']:
-        text2 = 'Вы являетесь участником игры знакомств. Чтобы выйти из игры - нажмите "Выйти"'
+        text2 = Misc.PROMT_MEET_DOING
     else:
         text2 = (
             'Добро пожаловать в игру знакомств!\n'
@@ -4587,7 +4587,7 @@ async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
         )
     callback_data_template = Misc.CALLBACK_DATA_SID_TEMPLATE + '%(sid2)s%(sep)s'
     reply_markup = InlineKeyboardMarkup()
-    inline_btn = InlineKeyboardButton(
+    inline_btn_do_or_revoke = InlineKeyboardButton(
         'Выйти' if profile_from['did_meet'] else 'Участвовать',
         callback_data=callback_data_template % dict(
         keyboard_type=KeyboardType.MEET_REVOKE if profile_from['did_meet'] else KeyboardType.MEET_DO,
@@ -4595,7 +4595,16 @@ async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
         sid2=profile_to['username'] if profile_to else '',
         sep=KeyboardType.SEP,
     ))
-    reply_markup.row(inline_btn)
+    buttons = [inline_btn_do_or_revoke]
+    if profile_from['did_meet']:
+        inline_btn_invite = InlineKeyboardButton(
+            'Пригласить в игру',
+            callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
+            keyboard_type=KeyboardType.MEET_INVITE,
+            sep=KeyboardType.SEP,
+        ))
+        buttons = [inline_btn_invite] + buttons
+    reply_markup.row(*buttons)
     await bot.send_message(
         tg_user_sender.id,
         text=f'{text1}\n\n{text2}' if text1 else text2,
@@ -4829,13 +4838,7 @@ async def process_callback_meet_do_ask_gender(callback_query: types.CallbackQuer
 
 async def meet_do_or_revoke(data):
     if data['what'] == KeyboardType.MEET_DO:
-        text_to_sender = (
-            'Вы участвуете в игре знакомств!\n\n'
-            'Вы можете пригласить в игру знакомого Вам человека, '
-            'нажав на "Пригласить в игру": получите сообщение, '
-            'которое можете ему (ей) переслать\n\n'
-            'Для выхода из игры нажмите "Выйти"'
-        )
+        text_to_sender = Misc.PROMT_MEET_DOING
         did_meet = '1'
     else:
         text_to_sender = (
@@ -4892,8 +4895,8 @@ async def process_callback_meet_invite(callback_query: types.CallbackQuery, stat
     if status == 200:
         bot_data = await bot.get_me()
         url = f'https://t.me/{bot_data["username"]}?start=m-{profile["username"]}'
-        link = Misc.get_html_a(url, 'Перейти')
-        caption = f'{profile["first_name"]} приглашает Вас с игру знакомств. {link}'
+        link = Misc.get_html_a(url, 'Перейти...')
+        caption = f'{profile["first_name"]} приглашает Вас с игру знакомств! {link}'
         bytes_io = await Misc.get_qrcode(profile, url)
         await bot.send_photo(
             chat_id=callback_query.from_user.id,
