@@ -2126,7 +2126,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
     def popup_data(self, profile,
             color=None,
             frame=0,
-            thumb_size=THUMB_SIZE_POPUP,
+            thumb_size_popup=THUMB_SIZE_POPUP,
             thumb_size_icon=THUMB_SIZE_ICON
         ):
         url_profile = self.profile_url_by_uuid(self.request, profile.uuid, fmt=self.FMT)
@@ -2158,8 +2158,8 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             url_photo_popup=Profile.image_thumb(
                 self.request, profile.photo,
                 method=method,
-                width=thumb_size + frame * 2,
-                height=thumb_size + frame * 2,
+                width=thumb_size_popup + frame * 2,
+                height=thumb_size_popup + frame * 2,
                 put_default_avatar=True,
                 default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
             ),
@@ -2171,7 +2171,8 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 put_default_avatar=True,
                 default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
             ),
-            thumb_size_popup = thumb_size,
+            thumb_size_popup = thumb_size_popup + frame * 2,
+            thumb_size_icon = thumb_size_icon + frame * 2,
             video_reply_html='',
             offer_reply_html='',
             link_on_map=link_on_map,
@@ -2281,6 +2282,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         popup=popup % dict_user,
                         icon=dict_user['url_photo_icon'],
                         is_of_found_user=False,
+                        size_icon=dict_user['thumb_size_icon'],
                     ))
                 if p.gender == GenderMixin.GENDER_MALE:
                     list_m.append(dict_user)
