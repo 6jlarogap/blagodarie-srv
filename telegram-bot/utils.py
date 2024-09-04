@@ -664,6 +664,15 @@ class Misc(object):
             reply += f'{comment}\n'
         if not response.get('is_org'):
             reply += cls.get_lifetime_str(response)
+            gender = '('
+            if response['gender'] == 'm':
+                gender += 'м'
+            elif response['gender'] == 'f':
+                gender += 'ж'
+            else:
+                gender += 'пол не задан'
+            gender += ')'
+            reply += f'{gender}\n'
         reply += (
             '\n'
             f'Доверий: {response["trust_count"]}\n'
