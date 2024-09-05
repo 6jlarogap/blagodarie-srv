@@ -2349,7 +2349,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     legend += legend_user % d
             legend += '</table><br /><br />'
             if in_rectangle:
-                return Response(data=dict(legend=legend), status=200)
+                return Response(data=dict(legend=legend, num_all=num_all,), status=200)
         elif offer_id:
             try:
                 offer = Offer.objects.select_related('owner', 'owner__profile').get(uuid=offer_id)
