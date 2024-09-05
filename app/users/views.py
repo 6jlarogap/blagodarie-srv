@@ -1988,6 +1988,10 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         показать участников этой группы/канала
 
         meet            on или другое не пустое, участники игры знакомств
+            Вместе с meet возможны:
+                lat_south, lat_north, lng_west, lng_east:
+                        координаты области, в которой карта.
+                        При этом возвращается только legend
 
         offer_id        ид опроса- предложения в телеграме,
                         показать участников опроса, как они голосовали,
@@ -2266,15 +2270,45 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         elif meet:
             list_m = []
             list_f = []
+            legend = (
+                '<br />'
+                '<table style="border-spacing: 0;border-top: 2px solid;width: 100%;">'
+                '<col width="40%" />'
+                '<col width="10%" />'
+                '<col width="10%" />'
+                '<col width="40%" />'
+                '<tr>'
+                    '<td style="text-align:center;border-bottom: 2px solid";">М</td>'
+                    '<td style="text-align:center;border-bottom: 2px solid;border-right: 1px solid;"></td>'
+                    '<td style="text-align:center;border-bottom: 2px solid";"></td>'
+                    '<td style="text-align:center;border-bottom: 2px solid;">Ж</td>'
+                '</tr>'
+            )
             # Участники игры должны указывать пол, д.р. и место,
             # однако не исключаем, что место и д.р. затёрли
             #
-            for p in Profile.objects.filter(
-                    did_meet__isnull=False,
-                    gender__isnull=False,
-                ).order_by('dob').select_related('user').distinct():
+            q_meet = Q(did_meet__isnull=False, gender__isnull=False)
+            in_rectangle = False
+            try:
+                # это для обновлении легенды, когда меняются границы карты
+                #
+                lat_south = float(request.GET.get('lat_south'))
+                lat_north = float(request.GET.get('lat_north'))
+                lng_west = float(request.GET.get('lng_west'))
+                lng_east = float(request.GET.get('lng_east'))
+                in_rectangle = True
+            except (TypeError, ValueError):
+                pass
+            if in_rectangle:
+                q_meet &= Q(
+                    latitude__gte=lat_south,
+                    latitude__lte=lat_north,
+                    longitude__gte=lng_west,
+                    longitude__lte=lng_east,
+                )
+            for p in Profile.objects.filter(q_meet).order_by('dob').select_related('user').distinct():
                 dict_user = self.popup_data(p)
-                if p.latitude is not None and p.longitude is not None:
+                if p.latitude is not None and p.longitude is not None and not in_rectangle:
                     points.append(dict(
                         latitude=p.latitude,
                         longitude=p.longitude,
@@ -2294,21 +2328,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 num_all += 1
             len_m = len(list_m)
             len_f = len(list_f)
-            if len_m or len_f:
-                legend = (
-                    '<br />'
-                    '<table style="border-spacing: 0;border-top: 2px solid;width: 100%;">'
-                    '<col width="40%" />'
-                    '<col width="10%" />'
-                    '<col width="10%" />'
-                    '<col width="40%" />'
-                    '<tr>'
-                        '<td style="text-align:center;border-bottom: 2px solid";">М</td>'
-                        '<td style="text-align:center;border-bottom: 2px solid;border-right: 1px solid;"></td>'
-                        '<td style="text-align:center;border-bottom: 2px solid";"></td>'
-                        '<td style="text-align:center;border-bottom: 2px solid;">Ж</td>'
-                    '</tr>'
-                )
+            if len_f or len_m:
                 legend_user = (
                     '<tr style="border-bottom: 2px solid">'
                         '<td align="left" style="border-bottom: 2px solid;">%(m)s</td>'
@@ -2327,7 +2347,9 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         d['f'] = popup % list_f[i]
                         d['f_dob'] = list_f[i]['dob']
                     legend += legend_user % d
-                legend += '</table><br /><br />'
+            legend += '</table><br /><br />'
+            if in_rectangle:
+                return Response(data=dict(legend=legend), status=200)
         elif offer_id:
             try:
                 offer = Offer.objects.select_related('owner', 'owner__profile').get(uuid=offer_id)
