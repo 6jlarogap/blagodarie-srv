@@ -10,12 +10,13 @@ from django.db import transaction, IntegrityError, connection
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
-from django.db.models import Prefetch
+from django.db.models import Prefetch, F
 from django.http import Http404
 from django.contrib.postgres.search import SearchQuery, SearchVector
 from django.db.utils import ProgrammingError
 from django.core.validators import URLValidator
 from django.views.generic.base import View
+from django.db.models.functions import Lower, Collate
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -1166,11 +1167,15 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                             search_query = SearchQuery(query, search_type="raw", config='russian')
                             users = User.objects.annotate(
                                 search=search_vector
-                            ).select_related(*select_related).filter(q_active, search=search_query).distinct('id')
+                            ).select_related(*select_related).filter(q_active, search=search_query)
                         else:
                             # icontains
                             users = User.objects.filter(q_active, q_icontains
-                            ).select_related(*select_related).distinct('id')
+                            ).select_related(*select_related)
+                        # Collate & Lower: чтоб 'Бапинаева Карина' не была рашьше 'Бапинаев Сулейман'
+                        users = users.order_by(
+                                F('profile__dob').asc(nulls_first=True), Collate(Lower('first_name'), 'C')
+                            ).distinct()
                         if number:
                             users = users[from_:from_ + number]
                         for user in users:
@@ -1183,6 +1188,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                                 ))
                             data.append(item)
                     except ProgrammingError:
+                        raise
                         raise ServiceException(
                             'Неверная строка поиска',
                             'programming_error'
@@ -1193,7 +1199,8 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 if request.GET.get('name_iexact'):
                     q_uuid_owner &= Q(user__first_name__iexact=request.GET['name_iexact'])
                 users_selected = Profile.objects.filter(q_uuid_owner). \
-                    select_related('user', 'ability',).order_by('user__first_name',)
+                    select_related('user', 'ability',). \
+                    order_by(F('dob').asc(nulls_first=True), Collate(Lower('user__first_name'), 'C'))
                 for profile in users_selected:
                     data_item = profile.data_dict(request)
                     data_item.update(profile.owner_dict())

@@ -701,7 +701,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
         q = Q(user_to__isnull=False) & (Q(is_father=True) | Q(is_mother=True))
         for parent_link in self.user.currentstate_user_from_set.filter(q). \
                            select_related('user_to', 'user_to__profile', 'user_to__profile__ability'). \
-                           order_by('user_to__profile__dob').distinct():
+                           order_by(F('user_to__profile__dob').asc(nulls_first=True)).distinct():
             human = parent_link.user_to.profile.data_dict(request)
             if parent_link.is_child:
                 result['children'].append(human)
