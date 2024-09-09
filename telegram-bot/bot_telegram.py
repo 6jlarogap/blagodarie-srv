@@ -1269,8 +1269,9 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 tg_user_sender_id = tg_user_sender.id,
                 message_to_forward_id = None,
                 group_member=None,
-                attitude_current=attitude_current
             )
+            if d_trust['operation_type_id'] == OperationType.ACQ:
+                data.update(attitude_current=attitude_current)
             await put_thank_etc(tg_user_sender, data, state=state)
             return
 

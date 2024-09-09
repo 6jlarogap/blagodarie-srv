@@ -2202,6 +2202,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         #
         found_coordinates = False
 
+        graph =None
         meet = False
         num_all = 0
         first_name = ''
@@ -2313,6 +2314,9 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     longitude__gte=lng_west,
                     longitude__lte=lng_east,
                 )
+            nodes = []
+            links = []
+            user_pks = []
             for p in Profile.objects.filter(q_meet).order_by('dob').select_related('user').distinct():
                 dict_user = self.popup_data(p)
                 if p.latitude is not None and p.longitude is not None and not in_rectangle:
@@ -2333,6 +2337,22 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     # fool proof
                     continue
                 num_all += 1
+                nodes.append(p.data_dict(request=request, fmt='3d-force-graph'))
+                user_pks.append(p.user.pk)
+            q_connections = Q(attitude__isnull=False, user_to__isnull=False, is_reverse=False)
+            links = [
+                cs.data_dict(
+                    show_child=False,
+                    show_attitude=True,
+                    fmt='3d-force-graph',
+                ) \
+                for cs in CurrentState.objects.filter(
+                    attitude__isnull=False, is_reverse=False,
+                    user_from__in=user_pks, user_to__in=user_pks,
+                    ).select_related(
+                        'user_from__profile', 'user_to__profile',
+                    ).distinct()
+            ]
             len_m = len(list_m)
             len_f = len(list_f)
             if len_f or len_m:
@@ -2355,8 +2375,9 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         d['f_dob'] = list_f[i]['dob']
                     legend += legend_user % d
             legend += '</table><br /><br />'
+            graph = dict(nodes=nodes, links=links)
             if in_rectangle:
-                return Response(data=dict(legend=legend, num_all=num_all,), status=200)
+                return Response(data=dict(legend=legend, num_all=num_all, graph=graph), status=200)
         elif offer_id:
             try:
                 offer = Offer.objects.select_related('owner', 'owner__profile').get(uuid=offer_id)
@@ -2983,6 +3004,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             legend=legend,
             video_title=video_title,
             num_all=num_all,
+            graph=graph,
         )
         if uuid_trustees:
             data.update(
