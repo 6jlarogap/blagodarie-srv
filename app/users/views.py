@@ -2314,6 +2314,19 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     longitude__gte=lng_west,
                     longitude__lte=lng_east,
                 )
+            if request.GET.get('gender'):
+                q_meet &= Q(gender=request.GET['gender'])
+            today = datetime.date.today()
+            try:
+                d_older = datetime.date(today.year - int(request.GET.get('older')), 12, 31)
+                q_meet &= Q(dob__lte=d_older)
+            except (TypeError, ValueError,):
+                pass
+            try:
+                d_younger = datetime.date(today.year - int(request.GET.get('younger')), 1, 1)
+                q_meet &= Q(dob__gte=d_younger)
+            except (TypeError, ValueError,):
+                pass
             nodes = []
             links = []
             user_pks = []
