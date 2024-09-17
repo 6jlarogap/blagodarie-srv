@@ -2319,7 +2319,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             user_pks = []
             for p in Profile.objects.filter(q_meet).order_by('dob').select_related('user').distinct():
                 dict_user = self.popup_data(p)
-                if p.latitude is not None and p.longitude is not None and not in_rectangle:
+                if p.latitude is not None and p.longitude is not None:
                     points.append(dict(
                         latitude=p.latitude,
                         longitude=p.longitude,
@@ -2376,8 +2376,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     legend += legend_user % d
             legend += '</table><br /><br />'
             graph = dict(nodes=nodes, links=links)
-            if in_rectangle:
-                return Response(data=dict(legend=legend, num_all=num_all, graph=graph), status=200)
+
         elif offer_id:
             try:
                 offer = Offer.objects.select_related('owner', 'owner__profile').get(uuid=offer_id)
