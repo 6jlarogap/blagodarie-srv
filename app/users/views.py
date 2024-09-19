@@ -2326,6 +2326,8 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     is_of_found_user=False,
                     size_icon=offerer['user']['thumb_size_icon'],
                 )
+                lat_sum += offerer['user']['latitude']
+                lng_sum += offerer['user']['longitude']
                 for i in range(len(offerer['offers'])):
                     offer_popup += (
                         '<tr>'
