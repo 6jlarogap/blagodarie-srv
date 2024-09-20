@@ -4615,6 +4615,14 @@ async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
                 keep_user_data='on'
         ))
         reply_markup.row(inline_btn_map)
+        inline_btn_map_offer = InlineKeyboardButton(
+            'Карта предложений',
+            login_url=Misc.make_login_url(
+                redirect_path=settings.MAP_HOST + '/?offer=on',
+                bot_username=bot_data["username"],
+                keep_user_data='on'
+        ))
+        reply_markup.row(inline_btn_map_offer, )
     await bot.send_message(
         tg_user_sender.id,
         text=f'{text1}\n\n{text2}' if text1 else text2,
@@ -4878,6 +4886,13 @@ async def meet_do_or_revoke(data):
                 sid2=data['username_to'],
                 sep=KeyboardType.SEP,
             ))
+            inline_btn_invite = InlineKeyboardButton(
+                'Пригласить в игру',
+                callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
+                keyboard_type=KeyboardType.MEET_INVITE,
+                sep=KeyboardType.SEP,
+            ))
+            reply_markup.row(inline_btn_invite, inline_btn_quit, )
             bot_data = await bot.get_me()
             inline_btn_map = InlineKeyboardButton(
                 'Карта участников игры',
@@ -4886,14 +4901,15 @@ async def meet_do_or_revoke(data):
                     bot_username=bot_data["username"],
                     keep_user_data='on'
             ))
-            inline_btn_invite = InlineKeyboardButton(
-                'Пригласить в игру',
-                callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
-                keyboard_type=KeyboardType.MEET_INVITE,
-                sep=KeyboardType.SEP,
-            ))
-            reply_markup.row(inline_btn_invite, inline_btn_quit, )
             reply_markup.row(inline_btn_map, )
+            inline_btn_map_offer = InlineKeyboardButton(
+                'Карта предложений',
+                login_url=Misc.make_login_url(
+                    redirect_path=settings.MAP_HOST + '/?offer=on',
+                    bot_username=bot_data["username"],
+                    keep_user_data='on'
+            ))
+            reply_markup.row(inline_btn_map_offer, )
         await bot.send_message(
             data['tg_user_sender_id'],
             text=text_to_sender,
