@@ -1051,7 +1051,7 @@ class TgPollAnswer(BaseModelInsertTimestamp):
     def __str__(self):
         return '%s: %s' % (self.number, self.answer)
 
-class Offer(BaseModelInsertTimestamp):
+class Offer(BaseModelInsertTimestamp, GeoPointAddressModel):
     """
     Самодельный опрос в телеграме
 

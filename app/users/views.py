@@ -2284,63 +2284,54 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             qs = Profile.objects.filter(q).select_related('user').distinct()
 
         elif offer_on:
-            offerers = dict()
-            for offer in Offer.objects.filter(
+            q_offer_geo = Q(
+                latitude__isnull=False,
+                longitude__isnull=False
+            ) | Q(
                 owner__profile__latitude__isnull=False,
-                owner__profile__longitude__isnull=False,
-                closed_timestamp__isnull=True,
-            ).select_related('owner', 'owner__profile',
-            ).order_by('insert_timestamp'
-            ).distinct():
-                if offer.owner.pk not in offerers:
-                    offerers[offer.owner.pk] = dict(
-                        user=self.popup_data(offer.owner.profile),
-                        offers=[]
-                    )
-                offerers[offer.owner.pk]['offers'].append(
+                owner__profile__longitude__isnull=False
+            )
+            q_offer_geo &= Q(closed_timestamp__isnull=True)
+            user_pks = set()
+            for offer in Offer.objects.filter(q_offer_geo
+                ).select_related('owner', 'owner__profile',
+                ).distinct():
+                user_pks.add(offer.owner.pk)
+                offerer = self.popup_data(offer.owner.profile)
+                title = title_template % offerer
+                title_deeplink = f'<a href="{offerer["url_deeplink"]}" target="_blank">{title}</a>'
+                offer_popup = popup % offerer
+                offer_popup = offer_popup.replace('</table>', '')
+                latitude = offer.latitude or offerer['latitude']
+                longitude = offer.longitude or offerer['longitude']
+                point = dict(
+                    latitude=latitude,
+                    longitude=longitude,
+                    title=offer.question,
+                    icon=offerer['url_photo_icon'],
+                    is_of_found_user=False,
+                    size_icon=offerer['thumb_size_icon'],
+                )
+                lat_sum += latitude
+                lng_sum += longitude
+                question_deeplink = (
                     f'<a href="https://t.me/{self.bot_username}?start=offer-{offer.uuid}">'
                     f'{offer.question}</a>'
                 )
-            for pk in offerers:
-                offerer = offerers[pk]
-                title = title_template % offerer['user']
-                offer_popup = (
-                    '<table>'
-                        '<thead>'
-                            '<tr>'
-                                '<th valign=middle">'
-                                    '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
-                                '</td>'
-                                '<th valign=middle">'
-                                    f'<b><big>{title}</big></b><br /><br />'
-                                '</td>'
-                            '</tr>'
-                        '</thead>'
-                        '<tbody>'
-                ) % offerer['user']
-                point = dict(
-                    latitude=offerer['user']['latitude'],
-                    longitude=offerer['user']['longitude'],
-                    title=title,
-                    icon=offerer['user']['url_photo_icon'],
-                    is_of_found_user=False,
-                    size_icon=offerer['user']['thumb_size_icon'],
+                offer_popup += (
+                    '<tr>'
+                        '<td valign=middle>'
+                            'Опрос/<br>предложение:'
+                        '</td>'
+                        '<td valign=middle>'
+                            f'{question_deeplink}'
+                        '</td>'
+                    '</tr>'
                 )
-                lat_sum += offerer['user']['latitude']
-                lng_sum += offerer['user']['longitude']
-                for i in range(len(offerer['offers'])):
-                    offer_popup += (
-                        '<tr>'
-                            f'<td title="{title}">'
-                            '</td>'
-                            '<td valign=middle>'
-                                f'{offerer["offers"][i]}<br /><br />'
-                            '</td>'
-                        '</tr>'
-                    )
-                offer_popup += '</tbody></table>'
-                point.update(popup=offer_popup % offerer['user'])
+                offer_popup += '</table>'
+                point.update(popup=offer_popup % offerer)
                 points.append(point)
+            num_all = len(user_pks)
 
         elif meet:
             list_m = []

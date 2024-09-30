@@ -504,7 +504,10 @@ class GeoPointAddressModel(GeoPointModel):
             changed = True
             self.latitude = latitude
             self.longitude = longitude
-            self.address = GeoPointAddressModel.coordinates_to_address(self.latitude, self.longitude)
+            if latitude is not None and longitude is not None:
+                self.address = GeoPointAddressModel.coordinates_to_address(self.latitude, self.longitude)
+            else:
+                self.address = None
             if save:
                 self.save(update_fields=('latitude', 'longitude', 'address',))
         else:
