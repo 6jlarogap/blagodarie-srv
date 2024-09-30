@@ -113,6 +113,10 @@ class FSMinviteConfirm(StatesGroup):
     # приглашение с объединением собственного
     ask = State()
 
+class FSMofferPlace(StatesGroup):
+    # После создания оффера спросить о месте
+    ask = State()
+
 kwargs_bot_start = dict(
     token=settings.TOKEN,
     parse_mode=types.ParseMode.HTML,
@@ -297,34 +301,29 @@ async def process_command_offer(message: types.Message, state: FSMContext):
             ))
             return
 
-        create_offer_dict = dict(
-            tg_token=settings.TOKEN,
+        state = dp.current_state()
+        async with state.proxy() as data:
+            data['create_offer_dict'] = dict(
             user_uuid=response_sender['uuid'],
             question=question,
             answers=answers,
             is_multi=is_multi,
         )
-        logging.debug('create offer in api, payload: %s' % Misc.secret(create_offer_dict))
-        status, response = await Misc.api_request(
-            path='/api/offer',
-            method='post',
-            json=create_offer_dict,
+        inline_btn_pass = InlineKeyboardButton(
+            'Пропустить',
+            callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
+                keyboard_type=KeyboardType.OFFER_GEO_PASS,
+                sep=KeyboardType.SEP,
+        ))
+        reply_markup = InlineKeyboardMarkup()
+        reply_markup.row(inline_btn_pass, Misc.inline_button_cancel())
+        await FSMofferPlace.ask.set()
+        await message.reply(
+            Misc.PROMPT_OFFER_GEO,
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
         )
-        logging.debug('create offer in api, status: %s' % status)
-        logging.debug('create offer in api, response: %s' % response)
-        if status == 400 and response.get('message'):
-            err_mes = response['message']
-        elif status != 200:
-            err_mes = 'Ошибка сохранения опроса-предложения'
-        if err_mes:
-            await message.reply(err_mes, disable_web_page_preview=True,)
-            return
-        await message.reply('Создан опрос:', disable_web_page_preview=True,)
-        bot_data = await bot.get_me()
-        await show_offer(response_sender, response, message, bot_data)
 
-        if response_sender.get('created'):
-            await Misc.update_user_photo(bot, message.from_user, response_sender)
 
 
 @dp.message_handler(
@@ -4742,11 +4741,7 @@ async def process_message_meet_geo(message: types.Message, state: FSMContext):
             return
         latitude, longitude = Misc.check_location_str(message.text)
         if latitude is None or longitude is None:
-            error_message = (
-                'Ожидались: координаты <u><i>широта, долгота</i></u>, '
-                'где <i>широта</i> и <i>долгота</i> - числа, возможные для координат'
-            )
-            await meet_quest_geo(state, data, error_message=error_message)
+            await meet_quest_geo(state, data, error_message=Misc.MSG_ERR_GEO)
             return
         data['latitude'], data['longitude'] = latitude, longitude
         await state.finish()
@@ -5389,11 +5384,7 @@ async def put_location(message, state, show_card=False):
                 message_text = message_text.strip()
                 latitude, longitude = Misc.check_location_str(message_text)
                 if latitude is None or longitude is None:
-                    await message.reply((
-                            'Ожидались: координаты <u><i>широта, долгота</i></u>, '
-                            'где <i>широта</i> и <i>долгота</i> - числа, возможные для координат\n'
-                            '<b>Повторите сначала!</b>'
-                        ),
+                    await message.reply(Misc.MSG_ERR_GEO + '\n<b>Повторите сначала!</b>',
                         reply_markup=reply_markup
                     )
         if latitude is not None and longitude is not None:
@@ -5554,6 +5545,88 @@ async def answer_youtube_message(message, youtube_id, youtube_link):
         ))
     reply_markup.row(inline_btn_scheme, inline_btn_map)
     await message.reply(reply, reply_markup=reply_markup,)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=(ContentType.TEXT,),
+    state=FSMofferPlace.ask,
+)
+async def process_message_offer_geo(message: types.Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    async with state.proxy() as data:
+        status_from, profile_from = await Misc.post_tg_user(message.from_user)
+        if status_from != 200 or not data.get('create_offer_dict') or \
+           profile_from['uuid'] != data['create_offer_dict']['user_uuid']:
+            await state.finish()
+            return
+        latitude, longitude = Misc.check_location_str(message.text)
+        if latitude is None or longitude is None:
+            error_message = Misc.MSG_ERR_GEO + '\n\n' + Misc.PROMPT_OFFER_GEO
+            reply_markup = InlineKeyboardMarkup()
+            inline_btn_pass = InlineKeyboardButton(
+                'Пропустить',
+                callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
+                    keyboard_type=KeyboardType.OFFER_GEO_PASS,
+                    sep=KeyboardType.SEP,
+            ))
+            reply_markup.row(inline_btn_pass, Misc.inline_button_cancel())
+            await message.reply(
+                error_message,
+                reply_markup=reply_markup,
+                disable_web_page_preview=True,
+            )
+            return
+        data['create_offer_dict']['latitude'], data['create_offer_dict']['longitude'] = latitude, longitude
+        await state.finish()
+        await create_offer(data, profile_from, message)
+
+
+@dp.callback_query_handler(
+    lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
+        KeyboardType.OFFER_GEO_PASS,
+        KeyboardType.SEP,
+    ), c.data,
+    ), state=FSMofferPlace.ask,
+    )
+async def process_callback_offer_geo_pass(callback_query: types.CallbackQuery, state: FSMContext):
+    async with state.proxy() as data:
+        status_from, profile_from = await Misc.post_tg_user(callback_query.from_user)
+        if status_from != 200 or not data.get('create_offer_dict') or \
+           profile_from['uuid'] != data['create_offer_dict']['user_uuid']:
+            await state.finish()
+            return
+        await state.finish()
+        await create_offer(data, profile_from, callback_query.message)
+
+
+async def create_offer(data, response_sender, message):
+    create_offer_dict = data['create_offer_dict'].copy()
+    create_offer_dict.update(tg_token=settings.TOKEN)
+    state = dp.current_state()
+    if state:
+        await Misc.state_finish(state)
+    logging.debug('create offer in api, payload: %s' % Misc.secret(create_offer_dict))
+    status, response = await Misc.api_request(
+        path='/api/offer',
+        method='post',
+        json=create_offer_dict,
+    )
+    logging.debug('create offer in api, status: %s' % status)
+    logging.debug('create offer in api, response: %s' % response)
+    err_mes = ''
+    if status == 400 and response.get('message'):
+        err_mes = response['message']
+    elif status != 200:
+        err_mes = 'Ошибка сохранения опроса-предложения'
+    if err_mes:
+        await message.reply(err_mes, disable_web_page_preview=True,)
+        return
+    await message.reply('Создан опрос:', disable_web_page_preview=True,)
+    bot_data = await bot.get_me()
+    await show_offer(response_sender, response, message, bot_data)
+
 
 async def post_offer_answer(offer_uuid, user_from, answers):
     payload = dict(

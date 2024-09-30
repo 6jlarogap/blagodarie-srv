@@ -2284,14 +2284,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             qs = Profile.objects.filter(q).select_related('user').distinct()
 
         elif offer_on:
-            q_offer_geo = Q(
-                latitude__isnull=False,
-                longitude__isnull=False
-            ) | Q(
-                owner__profile__latitude__isnull=False,
-                owner__profile__longitude__isnull=False
-            )
-            q_offer_geo &= Q(closed_timestamp__isnull=True)
+            q_offer_geo = Q(latitude__isnull=False, longitude__isnull=False, closed_timestamp__isnull=True)
             user_pks = set()
             for offer in Offer.objects.filter(q_offer_geo
                 ).select_related('owner', 'owner__profile',
@@ -2301,19 +2294,17 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 title = title_template % offerer
                 title_deeplink = f'<a href="{offerer["url_deeplink"]}" target="_blank">{title}</a>'
                 offer_popup = popup % offerer
-                offer_popup = offer_popup.replace('</table>', '')
-                latitude = offer.latitude or offerer['latitude']
-                longitude = offer.longitude or offerer['longitude']
+                offer_popup = offer_popup[:-len('</table>')]
                 point = dict(
-                    latitude=latitude,
-                    longitude=longitude,
+                    latitude=offer.latitude,
+                    longitude=offer.longitude,
                     title=offer.question,
                     icon=offerer['url_photo_icon'],
                     is_of_found_user=False,
                     size_icon=offerer['thumb_size_icon'],
                 )
-                lat_sum += latitude
-                lng_sum += longitude
+                lat_sum += offer.latitude
+                lng_sum += offer.longitude
                 question_deeplink = (
                     f'<a href="https://t.me/{self.bot_username}?start=offer-{offer.uuid}">'
                     f'{offer.question}</a>'
@@ -3465,6 +3456,7 @@ class ApiOffer(UuidMixin, APIView):
                 question=request.data['question'],
                 is_multi=request.data['is_multi'],
             )
+            self.put_location(request, offer)
             offeranswer0 = OfferAnswer.objects.create(offer=offer, number=0, answer='')
             # Создатель опроса его видел. Ему присваивается "фиктивный" номер 0 ответа
             profile.offer_answers.add(offeranswer0)
@@ -3479,6 +3471,11 @@ class ApiOffer(UuidMixin, APIView):
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
+    def put_location(self, request, offer):
+        latitude = request.data.get('latitude')
+        longitude = request.data.get('longitude')
+        if latitude is not None and longitude is not None:
+            offer.put_geodata(latitude, longitude)
 
     def get(self, request):
         try:
