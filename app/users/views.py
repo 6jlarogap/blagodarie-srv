@@ -11,7 +11,6 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db.models.query_utils import Q
 from django.db.models import Prefetch, F
-from django.http import Http404
 from django.contrib.postgres.search import SearchQuery, SearchVector
 from django.db.utils import ProgrammingError
 from django.core.validators import URLValidator
@@ -24,7 +23,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework import status
-from rest_framework.exceptions import NotAuthenticated
+from rest_framework.exceptions import NotAuthenticated, NotFound, PermissionDenied
 
 from app.utils import ServiceException, SkipException, FrontendMixin, FromToCountMixin
 from app.models import UnclearDate, PhotoModel, GenderMixin
@@ -1722,7 +1721,7 @@ class ApiTestGoToLink(FrontendMixin, APIView):
             try:
                 user = User.objects.get(auth_token__key=temp_token)
             except User.DoesNotExist:
-                raise Http404()
+                raise NotFound()
             uuid = request.GET.get('uuid')
             if uuid:
                 path = '/profile/?id=%s' % uuid
@@ -2285,11 +2284,11 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
 
         elif offer_on:
             q_offer_geo = Q(latitude__isnull=False, longitude__isnull=False, closed_timestamp__isnull=True)
-            user_pks = set()
+            coords = set()
             for offer in Offer.objects.filter(q_offer_geo
                 ).select_related('owner', 'owner__profile',
                 ).distinct():
-                user_pks.add(offer.owner.pk)
+                coords.add(f'{offer.latitude}~{offer.longitude}')
                 offerer = self.popup_data(offer.owner.profile)
                 title = title_template % offerer
                 title_deeplink = f'<a href="{offerer["url_deeplink"]}" target="_blank">{title}</a>'
@@ -2322,7 +2321,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 offer_popup += '</table>'
                 point.update(popup=offer_popup % offerer)
                 points.append(point)
-            num_all = len(user_pks)
+            num_all = len(coords)
 
         elif meet:
             list_m = []
@@ -3419,7 +3418,15 @@ class ApiBotPollResults(TelegramApiMixin, APIView):
 api_bot_poll_results = ApiBotPollResults.as_view()
 
 
-class ApiOffer(UuidMixin, APIView):
+class ApiOfferMixin(object):
+    def put_location(self, request, offer):
+        latitude = request.data.get('latitude')
+        longitude = request.data.get('longitude')
+        if latitude is not None and longitude is not None:
+            offer.put_geodata(latitude, longitude)
+
+
+class ApiOffer(ApiOfferMixin, UuidMixin, APIView):
 
     @transaction.atomic
     def post(self, request):
@@ -3471,12 +3478,6 @@ class ApiOffer(UuidMixin, APIView):
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
-    def put_location(self, request, offer):
-        latitude = request.data.get('latitude')
-        longitude = request.data.get('longitude')
-        if latitude is not None and longitude is not None:
-            offer.put_geodata(latitude, longitude)
-
     def get(self, request):
         try:
             offer = Offer.objects.select_related('owner', 'owner__profile').get(uuid=request.GET.get('uuid'))
@@ -3491,7 +3492,7 @@ class ApiOffer(UuidMixin, APIView):
 api_offer = ApiOffer.as_view()
 
 
-class ApiOfferAnswer(UuidMixin, APIView):
+class ApiOfferAnswer(ApiOfferMixin, UuidMixin, APIView):
 
     @transaction.atomic
     def post(self, request):
@@ -3509,6 +3510,7 @@ class ApiOfferAnswer(UuidMixin, APIView):
                             // [-2] прийти не может, это сообщение участникам
                             // Если [-3], то остановить опрос
                             // Если [-4], то возобновить опрос
+                            // Если [-5], то задать координаты
         }
         В случае успеха на выходе словарь опроса с ответами, кто за что отвечал:
             offer.data_dict(request)
@@ -3534,14 +3536,26 @@ class ApiOfferAnswer(UuidMixin, APIView):
                 # numbers[0] == -2: пропускаем, это сообщение участникам
                 elif len(numbers) == 1 and numbers[0] == -3 and owner == offer.owner:
                     # Остановить опрос
-                    if not offer.closed_timestamp:
-                        offer.closed_timestamp = int(time.time())
-                        offer.save(update_fields=('closed_timestamp',))
-                elif len(numbers) == 1 and numbers[0] == -4 and owner == offer.owner:
+                    if owner == offer.owner:
+                        if not offer.closed_timestamp:
+                            offer.closed_timestamp = int(time.time())
+                            offer.save(update_fields=('closed_timestamp',))
+                    else:
+                        raise PermissionDenied()
+                elif len(numbers) == 1 and numbers[0] == -4:
                     # Возобновить опрос
-                    if offer.closed_timestamp:
-                        offer.closed_timestamp = None
-                        offer.save(update_fields=('closed_timestamp',))
+                    if owner == offer.owner:
+                        if offer.closed_timestamp:
+                            offer.closed_timestamp = None
+                            offer.save(update_fields=('closed_timestamp',))
+                    else:
+                        raise PermissionDenied()
+                elif len(numbers) == 1 and numbers[0] == -5:
+                    # Указать координаты
+                    if owner == offer.owner:
+                        self.put_location(request, offer)
+                    else:
+                        raise PermissionDenied()
                 elif not offer.closed_timestamp:
                     current_numbers = [a.number for a in profile.offer_answers.filter(offer=offer)]
                     if profile and set(current_numbers) != set(numbers):
@@ -4030,7 +4044,7 @@ class ApiShortIdView(View):
         try:
             user = User.objects.select_related('profile').get(username=short_id)
         except User.DoesNotExist:
-            raise Http404
+            raise NotFound()
         return redirect(settings.SHORT_ID_URL % user.profile.uuid)
 
 api_short_id = ApiShortIdView.as_view()

@@ -78,6 +78,9 @@ class FSMsendMessage(StatesGroup):
 class FSMsendMessageToOffer(StatesGroup):
     ask = State()
 
+class FSMOfferPutPlace(StatesGroup):
+    ask = State()
+
 class FSMfeedback(StatesGroup):
     ask = State()
 
@@ -5583,6 +5586,50 @@ async def process_message_offer_geo(message: types.Message, state: FSMContext):
         await create_offer(data, profile_from, message)
 
 
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    content_types=(ContentType.TEXT,),
+    state=FSMOfferPutPlace.ask,
+)
+async def process_message_offer_set_geo(message: types.Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    async with state.proxy() as data:
+        status_from, profile_from = await Misc.post_tg_user(message.from_user)
+        if data.get('uuid') and data.get('offer_uuid') and \
+           profile_from['uuid'] == data['uuid']:
+            latitude, longitude = Misc.check_location_str(message.text)
+            if latitude is None or longitude is None:
+                error_message = Misc.MSG_ERR_GEO + '\n\n' + Misc.PROMPT_OFFER_GEO
+                reply_markup = InlineKeyboardMarkup()
+                reply_markup.row(Misc.inline_button_cancel())
+                await message.reply(
+                    error_message,
+                    reply_markup=reply_markup,
+                    disable_web_page_preview=True,
+                )
+                return
+        status_answer, response_answer = await post_offer_answer(
+            data['offer_uuid'],
+            profile_from,
+            [-5],
+            latitude=latitude, longitude=longitude,
+        )
+        bot_data = await bot.get_me()
+        if status_answer == 200:
+            reply = (
+                f'Координаты <a href="t.me/{bot_data["username"]}'
+                f'?start=offer-{data["offer_uuid"]}">опроса</a> установлены'
+            )
+        else:
+            reply = Misc.MSG_ERROR_API
+        await message.reply(reply,
+            disable_web_page_preview=True,
+            disable_notification=True,
+        )
+    await state.finish()
+
+
 @dp.callback_query_handler(
     lambda c: c.data and re.search(Misc.RE_KEY_SEP % (
         KeyboardType.OFFER_GEO_PASS,
@@ -5628,13 +5675,14 @@ async def create_offer(data, response_sender, message):
     await show_offer(response_sender, response, message, bot_data)
 
 
-async def post_offer_answer(offer_uuid, user_from, answers):
+async def post_offer_answer(offer_uuid, user_from, answers, **kwargs):
     payload = dict(
         tg_token=settings.TOKEN,
         offer_uuid=offer_uuid,
         answers=answers,
         user_uuid=user_from and user_from['uuid'] or None,
     )
+    payload.update(kwargs)
     logging.debug('post_offer, payload: %s' % Misc.secret(payload))
     status, response = await Misc.api_request(
         path='/api/offer/answer',
@@ -5766,6 +5814,12 @@ def markup_offer(user_from, offer, message):
             )
         reply_markup.row(inline_btn_answer)
 
+        callback_data_dict.update(number=-5)
+        inline_btn_answer = InlineKeyboardButton(
+            'Задать координаты',
+            callback_data=callback_data_template % callback_data_dict
+        )
+        reply_markup.row(inline_btn_answer)
     return reply_markup
 
 @dp.message_handler(
@@ -5906,6 +5960,7 @@ async def show_offer(user_from, offer, message, bot_data):
         #     -2:   сообщение, пока доступно только владельцу опроса
         #     -3:   остановить опрос
         #     -4:   возобновить опрос
+        #     -5:   задать координаты
         # KeyboardType.SEP,
     ), c.data),
     state = None,
@@ -5923,7 +5978,7 @@ async def process_callback_offer_answer(callback_query: types.CallbackQuery, sta
         if status_from != 200 or not profile_from:
             return
         if number == -2:
-            # Сообщение
+            # Сообщение участникам
             await FSMsendMessageToOffer.ask.set()
             state = dp.current_state()
             async with state.proxy() as data:
@@ -5935,6 +5990,19 @@ async def process_callback_offer_answer(callback_query: types.CallbackQuery, sta
                     'всем проголосовавшим участникам, кроме недоверенных. '
                     'Чтобы не получить недоверия - пишите только по делу!'
                 ),
+                reply_markup=Misc.reply_markup_cancel_row(),
+                disable_web_page_preview=True,
+            )
+            return
+        if number == -5:
+            # Задать координаты
+            await FSMOfferPutPlace.ask.set()
+            state = dp.current_state()
+            async with state.proxy() as data:
+                data['uuid'] = profile_from['uuid']
+                data['offer_uuid'] = offer_uuid
+            await callback_query.message.reply(
+                Misc.PROMPT_OFFER_GEO,
                 reply_markup=Misc.reply_markup_cancel_row(),
                 disable_web_page_preview=True,
             )
@@ -5970,6 +6038,8 @@ async def process_callback_offer_answer(callback_query: types.CallbackQuery, sta
                 success_message = 'Опрос остановлен'
             elif number == -4 and callback_query.message.chat.type == types.ChatType.PRIVATE:
                 success_message = 'Опрос возобновлен'
+            elif number == -5 and callback_query.message.chat.type == types.ChatType.PRIVATE:
+                success_message = 'Координаты опроса заданы'
             if success_message:
                 await callback_query.answer(success_message, show_alert=True,)
         elif callback_query.message.chat.type == types.ChatType.PRIVATE:
@@ -5983,6 +6053,8 @@ async def process_callback_offer_answer(callback_query: types.CallbackQuery, sta
                 err_mes = 'Не удалось приостановить опрос'
             elif number == -4:
                 err_mes = 'Не удалось возобновить опрос'
+            elif number == -5:
+                err_mes = 'Не удалось задать координаты'
             else:
                 err_mes = 'Ошибка выполнения запроса'
             await callback_query.message.reply(err_mes)
