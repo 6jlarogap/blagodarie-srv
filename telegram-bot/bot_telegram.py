@@ -610,6 +610,8 @@ async def echo_offer_list_to_bot(message: types.Message, state: FSMContext):
         method='get',
         params=dict(uuid=profile_from['uuid'])
     )
+    logging.debug('get_offers_list in api, status: %s' % status)
+    logging.debug('get_offers_list in api, response: %s' % response)
     if status == 200:
         if response:
             reply = '<b>Ваши опросы:</b>\n\n'
@@ -4587,6 +4589,19 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
     await put_thank_etc(tg_user_sender, data=data_, state=None)
 
 
+async def count_meet_invited(uuid):
+    """
+    Сколько пригласил юзер с uuid
+    """
+    status, response = await Misc.api_request(
+        path='/api/getstats/did_meet',
+        method='get',
+        params=dict(uuid=uuid)
+    )
+    logging.debug('get_count_meet_invited in api, status: %s' % status)
+    logging.debug('get_count_meet_invited in api, response: %s' % response)
+    return response['did_meet'] if status == 200 and response.get('did_meet') else 0
+
 async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data):
     # Вызывается из meet deeplink'a и команды /meet
     #
@@ -4603,9 +4618,8 @@ async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
         else:
             text1 = f'Вы установили знакомство с {full_name_to_link}'
     if profile_from['did_meet']:
-        # print('HERE-1')
-        # print(data)
-        text2 = Misc.PROMT_MEET_DOING
+        text2 = Misc.PROMT_MEET_DOING % dict(
+            count_meet_invited=await count_meet_invited(profile_from['uuid']))
     else:
         text2 = (
             'Добро пожаловать в игру знакомств!\n'
@@ -4887,9 +4901,8 @@ async def process_callback_meet_do_ask_gender(callback_query: types.CallbackQuer
 
 async def meet_do_or_revoke(data):
     if data['what'] == KeyboardType.MEET_DO:
-        # print('HERE-2')
-        # print(data)
-        text_to_sender = Misc.PROMT_MEET_DOING
+        text_to_sender = Misc.PROMT_MEET_DOING % dict(
+            count_meet_invited=await count_meet_invited(data.get('uuid')))
         did_meet = '1'
     else:
         text_to_sender = (
