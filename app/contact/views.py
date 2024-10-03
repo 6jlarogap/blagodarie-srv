@@ -942,6 +942,19 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
 
     def get_stats(self, request, *args, **kwargs):
 
+        if kwargs.get('only') == 'did_meet':
+
+            # Сколько пригласил юзеров пользователь request.GET('username')
+
+            if username := request.GET.get('username'):
+                result = Journal.objects.filter(
+                    operationtype_id=OperationType.DID_MEET,
+                    user_to__username=request.GET['username'],
+                ).distinct('user_from_id').count()
+            else:
+                result = None
+            return dict(did_meet=result)
+
         if kwargs.get('only') == 'user_connections_graph':
 
             # if not request.user.is_authenticated:

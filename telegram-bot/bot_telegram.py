@@ -4572,6 +4572,8 @@ async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
         else:
             text1 = f'Вы установили знакомство с {full_name_to_link}'
     if profile_from['did_meet']:
+        # print('HERE-1')
+        # print(data)
         text2 = Misc.PROMT_MEET_DOING
     else:
         text2 = (
@@ -4854,6 +4856,8 @@ async def process_callback_meet_do_ask_gender(callback_query: types.CallbackQuer
 
 async def meet_do_or_revoke(data):
     if data['what'] == KeyboardType.MEET_DO:
+        # print('HERE-2')
+        # print(data)
         text_to_sender = Misc.PROMT_MEET_DOING
         did_meet = '1'
     else:

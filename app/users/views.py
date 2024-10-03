@@ -1773,7 +1773,7 @@ class ApiBotStat(APIView):
             'mistrusts': CurrentState.objects.filter(is_reverse=False, attitude=CurrentState.MISTRUST).count(),
             'acqs': CurrentState.objects.filter(is_reverse=False, attitude=CurrentState.ACQ).count(),
         }
-        return Response(data=data, status=200)
+        return Response(data=data, status=status.HTTP_200_OK)
 
 api_bot_stat = ApiBotStat.as_view()
 
@@ -3490,6 +3490,20 @@ class ApiOffer(ApiOfferMixin, UuidMixin, APIView):
         return Response(data=data, status=status_code)
 
 api_offer = ApiOffer.as_view()
+
+
+class ApiOfferList(APIView):
+
+    def get(self, request):
+        data = [
+            dict(
+                owner=dict(username=offer.owner.usename, first_name=offer.owner.first_name),
+                offer=dict(question=offer.question,uuid=offer.uuid)
+            ) for offer in Offer.objects.filter(closed_timestamp__isnull=True)
+        ]
+        return Response(data=data, status=status.HTTP_200_OK)
+
+api_offer_list = ApiOfferList.as_view()
 
 
 class ApiOfferAnswer(ApiOfferMixin, UuidMixin, APIView):
