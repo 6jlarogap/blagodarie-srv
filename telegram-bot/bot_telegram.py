@@ -11,6 +11,7 @@ from aiogram.dispatcher import Dispatcher, FSMContext
 from aiogram.dispatcher.filters import ChatTypeFilter, Text
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_polling, start_webhook
+from aiogram.utils.parts import safe_split_text
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.utils.exceptions import ChatNotFound, CantInitiateConversation, CantTalkWithBots, \
     BadRequest, MessageNotModified, MessageCantBeDeleted, MessageToEditNotFound
@@ -594,9 +595,38 @@ async def echo_stat_to_bot(message: types.Message, state: FSMContext):
             f'Недоверий: {response["mistrusts"]}\n'
             f'Знакомств: {response["acqs"]}\n'
         )
-    else:
-        reply = 'Произошла ошибка'
-    await message.answer(reply)
+        await message.answer(reply)
+
+
+@dp.message_handler(
+    ChatTypeFilter(chat_type=types.ChatType.PRIVATE),
+    commands=('offers_list',),
+    state=None,
+)
+async def echo_offer_list_to_bot(message: types.Message, state: FSMContext):
+    status_from, profile_from = await Misc.post_tg_user(message.from_user)
+    status, response = await Misc.api_request(
+        path='/api/offer/list',
+        method='get',
+        params=dict(uuid=profile_from['uuid'])
+    )
+    if status == 200:
+        if response:
+            reply = '<b>Ваши опросы:</b>\n\n'
+            for item in response:
+                offer = item['offer']
+                bot_data = await bot.get_me()
+                s_offer = (
+                    f'<a href="t.me/{bot_data["username"]}?start=offer-{offer["uuid"]}">'
+                    f'{offer["question"]}</a>\n'
+                )
+                s_offer += '(опрос остановлен)\n\n' if offer['closed_timestamp'] else '\n'
+                reply += s_offer
+            parts = safe_split_text(reply, split_separator='\n')
+            for part in parts:
+                await message.reply(part, disable_web_page_preview=True)
+        else:
+            await message.reply('Вы не создавали опросов/предложений', disable_web_page_preview=True)
 
 
 @dp.message_handler(
@@ -1304,6 +1334,7 @@ commands_dict = {
     'graph': echo_graph_to_bot,
     'help': echo_help_to_bot,
     'meet': echo_meet,
+    'offers_list': echo_offer_list_to_bot,
     'stat': echo_stat_to_bot,
     'feedback': echo_feedback,
     'feedback_admins': echo_feedback_admins,
