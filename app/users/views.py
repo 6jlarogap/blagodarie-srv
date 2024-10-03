@@ -3495,11 +3495,18 @@ api_offer = ApiOffer.as_view()
 class ApiOfferList(APIView):
 
     def get(self, request):
+        """
+        Список офферов юзера с username = request.GET.get('username')
+        """
         data = [
             dict(
-                owner=dict(username=offer.owner.usename, first_name=offer.owner.first_name),
-                offer=dict(question=offer.question,uuid=offer.uuid)
-            ) for offer in Offer.objects.filter(closed_timestamp__isnull=True)
+                owner=dict(username=offer.owner.username, first_name=offer.owner.first_name),
+                offer=dict(question=offer.question,uuid=offer.uuid, closed_timestamp=offer.closed_timestamp)
+            ) for offer in Offer.objects.filter(
+                # username == '.' у нас быть не может
+                owner__username=request.GET.get('username', '.')
+                ).select_related('owner'
+                ).distinct()
         ]
         return Response(data=data, status=status.HTTP_200_OK)
 
