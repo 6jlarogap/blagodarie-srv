@@ -944,14 +944,14 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
 
         if kwargs.get('only') == 'did_meet':
 
-            # Сколько пригласил юзеров пользователь request.GET('username')
+            # Сколько пригласил юзеров пользователь c uuid = request.GET.get('uuid')
 
-            if username := request.GET.get('username'):
+            try:
                 result = Journal.objects.filter(
                     operationtype_id=OperationType.DID_MEET,
-                    user_to__username=request.GET['username'],
+                    user_to__profile__uuid=request.GET.get('uuid'),
                 ).distinct('user_from_id').count()
-            else:
+            except ValidationError:
                 result = None
             return dict(did_meet=result)
 

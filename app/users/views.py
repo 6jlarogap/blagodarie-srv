@@ -3496,18 +3496,19 @@ class ApiOfferList(APIView):
 
     def get(self, request):
         """
-        Список офферов юзера с username = request.GET.get('username')
+        Список офферов юзера с uuid = request.GET.get('uuid')
         """
-        data = [
-            dict(
-                owner=dict(username=offer.owner.username, first_name=offer.owner.first_name),
-                offer=dict(question=offer.question,uuid=offer.uuid, closed_timestamp=offer.closed_timestamp)
-            ) for offer in Offer.objects.filter(
-                # username == '.' у нас быть не может
-                owner__username=request.GET.get('username', '.')
-                ).select_related('owner'
-                ).distinct()
-        ]
+        try:
+            data = [
+                dict(
+                    offer=dict(question=offer.question,uuid=offer.uuid, closed_timestamp=offer.closed_timestamp)
+                ) for offer in Offer.objects.filter(
+                    owner__profile__uuid=request.GET.get('uuid'),
+                    ).select_related('owner', 'owner__profile',
+                    ).distinct()
+            ]
+        except ValidationError:
+            data = []
         return Response(data=data, status=status.HTTP_200_OK)
 
 api_offer_list = ApiOfferList.as_view()
