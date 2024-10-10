@@ -49,6 +49,9 @@ class OperationType(models.Model):
     # В этом случае journal.user_to: с кем установил занкомство, но
     # отказался от игры знакомств
     REVOKED_MEET = 13
+    # Сброс и установка симпатии
+    SET_SYMPA = 14
+    REVOKE_SYMPA = 15
 
     title = models.CharField(_("Тип операции"), max_length=255, unique=True)
 
@@ -155,11 +158,9 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
 
     user_from = models.ForeignKey('auth.User',
                     verbose_name=_("От кого"), on_delete=models.CASCADE,
-                    db_index=True,
                     related_name='currentstate_user_from_set')
     user_to = models.ForeignKey('auth.User',
                     verbose_name=_("Кому"), on_delete=models.CASCADE, null=True,
-                    db_index=True,
                     related_name='currentstate_user_to_set')
     anytext = models.ForeignKey(AnyText,
                     verbose_name=_("Текст"), on_delete=models.CASCADE, null=True)
@@ -195,13 +196,19 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
     #   а thanks_count, attitude примут действительные значения:
     #   числа благодарностей 2-го 1-му и доверия
     #
-    is_reverse = models.BooleanField(_("Обратное отношение"), default=False)
+    is_reverse = models.BooleanField(_("Обратное отношение"), default=False, db_index=True)
+
+    # Аналогично для симпатий: прямая симпатия и фейковая обратная
+    is_sympa = models.BooleanField(_("Симпатия"), default=False, db_index=True)
+    is_sympa_reverse = models.BooleanField(_("Симпатия: обратное отношение"), default=False, db_index=True)
+
 
     def data_dict(
         self,
         show_child=False,
         show_attitude=False,
         show_id_fio=False,
+        show_sympa=False,
         fmt='d3js'
     ):
 
@@ -230,6 +237,8 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
                 target_fio=self.user_to.first_name,
                 target_id=self.user_to.pk,
             ))
+        if show_sympa:
+            result.update(is_sympa=self.is_sympa)
         return result
 
     class Meta:

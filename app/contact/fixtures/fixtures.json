@@ -125,5 +125,19 @@
     "fields": {
       "title": "Revoked Part in Acquaintance Game"
     }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 14,
+    "fields": {
+      "title": "Set Sympathy"
+    }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 15,
+    "fields": {
+      "title": "Revoke Sympathy"
+    }
   }
 ]
