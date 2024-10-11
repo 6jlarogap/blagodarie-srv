@@ -4976,8 +4976,8 @@ async def process_callback_meet_invite(callback_query: types.CallbackQuery, stat
     if status == 200:
         bot_data = await bot.get_me()
         url = f'https://t.me/{bot_data["username"]}?start=m-{profile["username"]}'
-        link = Misc.get_html_a(url, 'Перейти...')
-        caption = f'{profile["first_name"]} приглашает Вас с игру знакомств! {link}'
+        link = Misc.get_html_a(url, 'Вход...')
+        caption = f'Перешлите одиноким — приглашение в игру знакомств! {link}'
         bytes_io = await Misc.get_qrcode(profile, url)
         await bot.send_photo(
             chat_id=callback_query.from_user.id,
