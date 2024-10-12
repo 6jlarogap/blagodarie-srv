@@ -4718,7 +4718,7 @@ async def meet_got_gender_text(message: types.Message, state: FSMContext):
 async def meet_quest_dob(state, data_this, error_message=None):
     async with state.proxy() as data:
         data.update(**data_this)
-        text = f'Укажите, когда Вы родилсь, ' + Misc.PROMPT_DATE_FORMAT
+        text = f'Напишите мне Вашу дату рождения, ' + Misc.PROMPT_DATE_FORMAT
         if error_message:
             text = f'{error_message}\n\n{text}'
         await bot.send_message(
