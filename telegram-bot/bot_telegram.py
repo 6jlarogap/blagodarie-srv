@@ -4646,15 +4646,19 @@ async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
         sep=KeyboardType.SEP,
     ))
     buttons = [inline_btn_do_or_revoke]
+
+    inline_btn_invite = InlineKeyboardButton(
+        'Пригласить в игру' if profile_from['did_meet'] else 'Пригласить',
+        callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
+        keyboard_type=KeyboardType.MEET_INVITE,
+        sep=KeyboardType.SEP,
+    ))
     if profile_from['did_meet']:
-        inline_btn_invite = InlineKeyboardButton(
-            'Пригласить в игру',
-            callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
-            keyboard_type=KeyboardType.MEET_INVITE,
-            sep=KeyboardType.SEP,
-        ))
         buttons = [inline_btn_invite] + buttons
+    elif not (profile_to and 'attitude_current' in data):
+        buttons += [inline_btn_invite]
     reply_markup.row(*buttons)
+
     if profile_from['did_meet']:
         inline_btn_map = InlineKeyboardButton(
             'Карта участников игры',
