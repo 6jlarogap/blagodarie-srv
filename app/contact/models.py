@@ -776,6 +776,36 @@ class ApiAddOperationMixin(object):
                 update_timestamp=update_timestamp,
             )
 
+        elif operationtype_id == OperationType.SET_SYMPA:
+            currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
+                user_from=user_from,
+                user_to=user_to,
+                defaults=dict(
+                    is_sympa=True,
+            ))
+            if not created_:
+                if not currentstate.is_sympa_reverse and currentstate.is_sympa == True:
+                    # Уже установлена симпатия
+                    pass
+                else:
+                    currentstate.update_timestamp = update_timestamp
+                    currentstate.is_sympa_reverse = False
+                    currentstate.is_sympa = True
+                    currentstate.save()
+
+            reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
+                user_to=user_from,
+                user_from=user_to,
+                defaults=dict(
+                    is_sympa_reverse=True,
+                    is_sympa=True,
+            ))
+            if not reverse_created and (reverse_cs.is_sympa_reverse or reverse_cs.is_sympa == False):
+                reverse_cs.update_timestamp = update_timestamp
+                reverse_cs.is_sympa_reverse = True
+                reverse_cs.is_sympa = True
+                reverse_cs.save()
+
         else:
             raise ServiceException('Неизвестный operation_type_id')
 
