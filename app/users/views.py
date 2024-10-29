@@ -1535,20 +1535,40 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
             if 'did_meet' in request.data:
                 did_meet = request.data.get('did_meet')
                 unix_time_now = int(time.time())
-                profile.did_meet = unix_time_now if did_meet else None
-                operationtype_id = OperationType.DID_MEET if did_meet else OperationType.REVOKED_MEET
-                user_to = None
-                if username_to := request.data.get('username_to'):
+                user_inviter = None
+                if username_inviter := request.data.get('username_inviter'):
                     try:
-                        user_to = User.objects.get(username=username_to)
+                        user_inviter = User.objects.get(username=username_inviter)
                     except User.DoesNotExist:
                         pass
-                Journal.objects.create(
-                    user_from=user,
-                    operationtype_id=operationtype_id,
-                    insert_timestamp=unix_time_now,
-                    user_to=user_to
-                    )
+                if did_meet:
+                    profile.did_meet = unix_time_now
+                    if user_inviter:
+                        self.add_operation(
+                            # Именно так: от user_inviter из телеги идет приглашение
+                            # к текущему юзеру с профилем profile
+                            user_inviter,
+                            profile,
+                            operationtype_id=OperationType.DID_MEET,
+                            comment=None,
+                            insert_timestamp = unix_time_now,
+                        )
+                    else:
+                        # Вошел в игру не по приглашению
+                        Journal.objects.create(
+                            user_from=user,
+                            operationtype_id=OperationType.DID_MEET,
+                            insert_timestamp=unix_time_now,
+                            user_to=None
+                            )
+                else:
+                    profile.did_meet = None
+                    Journal.objects.create(
+                        user_from=user,
+                        operationtype_id=OperationType.REVOKED_MEET,
+                        insert_timestamp=unix_time_now,
+                        user_to=user_inviter
+                        )
 
             user.save()
             profile.save()

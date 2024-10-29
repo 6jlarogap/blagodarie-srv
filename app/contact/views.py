@@ -947,10 +947,11 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
             # Сколько пригласил юзеров пользователь c uuid = request.GET.get('uuid')
 
             try:
-                result = Journal.objects.filter(
-                    operationtype_id=OperationType.DID_MEET,
-                    user_to__profile__uuid=request.GET.get('uuid'),
-                ).distinct('user_from_id').count()
+                result = CurrentState.objects.filter(
+                    user_from__profile__uuid=request.GET.get('uuid'),
+                    is_invite_meet=True,
+                    is_invite_meet_reverse=False,
+                ).count()
             except ValidationError:
                 result = None
             return dict(did_meet=result)

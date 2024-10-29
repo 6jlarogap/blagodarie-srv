@@ -42,12 +42,13 @@ class OperationType(models.Model):
     SET_MOTHER = 10
     # Acquainted
     ACQ = 11
-    # Took Part in Acquaintance Game
-    # В этом случае journal.user_to: с кем установил занкомство
+    # Took Part in Acquaintance Game or invited somebody
+    # В этом случае journal.user_to: с кем установил знакомство,
+    # если установил знакомство
     DID_MEET = 12
+    INVITE_MEET = DID_MEET
     # Revoked Part in Acquaintance Game
-    # В этом случае journal.user_to: с кем установил занкомство, но
-    # отказался от игры знакомств
+    # В этом случае запись только в journal.user_to: отказался от игры знакомств
     REVOKED_MEET = 13
     # Сброс и установка симпатии
     SET_SYMPA = 14
@@ -198,9 +199,13 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
     #
     is_reverse = models.BooleanField(_("Обратное отношение"), default=False, db_index=True)
 
-    # Аналогично для симпатий: прямая симпатия и фейковая обратная
+    # Аналогично для симпатий: "прямая" симпатия и фейковая обратная
     is_sympa = models.BooleanField(_("Симпатия"), default=False, db_index=True)
     is_sympa_reverse = models.BooleanField(_("Симпатия: обратное отношение"), default=False, db_index=True)
+
+    # Аналогично для приглашений в игру знакомств: прямое приглашение и фейковое обратное
+    is_invite_meet = models.BooleanField(_("Приглашение в игру знакомств"), default=False, db_index=True)
+    is_invite_meet_reverse = models.BooleanField(_("Приглашение в игру знакомств: обратное отношение"), default=False, db_index=True)
 
 
     def data_dict(
@@ -209,6 +214,7 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
         show_attitude=False,
         show_id_fio=False,
         show_sympa=False,
+        show_invite_meet=False,
         fmt='d3js'
     ):
 
@@ -239,6 +245,8 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
             ))
         if show_sympa:
             result.update(is_sympa=self.is_sympa)
+        if show_invite_meet:
+            result.update(is_sympa=self.is_invite_meet)
         return result
 
     class Meta:
@@ -827,6 +835,36 @@ class ApiAddOperationMixin(object):
                 is_sympa_reverse=False,
                 update_timestamp=update_timestamp,
             )
+
+        elif operationtype_id == OperationType.INVITE_MEET:
+            currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
+                user_from=user_from,
+                user_to=user_to,
+                defaults=dict(
+                    is_invite_meet=True,
+            ))
+            if not created_:
+                if not currentstate.is_invite_meet_reverse and currentstate.is_invite_meet == True:
+                    # Уже было приглашение
+                    pass
+                else:
+                    currentstate.update_timestamp = update_timestamp
+                    currentstate.is_invite_meet_reverse = False
+                    currentstate.is_invite_meet = True
+                    currentstate.save()
+
+            reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
+                user_to=user_from,
+                user_from=user_to,
+                defaults=dict(
+                    is_invite_meet_reverse=True,
+                    is_invite_meet=True,
+            ))
+            if not reverse_created and (reverse_cs.is_invite_meet_reverse or reverse_cs.is_invite_meet == False):
+                reverse_cs.update_timestamp = update_timestamp
+                reverse_cs.is_invite_meet_reverse = True
+                reverse_cs.is_invite_meet = True
+                reverse_cs.save()
 
         else:
             raise ServiceException('Неизвестный operation_type_id')

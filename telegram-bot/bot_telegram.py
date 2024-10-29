@@ -4832,16 +4832,16 @@ async def process_callback_meet_do_or_revoke(callback_query: types.CallbackQuery
             disable_web_page_preview=True,
         )
         return
-    username_to = ''
+    username_inviter = ''
     try:
-        username_to = code[2]
+        username_inviter = code[2]
     except IndexError:
         pass
     data_this = dict(
         what=what,
         uuid=profile_from['uuid'],
         username_from=profile_from['username'],
-        username_to=username_to,
+        username_inviter=username_inviter,
         gender=profile_from['gender'],
         dob=profile_from['dob'],
         latitude=profile_from['latitude'],
@@ -4916,9 +4916,9 @@ async def meet_do_or_revoke(data):
         did_meet = ''
     parms = dict(did_meet=did_meet)
     if data['what'] == KeyboardType.MEET_DO:
-        fields = ('uuid', 'username_to', 'gender', 'dob', 'latitude', 'longitude',)
+        fields = ('uuid', 'username_inviter', 'gender', 'dob', 'latitude', 'longitude',)
     else:
-        fields = ('uuid', 'username_to',)
+        fields = ('uuid', 'username_inviter',)
     for k in fields:
         if k in data:
             parms[k] = data[k]
@@ -4933,7 +4933,7 @@ async def meet_do_or_revoke(data):
                 callback_data=callback_data_template % dict(
                 keyboard_type=KeyboardType.MEET_REVOKE,
                 sid=data['username_from'],
-                sid2=data['username_to'],
+                sid2=data['username_inviter'],
                 sep=KeyboardType.SEP,
             ))
             inline_btn_invite = InlineKeyboardButton(
