@@ -246,7 +246,7 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
         if show_sympa:
             result.update(is_sympa=self.is_sympa)
         if show_invite_meet:
-            result.update(is_sympa=self.is_invite_meet)
+            result.update(is_invite_meet=self.is_invite_meet)
         return result
 
     class Meta:

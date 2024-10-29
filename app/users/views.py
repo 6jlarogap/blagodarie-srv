@@ -2398,6 +2398,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             nodes = []
             links = []
             user_pks = []
+            fmt = '3d-force-graph'
             for p in Profile.objects.filter(q_meet).order_by('dob').select_related('user').distinct():
                 dict_user = self.popup_data(p)
                 if p.latitude is not None and p.longitude is not None:
@@ -2418,22 +2419,21 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     # fool proof
                     continue
                 num_all += 1
-                nodes.append(p.data_dict(request=request, fmt='3d-force-graph'))
+                nodes.append(p.data_dict(request=request, fmt=fmt))
                 user_pks.append(p.user.pk)
-            q_connections = Q(attitude__isnull=False, user_to__isnull=False, is_reverse=False)
-            links = [
-                cs.data_dict(
-                    show_child=False,
-                    show_attitude=True,
-                    fmt='3d-force-graph',
-                ) \
-                for cs in CurrentState.objects.filter(
-                    attitude__isnull=False, is_reverse=False,
+            q_connections = \
+                Q(user_to__isnull=False) & \
+                (Q(attitude__isnull=False, is_reverse=False) | Q(is_invite_meet=True, is_invite_meet_reverse=False))
+            links = []
+            for cs in CurrentState.objects.filter(q_connections).filter(
                     user_from__in=user_pks, user_to__in=user_pks,
                     ).select_related(
                         'user_from__profile', 'user_to__profile',
-                    ).distinct()
-            ]
+                    ).distinct():
+                if cs.attitude is not None and not cs.is_reverse:
+                    links.append(cs.data_dict(show_attitude=True,fmt=fmt,))
+                if cs.is_invite_meet and not cs.is_invite_meet_reverse:
+                    links.append(cs.data_dict(show_invite_meet=True,fmt=fmt,))
             len_m = len(list_m)
             len_f = len(list_f)
             if len_f or len_m:
