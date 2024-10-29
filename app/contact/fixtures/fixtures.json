@@ -116,7 +116,7 @@
     "model": "contact.operationtype",
     "pk": 12,
     "fields": {
-      "title": "Took Part in Acquaintance Game"
+      "title": "Took Part in Acquaintance Game or invited somebody"
     }
   },
   {
