@@ -1,4 +1,4 @@
-import os, re, hmac, hashlib, json, time, datetime
+import os, re, hmac, hashlib, json, time, datetime, copy
 import uuid, redis
 import urllib.request, urllib.error, urllib.parse
 from urllib.parse import urlparse
@@ -2414,6 +2414,12 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         'user_from__profile', 'user_to__profile',
                     ).distinct()
             ]
+            links_1 = copy.deepcopy(links)
+            for item in links:
+                item['curvature'] = 0.25
+            for item in links_1:
+                item['curvature'] = 0.5
+            links = links + links_1
             len_m = len(list_m)
             len_f = len(list_f)
             if len_f or len_m:

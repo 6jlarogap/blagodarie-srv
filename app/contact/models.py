@@ -806,6 +806,28 @@ class ApiAddOperationMixin(object):
                 reverse_cs.is_sympa = True
                 reverse_cs.save()
 
+        elif operationtype_id == OperationType.REVOKE_SYMPA:
+            q = Q(user_from=user_from, user_to=user_to, is_sympa=True)
+            try:
+                currentstate = CurrentState.objects.get(user_from=user_from, user_to=user_to, is_sympa=True)
+            except CurrentState.DoesNotExist:
+                pass
+            else:
+                currentstate.is_sympa = False
+                currentstate.update_timestamp = update_timestamp
+                currentstate.save()
+
+            CurrentState.objects.filter(
+                user_to=user_from,
+                user_from=user_to,
+                is_sympa_reverse=True,
+                is_sympa=True,
+            ).update(
+                is_sympa=False,
+                is_sympa_reverse=False,
+                update_timestamp=update_timestamp,
+            )
+
         else:
             raise ServiceException('Неизвестный operation_type_id')
 
