@@ -1289,13 +1289,6 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             status_to, profile_to = await Misc.get_user_by_sid(d_trust['sid'])
             if status_to != 200:
                 return
-            if d_trust['operation_type_id'] == OperationType.ACQ:
-                # Надо посмотреть отношения. Если уже доверяет, то не устанавливаем
-                # знакомство, сообщение, уходим.
-                status_relations, response_relations = await Misc.call_response_relations(response_from, profile_to)
-                if status_relations != 200:
-                    return
-                attitude_current = response_relations['from_to']['attitude']
             data = dict(
                 profile_from = response_from,
                 profile_to = profile_to,
@@ -1303,9 +1296,8 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                 tg_user_sender_id = tg_user_sender.id,
                 message_to_forward_id = None,
                 group_member=None,
+                meet_deeplink=d_trust['operation_type_id'] == OperationType.ACQ,
             )
-            if d_trust['operation_type_id'] == OperationType.ACQ:
-                data.update(attitude_current=attitude_current)
             await put_thank_etc(tg_user_sender, data, state=state)
             return
 
@@ -4607,29 +4599,21 @@ async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
     #
     profile_from = data['profile_from']
     profile_to = data.get('profile_to')
-    text1 = ''
-    if profile_to and 'attitude_current' in data:
-        # Это из meet диплинка
-        full_name_to_link = Misc.get_deeplink_with_name(profile_to, bot_data, plus_trusts=True)
-        if data['attitude_current'] == Attitude.ACQ:
-            text1 = f'Вы уже знакомы с {full_name_to_link}'
-        elif data['attitude_current'] == Attitude.TRUST:
-            text1 = f'Вы уже знакомы и доверяете {full_name_to_link}'
-        else:
-            text1 = f'Вы установили знакомство с {full_name_to_link}'
     if profile_from['did_meet']:
-        text2 = Misc.PROMT_MEET_DOING % dict(
-            count_meet_invited=await count_meet_invited(profile_from['uuid']))
+        text = Misc.PROMT_MEET_DOING % dict(
+            count_meet_invited=await count_meet_invited(profile_from['uuid']),
+            already='уже ',
+        )
     else:
-        text2 = (
+        text = (
             'Добро пожаловать в игру знакомств!\n'
             'Цель игры - соединить одиноких людей.\n\n'
             'Чтобы войти в игру - нажмите "Участвовать" '
         )
         if not profile_from['gender'] or not profile_from['dob'] or \
             profile_from['latitude'] is None or profile_from['longitude'] is None:
-            text2 += '- Вам будет предложено заполнить анкетные данные - '
-        text2 += (
+            text += '- Вам будет предложено заполнить анкетные данные - '
+        text += (
             'и Вы станете получать предложения новых встреч!\n\n'
             'Чтобы победить - приглашайте в игру одиноких людей - '
             'и посещайте туры знакомств - пока не встретите свою вторую половину!\n\n'
@@ -4655,7 +4639,7 @@ async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
     ))
     if profile_from['did_meet']:
         buttons = [inline_btn_invite] + buttons
-    elif not (profile_to and 'attitude_current' in data):
+    elif not (profile_to and data.get('meet_deeplink')):
         buttons += [inline_btn_invite]
     reply_markup.row(*buttons)
 
@@ -4678,7 +4662,7 @@ async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
         reply_markup.row(inline_btn_map_offer, )
     await bot.send_message(
         tg_user_sender.id,
-        text=f'{text1}\n\n{text2}' if text1 else text2,
+        text=text,
         disable_web_page_preview=True,
         reply_markup=reply_markup,
     )
@@ -4906,7 +4890,9 @@ async def process_callback_meet_do_ask_gender(callback_query: types.CallbackQuer
 async def meet_do_or_revoke(data):
     if data['what'] == KeyboardType.MEET_DO:
         text_to_sender = Misc.PROMT_MEET_DOING % dict(
-            count_meet_invited=await count_meet_invited(data.get('uuid')))
+            count_meet_invited=await count_meet_invited(data.get('uuid')),
+            already='',
+        )
         did_meet = '1'
     else:
         text_to_sender = (
@@ -5008,13 +4994,9 @@ async def put_thank_etc(tg_user_sender, data, state=None):
         return
 
     bot_data = await bot.get_me()
-    if attitude_current:= data.get('attitude_current'):
-        # Это может быть установлено только из диплинка
-        if data['operation_type_id'] == OperationType.ACQ and \
-           attitude_current in (Attitude.ACQ, Attitude.TRUST):
-            # А если из meet, то там своя специфика
-            await process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
-            return
+    if data.get('meet_deeplink'):
+        await process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
+        return
 
     profile_from = data['profile_from']
     group_member = data.get('group_member')
@@ -5085,25 +5067,6 @@ async def put_thank_etc(tg_user_sender, data, state=None):
             trusts_or_thanks=trusts_or_thanks,
             thanks_count_str=thanks_count_str,
         )
-
-    if (operation_done or operation_already) and \
-       'attitude_current' in data and \
-       data['operation_type_id'] == OperationType.ACQ:
-        if operation_done and text:
-            data['profile_from'] = response['profile_from']
-            data['profile_to'] = response['profile_to']
-            for tgd in data['profile_to']['tg_data']:
-                try:
-                    await bot.send_message(
-                        tgd['tg_uid'],
-                        text,
-                        disable_web_page_preview=True,
-                        disable_notification=True,
-                    )
-                except (ChatNotFound, CantInitiateConversation):
-                    pass
-        await process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
-        return
 
     if not text and not operation_done:
         if status == 200:
