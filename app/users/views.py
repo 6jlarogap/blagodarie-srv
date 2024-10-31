@@ -1543,7 +1543,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                         pass
                 if did_meet:
                     profile.did_meet = unix_time_now
-                    if user_inviter:
+                    if user_inviter and user_inviter != user:
                         self.add_operation(
                             # Именно так: от user_inviter из телеги идет приглашение
                             # к текущему юзеру с профилем profile
@@ -1554,7 +1554,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                             insert_timestamp = unix_time_now,
                         )
                     else:
-                        # Вошел в игру не по приглашению
+                        # Вошел в игру не по приглашению или нажал на ссылку на себя
                         Journal.objects.create(
                             user_from=user,
                             operationtype_id=OperationType.DID_MEET,
