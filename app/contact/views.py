@@ -128,7 +128,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                                 *   или uuid собственного пользователя авторизованного юзера
                                 !   иначе ошибка
 
-            * user_id_to, к кому, uuid, обязательно
+            * user_id_to, к кому, uuid или id, обязательно
 
             Пример исходных данных:
             {

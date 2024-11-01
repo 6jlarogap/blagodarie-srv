@@ -2180,6 +2180,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         elif not color and not frame:
             method = 'crop'
         return dict(
+            user_id=profile.user.pk,
             full_name=profile.user.first_name,
             username=profile.user.username,
             trust_count=profile.trust_count,
@@ -2226,6 +2227,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         #
         found_coordinates = False
 
+        user_auth = request.user if request.user.is_authenticated else None
         graph =None
         meet = False
         offer_on = False
@@ -2344,9 +2346,27 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             num_all = len(coords)
 
         elif meet:
+            color_sympa = 'darkorange'
             list_m = []
             list_f = []
             legend = (
+                '<br />'
+                '<table style="border-spacing: 0;border-top: 2px solid;width: 100%;">'
+                '<col width="30%" />'
+                '<col width="10%" />'
+                '<col width="10%" />'
+                '<col width="10%" />'
+                '<col width="10%" />'
+                '<col width="30%" />'
+                '<tr>'
+                    '<td style="text-align:center;border-bottom: 2px solid";">М</td>'
+                    '<td style="text-align:center;border-bottom: 2px solid;"></td>'
+                    '<td style="text-align:center;border-bottom: 2px solid;border-right: 1px solid;"></td>'
+                    '<td style="text-align:center;border-bottom: 2px solid";"></td>'
+                    '<td style="text-align:center;border-bottom: 2px solid";"></td>'
+                    '<td style="text-align:center;border-bottom: 2px solid;">Ж</td>'
+                '</tr>'
+            ) if user_auth else (
                 '<br />'
                 '<table style="border-spacing: 0;border-top: 2px solid;width: 100%;">'
                 '<col width="40%" />'
@@ -2399,8 +2419,17 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             links = []
             user_pks = []
             fmt = '3d-force-graph'
+            if user_auth:
+                my_sympas = [
+                    cs.user_to.pk for cs in CurrentState.objects.filter(
+                        user_from=user_auth, user_to__isnull=False,
+                        is_sympa=True, is_sympa_reverse=False,
+                )]
             for p in Profile.objects.filter(q_meet).order_by('dob').select_related('user').distinct():
-                dict_user = self.popup_data(p)
+                color = None; frame = 0
+                if user_auth and p.user.pk in my_sympas:
+                    color = color_sympa; frame=5
+                dict_user = self.popup_data(p, color, frame)
                 if p.latitude is not None and p.longitude is not None:
                     points.append(dict(
                         latitude=p.latitude,
@@ -2419,7 +2448,14 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     # fool proof
                     continue
                 num_all += 1
-                nodes.append(p.data_dict(request=request, fmt=fmt))
+                nodes.append(dict(
+                    id=p.user.pk,
+                    uuid=p.uuid,
+                    username=p.user.username,
+                    first_name=p.user.first_name,
+                    photo=dict_user['url_photo_popup'],
+                    gender=p.gender,
+                ))
                 user_pks.append(p.user.pk)
             q_connections = \
                 Q(user_to__isnull=False) & \
@@ -2434,10 +2470,36 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     links.append(cs.data_dict(show_attitude=True,fmt=fmt,))
                 if cs.is_invite_meet and not cs.is_invite_meet_reverse:
                     links.append(cs.data_dict(show_invite_meet=True,fmt=fmt,))
+                if cs.is_sympa and not cs.is_sympa_reverse:
+                    links.append(cs.data_dict(show_sympa=True,fmt=fmt,))
             len_m = len(list_m)
             len_f = len(list_f)
+            popup_f = (
+                '<table>'
+                '<tr>'
+                    '<td valign=top>'
+                        ' %(full_name)s (%(trust_count)s)<br />'
+                        ' <a href="%(url_deeplink)s" target="_blank">Профиль</a><br />'
+                        '%(link_on_map)s'
+                        ' <a href="%(url_profile)s" target="_blank">Доверия</a>'
+                    '</td>'
+                    '<td valign=top>'
+                        '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
+                    '</td>'
+                '</tr>'
+                '</table>'
+            )
             if len_f or len_m:
                 legend_user = (
+                    '<tr style="border-bottom: 2px solid">'
+                        '<td align="left" style="border-bottom: 2px solid;">%(m)s</td>'
+                        '<td style="text-align:center;border-bottom: 2px solid;">%(m_dob)s</td>'
+                        '<td style="text-align:center;border-bottom: 2px solid;border-right: 1px solid;">%(m_sympa)s</td>'
+                        '<td style="text-align:center;border-bottom: 2px solid">%(f_sympa)s</td>'
+                        '<td style="text-align:center;border-bottom: 2px solid;">%(f_dob)s</td>'
+                        '<td align="right" style="border-bottom: 2px solid;"">%(f)s</td>'
+                    '</tr>'
+                ) if user_auth else (
                     '<tr style="border-bottom: 2px solid">'
                         '<td align="left" style="border-bottom: 2px solid;">%(m)s</td>'
                         '<td style="text-align:center;border-bottom: 2px solid;border-right: 1px solid;">%(m_dob)s</td>'
@@ -2445,15 +2507,38 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         '<td align="right" style="border-bottom: 2px solid;"">%(f)s</td>'
                     '</tr>'
                 )
+                legend_sympa = (
+                    '<label for="table-sympa-%(user_id)s"><span style="color: %(color_sympa)s">Симпатия:<span></label><br />'
+                    '<input type="checkbox" class="sympa" id="table-sympa-%(user_id)s" %(sympa_checked)s>'
+                )
 
                 for i in range(max(len_m, len_f)):
-                    d = dict(m='', m_dob='', f='', f_dob='')
+                    d = dict(
+                        m='', m_dob='', m_sympa='',
+                        f='', f_dob='', f_sympa='',
+                    )
                     if i < len_m:
                         d['m'] = popup % list_m[i]
                         d['m_dob'] = list_m[i]['dob']
+                        if user_auth and list_m[i]['user_id'] != user_auth.pk:
+                            sympa_checked='checked' if list_m[i]['user_id'] in my_sympas else ''
+                            d_sympa = dict(
+                                color_sympa=color_sympa if sympa_checked else 'system-color',
+                                user_id=list_m[i]['user_id'],
+                                sympa_checked=sympa_checked,
+                            )
+                            d['m_sympa'] = legend_sympa % d_sympa
                     if i < len_f:
-                        d['f'] = popup % list_f[i]
+                        d['f'] = popup_f % list_f[i]
                         d['f_dob'] = list_f[i]['dob']
+                        if user_auth and list_f[i]['user_id'] != user_auth.pk:
+                            sympa_checked='checked' if list_f[i]['user_id'] in my_sympas else ''
+                            d_sympa = dict(
+                                color_sympa=color_sympa if sympa_checked else 'system-color',
+                                user_id=list_f[i]['user_id'],
+                                sympa_checked=sympa_checked,
+                            )
+                            d['f_sympa'] = legend_sympa % d_sympa
                     legend += legend_user % d
             legend += '</table><br /><br />'
             graph = dict(nodes=nodes, links=links)
