@@ -4652,14 +4652,6 @@ async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
                 keep_user_data='on'
         ))
         reply_markup.row(inline_btn_map)
-        inline_btn_map_offer = InlineKeyboardButton(
-            'Карта предложений',
-            login_url=Misc.make_login_url(
-                redirect_path=settings.MAP_HOST + '/?offer=on',
-                bot_username=bot_data["username"],
-                keep_user_data='on'
-        ))
-        reply_markup.row(inline_btn_map_offer, )
     await bot.send_message(
         tg_user_sender.id,
         text=text,
@@ -4938,14 +4930,6 @@ async def meet_do_or_revoke(data):
                     keep_user_data='on'
             ))
             reply_markup.row(inline_btn_map, )
-            inline_btn_map_offer = InlineKeyboardButton(
-                'Карта предложений',
-                login_url=Misc.make_login_url(
-                    redirect_path=settings.MAP_HOST + '/?offer=on',
-                    bot_username=bot_data["username"],
-                    keep_user_data='on'
-            ))
-            reply_markup.row(inline_btn_map_offer, )
         await bot.send_message(
             data['tg_user_sender_id'],
             text=text_to_sender,

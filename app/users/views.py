@@ -2396,12 +2396,13 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             except (TypeError, ValueError):
                 pass
             if in_rectangle:
-                q_meet &= Q(
+                q_rectangle = Q(
                     latitude__gte=lat_south,
                     latitude__lte=lat_north,
                     longitude__gte=lng_west,
                     longitude__lte=lng_east,
                 )
+                q_meet &= q_rectangle
             if request.GET.get('gender'):
                 q_meet &= Q(gender=request.GET['gender'])
             today = datetime.date.today()
@@ -2542,6 +2543,46 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     legend += legend_user % d
             legend += '</table><br /><br />'
             graph = dict(nodes=nodes, links=links)
+
+            if request.GET.get('with_offers'):
+                q_offer_geo = Q(closed_timestamp__isnull=True)
+                if in_rectangle:
+                    q_offer_geo &= q_rectangle
+                else:
+                    q_offer_geo &= Q(latitude__isnull=False, longitude__isnull=False)
+                for offer in Offer.objects.filter(q_offer_geo
+                    ).select_related('owner', 'owner__profile',
+                    ).distinct():
+                    offerer = self.popup_data(offer.owner.profile, color='plum', frame=5)
+                    title = title_template % offerer
+                    title_deeplink = f'<a href="{offerer["url_deeplink"]}" target="_blank">{title}</a>'
+                    offer_popup = popup % offerer
+                    offer_popup = offer_popup[:-len('</table>')]
+                    point = dict(
+                        latitude=offer.latitude,
+                        longitude=offer.longitude,
+                        title=offer.question,
+                        icon=offerer['url_photo_icon'],
+                        is_of_found_user=False,
+                        size_icon=offerer['thumb_size_icon'],
+                    )
+                    question_deeplink = (
+                        f'<a href="https://t.me/{self.bot_username}?start=offer-{offer.uuid}">'
+                        f'{offer.question}</a>'
+                    )
+                    offer_popup += (
+                        '<tr>'
+                            '<td valign=middle>'
+                                'Опрос/<br>предложение:'
+                            '</td>'
+                            '<td valign=middle>'
+                                f'{question_deeplink}'
+                            '</td>'
+                        '</tr>'
+                    )
+                    offer_popup += '</table>'
+                    point.update(popup=offer_popup % offerer)
+                    points.append(point)
 
         elif offer_id:
             try:
