@@ -2553,7 +2553,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 for offer in Offer.objects.filter(q_offer_geo
                     ).select_related('owner', 'owner__profile',
                     ).distinct():
-                    offerer = self.popup_data(offer.owner.profile, color='plum', frame=5)
+                    offerer = self.popup_data(offer.owner.profile, thumb_size_icon=24, color='plum', frame=2)
                     title = title_template % offerer
                     title_deeplink = f'<a href="{offerer["url_deeplink"]}" target="_blank">{title}</a>'
                     offer_popup = popup % offerer
@@ -2561,10 +2561,11 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     point = dict(
                         latitude=offer.latitude,
                         longitude=offer.longitude,
-                        title=offer.question,
+                        title=f'Опрос/предложение: {offer.question}',
                         icon=offerer['url_photo_icon'],
                         is_of_found_user=False,
                         size_icon=offerer['thumb_size_icon'],
+                        is_offer=True,
                     )
                     question_deeplink = (
                         f'<a href="https://t.me/{self.bot_username}?start=offer-{offer.uuid}">'
