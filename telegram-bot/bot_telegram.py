@@ -1219,7 +1219,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
                     'Продолжить',
                     login_url=Misc.make_login_url(
                         redirect_path=redirect_path,
-                        bot_sername=bot_data['username'],
+                        bot_username=bot_data['username'],
                         keep_user_data='on'
                     ),
                 )
