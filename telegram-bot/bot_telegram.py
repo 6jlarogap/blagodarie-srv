@@ -911,6 +911,22 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             state_ = 'start_setplace'
 
         elif m := re.search(
+                r'^\/start\s+meet$',
+                message_text,
+                flags=re.I,
+          ):
+            state_ = 'start_meet'
+
+        elif m := re.search(
+                (
+                    r'^(?:https?\:\/\/)?t\.me\/%s\?start\=meet'
+                ) % re.escape(bot_data['username']),
+                message_text,
+                flags=re.I,
+          ):
+            state_ = 'start_meet'
+
+        elif m := re.search(
                 r'^\/start\s+(t|m|th)\-([0-9a-z]{10})$',
                 message_text,
                 flags=re.I,
@@ -1166,7 +1182,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
     if state_ and state_ not in (
         'not_found', 'invalid_message_text',
         'start_setplace', 'start_poll',
-        'start_offer', 'start_trust', 'start_auth_redirect',
+        'start_offer', 'start_trust', 'start_meet', 'start_auth_redirect',
         'youtube_link', 'start_invite'
        ) and user_from_id and profile_card:
         if state_ == 'start':
@@ -1190,7 +1206,7 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
         await message.reply(reply, reply_markup=reply_markup, disable_web_page_preview=True)
 
     if state_ not in (
-        'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect', 'start_trust', 'youtube_link',
+        'start_setplace', 'start_poll', 'start_offer', 'start_auth_redirect', 'start_trust', 'start_meet', 'youtube_link',
        ):
         await Misc.show_deeplinks(a_found, message, bot_data)
 
@@ -1285,6 +1301,10 @@ async def echo_send_to_bot(message: types.Message, state: FSMContext):
             await Misc.update_user_photo(bot, tg_user_forwarded, response_to)
         elif state_ == 'start_invite':
             await show_invite(response_from, token_invite, message, bot_data)
+        elif state_ == 'start_meet':
+            data = dict(profile_from = response_from)
+            await process_meet_from_deeplink_and_command(message.from_user, data, bot_data)
+            return
         elif state_ == 'start_trust':
             status_to, profile_to = await Misc.get_user_by_sid(d_trust['sid'])
             if status_to != 200:
