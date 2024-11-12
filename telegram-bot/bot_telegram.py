@@ -4603,7 +4603,7 @@ async def process_callback_tn(callback_query: types.CallbackQuery, state: FSMCon
 
 async def count_meet_invited(uuid):
     """
-    Сколько пригласил юзер с uuid
+    Сколько пригласил юзер с uuid, сколько от и к нему симпатий
     """
     status, response = await Misc.api_request(
         path='/api/getstats/did_meet',
@@ -4612,7 +4612,7 @@ async def count_meet_invited(uuid):
     )
     logging.debug('get_count_meet_invited in api, status: %s' % status)
     logging.debug('get_count_meet_invited in api, response: %s' % response)
-    return response['did_meet'] if status == 200 and response.get('did_meet') else 0
+    return response
 
 async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data):
     # Вызывается из meet deeplink'a и команды /meet
@@ -4620,10 +4620,9 @@ async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
     profile_from = data['profile_from']
     profile_to = data.get('profile_to')
     if profile_from['did_meet']:
-        text = Misc.PROMT_MEET_DOING % dict(
-            count_meet_invited=await count_meet_invited(profile_from['uuid']),
-            already='уже ',
-        )
+        count_meet_invited_ = await count_meet_invited(profile_from.get('uuid'))
+        count_meet_invited_.update(already='уже ')
+        text = Misc.PROMT_MEET_DOING % count_meet_invited_
     else:
         text = \
 '''Добро пожаловать в игру знакомств! Цель игры - соединить одиноких людей!
@@ -4902,10 +4901,9 @@ async def process_callback_meet_do_ask_gender(callback_query: types.CallbackQuer
 
 async def meet_do_or_revoke(data):
     if data['what'] == KeyboardType.MEET_DO:
-        text_to_sender = Misc.PROMT_MEET_DOING % dict(
-            count_meet_invited=await count_meet_invited(data.get('uuid')),
-            already='',
-        )
+        count_meet_invited_ = await count_meet_invited(data.get('uuid'))
+        count_meet_invited_.update(already='')
+        text_to_sender = Misc.PROMT_MEET_DOING % count_meet_invited_
         did_meet = '1'
     else:
         text_to_sender = (

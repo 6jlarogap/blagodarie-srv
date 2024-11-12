@@ -944,17 +944,30 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
 
         if kwargs.get('only') == 'did_meet':
 
-            # Сколько пригласил юзеров пользователь c uuid = request.GET.get('uuid')
+            # Сколько пригласил юзеров пользователь c uuid = request.GET.get('uuid'),
+            # сколько у него, к нему симпатий
 
+            invited=sympa_to=sympa_from=0
             try:
-                result = CurrentState.objects.filter(
-                    user_from__profile__uuid=request.GET.get('uuid'),
-                    is_invite_meet=True,
-                    is_invite_meet_reverse=False,
-                ).count()
+                uuid = request.GET.get('uuid')
+                q_rel = Q(is_invite_meet=True, is_invite_meet_reverse=False) | \
+                    Q(is_sympa=True, is_sympa_reverse=False)
+                q_users = Q(user_from__profile__uuid=uuid) | Q(user_to__profile__uuid=uuid)
+                for cs in CurrentState.objects.filter(
+                            q_rel & q_users
+                          ).select_related(
+                            'user_from__profile', 'user_to__profile'
+                          ).distinct():
+                    if str(cs.user_from.profile.uuid) == uuid and cs.is_invite_meet and not cs.is_invite_meet_reverse:
+                        invited += 1
+                    if cs.is_sympa and not cs.is_sympa_reverse:
+                        if str(cs.user_from.profile.uuid) == uuid:
+                            sympa_from += 1
+                        if str(cs.user_to.profile.uuid) == uuid:
+                            sympa_to += 1
             except ValidationError:
-                result = None
-            return dict(did_meet=result)
+                pass
+            return dict(invited=invited, sympa_to=sympa_to, sympa_from=sympa_from)
 
         if kwargs.get('only') == 'user_connections_graph':
 
