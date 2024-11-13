@@ -279,7 +279,7 @@ class Misc(object):
     )
 
     PROMT_MEET_DOING = (
-        'Вы %(already)sучаствуете в игре знакомств!\n'
+        '%(vy)s %(already)sучаствуете в игре знакомств!\n'
         '\n'
         'Приглашенных Вами: %(invited)s\n'
         'Симпатий к Вам: %(sympa_to)s\n'
@@ -644,13 +644,13 @@ class Misc(object):
 
 
     @classmethod
-    def reply_user_card(cls, response, editable, bot_data):
+    def reply_user_card(cls, response_from, response_to, editable, bot_data):
         """
         Карточка пользователя, каким он на сайте
 
         На входе:
-        response: ответ от сервера
-        bot_data
+        response_from: О пользователе, который смотрит карточку
+        response_to: О пользователе, которого карточка
 
         На выходе:
         Имя Фамилия
@@ -659,6 +659,7 @@ class Misc(object):
         Доверий:
         Благодарностей:
         Знакомств:
+        Приглашений
 
         Возможности: водитель Камаз шашлык виноград курага изюм
 
@@ -669,17 +670,17 @@ class Misc(object):
         +3752975422568
         https://username.com
         """
-        if not response:
+        if not response_to:
             return ''
-        reply = f'<b>{response["first_name"]}</b>\n'
-        if editable and (comment := response.get('comment', '').strip()) and comment:
+        reply = f'<b>{response_to["first_name"]}</b>\n'
+        if (comment := response_to.get('comment', '').strip()) and comment:
             reply += f'{comment}\n'
-        if not response.get('is_org'):
-            reply += cls.get_lifetime_str(response)
+        if not response_to.get('is_org'):
+            reply += cls.get_lifetime_str(response_to)
             gender = '('
-            if response['gender'] == 'm':
+            if response_to['gender'] == 'm':
                 gender += 'м'
-            elif response['gender'] == 'f':
+            elif response_to['gender'] == 'f':
                 gender += 'ж'
             else:
                 gender += 'пол не задан'
@@ -687,34 +688,36 @@ class Misc(object):
             reply += f'{gender}\n'
         reply += (
             '\n'
-            f'Доверий: {response["trust_count"]}\n'
-            f'Благодарностей: {response["sum_thanks_count"]}\n'
-            f'Знакомств: {response["acq_count"]}\n'
-            '\n'
+            f'Доверий: {response_to["trust_count"]}\n'
+            f'Благодарностей: {response_to["sum_thanks_count"]}\n'
+            f'Знакомств: {response_to["acq_count"]}\n'
         )
-        keys = []
+        if response_from['did_meet'] and response_to['did_meet']:
+            reply += f'Приглашений: {response_to["invite_meet_count"]}\n'
+        reply += '\n'
 
-        if editable and (response['is_active'] or response.get('owner')):
+        keys = []
+        if editable and (response_to['is_active'] or response_to.get('owner')):
             abilities_text = '\n'.join(
-                ability['text'] for ability in response['abilities']
-            ) if response.get('abilities') else 'не заданы'
+                ability['text'] for ability in response_to['abilities']
+            ) if response_to.get('abilities') else 'не заданы'
             reply += ('Возможности: %s' % abilities_text) + '\n\n'
 
             wishes_text = '\n'.join(
-                wish['text'] for wish in response['wishes']
-            ) if response.get('wishes') else 'не заданы'
+                wish['text'] for wish in response_to['wishes']
+            ) if response_to.get('wishes') else 'не заданы'
             reply += ('Потребности: %s' % wishes_text) + '\n\n'
 
-            if not response.get('is_org'):
-                papa = response.get('father') and \
-                    cls.get_deeplink_with_name(response['father'], bot_data, with_lifetime_years=True) or \
+            if not response_to.get('is_org'):
+                papa = response_to.get('father') and \
+                    cls.get_deeplink_with_name(response_to['father'], bot_data, with_lifetime_years=True) or \
                     'не задан'
-                mama = response.get('mother') and \
-                    cls.get_deeplink_with_name(response['mother'], bot_data, with_lifetime_years=True) or \
+                mama = response_to.get('mother') and \
+                    cls.get_deeplink_with_name(response_to['mother'], bot_data, with_lifetime_years=True) or \
                     'не задана'
-                if response.get('children'):
+                if response_to.get('children'):
                     children = '\n'
-                    for child in response['children']:
+                    for child in response_to['children']:
                         children += ' ' + cls.get_deeplink_with_name(child, bot_data, with_lifetime_years=True) + '\n'
                 else:
                     children = 'не заданы\n'
@@ -725,12 +728,12 @@ class Misc(object):
                 ) % dict(papa=papa, mama=mama, children=children)
                 reply += parents
 
-        keys += ['@%s' % tgd['tg_username'] for tgd in response.get('tg_data', []) if tgd['tg_username']]
-        keys += [key['value'] for key in response.get('keys', [])]
-        keys.append(cls.get_deeplink(response, bot_data))
+        keys += ['@%s' % tgd['tg_username'] for tgd in response_to.get('tg_data', []) if tgd['tg_username']]
+        keys += [key['value'] for key in response_to.get('keys', [])]
+        keys.append(cls.get_deeplink(response_to, bot_data))
 
-        if response.get('username'):
-            keys.append(settings.SHORT_ID_LINK % response['username'])
+        if response_to.get('username'):
+            keys.append(settings.SHORT_ID_LINK % response_to['username'])
 
         keys_text = '\n' + '\n'.join(
             key for key in keys
@@ -1061,6 +1064,7 @@ class Misc(object):
         editable = cls.editable(profile=response_to, sender=response_from)
 
         reply = cls.reply_user_card(
+            response_from,
             response_to,
             editable,
             bot_data=bot_data,
@@ -1220,11 +1224,8 @@ class Misc(object):
                     uuid=response_to['uuid'],
                     sep=KeyboardType.SEP,
                 ))
-                edit_buttons_2 = []
-                if editable:
-                    edit_buttons_2 += [inline_btn_location, inline_btn_comment]
-                else:
-                    edit_buttons_1 += [inline_btn_location]
+                edit_buttons_2 = [inline_btn_location, inline_btn_comment]
+
                 if editable and is_owned_account:
                     dict_change_owner = dict(
                         keyboard_type=KeyboardType.CHANGE_OWNER,

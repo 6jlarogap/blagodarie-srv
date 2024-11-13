@@ -370,6 +370,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
     trust_count = models.PositiveIntegerField(_("Число оказанных доверий"), default=0)
     mistrust_count = models.PositiveIntegerField(_("Число утрат доверия"), default=0)
     acq_count = models.PositiveIntegerField(_("Число тех кто с ним (с ней) знаком)"), default=0)
+    invite_meet_count = models.PositiveIntegerField(_("Число тех, кого он пригласил)"), default=0)
     did_bot_start = models.BooleanField(_("Стартовал телеграм бот"), default=False)
     is_org = models.BooleanField(_("Организация"), default=False)
     ability = models.ForeignKey('contact.Ability', verbose_name=_("Способность"), null=True, on_delete=models.SET_NULL)
@@ -449,6 +450,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 sum_thanks_count=self.sum_thanks_count,
                 fame=self.fame,
                 mistrust_count=self.mistrust_count,
+                invite_meet_count=self.invite_meet_count,
                 trust_count=self.trust_count,
                 acq_count=self.acq_count,
                 is_active=user.is_active,
@@ -648,7 +650,19 @@ class Profile(PhotoModel, GeoPointAddressModel):
         user_from.delete()
 
         self.recount_sum_thanks_count()
+        self.recount_invite_meet_count()
         self.recount_trust_fame()
+
+    def recount_invite_meet_count(self, do_save=True):
+        CurrentState = get_model('contact', 'CurrentState')
+        self.invite_meet_count = CurrentState.objects.filter(
+            is_invite_meet_reverse=False,
+            user_from=self.user,
+            user_to__isnull=False,
+            is_invite_meet=True,
+        ).distinct().count()
+        if do_save:
+            self.save(update_fields=('invite_meet_count',))
 
     def recount_sum_thanks_count(self, do_save=True):
         CurrentState = get_model('contact', 'CurrentState')

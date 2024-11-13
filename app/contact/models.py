@@ -843,7 +843,9 @@ class ApiAddOperationMixin(object):
                 defaults=dict(
                     is_invite_meet=True,
             ))
-            if not created_:
+            if created_:
+                currentstate.user_from.profile.recount_invite_meet_count()
+            else:
                 if not currentstate.is_invite_meet_reverse and currentstate.is_invite_meet == True:
                     # Уже было приглашение
                     pass
@@ -852,6 +854,7 @@ class ApiAddOperationMixin(object):
                     currentstate.is_invite_meet_reverse = False
                     currentstate.is_invite_meet = True
                     currentstate.save()
+                    currentstate.user_from.profile.recount_invite_meet_count()
 
             reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
                 user_to=user_from,

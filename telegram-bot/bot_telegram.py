@@ -4621,7 +4621,7 @@ async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
     profile_to = data.get('profile_to')
     if profile_from['did_meet']:
         count_meet_invited_ = await count_meet_invited(profile_from.get('uuid'))
-        count_meet_invited_.update(already='уже ')
+        count_meet_invited_.update(already='уже ', vy=Misc.get_html_a(Misc.get_deeplink(profile_from, bot_data), 'Вы'))
         text = Misc.PROMT_MEET_DOING % count_meet_invited_
     else:
         text = \
@@ -4659,7 +4659,7 @@ async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
     ))
     if profile_from['did_meet']:
         buttons = [inline_btn_invite] + buttons
-    elif not (profile_to and data.get('meet_deeplink')):
+    else:
         buttons += [inline_btn_invite]
     reply_markup.row(*buttons)
 
@@ -4837,6 +4837,7 @@ async def process_callback_meet_do_or_revoke(callback_query: types.CallbackQuery
         what=what,
         uuid=profile_from['uuid'],
         username_from=profile_from['username'],
+        username=profile_from['username'],
         username_inviter=username_inviter,
         gender=profile_from['gender'],
         dob=profile_from['dob'],
@@ -4902,6 +4903,8 @@ async def process_callback_meet_do_ask_gender(callback_query: types.CallbackQuer
 async def meet_do_or_revoke(data):
     if data['what'] == KeyboardType.MEET_DO:
         count_meet_invited_ = await count_meet_invited(data.get('uuid'))
+        bot_data = await bot.get_me()
+        count_meet_invited_.update(already='', vy=Misc.get_html_a(Misc.get_deeplink(data, bot_data), 'Вы'))
         count_meet_invited_.update(already='')
         text_to_sender = Misc.PROMT_MEET_DOING % count_meet_invited_
         did_meet = '1'
