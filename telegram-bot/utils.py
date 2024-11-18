@@ -693,7 +693,7 @@ class Misc(object):
             f'Знакомств: {response_to["acq_count"]}\n'
         )
         if response_from['did_meet'] and response_to['did_meet']:
-            reply += f'Приглашений: {response_to["invite_meet_count"]}\n'
+            reply += f'Приглашений <a href=\'https://t.me/{bot_data["username"]}?start=meet\'>в игру</a>: {response_to["invite_meet_count"]}\n'
         reply += '\n'
 
         keys = []
