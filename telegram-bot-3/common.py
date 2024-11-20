@@ -516,7 +516,7 @@ class Misc(object):
                         if first:
                             file_ = f
                             first = False
-                        elif f.get('width') and f.get('height') and f['width'] * f['height'] <= settings.PHOTO_MAX_SIZE:
+                        elif f.width and f.height and f.width * f.height <= settings.PHOTO_MAX_SIZE:
                             file_ = f
                     break
         if file_:
@@ -542,8 +542,7 @@ class Misc(object):
             fd = open(tg_file.file_path, 'rb')
             image = fd.read()
         else:
-            fd = BytesIO()
-            await bot.download_file(tg_file.file_path, fd)
+            fd = await bot.download_file(tg_file.file_path)
             image = fd.read()
         fd.close()
         return image
@@ -831,7 +830,9 @@ class Misc(object):
         logging.debug('get_or_create tg_user by tg_uid in api, status: %s' % status_sender)
         logging.debug('get_or_create tg_user by tg_uid in api, response: %s' % response_sender)
         if response_sender.get('created'):
-            await cls.update_user_photo(tg_user=tg_user_sender, profile=response_sender)
+            status_photo, response_photo = await cls.update_user_photo(tg_user=tg_user_sender, profile=response_sender)
+            if status_photo == 200:
+                response_sender = response_photo
         return status_sender, response_sender
 
 

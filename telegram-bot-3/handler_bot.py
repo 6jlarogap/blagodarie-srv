@@ -18,8 +18,7 @@ from aiogram.filters import Command, StateFilter, CommandStart, CommandObject
 import settings, me
 from settings import logging
 
-from common import Misc
-from common import FSMnewPerson
+from common import Misc, FSMnewPerson
 
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
@@ -77,6 +76,8 @@ async def cmd_start(message: Message, state: FSMContext):
             profile_sender=response_sender,
             tg_user_sender=message.from_user,
         )
+    # elif :
+    #     await message.reply(f'arg: ~{arg}~')
     else:
         await message.reply(f'arg: ~{arg}~')
 
