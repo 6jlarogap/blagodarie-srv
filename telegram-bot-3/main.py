@@ -13,6 +13,7 @@ async def main_():
         token=settings.TOKEN,
         default=DefaultBotProperties(
             parse_mode=enums.ParseMode.HTML,
+            link_preview_is_disabled=True,
     ))
     dp = Dispatcher(storage=storage)
     me.bot = bot

@@ -9,7 +9,7 @@ import qrcode
 from PIL import Image
 from io import BytesIO
 
-from aiogram import types
+from aiogram import types, html
 from aiogram.types.login_url import LoginUrl
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.types.input_file import URLInputFile
@@ -168,7 +168,6 @@ class KeyboardType(object):
     NEW_SON = 45
     NEW_DAUGHTER = 46
 
-
     # У ребёнка родитель папа или мама?
     #
     FATHER_OF_CHILD = 24
@@ -238,6 +237,20 @@ class KeyboardType(object):
     # В вопросе, не желает ли принять приглашение
     INVITE_CONFIRM = 56
 
+    # Участие и отказ от участия в игре знакомств
+    #
+    MEET_DO = 57
+    MEET_REVOKE = 58
+
+    MEET_GENDER_MALE = 59
+    MEET_GENDER_FEMALE = 60
+
+    MEET_INVITE = 61
+
+    # Пропуск задания координат при создании оффера
+    #
+    OFFER_GEO_PASS = 62
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -251,6 +264,42 @@ class Misc(object):
     MSG_YOU_CANCELLED_INPUT = 'Вы отказались от ввода данных'
     MSG_USER_NOT_FOUND = 'Пользователь не найден'
 
+    MSG_ERR_GEO = (
+        'Ожидались: координаты <u><i>широта, долгота</i></u>, '
+        'где <i>широта</i> и <i>долгота</i> - числа, возможные для координат'
+    )
+
+    MSG_LOCATION = (
+        'Пожалуйста, отправьте мне координаты вида \'74.188586, 95.790195\' '
+        '(широта,долгота - удобно скопировать из приложения карт Яндекса/Гугла) '
+        'или нажмите Отмена. ВНИМАНИЕ! Отправленные координаты будут опубликованы!\n'
+        '\n'
+        'Отправленное местоположение будет использовано для отображение профиля '
+        'на картах участников голосований, опросов и на общей карте участников проекта '
+        '- точное местоположение не требуется - '
+        'можно выбрать ближнюю/дальнюю остановку транспорта, рынок или парк.'
+    )
+
+    MSG_LOCATION_MANDAT = (
+        'Пожалуйста, отправьте мне координаты вида \'74.188586, 95.790195\' '
+        '(широта,долгота - удобно скопировать из приложения карт Яндекса/Гугла) '
+        'ВНИМАНИЕ! Отправленные координаты будут опубликованы!\n'
+        '\n'
+        '- точное местоположение не требуется - '
+        'можно выбрать ближнюю/дальнюю остановку транспорта, рынок или парк.'
+    )
+
+    PROMT_MEET_DOING = (
+        '%(vy)s %(already)sучаствуете в игре знакомств!\n'
+        '\n'
+        'Приглашенных Вами: %(invited)s\n'
+        'Симпатий к Вам: %(sympa_to)s\n'
+        'Симпатий от Вас: %(sympa_from)s\n'
+        '\n'
+        'Выберите одно из действий:\n'
+    )
+
+    PROMPT_OFFER_GEO = 'Укажите координаты вида: хх.ххх,уу.ууу - их удобно скопировать из карт яндекса или гугла'
     PROMPT_SEARCH_TEXT_TOO_SHORT = 'Минимальное число символов в тексте для поиска: %s\n' % settings.MIN_LEN_SEARCHED_TEXT
     PROMPT_SEARCH_PHRASE_TOO_SHORT = 'Недостаточно для поиска: короткие слова или текст вообще без слов и т.п.'
     PROMPT_NOTHING_FOUND = 'Никто не найден - попробуйте другие слова'
@@ -327,10 +376,12 @@ class Misc(object):
     MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE
 
     RE_UUID = re.compile(r'[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}', re.IGNORECASE)
+    RE_SID = re.compile(r'^[0-9a-z]{10}$', re.IGNORECASE)
 
     # Никакого re.compile! :
     RE_KEY_SEP = r'^%s%s'
 
+    CALLBACK_DATA_SID_TEMPLATE = '%(keyboard_type)s%(sep)s%(sid)s%(sep)s'
     CALLBACK_DATA_UUID_TEMPLATE = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s'
     CALLBACK_DATA_ID__TEMPLATE = '%(keyboard_type)s%(sep)s%(id_)s%(sep)s'
     CALLBACK_DATA_KEY_TEMPLATE = '%(keyboard_type)s%(sep)s'
@@ -394,7 +445,7 @@ class Misc(object):
 
     @classmethod
     def get_html_a(cls, href, text):
-        return '<a href="%s">%s</a>' % (href, text)
+        return f'<a href="{href}">{html.quote(text)}</a>'
 
 
     @classmethod
@@ -456,40 +507,46 @@ class Misc(object):
         #)
         #]
 
-        file_id = None
+        file_ = None
         first = True
         for o in photos_output:
             if o[0] == 'photos':
                 for p in o[1]:
                     for f in p:
                         if first:
-                            file_id = f.file_id
+                            file_ = f
                             first = False
-                        elif f.width * f.height <= settings.PHOTO_MAX_SIZE:
-                            file_id = f.file_id
+                        elif f.get('width') and f.get('height') and f['width'] * f['height'] <= settings.PHOTO_MAX_SIZE:
+                            file_ = f
                     break
-        if file_id:
-            photo_path = await bot.get_file(file_id)
-            photo_path = photo_path and photo_path.file_path or ''
-            photo_path = photo_path.rstrip('/') or None
-        else:
-            photo_path = None
-
-        if photo_path:
-            async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
-                try:
-                    async with session.get(
-                        "https://api.telegram.org/file/bot%s/%s" % (settings.TOKEN, photo_path,),
-                    ) as resp:
-                        try:
-                            status = int(resp.status)
-                            if status == 200:
-                                result = base64.b64encode(await resp.read()).decode('UTF-8')
-                        except ValueError:
-                            pass
-                except:
-                    pass
+        if file_:
+            image = await Misc.get_file_bytes(file_)
+            result = base64.b64encode(image).decode('UTF-8')
         return result
+
+
+    @classmethod
+    async def get_file_bytes(cls, f):
+        """
+        Получить байты из телеграм- файла
+
+        f:
+            может быть message.photo[-1] при ContentType.PHOTO или фото тг юзера.
+            У него обязан быть атрибут file_id или ключ file_id
+        """
+        file_id = getattr(f, 'file_id', None)
+        if not file_id:
+            file_id = f['file_id']
+        tg_file = await bot.get_file(file_id)
+        if settings.LOCAL_SERVER:
+            fd = open(tg_file.file_path, 'rb')
+            image = fd.read()
+        else:
+            fd = BytesIO()
+            await bot.download_file(tg_file.file_path, fd)
+            image = fd.read()
+        fd.close()
+        return image
 
 
     @classmethod
@@ -579,7 +636,7 @@ class Misc(object):
         или с числом доверий и не доверий, жирно, типа (+2 -1)
         """
         href = cls.get_deeplink(response, https=True)
-        iof = response['first_name']
+        iof = html.quote(response['first_name'])
         if with_lifetime_years:
             lifetime_years_str = cls.get_lifetime_years_str(response)
             if lifetime_years_str:
@@ -594,12 +651,13 @@ class Misc(object):
 
 
     @classmethod
-    def reply_user_card(cls, response, editable):
+    def reply_user_card(cls, response_from, response_to, editable):
         """
         Карточка пользователя, каким он на сайте
 
         На входе:
-        response: ответ от сервера
+        response_from: О пользователе, который смотрит карточку
+        response_to: О пользователе, которого карточка
 
         На выходе:
         Имя Фамилия
@@ -608,6 +666,7 @@ class Misc(object):
         Доверий:
         Благодарностей:
         Знакомств:
+        Приглашений
 
         Возможности: водитель Камаз шашлык виноград курага изюм
 
@@ -618,59 +677,70 @@ class Misc(object):
         +3752975422568
         https://username.com
         """
-        if not response:
+        if not response_to:
             return ''
-        reply = f'<b>{response["first_name"]}</b>\n'
-        if editable and (comment := response.get('comment', '').strip()) and comment:
+        reply = f'<b>{response_to["first_name"]}</b>\n'
+        if (comment := response_to.get('comment', '').strip()) and comment:
             reply += f'{comment}\n'
-        if not response.get('is_org'):
-            reply += cls.get_lifetime_str(response)
+        if not response_to.get('is_org'):
+            reply += cls.get_lifetime_str(response_to)
+            gender = '('
+            if response_to['gender'] == 'm':
+                gender += 'м'
+            elif response_to['gender'] == 'f':
+                gender += 'ж'
+            else:
+                gender += 'пол не задан'
+            gender += ')'
+            reply += f'{gender}\n'
         reply += (
             '\n'
-            f'Доверий: {response["trust_count"]}\n'
-            f'Благодарностей: {response["sum_thanks_count"]}\n'
-            f'Знакомств: {response["acq_count"]}\n'
-            '\n'
+            f'Доверий: {response_to["trust_count"]}\n'
+            f'Благодарностей: {response_to["sum_thanks_count"]}\n'
+            f'Знакомств: {response_to["acq_count"]}\n'
         )
-        keys = []
+        if response_from['did_meet'] and response_to['did_meet']:
+            reply += f'Приглашений <a href=\'https://t.me/{bot_data["username"]}?start=meet\'>в игру</a>: {response_to["invite_meet_count"]}\n'
+        reply += '\n'
 
-        if editable and (response['is_active'] or response.get('owner')):
+        keys = []
+        if editable and (response_to['is_active'] or response_to.get('owner')):
             abilities_text = '\n'.join(
-                ability['text'] for ability in response['abilities']
-            ) if response.get('abilities') else 'не заданы'
-            reply += f'Возможности: {abilities_text}\n\n'
+                html.quote(ability['text']) for ability in response_to['abilities']
+            ) if response_to.get('abilities') else 'не заданы'
+            reply += ('Возможности: %s' % abilities_text) + '\n\n'
 
             wishes_text = '\n'.join(
-                wish['text'] for wish in response['wishes']
-            ) if response.get('wishes') else 'не заданы'
-            reply += f'Потребности: {wishes_text}\n\n'
+                html.quote(wish['text']) for wish in response_to['wishes']
+            ) if response_to.get('wishes') else 'не заданы'
+            reply += ('Потребности: %s' % wishes_text) + '\n\n'
 
-            if not response.get('is_org'):
-                papa = response.get('father') and \
-                    cls.get_deeplink_with_name(response['father'], with_lifetime_years=True) or \
+            if not response_to.get('is_org'):
+                papa = response_to.get('father') and \
+                    cls.get_deeplink_with_name(response_to['father'], with_lifetime_years=True) or \
                     'не задан'
-                mama = response.get('mother') and \
-                    cls.get_deeplink_with_name(response['mother'], with_lifetime_years=True) or \
+                mama = response_to.get('mother') and \
+                    cls.get_deeplink_with_name(response_to['mother'], with_lifetime_years=True) or \
                     'не задана'
-                if response.get('children'):
+                if response_to.get('children'):
                     children = '\n'
-                    for child in response['children']:
+                    for child in response_to['children']:
                         children += ' ' + cls.get_deeplink_with_name(child, with_lifetime_years=True) + '\n'
                 else:
                     children = 'не заданы\n'
                 parents = (
-                    f'Папа: {papa}\n'
-                    f'Мама: {mama}\n'
-                    f'Дети: {children}\n'
-                )
+                    'Папа: %(papa)s\n'
+                    'Мама: %(mama)s\n'
+                    'Дети: %(children)s\n'
+                ) % dict(papa=papa, mama=mama, children=children)
                 reply += parents
 
-        keys += ['@%s' % tgd['tg_username'] for tgd in response.get('tg_data', []) if tgd['tg_username']]
-        keys += [key['value'] for key in response.get('keys', [])]
-        keys.append(cls.get_deeplink(response))
+        keys += ['@%s' % tgd['tg_username'] for tgd in response_to.get('tg_data', []) if tgd['tg_username']]
+        keys += [key['value'] for key in response_to.get('keys', [])]
+        keys.append(cls.get_deeplink(response_to))
 
-        if response.get('username'):
-            keys.append(settings.SHORT_ID_LINK % response['username'])
+        if response_to.get('username'):
+            keys.append(settings.SHORT_ID_LINK % response_to['username'])
 
         keys_text = '\n' + '\n'.join(
             key for key in keys
@@ -986,7 +1056,7 @@ class Misc(object):
         card_message=None,
     ):
         """
-        Показать карточки пользователей
+        Показать карточку пользователя
         """
         if not profile:
             return
@@ -996,10 +1066,7 @@ class Misc(object):
         is_org = profile.get('is_org')
         editable = cls.editable(profile=profile, sender=profile_sender)
 
-        reply = cls.reply_user_card(
-            profile,
-            editable,
-        )
+        reply = cls.reply_user_card(profile_sender, profile, editable)
         response_relations = {}
         if user_from_id != profile['user_id']:
             status_relations, response_relations = await cls.call_response_relations(profile_sender, profile)
@@ -1065,10 +1132,7 @@ class Misc(object):
         inline_btn_trusts = InlineKeyboardButton(
             text='Сеть доверия',
             login_url=cls.make_login_url(
-                redirect_path='%(graph_host)s/?user_uuid_trusts=%(user_uuid)s' % dict(
-                        graph_host=settings.GRAPH_HOST,
-                        user_uuid=profile['uuid'],
-                    ),
+                redirect_path=f'{settings.GRAPH_HOST}/?user_trusts={profile["username"]}',
                 keep_user_data='on',
             ))
         login_url_buttons = [inline_btn_trusts, ]
@@ -1078,14 +1142,11 @@ class Misc(object):
                 text='Род',
                 login_url=cls.make_login_url(
                     redirect_path=(
-                            '%(graph_host)s/?user_uuid_genesis_tree=%(user_uuid)s'
-                            '&up=on&down=on&depth=2'
-                        ) % dict(
-                        graph_host=settings.GRAPH_HOST,
-                        user_uuid=profile['uuid'],
+                            f'{settings.GRAPH_HOST}/?user_genesis_tree={profile["username"]}'
+                            f'&up=on&down=on&depth=2'
                     ),
                     keep_user_data='on',
-                ))
+            ))
             login_url_buttons.append(inline_btn_genesis)
 
         if profile.get('latitude') is not None and profile.get('longitude') is not None:
@@ -1156,11 +1217,8 @@ class Misc(object):
                     uuid=profile['uuid'],
                     sep=KeyboardType.SEP,
                 ))
-                edit_buttons_2 = []
-                if editable:
-                    edit_buttons_2 += [inline_btn_location, inline_btn_comment]
-                else:
-                    edit_buttons_1 += [inline_btn_location]
+
+                edit_buttons_2 = [inline_btn_location, inline_btn_comment]
                 if editable and is_owned_account:
                     dict_change_owner = dict(
                         keyboard_type=KeyboardType.CHANGE_OWNER,
@@ -1725,35 +1783,37 @@ class Misc(object):
 
 
     @classmethod
-    async def answer_youtube_message(cls, message, youtube_id, youtube_link):
+    def get_sid_from_callback(cls, callback_query):
         """
-        На запрос авторизации на сайт голосования или в ответ на youtube ссылку в бот
+        Получить username из самых распространенных callback_query
         """
-        reply = 'Коллективный разум:\n' + youtube_link
-        redirect_path = settings.VOTE_URL + '#' + youtube_link
-        buttons = []
-        inline_btn_redirect = InlineKeyboardButton(
-            text='Продолжить',
-            login_url=cls.make_login_url(
-                redirect_path=redirect_path,
-                keep_user_data='on'
-        ))
-        buttons.append([inline_btn_redirect])
-        inline_btn_scheme = InlineKeyboardButton(
-            text='Схема',
-            login_url=cls.make_login_url(
-                redirect_path=f'{settings.GRAPH_HOST}/?videoid={youtube_id}&source=yt',
-                keep_user_data='on',
-            ))
-        inline_btn_map = InlineKeyboardButton(
-            text='Карта',
-            login_url=cls.make_login_url(
-                redirect_path=f'{settings.MAP_HOST}/?videoid={youtube_id}&source=yt',
-                keep_user_data='on',
-            ))
-        buttons.append([inline_btn_scheme, inline_btn_map])
-        await message.reply(reply, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+        result = None
+        if getattr(callback_query, 'message', None) and getattr(callback_query, 'data', None):
+            code = (callback_query.data or '').split(KeyboardType.SEP)
+            try:
+                result = code[1]
+                if not re.search(cls.RE_SID, result):
+                    result = None
+            except IndexError:
+                pass
+        return result
 
+    @classmethod
+    def check_location_str(cls, message_text):
+        latitude, longitude = None, None
+        m = re.search(r'([\-\+]?\d+(?:[\.\,]\d*)?)\s*\,\s*([\-\+]?\d+(?:[\.\,]\d*)?)', message_text)
+        if m:
+            try:
+                latitude_ = float(m.group(1).replace(',', '.'))
+                longitude_ = float(m.group(2).replace(',', '.'))
+                if -90 <= latitude_ <= 90 and -180 <= longitude_ <= 180:
+                    latitude = latitude_
+                    longitude = longitude_
+                else:
+                    raise ValueError
+            except ValueError:
+                pass
+        return latitude, longitude
 
     @classmethod
     def arg_deeplink(cls, message_text):
@@ -1762,11 +1822,11 @@ class Misc(object):
         """
         result = ''
         if m := re.search(
-            r'^(?:https?\:\/\/)?t\.me\/%s\?start\=(\S+)' % re.escape(bot_data.username),
+            r'^(?:https?\:\/\/)?t\.me\/%s\?start\=(\S.*)' % re.escape(bot_data.username),
             message_text,
             flags=re.I,
         ):
-            result = m.group(1)
+            result = m.group(1).strip()
         return result
 
 

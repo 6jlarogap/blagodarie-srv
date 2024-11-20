@@ -7,7 +7,7 @@
 
 import re, redis
 
-from aiogram import Router, F
+from aiogram import Router, F, html
 from aiogram.types import Message, ContentType,  \
                             MessageOriginUser, MessageOriginHiddenUser, \
                             InlineKeyboardMarkup, InlineKeyboardButton
@@ -24,7 +24,7 @@ from common import FSMnewPerson
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
-@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('graph'))
+@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('graph'))
 async def cmd_graph(message: Message, state: FSMContext):
     inline_btn_all_users = InlineKeyboardButton(
         text='Отношения участников',
@@ -40,13 +40,12 @@ async def cmd_graph(message: Message, state: FSMContext):
     ))
     await message.reply(
         text='Выберите тип графика',
-        disable_web_page_preview=True,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[inline_btn_all_users],[inline_btn_recent]])
 
     )
 
 
-@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('ya'))
+@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('ya'))
 async def cmd_ya(message: Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     await Misc.show_card(
@@ -56,13 +55,13 @@ async def cmd_ya(message: Message, state: FSMContext):
     )
 
 
-@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('help'))
+@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('help'))
 async def cmd_help(message: Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
-    await message.reply(await Misc.help_text(), disable_web_page_preview=True)
+    await message.reply(await Misc.help_text())
 
 
-@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('start'))
+@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('start'))
 async def cmd_start(message: Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     arg = Misc.arg_deeplink(message.text)
@@ -72,7 +71,7 @@ async def cmd_start(message: Message, state: FSMContext):
             arg = m.group(1)
     if not arg:
         # Просто /start
-        await message.reply(await Misc.help_text(), disable_web_page_preview=True)
+        await message.reply(await Misc.help_text())
         await Misc.show_card(
             profile=response_sender,
             profile_sender=response_sender,
@@ -81,7 +80,7 @@ async def cmd_start(message: Message, state: FSMContext):
     else:
         await message.reply(f'arg: ~{arg}~')
 
-@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command(re.compile('new|new_person')))
+@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command(re.compile('new|new_person')))
 async def cmd_new_person(message: Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
@@ -97,6 +96,10 @@ async def cmd_new_person(message: Message, state: FSMContext):
 
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None))
 async def message_to_bot(message: Message, state: FSMContext):
+    # Deeplink. Если щелкнуть по нему, все ок. Если загнать в бот, то никакой реакции
+    #
+    if message.content_type == ContentType.TEXT and  Misc.arg_deeplink(message.text):
+        await cmd_start(message, state)
     show_response = True
     if message.media_group_id:
         if r := redis.Redis(**settings.REDIS_CONNECT):

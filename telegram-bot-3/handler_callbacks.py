@@ -76,10 +76,7 @@ async def new_iof_ask_gender(message: Message, state: FSMContext):
         inline_btn_male, inline_btn_female, Misc.inline_button_cancel()
     ]])
     await message.reply(
-        '<u>' + data['first_name'] + '</u>:\n\n' + 'Укажите пол',
-        reply_markup=reply_markup,
-        disable_web_page_preview=True,
-    )
+        '<u>' + data['first_name'] + '</u>:\n\n' + 'Укажите пол', reply_markup=reply_markup,)
 
 
 @dp.callback_query(F.data.regexp(r'^(%s|%s)%s$' % (
@@ -150,7 +147,6 @@ async def cbq_gender(callback: CallbackQuery, state: FSMContext):
     await callback.message.reply(
         prompt_gender,
         reply_markup=reply_markup,
-        disable_web_page_preview=True,
     )
     await callback.answer()
 
@@ -189,7 +185,6 @@ async def cbq_gender(callback: CallbackQuery, state: FSMContext):
                     deeplink = Misc.get_deeplink_with_name(response)
                     await callback.message.reply(
                         text= f'{deeplink}\nУстановлен пол: {s_gender}',
-                        disable_web_page_preview=True,
                     )
     await state.clear()
     await callback.answer()
