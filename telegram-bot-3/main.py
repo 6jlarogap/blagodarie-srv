@@ -3,26 +3,36 @@ from aiogram import Bot, Dispatcher, enums
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 
+from aiogram.client.telegram import TelegramAPIServer
+from aiogram.client.session.aiohttp import AiohttpSession
+
 import settings, me
 from settings import logging
 
 storage = MemoryStorage()
 
 async def main_():
-    bot = Bot(
+    kwargs_bot = dict(
         token=settings.TOKEN,
         default=DefaultBotProperties(
             parse_mode=enums.ParseMode.HTML,
             link_preview_is_disabled=True,
     ))
+    if settings.LOCAL_SERVER:
+        kwargs_bot.update(
+            session = AiohttpSession(
+                api=TelegramAPIServer.from_base(settings.LOCAL_SERVER, is_local=True),
+        ))
+    bot = Bot(**kwargs_bot)
     dp = Dispatcher(storage=storage)
+
     me.bot = bot
     me.dp = dp
     me.bot_data = await bot.get_me()
-
     from handler_bot import router as router_bot
     from handler_group import router as router_group
     from handler_callbacks import router as router_callbacks
+
     dp.include_routers(router_bot, router_group, router_callbacks)
 
     await bot.delete_webhook(drop_pending_updates=True)
