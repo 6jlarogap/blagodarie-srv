@@ -25,12 +25,14 @@ TIMEOUT = aiohttp.ClientTimeout(total=settings.HTTP_TIMEOUT)
 
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
-# Контексты, используемые в разных местах
+# Контексты, используемые в разных местах: обычно и в командах и в кнопках
 
 class FSMnewPerson(StatesGroup):
     ask = State()
     ask_gender = State()
 
+class FSMgeo(StatesGroup):
+    geo = State()
 
 class Attitude(object):
 
@@ -1208,7 +1210,7 @@ class Misc(object):
                     text='Место',
                     callback_data=callback_data_template % dict(
                     keyboard_type=KeyboardType.LOCATION,
-                    uuid=profile['uuid'] if is_owned_account else '',
+                    uuid=profile['uuid'],
                     sep=KeyboardType.SEP,
                 ))
                 inline_btn_comment = InlineKeyboardButton(
@@ -1802,18 +1804,19 @@ class Misc(object):
     @classmethod
     def check_location_str(cls, message_text):
         latitude, longitude = None, None
-        m = re.search(r'([\-\+]?\d+(?:[\.\,]\d*)?)\s*\,\s*([\-\+]?\d+(?:[\.\,]\d*)?)', message_text)
-        if m:
-            try:
-                latitude_ = float(m.group(1).replace(',', '.'))
-                longitude_ = float(m.group(2).replace(',', '.'))
-                if -90 <= latitude_ <= 90 and -180 <= longitude_ <= 180:
-                    latitude = latitude_
-                    longitude = longitude_
-                else:
-                    raise ValueError
-            except ValueError:
-                pass
+        if type(message_text) == str:
+            m = re.search(r'([\-\+]?\d+(?:[\.\,]\d*)?)\s*\,\s*([\-\+]?\d+(?:[\.\,]\d*)?)', message_text)
+            if m:
+                try:
+                    latitude_ = float(m.group(1).replace(',', '.'))
+                    longitude_ = float(m.group(2).replace(',', '.'))
+                    if -90 <= latitude_ <= 90 and -180 <= longitude_ <= 180:
+                        latitude = latitude_
+                        longitude = longitude_
+                    else:
+                        raise ValueError
+                except ValueError:
+                    pass
         return latitude, longitude
 
     @classmethod
@@ -1852,6 +1855,18 @@ class Misc(object):
                 parts.append(temp_text)
                 break
         return parts
+
+    @classmethod
+    async def prompt_location(cls, message, state, uuid=None):
+        await state.set_state(FSMgeo.geo)
+        if uuid:
+            data = await state.get_data()
+            data['uuid'] = uuid
+        await bot.send_message(
+            message.chat.id,
+            cls.MSG_LOCATION,
+            reply_markup=cls.reply_markup_cancel_row(),
+        )
 
 
 class TgGroup(object):

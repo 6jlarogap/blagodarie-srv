@@ -14,11 +14,12 @@ from aiogram.types import Message, ContentType,  \
 from aiogram.enums import ChatType
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command, StateFilter, CommandStart, CommandObject
+from aiogram.fsm.state import StatesGroup, State
 
 import settings, me
 from settings import logging
 
-from common import Misc, FSMnewPerson
+from common import Misc, FSMnewPerson, FSMgeo
 
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
@@ -60,6 +61,10 @@ async def cmd_help(message: Message, state: FSMContext):
     await message.reply(await Misc.help_text())
 
 
+@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('setplace'))
+async def cmd_setplace(message: Message, state: FSMContext):
+    await Misc.prompt_location(message, state)
+
 @router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('start'))
 async def cmd_start(message: Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
@@ -67,7 +72,7 @@ async def cmd_start(message: Message, state: FSMContext):
     if not arg:
         # команда /start
         if m := re.search(r'^\s*\/start\s+(.+)', message.text, flags=re.I):
-            arg = m.group(1)
+            arg = (m.group(1) or '').lower()
     if not arg:
         # Просто /start
         await message.reply(await Misc.help_text())
@@ -76,8 +81,8 @@ async def cmd_start(message: Message, state: FSMContext):
             profile_sender=response_sender,
             tg_user_sender=message.from_user,
         )
-    # elif :
-    #     await message.reply(f'arg: ~{arg}~')
+    elif arg == 'setplace':
+        await Misc.prompt_location(message, state)
     else:
         await message.reply(f'arg: ~{arg}~')
 
@@ -170,8 +175,10 @@ commands_dict = {
     'help': cmd_help,
     'new': cmd_new_person,
     'new_person': cmd_new_person,
+    'setplace': cmd_setplace,
     'start': cmd_start,
 }
+
 
 async def is_it_command(message: Message, state: FSMContext, excepts=[]):
     """
@@ -197,3 +204,64 @@ async def is_it_command(message: Message, state: FSMContext, excepts=[]):
                 result = True
                 await commands_dict[command](message, state)
     return result
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMgeo.geo))
+async def process_location_input(message: Message, state: FSMContext):
+    """
+    Записать местоположение пользователя телеграма или uuid в состоянии
+    """
+    if message.content_type == ContentType.TEXT:
+        if await is_it_command(message, state):
+            return
+    else:
+        await message.answer(Misc.MSG_ERR_GEO, reply_markup=Misc.reply_markup_cancel_row())
+        return
+    await put_location(message, state, show_card=True)
+
+
+async def put_location(message, state, show_card=False):
+    """
+    Записать местоположение пользователя телеграма
+
+    В случае успеха:
+        Если show_card == True, то вернуть профиль карточки с новыми координатами
+        Вернуть профиль пользователя
+    Иначе вернуть пустой словарь
+    """
+    result = {}
+    reply_markup = None
+    user_uuid = None
+    data = await state.get_data()
+    user_uuid = data.get('uuid')
+    latitude = longitude = None
+    tg_user_sender = message.from_user
+    status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+    if status_sender == 200:
+        if not user_uuid:
+            user_uuid = response_sender.get('uuid')
+        latitude, longitude = Misc.check_location_str(message.text)
+        if latitude is None or longitude is None:
+            await message.answer(Misc.MSG_ERR_GEO, reply_markup=Misc.reply_markup_cancel_row())
+            return
+        else:
+            status, response = await Misc.put_user_properties(
+                uuid=user_uuid,
+                latitude = latitude,
+                longitude = longitude,
+            )
+            if status == 200:
+                result = response
+                if show_card:
+                    await Misc.show_card(
+                        profile=response_sender,
+                        profile_sender=response,
+                        tg_user_sender=tg_user_sender,
+                    )
+                    await message.reply('Координаты записаны', reply_markup=reply_markup)
+            else:
+                await message.reply('Ошибка записи координат', reply_markup=reply_markup)
+    await state.clear()
+    return result
+
+

@@ -188,3 +188,30 @@ async def cbq_gender(callback: CallbackQuery, state: FSMContext):
                     )
     await state.clear()
     await callback.answer()
+
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.LOCATION,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_location(callback: CallbackQuery, state: FSMContext):
+    """
+    Действия по местоположению
+
+    На входе строка:
+        <KeyboardType.LOCATION>             # 0
+        <KeyboardType.SEP>
+        uuid                                # 1
+        <KeyboardType.SEP>
+    """
+    tg_user_sender = callback.from_user
+    code = callback.data.split(KeyboardType.SEP)
+    try:
+        uuid = code[1]
+        if uuid and not await Misc.check_owner_by_uuid(owner_tg_user=callback.from_user, uuid=uuid):
+            return
+    except IndexError:
+        uuid = None
+    await callback.answer()
+    if uuid:
+        await Misc.prompt_location(callback.message, state, uuid=uuid)
