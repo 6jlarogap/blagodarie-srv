@@ -1860,8 +1860,7 @@ class Misc(object):
     async def prompt_location(cls, message, state, uuid=None):
         await state.set_state(FSMgeo.geo)
         if uuid:
-            data = await state.get_data()
-            data['uuid'] = uuid
+            await state.update_data(uuid=uuid)
         await bot.send_message(
             message.chat.id,
             cls.MSG_LOCATION,

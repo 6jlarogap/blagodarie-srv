@@ -21,8 +21,14 @@ from settings import logging
 
 from common import Misc, FSMnewPerson, FSMgeo
 
+import pymorphy3
+MorphAnalyzer = pymorphy3.MorphAnalyzer()
+
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
+
+class FSMquery(StatesGroup):
+    ask = State()
 
 @router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('graph'))
 async def cmd_graph(message: Message, state: FSMContext):
@@ -95,6 +101,26 @@ async def cmd_new_person(message: Message, state: FSMContext):
         await state.set_state(FSMnewPerson.ask)
         await state.update_data(uuid=response_sender['uuid'])
         await message.reply(Misc.PROMPT_NEW_IOF, reply_markup=Misc.reply_markup_cancel_row())
+
+
+@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command(re.compile('findpotr|findvozm|findperson')))
+async def cmd_find(message: Message, state: FSMContext):
+    message_text = message.text.split()[0].lstrip('/')
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender == 200:
+        if not Misc.editable(response_sender):
+            return
+        if message_text == 'findpotr':
+            what = 'query_wish'
+        elif message_text == 'findvozm':
+            what = 'query_ability'
+        elif message_text == 'findperson':
+            what = 'query_person'
+        else:
+            return
+        await state.set_state(FSMquery.ask)
+        await state.update_data(what=what)
+        await message.reply(Misc.PROMPT_QUERY[what], reply_markup=Misc.reply_markup_cancel_row())
 
 
 # Команды в бот закончились.
@@ -265,3 +291,41 @@ async def put_location(message, state, show_card=False):
     return result
 
 
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMquery.ask))
+async def process_find_input(message: Message, state: FSMContext):
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    data = await state.get_data()
+    try:
+        what = data['what']
+    except KeyError:
+        pass
+    else:
+        a_found = None
+        if message.content_type != ContentType.TEXT:
+            reply_markup = Misc.reply_markup_cancel_row()
+            await message.reply(
+                Misc.MSG_ERROR_TEXT_ONLY + '\n\n' +  Misc.PROMPT_QUERY[what],
+                reply_markup=Misc.reply_markup_cancel_row(),
+            )
+            return
+        if len(message.text.strip()) < settings.MIN_LEN_SEARCHED_TEXT:
+            reply = Misc.PROMPT_SEARCH_TEXT_TOO_SHORT
+        else:
+            search_phrase = Misc.text_search_phrase(
+                message.text,
+                MorphAnalyzer,
+            )
+            print(search_phrase)
+            if not search_phrase:
+                reply = Misc.PROMPT_SEARCH_PHRASE_TOO_SHORT
+            else:
+                status, a_found = await Misc.search_users(what, search_phrase)
+                if status != 200:
+                    a_found = None
+                elif not a_found:
+                    reply = Misc.PROMPT_NOTHING_FOUND
+        if a_found:
+            await Misc.show_deeplinks(a_found, message)
+        elif reply:
+            await message.reply(reply)
+    await state.clear()
