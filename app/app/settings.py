@@ -511,7 +511,7 @@ except ModuleNotFoundError:
 # Переход по короткой ссылке. По url типа ../t/qwert12345
 # делается redirect на:
 #
-SHORT_ID_URL = GRAPH_URL + '/?user_uuid_trusts=%s'
+SHORT_ID_URL = GRAPH_URL + '/?user_trusts=%s'
 
 # MEDIA_ROOT может измениться в local_settings
 #

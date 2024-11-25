@@ -4214,7 +4214,7 @@ class ApiShortIdView(View):
             user = User.objects.select_related('profile').get(username=short_id)
         except User.DoesNotExist:
             raise NotFound()
-        return redirect(settings.SHORT_ID_URL % user.profile.uuid)
+        return redirect(settings.SHORT_ID_URL % user.username)
 
 api_short_id = ApiShortIdView.as_view()
 

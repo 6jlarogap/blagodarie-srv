@@ -1447,7 +1447,7 @@ class Misc(object):
         qr_code.add_data(url)
         image = qr_code.make_image(fill_color='black', back_color='white').convert('RGB')
         bytes_io = BytesIO()
-        bytes_io.name = f'{profile["username"]}.jpg'
+        bytes_io.name = f'qr-{profile["username"]}.jpg'
 
         if profile.get('photo'):
             thumbnail = cls.url_photo_to_thumbnail(
@@ -1477,7 +1477,6 @@ class Misc(object):
                     image.paste(photo, pos)
 
         image.save(bytes_io, format='JPEG')
-        bytes_io.seek(0)
         return bytes_io
 
 

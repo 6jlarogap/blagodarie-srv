@@ -7,7 +7,7 @@ import re
 from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
 from aiogram.types import Message, CallbackQuery, ContentType, \
-                          InlineKeyboardMarkup, InlineKeyboardButton
+                          InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.enums import ChatType
@@ -472,5 +472,24 @@ async def meet_do_or_revoke(data):
             text=text_to_sender,
             disable_web_page_preview=True,
             reply_markup=reply_markup,
+        )
+
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.MEET_INVITE,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_meet_invite(callback: CallbackQuery, state: FSMContext):
+    status, profile = await Misc.post_tg_user(callback.from_user)
+    await callback.answer()
+    if status == 200:
+        url = f'https://t.me/{bot_data.username}?start=m-{profile["username"]}'
+        link = Misc.get_html_a(url, 'Вход...')
+        caption = f'Перешлите одиноким — приглашение в игру знакомств! {link}'
+        bytes_io = await Misc.get_qrcode(profile, url)
+        await bot.send_photo(
+            chat_id=callback.from_user.id,
+            photo=BufferedInputFile(bytes_io.getvalue(), filename=bytes_io.name),
+            caption=caption,
         )
 
