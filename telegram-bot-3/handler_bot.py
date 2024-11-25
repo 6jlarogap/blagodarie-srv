@@ -19,7 +19,7 @@ from aiogram.fsm.state import StatesGroup, State
 import settings, me
 from settings import logging
 
-from common import Misc, FSMnewPerson, FSMgeo
+from common import Misc, KeyboardType, FSMnewPerson, FSMgeo
 
 import pymorphy3
 MorphAnalyzer = pymorphy3.MorphAnalyzer()
@@ -74,11 +74,13 @@ async def cmd_setplace(message: Message, state: FSMContext):
 @router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('start'))
 async def cmd_start(message: Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender != 200:
+        return
     arg = Misc.arg_deeplink(message.text)
     if not arg:
         # команда /start
         if m := re.search(r'^\s*\/start\s+(.+)', message.text, flags=re.I):
-            arg = (m.group(1) or '').lower()
+            arg = m.group(1) or ''
     if not arg:
         # Просто /start
         await message.reply(await Misc.help_text())
@@ -87,8 +89,15 @@ async def cmd_start(message: Message, state: FSMContext):
             profile_sender=response_sender,
             tg_user_sender=message.from_user,
         )
+    elif m := re.search(r'm\-([0-9a-z]{10})$', arg, flags=re.I):
+        status_to, profile_to = await Misc.get_user_by_sid(m.group(1))
+        if status_to == 200:
+            data = dict(profile_from = response_sender, profile_to=profile_to)
+            await process_meet_from_deeplink_and_command(message, state, data)
     elif arg == 'setplace':
         await Misc.prompt_location(message, state)
+    elif arg == 'meet':
+        await cmd_meet(message, state)
     else:
         await message.reply(f'arg: ~{arg}~')
 
@@ -122,6 +131,12 @@ async def cmd_find(message: Message, state: FSMContext):
         await state.update_data(what=what)
         await message.reply(Misc.PROMPT_QUERY[what], reply_markup=Misc.reply_markup_cancel_row())
 
+
+@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('meet'))
+async def cmd_meet(message: Message, state: FSMContext):
+    status, profile = await Misc.post_tg_user(message.from_user)
+    data = dict(profile_from = profile, profile_to=None)
+    await process_meet_from_deeplink_and_command(message, state, data)
 
 # Команды в бот закончились.
 # Просто сообщение в бот. Должно здесь идти после всех команд в бот
@@ -194,7 +209,6 @@ async def message_to_bot(message: Message, state: FSMContext):
         await Misc.answer_youtube_message(message, youtube_id, youtube_link)
         return
 
-
 commands_dict = {
     'graph': cmd_graph,
     'ya': cmd_ya,
@@ -202,6 +216,7 @@ commands_dict = {
     'new': cmd_new_person,
     'new_person': cmd_new_person,
     'setplace': cmd_setplace,
+    'meet': cmd_meet,
     'start': cmd_start,
 }
 
@@ -244,6 +259,46 @@ async def process_location_input(message: Message, state: FSMContext):
         await message.answer(Misc.MSG_ERR_GEO, reply_markup=Misc.reply_markup_cancel_row())
         return
     await put_location(message, state, show_card=True)
+    await state.clear()
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMquery.ask))
+async def process_find_input(message: Message, state: FSMContext):
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    data = await state.get_data()
+    try:
+        what = data['what']
+    except KeyError:
+        pass
+    else:
+        a_found = None
+        if message.content_type != ContentType.TEXT:
+            reply_markup = Misc.reply_markup_cancel_row()
+            await message.reply(
+                Misc.MSG_ERROR_TEXT_ONLY + '\n\n' +  Misc.PROMPT_QUERY[what],
+                reply_markup=Misc.reply_markup_cancel_row(),
+            )
+            return
+        if len(message.text.strip()) < settings.MIN_LEN_SEARCHED_TEXT:
+            reply = Misc.PROMPT_SEARCH_TEXT_TOO_SHORT
+        else:
+            search_phrase = Misc.text_search_phrase(
+                message.text,
+                MorphAnalyzer,
+            )
+            if not search_phrase:
+                reply = Misc.PROMPT_SEARCH_PHRASE_TOO_SHORT
+            else:
+                status, a_found = await Misc.search_users(what, search_phrase)
+                if status != 200:
+                    a_found = None
+                elif not a_found:
+                    reply = Misc.PROMPT_NOTHING_FOUND
+        if a_found:
+            await Misc.show_deeplinks(a_found, message)
+        elif reply:
+            await message.reply(reply)
+    await state.clear()
 
 
 async def put_location(message, state, show_card=False):
@@ -287,45 +342,65 @@ async def put_location(message, state, show_card=False):
                     await message.reply('Координаты записаны', reply_markup=reply_markup)
             else:
                 await message.reply('Ошибка записи координат', reply_markup=reply_markup)
-    await state.clear()
     return result
 
 
-@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMquery.ask))
-async def process_find_input(message: Message, state: FSMContext):
-    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
-    data = await state.get_data()
-    try:
-        what = data['what']
-    except KeyError:
-        pass
+async def process_meet_from_deeplink_and_command(message, state, data):
+    profile_from, profile_to = data['profile_from'], data['profile_to']
+    if profile_to and profile_to['uuid'] == profile_from['uuid']:
+        profile_to = None
+    if profile_from['did_meet']:
+        count_meet_invited_ = await Misc.count_meet_invited(profile_from.get('uuid'))
+        count_meet_invited_.update(already='уже ', vy=Misc.get_html_a(Misc.get_deeplink(profile_from, bot_data), 'Вы'))
+        text = Misc.PROMT_MEET_DOING % count_meet_invited_
     else:
-        a_found = None
-        if message.content_type != ContentType.TEXT:
-            reply_markup = Misc.reply_markup_cancel_row()
-            await message.reply(
-                Misc.MSG_ERROR_TEXT_ONLY + '\n\n' +  Misc.PROMPT_QUERY[what],
-                reply_markup=Misc.reply_markup_cancel_row(),
-            )
-            return
-        if len(message.text.strip()) < settings.MIN_LEN_SEARCHED_TEXT:
-            reply = Misc.PROMPT_SEARCH_TEXT_TOO_SHORT
-        else:
-            search_phrase = Misc.text_search_phrase(
-                message.text,
-                MorphAnalyzer,
-            )
-            print(search_phrase)
-            if not search_phrase:
-                reply = Misc.PROMPT_SEARCH_PHRASE_TOO_SHORT
-            else:
-                status, a_found = await Misc.search_users(what, search_phrase)
-                if status != 200:
-                    a_found = None
-                elif not a_found:
-                    reply = Misc.PROMPT_NOTHING_FOUND
-        if a_found:
-            await Misc.show_deeplinks(a_found, message)
-        elif reply:
-            await message.reply(reply)
-    await state.clear()
+        text = \
+'''Добро пожаловать в игру знакомств! Цель игры - соединить одиноких людей!
+
+Чтобы играть:
+- нажмите "Участвовать",
+- заполните анкету,
+- приглашайте одиноких,
+- отмечайте симпатии,
+- выбирайте предложения и
+- встречайтесь!
+
+Победители - покинувшие игру соединившиеся пары!
+
+Нажимая "Участвовать", Вы соглашаетесь с публикацией Ваших анкетных данных и принятием ответственности за их достоверность!
+Удачи!'''
+
+    callback_data_template = Misc.CALLBACK_DATA_SID_TEMPLATE + '%(sid2)s%(sep)s'
+    inline_btn_do_or_revoke = InlineKeyboardButton(
+        text='Выйти' if profile_from['did_meet'] else 'Участвовать',
+        callback_data=callback_data_template % dict(
+        keyboard_type=KeyboardType.MEET_REVOKE if profile_from['did_meet'] else KeyboardType.MEET_DO,
+        sid=profile_from['username'],
+        sid2=profile_to['username'] if profile_to else '',
+        sep=KeyboardType.SEP,
+    ))
+    inline_btn_invite = InlineKeyboardButton(
+        text='Пригласить в игру' if profile_from['did_meet'] else 'Пригласить',
+        callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
+        keyboard_type=KeyboardType.MEET_INVITE,
+        sep=KeyboardType.SEP,
+    ))
+    if profile_from['did_meet']:
+        buttons = [inline_btn_invite, inline_btn_do_or_revoke]
+    else:
+        buttons = [inline_btn_do_or_revoke]
+    buttons = [buttons]
+    if profile_from['did_meet']:
+        inline_btn_map = InlineKeyboardButton(
+            text='Карта участников игры',
+            login_url=Misc.make_login_url(
+                redirect_path=settings.MAP_HOST + '/?meet=on',
+                keep_user_data='on'
+        ))
+        buttons.append([inline_btn_map])
+    await bot.send_message(
+        message.from_user.id,
+        text=text,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+    )
+

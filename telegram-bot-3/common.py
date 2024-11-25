@@ -701,7 +701,7 @@ class Misc(object):
             f'Знакомств: {response_to["acq_count"]}\n'
         )
         if response_from['did_meet'] and response_to['did_meet']:
-            reply += f'Приглашений <a href=\'https://t.me/{bot_data["username"]}?start=meet\'>в игру</a>: {response_to["invite_meet_count"]}\n'
+            reply += f'Приглашений <a href=\'https://t.me/{bot_data.username}?start=meet\'>в игру</a>: {response_to["invite_meet_count"]}\n'
         reply += '\n'
 
         keys = []
@@ -1866,6 +1866,20 @@ class Misc(object):
             cls.MSG_LOCATION,
             reply_markup=cls.reply_markup_cancel_row(),
         )
+
+    @classmethod
+    async def count_meet_invited(cls, uuid):
+        """
+        Сколько пригласил юзер с uuid, сколько от и к нему симпатий
+        """
+        status, response = await cls.api_request(
+            path='/api/getstats/did_meet',
+            method='get',
+            params=dict(uuid=uuid)
+        )
+        logging.debug('get_count_meet_invited in api, status: %s' % status)
+        logging.debug('get_count_meet_invited in api, response: %s' % response)
+        return response
 
 
 class TgGroup(object):

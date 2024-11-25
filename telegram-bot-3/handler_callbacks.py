@@ -27,6 +27,11 @@ dp, bot, bot_data = me.dp, me.bot, me.bot_data
 class FSMgender(StatesGroup):
     ask = State()
 
+class FSMmeet(StatesGroup):
+    ask_gender = State()
+    ask_dob = State()
+    ask_geo = State()
+
 @dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.CANCEL_ANY,
         KeyboardType.SEP,
@@ -215,3 +220,257 @@ async def cbq_location(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
     if uuid:
         await Misc.prompt_location(callback.message, state, uuid=uuid)
+
+
+async def meet_quest_gender(state):
+    data = await state.get_data()
+    callback_data_template = Misc.CALLBACK_DATA_KEY_TEMPLATE
+    callback_data_male = callback_data_template % dict(
+        keyboard_type=KeyboardType.MEET_GENDER_MALE,
+        sep=KeyboardType.SEP,
+    )
+    inline_btn_male = InlineKeyboardButton(text='Муж', callback_data=callback_data_male)
+    callback_data_female = callback_data_template % dict(
+        keyboard_type=KeyboardType.MEET_GENDER_FEMALE,
+        sep=KeyboardType.SEP,
+    )
+    inline_btn_female = InlineKeyboardButton(text='Жен', callback_data=callback_data_female)
+    await bot.send_message(
+        chat_id=data['tg_user_sender_id'],
+        text='Укажите Ваш пол',
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[inline_btn_male, inline_btn_female, Misc.inline_button_cancel()]]),
+        reply_to_message_id=data['message_id'],
+    )
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMmeet.ask_gender))
+async def meet_got_gender_text(message: Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    await message.reply(
+        Misc.PROMPT_MESSAGE_INSTEAD_OF_GENDER,
+        reply_markup=Misc.reply_markup_cancel_row(),
+    )
+
+
+async def meet_quest_dob(state, error_message=None):
+    data = await state.get_data()
+    text = f'Напишите мне Вашу дату рождения, ' + Misc.PROMPT_DATE_FORMAT
+    if error_message:
+        text = f'{error_message}\n\n{text}'
+    await bot.send_message(
+        chat_id=data['tg_user_sender_id'],
+        text=text,
+        reply_markup=Misc.reply_markup_cancel_row(),
+    )
+
+
+async def meet_quest_geo(state, error_message=None):
+    text = Misc.MSG_LOCATION_MANDAT
+    if error_message:
+        text = f'{error_message}\n\n{text}'
+    data = await state.get_data()
+    await bot.send_message(
+        chat_id=data['tg_user_sender_id'],
+        text=text,
+        reply_markup=Misc.reply_markup_cancel_row(),
+    )
+
+
+@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMmeet.ask_geo))
+async def process_message_meet_geo(message: Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    data = await state.get_data()
+    status_from, profile_from = await Misc.post_tg_user(message.from_user)
+    if status_from != 200 or profile_from['uuid'] != data['uuid']:
+        await state.clear()
+        return
+    latitude, longitude = Misc.check_location_str(message.text)
+    if latitude is None or longitude is None:
+        await meet_quest_geo(state, error_message=Misc.MSG_ERR_GEO)
+        return
+    data.update(latitude=latitude, longitude=longitude)
+    await state.clear()
+    await meet_do_or_revoke(data)
+
+
+@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMmeet.ask_dob))
+async def process_message_meet_dob(message: Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    data = await state.get_data()
+    status_from, profile_from = await Misc.post_tg_user(message.from_user)
+    if status_from != 200 or profile_from['uuid'] != data['uuid']:
+        await state.clear()
+        return
+    dob = message.text.strip()
+    status, response = await Misc.api_request(
+        path='/api/check/date',
+        method='get',
+        params=dict(date=dob, min_age='10', max_age='100')
+    )
+    if status == 400:
+        await meet_quest_dob(state, error_message=response['message'])
+    elif status == 200:
+        await state.update_data(dob=dob)
+        if data['latitude'] is not None and data['longitude'] is not None:
+            await state.clear()
+            await meet_do_or_revoke(data)
+        else:
+            await state.set_state(FSMmeet.ask_geo)
+            await meet_quest_geo(state, data)
+    else:
+        await state.clear()
+
+
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        f'{KeyboardType.MEET_DO}|{KeyboardType.MEET_REVOKE}',
+        KeyboardType.SEP,
+        # sid_from         # 1
+        # KeyboardType.SEP,
+        # sid_to           # 2
+    )), StateFilter(None))
+async def cbq_meet_do_or_revoke(callback: CallbackQuery, state: FSMContext):
+    if not (username_from := Misc.get_sid_from_callback(callback)):
+        return
+    code = callback.data.split(KeyboardType.SEP)
+    what = int(code[0])
+    status_from, profile_from = await Misc.post_tg_user(callback.from_user)
+    if status_from != 200 or profile_from['username'] != username_from:
+        return
+    text_scram = ''
+    if profile_from['did_meet'] and what == KeyboardType.MEET_DO:
+        text_scram = 'Вы уже участвуете в игре знакомств'
+    elif not profile_from['did_meet'] and what == KeyboardType.MEET_REVOKE:
+        text_scram = 'Вы и так не участвуете в игре знакомств'
+    if text_scram:
+        await callback_query.message.reply(
+            text=text_scram,
+            disable_web_page_preview=True,
+        )
+        return
+    username_inviter = ''
+    try:
+        username_inviter = code[2]
+    except IndexError:
+        pass
+    data = dict(
+        what=what,
+        uuid=profile_from['uuid'],
+        username_from=profile_from['username'],
+        username=profile_from['username'],
+        username_inviter=username_inviter,
+        gender=profile_from['gender'],
+        dob=profile_from['dob'],
+        latitude=profile_from['latitude'],
+        longitude=profile_from['longitude'],
+        tg_user_sender_id=callback.from_user.id,
+        message_id=callback.message.message_id,
+    )
+    await callback.answer()
+    if what == KeyboardType.MEET_DO:
+        if profile_from['gender'] and profile_from['dob'] and \
+           profile_from['latitude'] is not None and profile_from['longitude'] is not None:
+            await meet_do_or_revoke(data)
+        else:
+            if not profile_from['gender']:
+                await state.set_state(FSMmeet.ask_gender)
+                next_proc = meet_quest_gender
+            elif not profile_from['dob']:
+                await state.set_state(FSMmeet.ask_dob)
+                next_proc = meet_quest_dob
+            elif not (profile_from['latitude'] and profile_from['longitude']):
+                await state.set_state(FSMmeet.ask_geo)
+                next_proc = meet_quest_geo
+            await state.update_data(**data)
+            await next_proc(state)
+    else:
+        await meet_do_or_revoke(data)
+
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        f'{KeyboardType.MEET_GENDER_FEMALE}|{KeyboardType.MEET_GENDER_MALE}',
+        KeyboardType.SEP,
+    )), StateFilter(FSMmeet.ask_gender))
+
+async def cbq_meet_ask_gender(callback: CallbackQuery, state: FSMContext):
+    status_sender, response_sender = await Misc.post_tg_user(callback.from_user)
+    if status_sender != 200 and data.get('uuid') != response_sender['uuid']:
+        await state.clear()
+        return
+    code = callback.data.split(KeyboardType.SEP)
+    await state.update_data(gender='m' if int(code[0]) == KeyboardType.MEET_GENDER_MALE else 'f')
+    data = await state.get_data()
+    next_proc = None
+    if not response_sender['dob']:
+        await state.set_state(FSMmeet.ask_dob)
+        next_proc = meet_quest_dob
+    elif response_sender['latitude'] is None or response_sender['longitude'] is None:
+        await state.set_state(FSMmeet.ask_geo)
+        next_proc = meet_quest_geo
+    await callback.answer()
+    if next_proc:
+        await next_proc(state)
+    else:
+        await state.clear()
+        await meet_do_or_revoke(data)
+
+
+async def meet_do_or_revoke(data):
+    if data['what'] == KeyboardType.MEET_DO:
+        count_meet_invited_ = await Misc.count_meet_invited(data.get('uuid'))
+        count_meet_invited_.update(already='', vy=Misc.get_html_a(Misc.get_deeplink(data), 'Вы'))
+        text_to_sender = Misc.PROMT_MEET_DOING % count_meet_invited_
+        did_meet = '1'
+    else:
+        text_to_sender = (
+            'Вы вышли из игры знакомств. Нам вас будет не хватать.\n\n'
+            'Для участия в игре знакомств: команда /meet'
+        )
+        did_meet = ''
+    parms = dict(did_meet=did_meet)
+    if data['what'] == KeyboardType.MEET_DO:
+        fields = ('uuid', 'username_inviter', 'gender', 'dob', 'latitude', 'longitude',)
+    else:
+        fields = ('uuid', 'username_inviter',)
+    for k in fields:
+        if k in data:
+            parms[k] = data[k]
+    status, response = await Misc.put_user_properties(**parms)
+    if status == 200:
+        reply_markup = None
+        if did_meet:
+            callback_data_template = Misc.CALLBACK_DATA_SID_TEMPLATE + '%(sid2)s%(sep)s'
+            inline_btn_quit = InlineKeyboardButton(
+                text='Выйти',
+                callback_data=callback_data_template % dict(
+                keyboard_type=KeyboardType.MEET_REVOKE,
+                sid=data['username_from'],
+                sid2=data['username_inviter'],
+                sep=KeyboardType.SEP,
+            ))
+            inline_btn_invite = InlineKeyboardButton(
+                text='Пригласить в игру',
+                callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
+                keyboard_type=KeyboardType.MEET_INVITE,
+                sep=KeyboardType.SEP,
+            ))
+            buttons = [[inline_btn_invite, inline_btn_quit]]
+            bot_data = await bot.get_me()
+            inline_btn_map = InlineKeyboardButton(
+                text='Карта участников игры',
+                login_url=Misc.make_login_url(
+                    redirect_path=settings.MAP_HOST + '/?meet=on',
+                    keep_user_data='on'
+            ))
+            buttons.append([inline_btn_map])
+            reply_markup = InlineKeyboardMarkup(inline_keyboard=buttons)
+        await bot.send_message(
+            data['tg_user_sender_id'],
+            text=text_to_sender,
+            disable_web_page_preview=True,
+            reply_markup=reply_markup,
+        )
+
