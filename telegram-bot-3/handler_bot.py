@@ -89,7 +89,7 @@ async def cmd_start(message: Message, state: FSMContext):
             profile_sender=response_sender,
             tg_user_sender=message.from_user,
         )
-    elif m := re.search(r'm\-([0-9a-z]{10})$', arg, flags=re.I):
+    elif m := re.search(r'^m\-([0-9a-z]{10})$', arg, flags=re.I):
         status_to, profile_to = await Misc.get_user_by_sid(m.group(1))
         if status_to == 200:
             data = dict(profile_from = response_sender, profile_to=profile_to)
@@ -98,6 +98,14 @@ async def cmd_start(message: Message, state: FSMContext):
         await Misc.prompt_location(message, state)
     elif arg == 'meet':
         await cmd_meet(message, state)
+    elif m := re.search(r'^([0-9a-z]{10})$', arg, flags=re.I):
+        status_to, profile_to = await Misc.get_user_by_sid(m.group(1))
+        if status_to == 200:
+            await Misc.show_card(
+                profile=profile_to,
+                profile_sender=response_sender,
+                tg_user_sender=message.from_user,
+            )
     else:
         await message.reply(f'arg: ~{arg}~')
 
@@ -143,10 +151,12 @@ async def cmd_meet(message: Message, state: FSMContext):
 
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None))
 async def message_to_bot(message: Message, state: FSMContext):
+
     # Deeplink. Если щелкнуть по нему, все ок. Если загнать в бот, то никакой реакции
     #
     if message.content_type == ContentType.TEXT and  Misc.arg_deeplink(message.text):
         await cmd_start(message, state)
+
     show_response = True
     if message.media_group_id:
         if r := redis.Redis(**settings.REDIS_CONNECT):
@@ -168,19 +178,19 @@ async def message_to_bot(message: Message, state: FSMContext):
 
     tg_user_sender = message.from_user
     reply = ''
-    is_forward = is_forward_from_other = is_forward_from_me = False
+    is_forward = is_forward_from_other = found_username = False
     if tg_user_sender.is_bot:
         reply = 'Сообщения от ботов пока не обрабатываются'
     elif message.content_type == ContentType.PINNED_MESSAGE:
         return
     if message.forward_origin:
         if type(message.forward_origin) == MessageOriginUser:
-            if message.forward_origin.sender_user.is_bot:
+            tg_user_forwarded = message.forward_origin.sender_user
+            if tg_user_forwarded.is_bot:
                 reply = 'Сообщения, пересланные от ботов, пока не обрабатываются'
             else:
                 is_forward = True
-                is_forward_from_me = message.forward_origin.sender_user.id == tg_user_sender.id
-                is_forward_from_other = not is_forward_from_me
+                is_forward_from_other = tg_user_forwarded.id != tg_user_sender.id
         elif type(message.forward_origin) == MessageOriginHiddenUser:
             reply = (
                 'Автор исходного сообщения '
@@ -198,16 +208,93 @@ async def message_to_bot(message: Message, state: FSMContext):
         await message.reply(reply)
         return
 
-    message_text = getattr(message, 'text', '') and message.text.strip() or ''
-    if not is_forward and message_text.startswith('/'):
-        await message.reply('Не известная команда')
+    status_from, response_from = await Misc.post_tg_user(tg_user_sender)
+    if status_from != 200:
         return
 
-    status_sender, response_sender = await Misc.post_tg_user(tg_user_sender)
+    message_text = getattr(message, 'text', '') and message.text.strip() or ''
+    if is_forward_from_other:
+        status_to, response_to = await Misc.post_tg_user(tg_user_forwarded)
+        if status_to != 200:
+            return
+        await Misc.show_card(
+            profile=response_to,
+            profile_sender=response_from,
+            tg_user_sender=tg_user_sender,
+            message_to_forward_id = message.message_id,
+        )
+        usernames, text_stripped = Misc.get_text_usernames(message_text)
+        if usernames:
+            logging.debug('@usernames found in message text\n')
+            payload_username = dict(tg_username=','.join(usernames),)
+            status, response = await Misc.api_request(
+                path='/api/profile',
+                method='get',
+                params=payload_username,
+            )
+            logging.debug('get by username, status: %s' % status)
+            logging.debug('get by username, response: %s' % response)
+            if status == 200 and response:
+                await Misc.show_deeplinks(response, message,)
+        return
+
+    # not forwarded or forwarded from me
+
+    a_found = []
+    if message_text.startswith('/'):
+        await message.reply('Не известная команда')
+        return
+    if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
+        await message.reply(Misc.invalid_search_text())
+        return
     if m := Misc.get_youtube_id(message_text):
         youtube_id, youtube_link = m
         await Misc.answer_youtube_message(message, youtube_id, youtube_link)
         return
+
+    search_phrase = ''
+    usernames, text_stripped = Misc.get_text_usernames(message_text)
+    if text_stripped:
+        search_phrase = Misc.text_search_phrase(
+            text_stripped,
+            MorphAnalyzer,
+        )
+        if not search_phrase and not usernames:
+            await message.reply(Misc.PROMPT_SEARCH_PHRASE_TOO_SHORT)
+            return
+
+    if usernames:
+        logging.debug('@usernames found in message text\n')
+        payload_username = dict(tg_username=','.join(usernames),)
+        status, response = await Misc.api_request(
+            path='/api/profile',
+            method='get',
+            params=payload_username,
+        )
+        logging.debug('get by username, status: %s' % status)
+        logging.debug('get by username, response: %s' % response)
+        if status == 200 and response:
+            a_found += response
+            found_username = True
+
+    if search_phrase:
+        status, response = await Misc.search_users('query', search_phrase)
+        if status == 400 and response.get('code') and response['code'] == 'programming_error':
+            if not found_username:
+                await message.reply('Ошибка доступа к данных. Получили отказ по такой строке в поиске')
+                return
+        elif status == 200:
+            if response:
+                a_found += response
+            elif not found_username:
+                await message.reply(Misc.PROMPT_NOTHING_FOUND)
+                return
+        else:
+            await message.reply(Misc.MSG_ERROR_API)
+            return
+    if a_found:
+        await Misc.show_deeplinks(a_found, message)
+
 
 commands_dict = {
     'graph': cmd_graph,

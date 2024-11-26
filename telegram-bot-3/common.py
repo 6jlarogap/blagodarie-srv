@@ -416,7 +416,6 @@ class Misc(object):
             result.update(tg_token='SECRET')
         return result
 
-
     @classmethod
     def datetime_string(cls, timestamp, with_timezone=True):
         dt = datetime.datetime.fromtimestamp(timestamp)
@@ -427,7 +426,6 @@ class Misc(object):
                 str_tz = dt.astimezone().tzname()
             result += ' ' + str_tz
         return result
-
 
     @classmethod
     def invalid_search_text(cls):
@@ -444,11 +442,9 @@ class Misc(object):
             'Дальнейшие действия будут Вам предложены\n'
         )
 
-
     @classmethod
     def get_html_a(cls, href, text):
         return f'<a href="{href}">{html.quote(text)}</a>'
-
 
     @classmethod
     async def get_template(cls, template):
@@ -465,7 +461,6 @@ class Misc(object):
                 pass
         return status, response
 
-
     @classmethod
     async def help_text(cls):
         status, response = await cls.get_template('help')
@@ -475,7 +470,6 @@ class Misc(object):
     async def chat_pin_message_text(cls):
         status, response = await cls.get_template('chat_pin_message')
         return response if status == 200 and response else None
-
 
     @classmethod
     async def get_user_photo(cls, user):
@@ -526,7 +520,6 @@ class Misc(object):
             result = base64.b64encode(image).decode('UTF-8')
         return result
 
-
     @classmethod
     async def get_file_bytes(cls, f):
         """
@@ -549,7 +542,6 @@ class Misc(object):
         fd.close()
         return image
 
-
     @classmethod
     async def put_tg_user_photo(cls, photo, response):
         status_photo, response_photo = None, None
@@ -560,13 +552,11 @@ class Misc(object):
             )
         return status_photo, response_photo
 
-
     @classmethod
     async def update_user_photo(cls, tg_user, profile):
         return await cls.put_tg_user_photo(
             await cls.get_user_photo(tg_user), profile,
         )
-
 
     @classmethod
     async def api_request(cls,
@@ -607,7 +597,6 @@ class Misc(object):
                 pass
         return status, response
 
-
     @classmethod
     def get_deeplink(cls, response, https=False):
         """
@@ -625,7 +614,6 @@ class Misc(object):
         if https:
             deeplink = 'https://' + deeplink
         return deeplink
-
 
     @classmethod
     def get_deeplink_with_name(cls, response, with_lifetime_years=False, plus_trusts=False):
@@ -649,7 +637,6 @@ class Misc(object):
             result += f' (<b>+{trust_count}, -{mistrust_count}</b>)'
             plus_trusts = False
         return result
-
 
     @classmethod
     def reply_user_card(cls, response_from, response_to, editable):
@@ -808,7 +795,6 @@ class Misc(object):
             bot_username=bot_data.username,
         )
 
-
     @classmethod
     async def post_tg_user(cls, tg_user_sender, activate=False, did_bot_start=True):
         """
@@ -858,7 +844,6 @@ class Misc(object):
         logging.debug('get_user_profile by uuid, response: %s' % response)
         return status, response
 
-
     @classmethod
     async def get_user_by_sid(cls, sid, with_owner_tg_data=False):
         """
@@ -896,7 +881,6 @@ class Misc(object):
         logging.debug('get_admins, response: %s' % response)
         return status, response
 
-
     @classmethod
     async def get_user_by_tg_uid(cls, tg_uid):
         """
@@ -912,7 +896,6 @@ class Misc(object):
         logging.debug('get_user_profile by tg_uid, response: %s' % response)
         return status, response
 
-
     @classmethod
     def is_photo_downloaded(cls, profile):
         """
@@ -923,7 +906,6 @@ class Misc(object):
         if photo and photo.lower().startswith(settings.API_HOST.lower()):
             result = True
         return result
-
 
     @classmethod
     async def check_owner_by_uuid(cls, owner_tg_user, uuid, check_owned_only=False):
@@ -948,7 +930,6 @@ class Misc(object):
                     result.update(response_uuid=response_uuid)
         return result
 
-
     @classmethod
     async def check_owner_by_sid(cls, owner_tg_user, sid, check_owned_only=False):
         """
@@ -972,7 +953,6 @@ class Misc(object):
                     result.update(response_uuid=response_uuid)
         return result
 
-
     @classmethod
     def get_text_usernames(cls, s):
         """
@@ -991,7 +971,6 @@ class Misc(object):
         for i, v in enumerate(usernames):
             usernames[i] = usernames[i][1:]
         return usernames, text
-
 
     @classmethod
     async def show_deeplinks(cls,
@@ -1014,8 +993,7 @@ class Misc(object):
         if reply:
             parts = cls.safe_split_text(reply, split_separator='\n')
             for part in parts:
-                await message.reply(part, disable_web_page_preview=True)
-
+                await message.reply(part)
 
     @classmethod
     async def call_response_relations(cls, profile_sender, profile):
@@ -1034,7 +1012,6 @@ class Misc(object):
         if status != 200 or not response:
             status, response = None, {}
         return status, response
-
 
     @classmethod
     async def show_card(cls,
@@ -1359,7 +1336,6 @@ class Misc(object):
             reply_markup = InlineKeyboardMarkup(inline_keyboard=buttons)
             await cls.send_or_edit_card(reply, reply_markup, profile, tg_user_sender, card_message)
 
-
     @classmethod
     async def send_or_edit_card(cls, reply, reply_markup, profile, tg_user_sender, card_message=None,):
         send_text_message = True
@@ -1402,15 +1378,13 @@ class Misc(object):
                         message_id=card_message.message_id,
                         text=reply,
                         reply_markup=reply_markup,
-                        disable_web_page_preview=True,
                     )
                 except:
                     pass
             else:
                 parts = cls.safe_split_text(reply, split_separator='\n')
                 for part in parts:
-                    await bot.send_message(tg_user_sender.id, part, reply_markup=reply_markup, disable_web_page_preview=True)
-
+                    await bot.send_message(tg_user_sender.id, part, reply_markup=reply_markup)
 
     @classmethod
     def url_photo_to_thumbnail(cls, photo, width, height=None, fill_color='white', frame_width=0):
@@ -1429,7 +1403,6 @@ class Misc(object):
             result = result.replace('/media/', '/thumb/', 1)
             result += f'/{width}x{height}~crop-{fill_color}-frame-{frame_width}~12.jpg'
         return result
-
 
     @classmethod
     async def get_qrcode(cls, profile, url):
@@ -1479,7 +1452,6 @@ class Misc(object):
         image.save(bytes_io, format='JPEG')
         return bytes_io
 
-
     @classmethod
     def get_lifetime_str(cls, response):
         lifetime = 'д/р - %s\n' % (response['dob'] if response.get('dob') else 'не задано')
@@ -1492,7 +1464,6 @@ class Misc(object):
                 s_dead = 'умерла' if gender == 'f' else 'умер'
             lifetime += f'д/с - неизвестна. Известно, что {s_dead}\n'
         return lifetime
-
 
     @classmethod
     def get_lifetime_years_str(cls, response):
@@ -1507,7 +1478,6 @@ class Misc(object):
             lifetime += " — ?"
         return lifetime
 
-
     @classmethod
     def his_her(cls, profile):
         his_her = 'его (её)'
@@ -1518,7 +1488,6 @@ class Misc(object):
                 his_her = 'её'
         return his_her
 
-
     @classmethod
     async def state_finish(cls, state):
         if state:
@@ -1527,7 +1496,6 @@ class Misc(object):
                 for key in ('uuid', ):
                     if data.get(key):
                         data[key] = ''
-
 
     @classmethod
     def inline_button_cancel(cls):
@@ -1543,7 +1511,6 @@ class Misc(object):
             callback_data=callback_data,
         )
 
-
     @classmethod
     def strip_text(cls, s):
         """
@@ -1554,7 +1521,6 @@ class Misc(object):
         s = re.sub(r'\s', ' ', s)
         return s
 
-
     @classmethod
     def reply_markup_cancel_row(cls):
         """
@@ -1563,7 +1529,6 @@ class Misc(object):
         inline_btn_cancel = cls.inline_button_cancel()
         reply_markup = InlineKeyboardMarkup(inline_keyboard=[[inline_btn_cancel]])
         return reply_markup
-
 
     @classmethod
     async def put_user_properties(cls, **kwargs):
@@ -1624,7 +1589,6 @@ class Misc(object):
                 pass
         return user_uuid_to
 
-
     @classmethod
     def sid_from_link(cls, link):
         """
@@ -1633,7 +1597,6 @@ class Misc(object):
         if m:= re.search(r'([0-9A-Za-z]{10})$', link):
             return m.group(1)
         return None
-
 
     @classmethod
     def uuid_strip(cls, uuid):
@@ -1751,7 +1714,6 @@ class Misc(object):
                 chat_id=chat.id,
                 text=text,
                 reply_markup=reply_markup,
-                disable_web_page_preview=True,
             )
         except:
             messsage_for_pin = None
@@ -1768,7 +1730,6 @@ class Misc(object):
             )
         return messsage_for_pin
 
-
     @classmethod
     def getuuid_from_callback(cls, callback_query):
         """
@@ -1782,7 +1743,6 @@ class Misc(object):
             except IndexError:
                 pass
         return result
-
 
     @classmethod
     def get_sid_from_callback(cls, callback_query):
@@ -1831,7 +1791,6 @@ class Misc(object):
         ):
             result = m.group(1).strip()
         return result
-
 
     @classmethod
     def safe_split_text(cls, text, length=MAX_MESSAGE_LENGTH, split_separator=' '):

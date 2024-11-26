@@ -346,10 +346,7 @@ async def cbq_meet_do_or_revoke(callback: CallbackQuery, state: FSMContext):
     elif not profile_from['did_meet'] and what == KeyboardType.MEET_REVOKE:
         text_scram = 'Вы и так не участвуете в игре знакомств'
     if text_scram:
-        await callback_query.message.reply(
-            text=text_scram,
-            disable_web_page_preview=True,
-        )
+        await callback_query.message.reply(text=text_scram)
         return
     username_inviter = ''
     try:
@@ -470,7 +467,6 @@ async def meet_do_or_revoke(data):
         await bot.send_message(
             data['tg_user_sender_id'],
             text=text_to_sender,
-            disable_web_page_preview=True,
             reply_markup=reply_markup,
         )
 
