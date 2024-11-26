@@ -31,7 +31,12 @@ dp, bot, bot_data = me.dp, me.bot, me.bot_data
 class FSMquery(StatesGroup):
     ask = State()
 
-@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('graph'))
+@router.message(
+    F.text,
+    F.chat.type.in_((ChatType.PRIVATE,)),
+    StateFilter(None),
+    Command(re.compile('^graph$', flags=re.I)),
+)
 async def cmd_graph(message: Message, state: FSMContext):
     inline_btn_all_users = InlineKeyboardButton(
         text='Отношения участников',
@@ -52,7 +57,12 @@ async def cmd_graph(message: Message, state: FSMContext):
     )
 
 
-@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('ya'))
+@router.message(
+    F.text,
+    F.chat.type.in_((ChatType.PRIVATE,)),
+    StateFilter(None),
+    Command(re.compile('^ya$', flags=re.I)),
+)
 async def cmd_ya(message: Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     await Misc.show_card(
@@ -62,17 +72,113 @@ async def cmd_ya(message: Message, state: FSMContext):
     )
 
 
-@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('help'))
+@router.message(
+    F.text,
+    F.chat.type.in_((ChatType.PRIVATE,)),
+    StateFilter(None),
+    Command(re.compile('^help$', flags=re.I)),
+)
 async def cmd_help(message: Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     await message.reply(await Misc.help_text())
 
 
-@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('setplace'))
+@router.message(
+    F.text,
+    F.chat.type.in_((ChatType.PRIVATE,)),
+    StateFilter(None),
+    Command(re.compile('^setplace$', flags=re.I)),
+)
 async def cmd_setplace(message: Message, state: FSMContext):
     await Misc.prompt_location(message, state)
 
-@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('start'))
+
+@router.message(
+    F.text,
+    F.chat.type.in_((ChatType.PRIVATE,)),
+    StateFilter(None),
+    Command(re.compile('^new|new_person$', flags=re.I)),
+)
+async def cmd_new_person(message: Message, state: FSMContext):
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender == 200:
+        if not Misc.editable(response_sender):
+            return
+        await state.set_state(FSMnewPerson.ask)
+        await state.update_data(uuid=response_sender['uuid'])
+        await message.reply(Misc.PROMPT_NEW_IOF, reply_markup=Misc.reply_markup_cancel_row())
+
+
+@router.message(
+    F.text,
+    F.chat.type.in_((ChatType.PRIVATE,)),
+    StateFilter(None),
+    Command(re.compile('^findpotr|findvozm|findperson$', flags=re.I)),
+)
+async def cmd_find(message: Message, state: FSMContext):
+    message_text = message.text.split()[0].lstrip('/')
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender == 200:
+        if not Misc.editable(response_sender):
+            return
+        if message_text == 'findpotr':
+            what = 'query_wish'
+        elif message_text == 'findvozm':
+            what = 'query_ability'
+        elif message_text == 'findperson':
+            what = 'query_person'
+        else:
+            return
+        await state.set_state(FSMquery.ask)
+        await state.update_data(what=what)
+        await message.reply(Misc.PROMPT_QUERY[what], reply_markup=Misc.reply_markup_cancel_row())
+
+
+@router.message(
+    F.text,
+    F.chat.type.in_((ChatType.PRIVATE,)),
+    StateFilter(None),
+    Command(re.compile('^meet$', flags=re.I)),
+)
+async def cmd_meet(message: Message, state: FSMContext):
+    status, profile = await Misc.post_tg_user(message.from_user)
+    data = dict(profile_from = profile, profile_to=None)
+    await process_meet_from_deeplink_and_command(message, state, data)
+
+
+@router.message(
+    F.text,
+    F.chat.type.in_((ChatType.PRIVATE,)),
+    StateFilter(None),
+    Command(re.compile('^trust|thank$', flags=re.I)),
+)
+async def cmd_trust_thank(message: Message, state: FSMContext):
+    command = message.text.strip('/').strip().lower()
+    status, profile = await Misc.post_tg_user(message.from_user)
+    if status == 200:
+        command_to_data = dict(
+            trust=dict(prefix='t',  caption='Доверяю %(link)s'),
+            thank=dict(prefix='th', caption='Благодарить %(link)s'),
+        )
+        url = (
+            f'https://t.me/{bot_data.username}'
+            f'?start={command_to_data[command]["prefix"]}-{profile["username"]}'
+        )
+        link = f'<a href="{url}">{profile["first_name"]}</a>'
+        caption = command_to_data[command]["caption"] % dict(link=link)
+        bytes_io = await Misc.get_qrcode(profile, url)
+        await bot.send_photo(
+            chat_id=message.from_user.id,
+            photo=BufferedInputFile(bytes_io.getvalue(), filename=bytes_io.name),
+            caption=caption,
+        )
+
+@router.message(
+    F.text,
+    F.chat.type.in_((ChatType.PRIVATE,)),
+    StateFilter(None),
+    Command(re.compile('start', flags=re.I)),
+)
 async def cmd_start(message: Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender != 200:
@@ -109,66 +215,6 @@ async def cmd_start(message: Message, state: FSMContext):
             )
     else:
         await message.reply(f'arg: ~{arg}~')
-
-@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command(re.compile('new|new_person')))
-async def cmd_new_person(message: Message, state: FSMContext):
-    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
-    if status_sender == 200:
-        if not Misc.editable(response_sender):
-            return
-        await state.set_state(FSMnewPerson.ask)
-        await state.update_data(uuid=response_sender['uuid'])
-        await message.reply(Misc.PROMPT_NEW_IOF, reply_markup=Misc.reply_markup_cancel_row())
-
-
-@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command(re.compile('findpotr|findvozm|findperson')))
-async def cmd_find(message: Message, state: FSMContext):
-    message_text = message.text.split()[0].lstrip('/')
-    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
-    if status_sender == 200:
-        if not Misc.editable(response_sender):
-            return
-        if message_text == 'findpotr':
-            what = 'query_wish'
-        elif message_text == 'findvozm':
-            what = 'query_ability'
-        elif message_text == 'findperson':
-            what = 'query_person'
-        else:
-            return
-        await state.set_state(FSMquery.ask)
-        await state.update_data(what=what)
-        await message.reply(Misc.PROMPT_QUERY[what], reply_markup=Misc.reply_markup_cancel_row())
-
-
-@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command('meet'))
-async def cmd_meet(message: Message, state: FSMContext):
-    status, profile = await Misc.post_tg_user(message.from_user)
-    data = dict(profile_from = profile, profile_to=None)
-    await process_meet_from_deeplink_and_command(message, state, data)
-
-
-@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command(re.compile('trust|thank', flags=re.I)))
-async def cmd_trust_thank(message: Message, state: FSMContext):
-    command = message.text.strip('/').strip().lower()
-    status, profile = await Misc.post_tg_user(message.from_user)
-    if status == 200:
-        command_to_data = dict(
-            trust=dict(prefix='t',  caption='Доверяю %(link)s'),
-            thank=dict(prefix='th', caption='Благодарить %(link)s'),
-        )
-        url = (
-            f'https://t.me/{bot_data.username}'
-            f'?start={command_to_data[command]["prefix"]}-{profile["username"]}'
-        )
-        link = f'<a href="{url}">{profile["first_name"]}</a>'
-        caption = command_to_data[command]["caption"] % dict(link=link)
-        bytes_io = await Misc.get_qrcode(profile, url)
-        await bot.send_photo(
-            chat_id=message.from_user.id,
-            photo=BufferedInputFile(bytes_io.getvalue(), filename=bytes_io.name),
-            caption=caption,
-        )
 
 # Команды в бот закончились.
 # Просто сообщение в бот. Должно здесь идти после всех команд в бот
