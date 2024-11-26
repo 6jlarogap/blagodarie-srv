@@ -10,7 +10,8 @@ import re, redis
 from aiogram import Router, F, html
 from aiogram.types import Message, ContentType,  \
                             MessageOriginUser, MessageOriginHiddenUser, \
-                            InlineKeyboardMarkup, InlineKeyboardButton
+                            InlineKeyboardMarkup, InlineKeyboardButton, \
+                            BufferedInputFile
 from aiogram.enums import ChatType
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command, StateFilter, CommandStart, CommandObject
@@ -145,6 +146,29 @@ async def cmd_meet(message: Message, state: FSMContext):
     status, profile = await Misc.post_tg_user(message.from_user)
     data = dict(profile_from = profile, profile_to=None)
     await process_meet_from_deeplink_and_command(message, state, data)
+
+
+@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(None), Command(re.compile('trust|thank', flags=re.I)))
+async def cmd_trust_thank(message: Message, state: FSMContext):
+    command = message.text.strip('/').strip().lower()
+    status, profile = await Misc.post_tg_user(message.from_user)
+    if status == 200:
+        command_to_data = dict(
+            trust=dict(prefix='t',  caption='Доверяю %(link)s'),
+            thank=dict(prefix='th', caption='Благодарить %(link)s'),
+        )
+        url = (
+            f'https://t.me/{bot_data.username}'
+            f'?start={command_to_data[command]["prefix"]}-{profile["username"]}'
+        )
+        link = f'<a href="{url}">{profile["first_name"]}</a>'
+        caption = command_to_data[command]["caption"] % dict(link=link)
+        bytes_io = await Misc.get_qrcode(profile, url)
+        await bot.send_photo(
+            chat_id=message.from_user.id,
+            photo=BufferedInputFile(bytes_io.getvalue(), filename=bytes_io.name),
+            caption=caption,
+        )
 
 # Команды в бот закончились.
 # Просто сообщение в бот. Должно здесь идти после всех команд в бот
