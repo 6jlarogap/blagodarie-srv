@@ -11,13 +11,14 @@ from aiogram.types import Message, CallbackQuery, ContentType, \
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.enums import ChatType
+from aiogram.exceptions import TelegramBadRequest
 
 from handler_bot import is_it_command
 
 import settings, me
 from settings import logging
 
-from common import Misc, KeyboardType
+from common import Misc, OperationType, KeyboardType
 from common import FSMnewPerson
 
 
@@ -489,3 +490,136 @@ async def cbq_meet_invite(callback: CallbackQuery, state: FSMContext):
             caption=caption,
         )
 
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.TRUST_THANK,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_attitude(callback: CallbackQuery, state: FSMContext):
+    """
+    Действия по нажатию кнопок доверия, недоверия, не знакомы
+
+    На входе строка:
+        <KeyboardType.TRUST_THANK>          # 0
+        <KeyboardType.SEP>
+        <operation_type_id>                 # 1
+        <KeyboardType.SEP>
+        <user_uuid_to (без знаков -)>       # 2
+        <KeyboardType.SEP>
+        <message_to_forward_id>             # 3
+        <KeyboardType.SEP>
+        <thank_card>                        # 4, отправлено из карточки после благодарности
+        <KeyboardType.SEP>
+    """
+    callback.answer()
+    try:
+        code = callback.data.split(KeyboardType.SEP)
+        try:
+            operation_type_id=int(code[1])
+        except (ValueError, IndexError,):
+            raise ValueError
+        uuid = Misc.uuid_from_text(code[2], unstrip=True)
+        if not uuid:
+            raise ValueError
+        try:
+            message_to_forward_id = int(code[3])
+        except (ValueError, IndexError,):
+            message_to_forward_id = None
+        try:
+            is_thank_card = bool(code[4])
+        except (IndexError,):
+            is_thank_card = False
+        message = callback.message
+        group_member = \
+            message.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP) and \
+            dict(
+                    group_chat_id=message.chat.id,
+                    group_title=message.chat.title,
+                    group_type=message.chat.type,
+            ) \
+            or None
+        tg_user_sender = callback.from_user
+        status_sender, profile_sender = await Misc.post_tg_user(
+            tg_user_sender,
+            did_bot_start=message.chat.type == ChatType.PRIVATE,
+        )
+        if status_sender != 200:
+            raise ValueError
+        if not operation_type_id or operation_type_id not in (
+                OperationType.TRUST,
+                OperationType.MISTRUST, OperationType.NULLIFY_ATTITUDE,
+                OperationType.ACQ, OperationType.THANK,
+            ):
+            raise ValueError
+        status_to, profile_to = await Misc.get_user_by_uuid(uuid)
+        if status_to != 200:
+            raise ValueError
+    except ValueError:
+        return
+
+    await callback.answer()
+
+    if profile_sender['uuid'] == profile_to['uuid']:
+        text_same = 'Операция на себя не позволяется'
+        if group_member:
+            if operation_type_id == OperationType.TRUST:
+                text_same ='Доверие самому себе не предусмотрено'
+            try:
+                await bot.answer_callback_query(
+                        callback_query.id,
+                        text=text_same,
+                        show_alert=True,
+                    )
+            except TelegramBadRequest:
+                pass
+            return
+        else:
+            await message.reply(text_same, disable_web_page_preview=True,)
+            return
+
+    data = dict(
+        tg_user_sender=tg_user_sender,
+        profile_from = profile_sender,
+        profile_to = profile_to,
+        operation_type_id = operation_type_id,
+        callback=callback,
+        message_to_forward_id = message_to_forward_id,
+        group_member=group_member,
+        is_thank_card=is_thank_card,
+        state=None,
+    )
+    if group_member:
+        group_member.update(user_tg_uid=tg_user_sender.id)
+    await Misc.put_attitude(data)
+
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.CANCEL_THANK,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_cancel_thank(callback: CallbackQuery, state: FSMContext):
+    try:
+        journal_id = int(callback.data.split(KeyboardType.SEP)[1])
+    except (TypeError, ValueError, IndexError,):
+        return
+    payload = dict(tg_token=settings.TOKEN, journal_id=journal_id)
+    logging.debug('cancel thank in api, payload: %s' % Misc.secret(payload))
+    status, response = await Misc.api_request(
+        path='/api/cancel_thank',
+        method='delete',
+        json=payload
+    )
+    logging.debug('cancel thank in api, status: %s' % status)
+    logging.debug('cancel thank in api, response: %s' % response)
+    reply_markup = callback.message.reply_markup
+    if status == 200:
+        text = 'Благодарность отменена'
+        reply_markup = None
+    elif status == 400:
+        text = callback.message.text + '\n\n' + response['message']
+    else:
+        text = callback.message.text + '\n\n' + Misc.MSG_ERROR_API
+    try:
+        await callback.message.edit_text(text=text, reply_markup=reply_markup,)
+    except TelegramBadRequest:
+        pass

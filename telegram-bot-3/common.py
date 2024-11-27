@@ -1474,12 +1474,9 @@ class Misc(object):
 
     @classmethod
     async def state_finish(cls, state):
+        # пока держим, часто в коде встречается!
         if state:
-            await state.finish()
-            async with state.proxy() as data:
-                for key in ('uuid', ):
-                    if data.get(key):
-                        data[key] = ''
+            await state.clear()
 
     @classmethod
     def inline_button_cancel(cls):
@@ -1715,13 +1712,13 @@ class Misc(object):
         return messsage_for_pin
 
     @classmethod
-    def getuuid_from_callback(cls, callback_query):
+    def getuuid_from_callback(cls, callback):
         """
-        Получить uuid из самых распространенных callback_query
+        Получить uuid из самых распространенных callbacks
         """
         result = None
-        if getattr(callback_query, 'message', None) and getattr(callback_query, 'data', None):
-            code = (callback_query.data or '').split(KeyboardType.SEP)
+        if getattr(callback, 'message', None) and getattr(callback, 'data', None):
+            code = (callback.data or '').split(KeyboardType.SEP)
             try:
                 result = code[1]
             except IndexError:
@@ -1729,13 +1726,13 @@ class Misc(object):
         return result
 
     @classmethod
-    def get_sid_from_callback(cls, callback_query):
+    def get_sid_from_callback(cls, callback):
         """
-        Получить username из самых распространенных callback_query
+        Получить username из самых распространенных callbacks
         """
         result = None
-        if getattr(callback_query, 'message', None) and getattr(callback_query, 'data', None):
-            code = (callback_query.data or '').split(KeyboardType.SEP)
+        if getattr(callback, 'message', None) and getattr(callback, 'data', None):
+            code = (callback.data or '').split(KeyboardType.SEP)
             try:
                 result = code[1]
                 if not re.search(cls.RE_SID, result):
@@ -1823,6 +1820,272 @@ class Misc(object):
         logging.debug('get_count_meet_invited in api, response: %s' % response)
         return response
 
+    @classmethod
+    async def put_attitude(cls, data):
+        # Может прийти неколько картинок, т.е сообщений, чтоб не было
+        # много благодарностей и т.п. по нескольким сообщениям
+        #
+        if data.get('state') is not None:
+            await data['state'].clear()
+
+        profile_from, profile_to = data['profile_from'], data['profile_to']
+        tg_user_sender, group_member = data['tg_user_sender'], data['group_member']
+        operation_type_id = int(data['operation_type_id'])
+        if group_member:
+            await TgGroupMember.add(**group_member)
+
+        post_op = dict(
+            tg_token=settings.TOKEN,
+            operation_type_id=str(operation_type_id),
+            tg_user_id_from=str(tg_user_sender.id),
+            user_id_to=profile_to['uuid'],
+        )
+        if data.get('message_to_forward_id'):
+            post_op.update(
+                tg_from_chat_id=tg_user_sender.id,
+                tg_message_id=data['message_to_forward_id'],
+            )
+        logging.debug('post operation, payload: %s' % cls.secret(post_op))
+        status, response = await cls.api_request(
+            path='/api/addoperation',
+            method='post',
+            data=post_op,
+        )
+        logging.debug('post operation, status: %s' % status)
+        logging.debug('post operation, response: %s' % response)
+        text = None
+        operation_done = operation_already = do_thank = False
+        if status == 200:
+            operation_done = True
+            trusts_or_thanks = ''
+            thanks_count_str = ''
+            thanks_count = response.get('currentstate') and response['currentstate'].get('thanks_count') or None
+            if thanks_count is not None:
+                thanks_count_str = ' (%s)' % thanks_count
+            if operation_type_id == OperationType.THANK:
+                text = '%(full_name_from_link)s благодарит%(thanks_count_str)s %(full_name_to_link)s'
+                do_thank = True
+            elif operation_type_id == OperationType.ACQ:
+                text = '%(full_name_from_link)s знаком(а) с %(full_name_to_link)s'
+            elif operation_type_id == OperationType.MISTRUST:
+                text = '%(full_name_from_link)s не доверяет %(full_name_to_link)s'
+            elif operation_type_id == OperationType.NULLIFY_ATTITUDE:
+                text = '%(full_name_from_link)s не знаком(а) с %(full_name_to_link)s'
+            elif operation_type_id == OperationType.TRUST:
+                text = '%(full_name_from_link)s доверяет %(full_name_to_link)s'
+            profile_from = response['profile_from']
+            profile_to = response['profile_to']
+
+        elif status == 400 and response.get('code', '') == 'already':
+            operation_already = True
+            full_name_to_link = cls.get_deeplink_with_name(profile_to, plus_trusts=True)
+            if operation_type_id == OperationType.TRUST:
+                text = f'Вы уже доверяете {full_name_to_link}'
+            elif operation_type_id == OperationType.MISTRUST:
+                text = f'Вы уже установили недоверие к {full_name_to_link}'
+            elif operation_type_id == OperationType.NULLIFY_ATTITUDE:
+                text = f'Вы и так не знакомы с {full_name_to_link}'
+            elif operation_type_id == OperationType.ACQ:
+                text = f'Вы уже знакомы с {full_name_to_link}'
+
+        if operation_done and text:
+            full_name_from_link = cls.get_deeplink_with_name(profile_from, plus_trusts=True)
+            full_name_to_link = cls.get_deeplink_with_name(profile_to, plus_trusts=True)
+            text = text % dict(
+                full_name_from_link=full_name_from_link,
+                full_name_to_link=full_name_to_link,
+                trusts_or_thanks=trusts_or_thanks,
+                thanks_count_str=thanks_count_str,
+            )
+
+        if not text and not operation_done:
+            if status == 200:
+                text = 'Операция выполнена'
+            elif status == 400 and response.get('message'):
+                text = response['message']
+            else:
+                text = 'Простите, произошла ошибка'
+
+        # Это отправителю благодарности и т.п., даже если произошла ошибка
+        #
+        if text:
+            buttons = []
+            if do_thank:
+                if response.get('journal_id'):
+                    inline_btn_cancel_thank = InlineKeyboardButton(
+                        text='Отменить благодарность',
+                        callback_data=cls.CALLBACK_DATA_ID__TEMPLATE % dict(
+                            keyboard_type=KeyboardType.CANCEL_THANK,
+                            id_=response['journal_id'],
+                            sep=KeyboardType.SEP,
+                    ))
+                    buttons.append([inline_btn_cancel_thank])
+
+            if not group_member and (operation_done or operation_already):
+                if not buttons:
+                    inline_btn_trusts = InlineKeyboardButton(
+                        text='Сеть доверия',
+                        login_url=cls.make_login_url(
+                            redirect_path=f'{settings.GRAPH_HOST}/?user_trusts={profile_to["username"]}',
+                            keep_user_data='on',
+                        ))
+                    inline_btn_map = InlineKeyboardButton(
+                        text='Карта',
+                        login_url=cls.make_login_url(
+                            redirect_path='%(map_host)s/?uuid_trustees=%(user_uuid)s' % dict(
+                                map_host=settings.MAP_HOST,
+                                user_uuid=profile_to['uuid'],
+                            ),
+                            keep_user_data='on',
+                        ))
+                    buttons.append([inline_btn_trusts, inline_btn_map])
+
+            if not group_member:
+                try:
+                    await bot.send_message(
+                        tg_user_sender.id,
+                        text=text,
+                        disable_notification=True,
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else None,
+                    )
+                except TelegramBadRequest:
+                    pass
+
+            if not group_member and data.get('callback') and \
+               (operation_done or operation_already):
+                if data.get('is_thank_card'):
+                    await cls.quest_after_thank_if_no_attitude(
+                        f'Установите отношение к {full_name_to_link}:',
+                        profile_from, profile_to, tg_user_sender,
+                        card_message=data['callback'].message,
+                    )
+                else:
+                    await cls.show_card(
+                        profile=profile_to,
+                        profile_sender=profile_from,
+                        tg_user_sender=tg_user_sender,
+                        card_message=data['callback'].message,
+                    )
+
+            if do_thank and response.get('currentstate') and response['currentstate'].get('attitude', '') is None:
+                # Благодарность незнакомому. Нужен вопрос, как он к этому незнакомому относится
+                await cls.quest_after_thank_if_no_attitude(
+                    f'Установите отношение к {full_name_to_link}:',
+                    profile_from, profile_to, tg_user_sender, card_message=None,
+                )
+
+        # Это в группу
+        #
+        if group_member and data.get('callback') and \
+           (operation_done  or operation_already):
+            try:
+                await data['callback'].message.edit_text(
+                    text=await cls.group_minicard_text (profile_to, data['callback'].message.chat),
+                    reply_markup=data['callback'].message.reply_markup,
+                )
+            except TelegramBadRequest:
+                pass
+            if operation_type_id == OperationType.TRUST:
+                if operation_done:
+                    popup_message = 'Доверие установлено'
+                else:
+                    popup_message = 'Доверие уже было установлено'
+                await bot.answer_callback_query(
+                    data['callback'].id,
+                    text=popup_message,
+                    show_alert=True,
+                )
+
+        # Это получателю благодарности и т.п. или владельцу получателя, если получатель собственный
+        #
+        if text:
+            text_to_recipient = text
+            if operation_done and data.get('message_to_forward_id'):
+                text_to_recipient += ' в связи с сообщением, см. ниже...'
+            tg_user_to_notify_tg_data = []
+            if profile_to.get('owner'):
+                if profile_to['owner']['uuid'] != profile_from['uuid']:
+                    tg_user_to_notify_tg_data = profile_to['owner'].get('tg_data', [])
+            else:
+                tg_user_to_notify_tg_data = profile_to.get('tg_data', [])
+            for tgd in tg_user_to_notify_tg_data:
+                if operation_done:
+                    try:
+                        await bot.send_message(
+                            tgd['tg_uid'],
+                            text=text_to_recipient,
+                            disable_notification=True,
+                        )
+                    except TelegramBadRequest:
+                        pass
+                if operation_done and not profile_to.get('owner') and data.get('message_to_forward_id'):
+                    try:
+                        await bot.forward_message(
+                            chat_id=tgd['tg_uid'],
+                            from_chat_id=tg_user_sender.id,
+                            message_id=data['message_to_forward_id'],
+                            disable_notification=True,
+                        )
+                    except TelegramBadRequest:
+                        pass
+
+
+    @classmethod
+    async def quest_after_thank_if_no_attitude(
+        cls, text, profile_from, profile_to, tg_user_from, card_message=None,
+    ):
+        """
+        Карточка юзера в бот, когда того благодарят, но благодаривший с ним не знаком
+
+        -   text:           текст в карточке
+        -   profile_to:     кого благодарят
+        -   tg_user_from:   кто благодарит
+        -   card_message:   сообщение с карточкой, которое надо подправить, а не слать новую карточку
+        """
+
+        attitude = None
+        status_relations, response_relations = await cls.call_response_relations(profile_from, profile_to)
+        if status_relations == 200:
+            attitude = response_relations['from_to']['attitude']
+
+        dict_reply = dict(
+            keyboard_type=KeyboardType.TRUST_THANK,
+            sep=KeyboardType.SEP,
+            user_to_uuid_stripped=cls.uuid_strip(profile_to['uuid']),
+            message_to_forward_id='',
+            is_thank_card='1',
+        )
+        callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE + '%(is_thank_card)s%(sep)s'
+        asterisk = ' (*)'
+
+        dict_reply.update(operation=OperationType.ACQ)
+        inline_btn_acq = InlineKeyboardButton(
+            text='Знакомы' + (asterisk if attitude == Attitude.ACQ else ''),
+            callback_data=callback_data_template % dict_reply,
+        )
+
+        dict_reply.update(operation=OperationType.TRUST)
+        inline_btn_trust = InlineKeyboardButton(
+            text='Доверяю' + (asterisk if attitude == Attitude.TRUST else ''),
+            callback_data=callback_data_template % dict_reply,
+        )
+
+        dict_reply.update(operation=OperationType.MISTRUST)
+        inline_btn_mistrust = InlineKeyboardButton(
+            text='Не доверяю' + (asterisk if attitude == Attitude.MISTRUST else ''),
+            callback_data=callback_data_template % dict_reply,
+        )
+
+        dict_reply.update(operation=OperationType.NULLIFY_ATTITUDE)
+        inline_btn_nullify_attitude = InlineKeyboardButton(
+            text='Не знакомы' + (asterisk if not attitude else ''),
+            callback_data=callback_data_template % dict_reply,
+        )
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=[
+            [inline_btn_acq, inline_btn_trust,],
+            [inline_btn_nullify_attitude, inline_btn_mistrust,]
+        ])
+        await cls.send_or_edit_card(text, reply_markup, profile_to, tg_user_from, card_message)
 
 class TgGroup(object):
     """

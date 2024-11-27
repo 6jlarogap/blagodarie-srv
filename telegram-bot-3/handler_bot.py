@@ -201,7 +201,7 @@ async def cmd_start(message: Message, state: FSMContext):
         status_to, profile_to = await Misc.get_user_by_sid(m.group(2))
         if status_to == 200:
             status_from, profile_from = await Misc.post_tg_user(message.from_user)
-            data = dict(
+            await Misc.put_attitude(data = dict(
                 tg_user_sender=message.from_user,
                 profile_from = profile_from,
                 profile_to = profile_to,
@@ -209,7 +209,9 @@ async def cmd_start(message: Message, state: FSMContext):
                 callback=None,
                 message_to_forward_id = None,
                 group_member=None,
-            )
+                is_thank_card=False,
+                state=None,
+            ))
 
     elif m := re.search(r'^([0-9a-z]{10})$', arg, flags=re.I):
         status_to, profile_to = await Misc.get_user_by_sid(m.group(1))
