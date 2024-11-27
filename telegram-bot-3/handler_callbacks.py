@@ -33,6 +33,9 @@ class FSMmeet(StatesGroup):
     ask_dob = State()
     ask_geo = State()
 
+class FSMexistingIOF(StatesGroup):
+    ask = State()
+
 @dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.CANCEL_ANY,
         KeyboardType.SEP,
@@ -126,7 +129,7 @@ async def cbq_gender_new_person(callback: CallbackQuery, state: FSMContext):
         KeyboardType.SEP,
     )), StateFilter(None))
 async def cbq_gender(callback: CallbackQuery, state: FSMContext):
-    if not (uuid := Misc.getuuid_from_callback(callback)):
+    if not (uuid := Misc.get_uuid_from_callback(callback)):
         return
     response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback.from_user, uuid=uuid)
     if not response_sender:
@@ -623,3 +626,64 @@ async def cbq_cancel_thank(callback: CallbackQuery, state: FSMContext):
         await callback.message.edit_text(text=text, reply_markup=reply_markup,)
     except TelegramBadRequest:
         pass
+    await callback.answer()
+
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.IOF,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_existing_iof(callback: CallbackQuery, state: FSMContext):
+    """
+    Заменить имя, фамилию, отчество или название организации
+    """
+    if not (uuid := Misc.get_uuid_from_callback(callback)):
+        return
+    if not (response_sender := await Misc.check_owner_by_uuid(owner_tg_user=callback.from_user, uuid=uuid)):
+        return
+    response_uuid = response_sender['response_uuid']
+    await state.set_state(FSMexistingIOF.ask)
+    await state.update_data(uuid=uuid, is_org=response_uuid['is_org'])
+    await bot.send_message(
+        callback.from_user.id,
+        (Misc.PROMPT_EXISTING_ORG if response_uuid['is_org'] else Misc.PROMPT_EXISTING_IOF) % dict(
+            name=response_uuid['first_name'],
+        ),
+        reply_markup=Misc.reply_markup_cancel_row(),
+    )
+    callback.answer()
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMexistingIOF.ask))
+async def process_existing_iof(message: Message, state: FSMContext):
+    if message.content_type != ContentType.TEXT:
+        await message.reply(Misc.MSG_ERROR_TEXT_ONLY, reply_markup=Misc.reply_markup_cancel_row())
+        return
+    if await is_it_command(message, state):
+        return
+    first_name = Misc.strip_text(message.text)
+    data = await state.get_data()
+    if not first_name or re.search(Misc.RE_UUID, first_name) or len(first_name) < 5:
+        await message.reply(
+            Misc.PROMPT_ORG_INCORRECT if data.get('is_org') else Misc.PROMPT_IOF_INCORRECT,
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+        return
+    if uuid := data.get('uuid'):
+        response_sender = await Misc.check_owner_by_uuid(
+            owner_tg_user=message.from_user,
+            uuid=uuid
+        )
+        if response_sender:
+            status, response = await Misc.put_user_properties(
+                uuid=uuid,
+                first_name=first_name,
+            )
+            if status == 200:
+                await message.reply('Изменено')
+                await Misc.show_card(
+                    profile=response,
+                    profile_sender=response_sender,
+                    tg_user_sender=message.from_user,
+                )
+    await state.clear()

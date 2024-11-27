@@ -32,6 +32,9 @@ dp, bot, bot_data = me.dp, me.bot, me.bot_data
 class FSMquery(StatesGroup):
     ask = State()
 
+class FSMnewOrg(StatesGroup):
+    ask = State()
+
 @router.message(
     F.text,
     F.chat.type.in_((ChatType.PRIVATE,)),
@@ -98,7 +101,7 @@ async def cmd_setplace(message: Message, state: FSMContext):
     F.text,
     F.chat.type.in_((ChatType.PRIVATE,)),
     StateFilter(None),
-    Command(re.compile('^new|new_person$', flags=re.I)),
+    Command(re.compile('^(?:new|new_person)$', flags=re.I)),
 )
 async def cmd_new_person(message: Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
@@ -114,7 +117,22 @@ async def cmd_new_person(message: Message, state: FSMContext):
     F.text,
     F.chat.type.in_((ChatType.PRIVATE,)),
     StateFilter(None),
-    Command(re.compile('^findpotr|findvozm|findperson$', flags=re.I)),
+    Command(re.compile('^new_org$', flags=re.I)),
+)
+async def cmd_new_org(message: Message, state: FSMContext):
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender == 200:
+        if not Misc.editable(response_sender):
+            return
+        await state.set_state(FSMnewOrg.ask)
+        await message.reply(Misc.PROMPT_NEW_ORG, reply_markup=Misc.reply_markup_cancel_row())
+
+
+@router.message(
+    F.text,
+    F.chat.type.in_((ChatType.PRIVATE,)),
+    StateFilter(None),
+    Command(re.compile('^(?:findpotr|findvozm|findperson)$', flags=re.I)),
 )
 async def cmd_find(message: Message, state: FSMContext):
     message_text = message.text.split()[0].lstrip('/')
@@ -151,7 +169,7 @@ async def cmd_meet(message: Message, state: FSMContext):
     F.text,
     F.chat.type.in_((ChatType.PRIVATE,)),
     StateFilter(None),
-    Command(re.compile('^trust|thank$', flags=re.I)),
+    Command(re.compile('^(?:trust|thank)$', flags=re.I)),
 )
 async def cmd_trust_thank(message: Message, state: FSMContext):
     command = message.text.strip('/').strip().lower()
@@ -232,7 +250,7 @@ async def cmd_feedback(message: Message, state: FSMContext):
     F.text,
     F.chat.type.in_((ChatType.PRIVATE,)),
     StateFilter(None),
-    Command(re.compile('start', flags=re.I)),
+    Command(re.compile('^start$', flags=re.I)),
 )
 async def cmd_start(message: Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
@@ -287,6 +305,37 @@ async def cmd_start(message: Message, state: FSMContext):
         await cmd_meet(message, state)
     else:
         await message.reply(f'arg: ~{arg}~')
+
+
+@router.message(
+    F.text,
+    F.chat.type.in_((ChatType.PRIVATE,)),
+    StateFilter(None),
+    Command(re.compile('^getowned$', flags=re.I)),
+)
+async def cmd_getowned(message: Message, state: FSMContext):
+    tg_user_sender = message.from_user
+    status, response_from = await Misc.post_tg_user(tg_user_sender)
+    if status == 200:
+        if not Misc.editable(response_from):
+            return
+        try:
+            status, a_response_to = await Misc.api_request(
+                path='/api/profile',
+                method='get',
+                params=dict(uuid_owner=response_from['uuid']),
+            )
+            logging.debug('get_tg_user_sender_owned data in api, status: %s' % status)
+            logging.debug('get_tg_user_sender_owned data in api, response: %s' % a_response_to)
+        except:
+            return
+
+        if a_response_to:
+            bot_data = await bot.get_me()
+            await Misc.show_deeplinks(a_response_to, message)
+        else:
+            await message.reply('У вас нет запрошенных данных')
+
 
 # Команды в бот закончились.
 # Просто сообщение в бот. Должно здесь идти после всех команд в бот
@@ -455,12 +504,14 @@ commands_dict = {
     'help': cmd_help,
     'new': cmd_new_person,
     'new_person': cmd_new_person,
+    'new_org': cmd_new_org,
     'setplace': cmd_setplace,
     'meet': cmd_meet,
     'start': cmd_start,
     'stat': cmd_stat,
     'map': cmd_map,
     'feedback': cmd_feedback,
+    'getowned': cmd_getowned,
 }
 
 
@@ -578,8 +629,8 @@ async def put_location(message, state, show_card=False):
                 result = response
                 if show_card:
                     await Misc.show_card(
-                        profile=response_sender,
-                        profile_sender=response,
+                        profile=response,
+                        profile_sender=response_sender,
                         tg_user_sender=tg_user_sender,
                     )
                     await message.reply('Координаты записаны', reply_markup=reply_markup)
@@ -646,4 +697,48 @@ async def process_meet_from_deeplink_and_command(message, state, data):
         text=text,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
     )
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMnewOrg.ask))
+async def process_new_org_ask(message: Message, state: FSMContext):
+    if message.content_type != ContentType.TEXT:
+        await message.reply(
+            Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + \
+            Misc.PROMPT_NEW_ORG,
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+        return
+    if await is_it_command(message, state):
+        return
+    first_name = Misc.strip_text(message.text)
+    if not first_name or len(first_name) < 5:
+        await message.reply(
+            Misc.PROMPT_ORG_INCORRECT,
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+        return
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender == 200:
+        payload_org = dict(
+            tg_token=settings.TOKEN,
+            owner_id=response_sender['user_id'],
+            first_name=first_name,
+            is_org='1',
+        )
+        logging.debug('post new org, payload: %s' % Misc.secret(payload_org))
+        status, response = await Misc.api_request(
+            path='/api/profile',
+            method='post',
+            data=payload_org,
+        )
+        logging.debug('post new org, status: %s' % status)
+        logging.debug('post new org, response: %s' % response)
+        if status == 200:
+            await message.reply('Добавлена организация')
+            await Misc.show_card(
+                profile=response,
+                profile_sender=response_sender,
+                tg_user_sender=message.from_user,
+            )
+    await state.clear()
 

@@ -318,6 +318,7 @@ class Misc(object):
     PROMPT_NEW_IOF = "Укажите имя отчество и фамилию - в одной строке, например: 'Иван Иванович Иванов'"
     PROMPT_NEW_ORG = 'Введите название новой организации'
     PROMPT_EXISTING_IOF = "Укажите для\n\n%(name)s\n\nдругие имя отчество и фамилию - в одной строке, например: 'Иван Иванович Иванов'"
+    PROMPT_EXISTING_ORG = 'Укажите для\n\n%(name)s\n\nдругое название'
 
     PROMPT_DATE_FORMAT = 'в формате ДД.ММ.ГГГГ или ММ.ГГГГ или ГГГГ'
 
@@ -397,7 +398,7 @@ class Misc(object):
     FORMAT_DATE = '%d.%m.%Y'
     FORMAT_TIME = '%H:%M:%S'
 
-    PROMPT_IOF_INCORRECT = 'Некорректные ФИО - напишите ещё раз имя отчество и фамилию или Отмена'
+    PROMPT_IOF_INCORRECT = 'Некорректные ФИО - напишите ещё раз имя отчество и фамилию, не меньше 5 символов, или Отмена'
     PROMPT_ORG_INCORRECT = (
         'Некорректное или слишком короткое, меньше 5 символов, '
         'название организации - напишите ещё раз название организации или '
@@ -1712,7 +1713,7 @@ class Misc(object):
         return messsage_for_pin
 
     @classmethod
-    def getuuid_from_callback(cls, callback):
+    def get_uuid_from_callback(cls, callback):
         """
         Получить uuid из самых распространенных callbacks
         """
