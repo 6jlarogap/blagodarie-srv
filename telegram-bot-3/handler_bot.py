@@ -20,7 +20,8 @@ from aiogram.fsm.state import StatesGroup, State
 import settings, me
 from settings import logging
 
-from common import Misc, KeyboardType, FSMnewPerson, FSMgeo
+from common import FSMnewPerson, FSMgeo
+from common import Misc, KeyboardType, OperationType
 
 import pymorphy3
 MorphAnalyzer = pymorphy3.MorphAnalyzer()
@@ -196,15 +197,20 @@ async def cmd_start(message: Message, state: FSMContext):
             profile_sender=response_sender,
             tg_user_sender=message.from_user,
         )
-    elif m := re.search(r'^m\-([0-9a-z]{10})$', arg, flags=re.I):
-        status_to, profile_to = await Misc.get_user_by_sid(m.group(1))
+    elif m := re.search(r'^(t|th)\-([0-9a-z]{10})$', arg, flags=re.I):
+        status_to, profile_to = await Misc.get_user_by_sid(m.group(2))
         if status_to == 200:
-            data = dict(profile_from = response_sender, profile_to=profile_to)
-            await process_meet_from_deeplink_and_command(message, state, data)
-    elif arg == 'setplace':
-        await Misc.prompt_location(message, state)
-    elif arg == 'meet':
-        await cmd_meet(message, state)
+            status_from, profile_from = await Misc.post_tg_user(message.from_user)
+            data = dict(
+                tg_user_sender=message.from_user,
+                profile_from = profile_from,
+                profile_to = profile_to,
+                operation_type_id = OperationType.start_prefix_to_op(m.group(1)),
+                callback=None,
+                message_to_forward_id = None,
+                group_member=None,
+            )
+
     elif m := re.search(r'^([0-9a-z]{10})$', arg, flags=re.I):
         status_to, profile_to = await Misc.get_user_by_sid(m.group(1))
         if status_to == 200:
@@ -213,6 +219,16 @@ async def cmd_start(message: Message, state: FSMContext):
                 profile_sender=response_sender,
                 tg_user_sender=message.from_user,
             )
+    elif m := re.search(r'^m\-([0-9a-z]{10})$', arg, flags=re.I):
+        status_to, profile_to = await Misc.get_user_by_sid(m.group(1))
+        if status_to == 200:
+            data = dict(profile_from = response_sender, profile_to=profile_to)
+            await process_meet_from_deeplink_and_command(message, state, data)
+
+    elif arg == 'setplace':
+        await Misc.prompt_location(message, state)
+    elif arg == 'meet':
+        await cmd_meet(message, state)
     else:
         await message.reply(f'arg: ~{arg}~')
 
@@ -315,7 +331,18 @@ async def message_to_bot(message: Message, state: FSMContext):
         await message.reply('Не известная команда')
         return
     if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
-        await message.reply(Misc.invalid_search_text())
+        await message.reply(
+            f'Поиск участников {settings.FRONTEND_HOST_TITLE} по:\n'
+            '\n'
+            '- @имени участника в телеграме,\n'
+            '- фамилии, имени, возможностям, потребностям.\n'
+            '\n'
+            f'Минимальное число символов в тексте для поиска: {settings.MIN_LEN_SEARCHED_TEXT}\n'
+            '\n'
+            'Также можно переслать сюда сообщение от любого пользователя телеграма\n'
+            '\n'
+            'Дальнейшие действия будут Вам предложены\n'
+        )
         return
     if m := Misc.get_youtube_id(message_text):
         youtube_id, youtube_link = m
