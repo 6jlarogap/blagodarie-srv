@@ -178,6 +178,60 @@ async def cmd_trust_thank(message: Message, state: FSMContext):
     F.text,
     F.chat.type.in_((ChatType.PRIVATE,)),
     StateFilter(None),
+    Command(re.compile('^stat$', flags=re.I)),
+)
+async def cmd_stat(message: Message, state: FSMContext):
+    status, response = await Misc.api_request(
+        path='/api/bot/stat',
+        method='get',
+    )
+    if status == 200 and response:
+        reply = (
+            '<b>Статистика</b>\n'
+            '\n'
+            f'Пользователи: {response["active"]}\n'
+            f'Стартовали бот: {response["did_bot_start"]}\n'
+            f'Указали местоположение: {response["with_geodata"]}\n'
+            f'Cозданные профили: {response["owned"]}\n'
+            f'Всего профилей: {response["active"] + response["owned"]}\n'
+            f'Родственных связей: {response["relations"]}\n'
+            f'Доверий: {response["trusts"]}\n'
+            f'Недоверий: {response["mistrusts"]}\n'
+            f'Знакомств: {response["acqs"]}\n'
+        )
+        await message.answer(reply)
+
+@router.message(
+    F.text,
+    F.chat.type.in_((ChatType.PRIVATE,)),
+    StateFilter(None),
+    Command(re.compile('^map$', flags=re.I)),
+)
+async def cmd_map(message: Message, state: FSMContext):
+    await bot.send_message(
+        message.from_user.id,
+        text=Misc.get_html_a(href=settings.MAP_HOST, text='Карта участников'),
+        disable_web_page_preview=True,
+    )
+
+
+@router.message(
+    F.text,
+    F.chat.type.in_((ChatType.PRIVATE,)),
+    StateFilter(None),
+    Command(re.compile('^feedback$', flags=re.I)),
+)
+async def cmd_feedback(message: Message, state: FSMContext):
+    await message.reply(
+        Misc.get_html_a(settings.BOT_CHAT['href'], settings.BOT_CHAT['caption']),
+        disable_web_page_preview=True,
+    )
+
+
+@router.message(
+    F.text,
+    F.chat.type.in_((ChatType.PRIVATE,)),
+    StateFilter(None),
     Command(re.compile('start', flags=re.I)),
 )
 async def cmd_start(message: Message, state: FSMContext):
@@ -404,6 +458,9 @@ commands_dict = {
     'setplace': cmd_setplace,
     'meet': cmd_meet,
     'start': cmd_start,
+    'stat': cmd_stat,
+    'map': cmd_map,
+    'feedback': cmd_feedback,
 }
 
 

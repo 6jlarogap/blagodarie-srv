@@ -142,10 +142,10 @@ async def cbq_gender(callback: CallbackQuery, state: FSMContext):
     inline_button_female = InlineKeyboardButton(text='Жен', callback_data=callback_data_template % dict_gender)
     await state.set_state(FSMgender.ask)
     await state.update_data(uuid=uuid)
-    his_her = Misc.his_her(response_uuid) if response_uuid['owner'] else 'Ваш'
+    your = '' if response_uuid['owner'] else 'Ваш '
     prompt_gender = (
         f'<b>{response_uuid["first_name"]}</b>.\n\n'
-        f'Уточните {his_her} пол:'
+        f'Уточните {your}пол:'
     )
     reply_markup = InlineKeyboardMarkup(inline_keyboard=[[
         inline_button_male, inline_button_female, Misc.inline_button_cancel()
