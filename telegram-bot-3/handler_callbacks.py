@@ -21,7 +21,6 @@ from settings import logging
 from common import Misc, OperationType, KeyboardType
 from common import FSMnewPerson
 
-
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
@@ -39,6 +38,10 @@ class FSMexistingIOF(StatesGroup):
 class FSMphoto(StatesGroup):
     ask = State()
     remove = State()
+
+class FSMdates(StatesGroup):
+    dob = State()
+    dod = State()
 
 @dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.CANCEL_ANY,
@@ -518,7 +521,7 @@ async def cbq_attitude(callback: CallbackQuery, state: FSMContext):
         <thank_card>                        # 4, отправлено из карточки после благодарности
         <KeyboardType.SEP>
     """
-    callback.answer()
+    await callback.answer()
     try:
         code = callback.data.split(KeyboardType.SEP)
         try:
@@ -655,7 +658,7 @@ async def cbq_existing_iof(callback: CallbackQuery, state: FSMContext):
         ),
         reply_markup=Misc.reply_markup_cancel_row(),
     )
-    callback.answer()
+    await callback.answer()
 
 
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMexistingIOF.ask))
@@ -815,4 +818,81 @@ async def cbq_photo_remove_confirmed(callback: CallbackQuery, state: FSMContext)
     await state.clear()
     await callback.answer()
 
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.DATES,
+        KeyboardType.SEP,
+        # uuid, кому                    # 1
+        # KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_dates(callback: CallbackQuery, state: FSMContext):
+    if (uuid := Misc.get_uuid_from_callback(callback)) and \
+       (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
+        response_uuid = response_check['response_uuid']
+        his_her = Misc.his_her(response_uuid) if response_uuid['owner'] else 'Ваш'
+        title_dob_unknown = 'Не знаю'
+        prompt_dob = (
+            f'<b>{response_uuid["first_name"]}</b>\n\n'
+            f'Укажите {his_her} день рождения '
+        ) + Misc.PROMPT_DATE_FORMAT
+        if not response_uuid['owner']:
+            prompt_dob += (
+                f'\n\nЕсли хотите скрыть дату своего рождения '
+                f'или в самом деле не знаете, когда Ваш день рождения, нажмите <u>{title_dob_unknown}</u>'
+            )
+        inline_button_dob_unknown = InlineKeyboardButton(
+            text=title_dob_unknown, callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+            keyboard_type=KeyboardType.DATES_DOB_UNKNOWN,
+            sep=KeyboardType.SEP,
+            uuid=uuid,
+        ))
+        reply_markup = InlineKeyboardMarkup(
+            inline_keyboard=[[inline_button_dob_unknown, Misc.inline_button_cancel()]]
+        )
+        await state.set_state(FSMdates.dob)
+        await state.update_data(uuid=uuid)
+        await callback.message.reply(
+            prompt_dob,
+            reply_markup=reply_markup,
+            disable_web_page_preview=True,
+        )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.DATES_DOB_UNKNOWN,
+        KeyboardType.SEP,
+    )), StateFilter(FSMdates.dob))
+async def cbq_dates_dob_unknown(callback: CallbackQuery, state: FSMContext):
+    if (uuid := Misc.get_uuid_from_callback(callback)) and \
+       (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
+        if response_check['response_uuid']['owner']:
+            await draw_dod(callback, response_check['response_uuid']['uuid'])
+        else:
+            await state.update_data(dob=None)
+            await put_dates(callback, state)
+    await callback.answer()
+
+
+async def put_dates(callback, state):
+    data = await state.get_data()
+    if data.get('uuid') and \
+       (response_check := await Misc.check_owner_by_uuid(callback.from_user, data['uuid'])):
+        dob = data.get('dob') or ''
+        dod = data.get('dod') or ''
+        is_dead = data.get('is_dead') or dod or ''
+        status_put, response_put = await Misc.put_user_properties(
+            uuid=data['uuid'],
+            dob=dob,
+            dod=dod,
+            is_dead = '1' if is_dead else '',
+        )
+        if status_put == 200:
+            await Misc.show_card(response_put, response_check, callback.from_user)
+        elif status_put == 400 and response_put.get('message'):
+            dates = 'даты' if response_check['response_uuid']['owner'] else 'дату рождения'
+            await callback.message.reply(f'Ошибка!\n{response_put["message"]}\n\nНазначайте {dates} по новой')
+        else:
+            await callback.message.reply(Misc.MSG_ERROR_API)
+    await state.clear()
 
