@@ -312,7 +312,7 @@ class Misc(object):
     PROMPT_ABILITY = 'Отправьте мне <u>текст</u> с <b>возможностями</b>'
     PROMPT_WISH = 'Отправьте мне <u>текст</u> с <b>потребностями</b>'
 
-    PROMPT_PHOTO = 'Отправьте мне <b>фото</b>, не более %s Мб размером.' % settings.DOWNLOAD_PHOTO_MAX_SIZE
+    PROMPT_PHOTO = f'Отправьте мне <b>фото</b>, не более {settings.DOWNLOAD_PHOTO_MAX_SIZE} Мб размером.'
     PROMPT_PHOTO_REMOVE = "Нажмите 'Удалить' для удаления имеющегося фото."
 
     PROMPT_NEW_IOF = "Укажите имя отчество и фамилию - в одной строке, например: 'Иван Иванович Иванов'"
@@ -375,7 +375,7 @@ class Misc(object):
         query_person='<b>Поиск людей</b>\n' + PROMPT_ENTER_SEARCH_STRING,
     )
 
-    MSG_ERROR_PHOTO_ONLY = 'Ожидается <b>фото</b>. Не более %s Мб размером.' %  settings.DOWNLOAD_PHOTO_MAX_SIZE
+    MSG_ERROR_PHOTO_ONLY = f'Ожидается <b>фото</b>. Не более {settings.DOWNLOAD_PHOTO_MAX_SIZE} Мб размером.'
 
     RE_UUID = re.compile(r'[\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12}', re.IGNORECASE)
     RE_SID = re.compile(r'^[0-9a-z]{10}$', re.IGNORECASE)

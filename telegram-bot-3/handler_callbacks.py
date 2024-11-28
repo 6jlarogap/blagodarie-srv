@@ -727,15 +727,16 @@ async def cbq_photo(callback: CallbackQuery, state: FSMContext):
 
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMphoto.ask))
 async def process_photo(message: Message, state: FSMContext):
-    if message.content_type != ContentType.PHOTO:
+    if message.content_type != ContentType.PHOTO or \
+       message.photo[-1].file_size > settings.DOWNLOAD_PHOTO_MAX_SIZE * 1024 * 1024:
         await message.reply(
-            Misc.MSG_ERROR_PHOTO_ONLY + '\n\n' + \
-            Misc.PROMPT_PHOTO,
+            Misc.MSG_ERROR_PHOTO_ONLY,
             reply_markup=Misc.reply_markup_cancel_row(),
         )
         return
     data = await state.get_data()
     if response_check := await Misc.check_owner_by_uuid(owner_tg_user=message.from_user, uuid=data.get('uuid')):
+        print(message.photo[-1].file_size)
         image = await Misc.get_file_bytes(message.photo[-1])
         image = base64.b64encode(image).decode('UTF-8')
         status_put, response_put = await Misc.put_user_properties(
