@@ -2,7 +2,7 @@
 #
 # Сallback реакции
 
-import re
+import re, base64
 
 from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
@@ -35,6 +35,10 @@ class FSMmeet(StatesGroup):
 
 class FSMexistingIOF(StatesGroup):
     ask = State()
+
+class FSMphoto(StatesGroup):
+    ask = State()
+    remove = State()
 
 @dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.CANCEL_ANY,
@@ -687,3 +691,69 @@ async def process_existing_iof(message: Message, state: FSMContext):
                     tg_user_sender=message.from_user,
                 )
     await state.clear()
+
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.PHOTO,       # 0
+        KeyboardType.SEP,
+        # uuid, кому              # 1
+        # KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_photo(callback: CallbackQuery, state: FSMContext):
+    if uuid := Misc.get_uuid_from_callback(callback):
+        if await Misc.check_owner_by_uuid(owner_tg_user=callback.from_user, uuid=uuid):
+            inline_button_cancel = Misc.inline_button_cancel()
+            await state.set_state(FSMphoto.ask)
+            await state.update_data(uuid=uuid)
+            prompt_photo = Misc.PROMPT_PHOTO
+            status, response = await Misc.get_user_by_uuid(uuid)
+            if status == 200 and Misc.is_photo_downloaded(response):
+                prompt_photo += '\n' + Misc.PROMPT_PHOTO_REMOVE
+                callback_data_remove = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+                    keyboard_type=KeyboardType.PHOTO_REMOVE,
+                    sep=KeyboardType.SEP,
+                    uuid=uuid,
+                )
+                inline_btn_remove = InlineKeyboardButton(
+                    text='Удалить',
+                    callback_data=callback_data_remove,
+                )
+                buttons = [[inline_button_cancel, inline_btn_remove]]
+            else:
+                buttons = [[inline_button_cancel]]
+            await callback.message.reply(prompt_photo, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+    await callback.answer()
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMphoto.ask))
+async def process_photo(message: Message, state: FSMContext):
+    if message.content_type != ContentType.PHOTO:
+        await message.reply(
+            Misc.MSG_ERROR_PHOTO_ONLY + '\n\n' + \
+            Misc.PROMPT_PHOTO,
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+        return
+    data = await state.get_data()
+    if response_check := await Misc.check_owner_by_uuid(owner_tg_user=message.from_user, uuid=data.get('uuid')):
+        image = await Misc.get_file_bytes(message.photo[-1])
+        image = base64.b64encode(image).decode('UTF-8')
+        status_put, response_put = await Misc.put_user_properties(
+            uuid=data['uuid'],
+            photo=image,
+        )
+        msg_error = '<b>Ошибка</b>. Фото не внесено.\n'
+        if status_put == 200:
+            await message.reply(f'{Misc.get_deeplink_with_name(response_put)} : фото внесено')
+            await Misc.show_card(response_put, response_check, message.from_user)
+        elif status_put == 400:
+            if response.get('message'):
+                await message.reply(msg_error + response_put['message'])
+            else:
+                await message.reply(msg_error + Misc.MSG_ERROR_API)
+        else:
+            await message.reply(msg_error + Misc.MSG_ERROR_API)
+    else:
+        await message.reply(msg_error + Misc.MSG_ERROR_API)
+    await state.clear()
+
