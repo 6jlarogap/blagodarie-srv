@@ -866,12 +866,63 @@ async def cbq_dates(callback: CallbackQuery, state: FSMContext):
 async def cbq_dates_dob_unknown(callback: CallbackQuery, state: FSMContext):
     if (uuid := Misc.get_uuid_from_callback(callback)) and \
        (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
-        if response_check['response_uuid']['owner']:
-            await draw_dod(callback, response_check['response_uuid']['uuid'])
+        if (profile := response_check['response_uuid'])['owner']:
+            await draw_dod(profile, callback.message, state)
         else:
             await state.update_data(dob=None)
             await put_dates(callback, state)
     await callback.answer()
+
+
+async def draw_dod(profile, message, state):
+    if profile['gender']:
+        is_male = profile['gender'] == 'm'
+        s_alive = 'Жив' if is_male else 'Жива'
+        s_alive_or_dont_know = s_alive + ' или не знаю'
+        s_dead = 'Умер' if is_male else 'Умерла'
+        s_dead_none_title = s_dead + ', дату не знаю'
+        his_her = 'его' if is_male else 'её'
+        he_she = 'он' if is_male else 'она'
+        prompt_dod = (
+            f'<b>{profile["first_name"]}</b>\n\n'
+            f'Нажмите <u>{s_alive_or_dont_know}</u>, если {s_alive.lower()} или Вы не знаете, {s_dead.lower()} {he_she} или нет\n\n'
+            f'Или нажмите <u>{s_dead_none_title}</u>, если {s_dead.lower()}, но Вы не знаете, когда {he_she} {s_dead.lower()}\n\n'
+            f'Или укажите дату {his_her} смерти {Misc.PROMPT_DATE_FORMAT}, если она Вам известна'
+        )
+    else:
+        s_alive = 'Жив(а)'
+        s_alive_or_dont_know = 'Жив(а) или не знаю'
+        s_dead = 'Умер(ла)'
+        s_dead_none_title = s_dead + ', дату не знаю'
+        prompt_dod = (
+            f'<b>{profile["first_name"]}</b>\n\n'
+            f'Нажмите <u>{s_alive_or_dont_know}</u>, если {s_alive.lower()} или Вы не знаете, {s_dead.lower()} или нет\n\n'
+            f'Или нажмите <u>{s_dead_none_title}</u>, если {s_dead.lower()}, но Вы не знаете дату смерти\n\n'
+            f'Или укажите дату смерти {Misc.PROMPT_DATE_FORMAT}'
+        )
+    callback_data_template = Misc.CALLBACK_DATA_UUID_TEMPLATE
+    dict_callback = dict(
+        keyboard_type=KeyboardType.DATES_DOD_NONE,
+        sep=KeyboardType.SEP,
+        uuid=profile['uuid'],
+    )
+    inline_button_alive = InlineKeyboardButton(
+        text=s_alive_or_dont_know,
+        callback_data=callback_data_template % dict_callback
+    )
+    dict_callback.update(keyboard_type=KeyboardType.DATES_DOD_DEAD)
+    inline_button_dead = InlineKeyboardButton(
+        text=s_dead_none_title,
+        callback_data=callback_data_template % dict_callback
+    )
+    reply_markup = InlineKeyboardMarkup(
+        inline_keyboard=[[inline_button_alive, inline_button_dead, Misc.inline_button_cancel()]]
+    )
+    await state.set_state(FSMdates.dod)
+    await message.reply(
+        prompt_dod,
+        reply_markup=reply_markup,
+    )
 
 
 async def put_dates(callback, state):
