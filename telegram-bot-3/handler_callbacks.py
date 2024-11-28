@@ -700,28 +700,28 @@ async def process_existing_iof(message: Message, state: FSMContext):
         # KeyboardType.SEP,
     )), StateFilter(None))
 async def cbq_photo(callback: CallbackQuery, state: FSMContext):
-    if uuid := Misc.get_uuid_from_callback(callback):
-        if await Misc.check_owner_by_uuid(owner_tg_user=callback.from_user, uuid=uuid):
-            inline_button_cancel = Misc.inline_button_cancel()
-            await state.set_state(FSMphoto.ask)
-            await state.update_data(uuid=uuid)
-            prompt_photo = Misc.PROMPT_PHOTO
-            status, response = await Misc.get_user_by_uuid(uuid)
-            if status == 200 and Misc.is_photo_downloaded(response):
-                prompt_photo += '\n' + Misc.PROMPT_PHOTO_REMOVE
-                callback_data_remove = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
-                    keyboard_type=KeyboardType.PHOTO_REMOVE,
-                    sep=KeyboardType.SEP,
-                    uuid=uuid,
-                )
-                inline_btn_remove = InlineKeyboardButton(
-                    text='Удалить',
-                    callback_data=callback_data_remove,
-                )
-                buttons = [[inline_button_cancel, inline_btn_remove]]
-            else:
-                buttons = [[inline_button_cancel]]
-            await callback.message.reply(prompt_photo, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+    if (uuid := Misc.get_uuid_from_callback(callback)) and \
+       (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
+        inline_button_cancel = Misc.inline_button_cancel()
+        await state.set_state(FSMphoto.ask)
+        await state.update_data(uuid=uuid)
+        prompt_photo = Misc.PROMPT_PHOTO
+        status, response = await Misc.get_user_by_uuid(uuid)
+        if status == 200 and Misc.is_photo_downloaded(response):
+            prompt_photo += '\n' + Misc.PROMPT_PHOTO_REMOVE
+            callback_data_remove = Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+                keyboard_type=KeyboardType.PHOTO_REMOVE,
+                sep=KeyboardType.SEP,
+                uuid=uuid,
+            )
+            inline_btn_remove = InlineKeyboardButton(
+                text='Удалить',
+                callback_data=callback_data_remove,
+            )
+            buttons = [[inline_button_cancel, inline_btn_remove]]
+        else:
+            buttons = [[inline_button_cancel]]
+        await callback.message.reply(prompt_photo, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
     await callback.answer()
 
 
@@ -736,7 +736,6 @@ async def process_photo(message: Message, state: FSMContext):
         return
     data = await state.get_data()
     if response_check := await Misc.check_owner_by_uuid(owner_tg_user=message.from_user, uuid=data.get('uuid')):
-        print(message.photo[-1].file_size)
         image = await Misc.get_file_bytes(message.photo[-1])
         image = base64.b64encode(image).decode('UTF-8')
         status_put, response_put = await Misc.put_user_properties(
@@ -748,7 +747,7 @@ async def process_photo(message: Message, state: FSMContext):
             await message.reply(f'{Misc.get_deeplink_with_name(response_put)} : фото внесено')
             await Misc.show_card(response_put, response_check, message.from_user)
         elif status_put == 400:
-            if response.get('message'):
+            if response_put.get('message'):
                 await message.reply(msg_error + response_put['message'])
             else:
                 await message.reply(msg_error + Misc.MSG_ERROR_API)
@@ -757,4 +756,63 @@ async def process_photo(message: Message, state: FSMContext):
     else:
         await message.reply(msg_error + Misc.MSG_ERROR_API)
     await state.clear()
+
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.PHOTO_REMOVE,      # 0
+        KeyboardType.SEP,
+        # uuid, кому                    # 1
+        # KeyboardType.SEP,
+    )), StateFilter(FSMphoto.ask))
+async def process_callback_photo_remove(callback: CallbackQuery, state: FSMContext):
+    if (uuid := Misc.get_uuid_from_callback(callback)) and \
+       (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
+        inline_btn_remove = InlineKeyboardButton(
+            text='Да, удалить',
+            callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+                keyboard_type=KeyboardType.PHOTO_REMOVE_CONFIRMED,
+                sep=KeyboardType.SEP,
+                uuid=uuid,
+        ))
+        reply_markup = InlineKeyboardMarkup(
+            inline_keyboard=[[Misc.inline_button_cancel(), inline_btn_remove]]
+        )
+        prompt_photo_confirm = (
+            'Подтвердите <b>удаление фото</b> у:\n'
+            f'<b>{response_check["response_uuid"]["first_name"]}</b>\n'
+        )
+        await state.set_state(FSMphoto.remove)
+        await callback.message.reply(prompt_photo_confirm, reply_markup=reply_markup)
+    else:
+        await state.clear()
+    await callback.answer()
+
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.PHOTO_REMOVE_CONFIRMED,      # 0
+        KeyboardType.SEP,
+        # uuid, кому                    # 1
+        # KeyboardType.SEP,
+    )), StateFilter(FSMphoto.remove))
+async def cbq_photo_remove_confirmed(callback: CallbackQuery, state: FSMContext):
+    if (uuid := Misc.get_uuid_from_callback(callback)) and \
+       (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
+        logging.debug('put (remove) photo: post tg_user data')
+        status_put, response_put = await Misc.put_user_properties(
+            photo='',
+            uuid=uuid,
+        )
+        if status_put == 200:
+            await callback.message.reply(f'{Misc.get_deeplink_with_name(response_put)} : фото удалено')
+            await Misc.show_card(response_put, response_check, callback.from_user)
+        elif status_put == 400:
+            if response_put.get('message'):
+                await message.reply(msg_error + response_put['message'])
+            else:
+                await message.reply(msg_error + Misc.MSG_ERROR_API)
+        else:
+            await message.reply(msg_error + Misc.MSG_ERROR_API)
+    await state.clear()
+    await callback.answer()
+
 
