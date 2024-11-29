@@ -866,11 +866,11 @@ async def cbq_dates(callback: CallbackQuery, state: FSMContext):
 async def cbq_dates_dob_unknown(callback: CallbackQuery, state: FSMContext):
     if (uuid := Misc.get_uuid_from_callback(callback)) and \
        (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
+        await state.update_data(dob=None)
         if (profile := response_check['response_uuid'])['owner']:
             await draw_dod(profile, callback.message, state)
         else:
-            await state.update_data(dob=None)
-            await put_dates(callback, state)
+            await put_dates(callback.message, state, callback.from_user)
     await callback.answer()
 
 
@@ -925,10 +925,10 @@ async def draw_dod(profile, message, state):
     )
 
 
-async def put_dates(callback, state):
+async def put_dates(message, state, tg_user_sender):
     data = await state.get_data()
     if data.get('uuid') and \
-       (response_check := await Misc.check_owner_by_uuid(callback.from_user, data['uuid'])):
+       (response_check := await Misc.check_owner_by_uuid(tg_user_sender, data['uuid'])):
         dob = data.get('dob') or ''
         dod = data.get('dod') or ''
         is_dead = data.get('is_dead') or dod or ''
@@ -939,11 +939,65 @@ async def put_dates(callback, state):
             is_dead = '1' if is_dead else '',
         )
         if status_put == 200:
-            await Misc.show_card(response_put, response_check, callback.from_user)
+            await Misc.show_card(response_put, response_check, tg_user_sender)
         elif status_put == 400 and response_put.get('message'):
             dates = 'даты' if response_check['response_uuid']['owner'] else 'дату рождения'
-            await callback.message.reply(f'Ошибка!\n{response_put["message"]}\n\nНазначайте {dates} по новой')
+            await message.reply(f'Ошибка!\n{response_put["message"]}\n\nНазначайте {dates} по новой')
         else:
-            await callback.message.reply(Misc.MSG_ERROR_API)
+            await message.reply(Misc.MSG_ERROR_API)
     await state.clear()
+
+
+@dp.callback_query(F.data.regexp(r'^(%s|%s)%s' % (
+        KeyboardType.DATES_DOD_NONE, KeyboardType.DATES_DOD_DEAD,
+        KeyboardType.SEP,
+    )), StateFilter(FSMdates.dod))
+async def cbq_dates_dod_done_or_dead(callback: CallbackQuery, state: FSMContext):
+    if (uuid := Misc.get_uuid_from_callback(callback)) and \
+       (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
+        code = callback.data.split(KeyboardType.SEP)
+        await state.update_data(
+            dod=None,
+            is_dead=code[0] == str(KeyboardType.DATES_DOD_DEAD)
+        )
+        await put_dates(callback.message, state, callback.from_user)
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMdates.dob))
+async def process_dob(message: Message, state: FSMContext):
+    if (message.content_type != ContentType.TEXT) or \
+       not (message_text := Misc.strip_text(message.text)):
+        await message.reply(
+            Misc.MSG_ERROR_TEXT_ONLY,
+            reply_markup=Misc.reply_markup_cancel_row()
+        )
+        return
+    if await is_it_command(message, state):
+        return
+    data = await state.get_data()
+    if (uuid := data.get('uuid')) and \
+       (response_check := await Misc.check_owner_by_uuid(message.from_user, uuid)):
+        await state.update_data(dob=message_text)
+        if (profile := response_check['response_uuid'])['owner']:
+            await draw_dod(profile, message, state)
+        else:
+            await put_dates(message, state, message.from_user)
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMdates.dod))
+async def process_dod(message: Message, state: FSMContext):
+    if (message.content_type != ContentType.TEXT) or \
+       not (message_text := Misc.strip_text(message.text)):
+        await message.reply(
+            Misc.MSG_ERROR_TEXT_ONLY,
+            reply_markup=Misc.reply_markup_cancel_row()
+        )
+        return
+    if await is_it_command(message, state):
+        return
+    data = await state.get_data()
+    if (uuid := data.get('uuid')) and \
+       (response_check := await Misc.check_owner_by_uuid(message.from_user, uuid)):
+        await state.update_data(dod=message_text)
+        await put_dates(message, state, message.from_user)
 
