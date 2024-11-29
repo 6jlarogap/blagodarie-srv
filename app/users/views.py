@@ -496,19 +496,19 @@ class ApiAuthTelegram(CreateUserMixin, TelegramApiMixin, FrontendMixin, ApiToken
                 oauth.update_timestamp = int(time.time())
                 oauth.save()
 
-            if user.last_name != '':
-                user.last_name = ''
-                changed = True
-            if not keep_user_data:
-                first_name = Profile.make_first_name(rd['last_name'], rd['first_name'])
-                if user.first_name != first_name:
-                    user.first_name = first_name
-                    changed = True
             was_not_active = False
             if not user.is_active:
                 changed = True
                 user.is_active = True
                 was_not_active = True
+            if user.last_name != '':
+                user.last_name = ''
+                changed = True
+            if was_not_active or not keep_user_data:
+                first_name = Profile.make_first_name(rd['last_name'], rd['first_name'])
+                if user.first_name != first_name:
+                    user.first_name = first_name
+                    changed = True
             if changed:
                 user.save()
 
@@ -1641,20 +1641,19 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 user.delete()
                 data = {}
             else:
-                for f in ('photo', 'photo_original_filename', 'middle_name',):
+                for f in ('middle_name',):
                         setattr(profile, f, '')
-                for f in ('latitude', 'longitude', 'gender', 'ability', 'comment', 'address', 'dob', 'dod'):
+                for f in ('latitude', 'longitude', 'ability', 'comment', 'address', 'dob', 'dod'):
                     setattr(profile, f, None)
                 profile.is_dead = False
                 profile.delete_from_media()
-                profile.photo = None
                 profile.photo_original_filename = ''
+                profile.photo = None
                 profile.save()
 
                 Key.objects.filter(owner=user).delete()
                 Ability.objects.filter(owner=user).delete()
                 Wish.objects.filter(owner=user).delete()
-                Token.objects.filter(user=user).delete()
 
                 CurrentState.objects.filter(
                     (Q(user_from=user) | Q(user_to=user)) & (Q(is_father=True) | Q(is_mother=True))
@@ -1670,8 +1669,13 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 user.first_name = "Обезличен"
                 user.is_active = False
                 user.save()
+
                 data = profile.data_dict(request)
                 data.update(profile.owner_dict())
+                data.update(profile.parents_dict(request))
+                data.update(profile.data_WAK())
+                if tg_token:
+                    data.update(tg_data=profile.tg_data())
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             transaction.set_rollback(True)
