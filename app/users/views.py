@@ -1019,6 +1019,8 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 dod=dod_got,
                 dob=dob_got,
             ))
+        if dod and dod > datetime.datetime.now().date():
+            raise ServiceException('Дата смерти: %(dod)s позже текущей' % dict(dod=dod))
         return dob, dod
 
     def get(self, request):
