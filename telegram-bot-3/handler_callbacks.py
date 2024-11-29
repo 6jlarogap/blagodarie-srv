@@ -43,6 +43,10 @@ class FSMdates(StatesGroup):
     dob = State()
     dod = State()
 
+class FSMcomment(StatesGroup):
+    ask = State()
+
+
 @dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.CANCEL_ANY,
         KeyboardType.SEP,
@@ -961,6 +965,7 @@ async def cbq_dates_dod_done_or_dead(callback: CallbackQuery, state: FSMContext)
             is_dead=code[0] == str(KeyboardType.DATES_DOD_DEAD)
         )
         await put_dates(callback.message, state, callback.from_user)
+    await callback.answer()
 
 
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMdates.dob))
@@ -1000,4 +1005,46 @@ async def process_dod(message: Message, state: FSMContext):
        (response_check := await Misc.check_owner_by_uuid(message.from_user, uuid)):
         await state.update_data(dod=message_text)
         await put_dates(message, state, message.from_user)
+
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.COMMENT,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_comment(callback: CallbackQuery, state: FSMContext):
+    if (uuid := Misc.get_uuid_from_callback(callback)) and \
+       (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
+        await state.set_state(FSMcomment.ask)
+        await state.update_data(uuid=uuid)
+    await callback.message.reply(
+        f'Введите комментарий для:\n{response_check["response_uuid"]["first_name"]}',
+        reply_markup=Misc.reply_markup_cancel_row(),
+    )
+    await callback.answer()
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMcomment.ask))
+async def process_comment(message: Message, state: FSMContext):
+    if (message.content_type != ContentType.TEXT) or \
+       not (message_text := message.text.strip()):
+        await message.reply(
+            Misc.MSG_ERROR_TEXT_ONLY,
+            reply_markup=Misc.reply_markup_cancel_row()
+        )
+        return
+    if await is_it_command(message, state):
+        return
+    data = await state.get_data()
+    if (uuid := data.get('uuid')) and \
+       (response_check := await Misc.check_owner_by_uuid(message.from_user, uuid)):
+        status_put, response_put = await Misc.put_user_properties(
+            uuid=uuid,
+            comment=message_text,
+        )
+        if status_put == 200:
+            await message.reply(
+                f'{"Изменен" if response_check["response_uuid"]["comment"] else "Добавлен"} комментарий'
+            )
+            await Misc.show_card(response_put, response_check, message.from_user)
+    await state.clear()
 
