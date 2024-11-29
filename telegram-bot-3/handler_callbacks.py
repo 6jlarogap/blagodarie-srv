@@ -1063,40 +1063,43 @@ async def cbq_delete_user(callback: CallbackQuery, state: FSMContext):
        (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
         profile = response_check['response_uuid']
         owner = response_check
-        if profile['uuid'] == owner['uuid']:
-            # Себя обезличиваем
-            prompt = (
-                f'<b>{profile["first_name"]}</b>\n'
-                '\n'
-                'Вы собираетесь <u>обезличить</u> себя в системе.\n'
-                'Будут удалены Ваши данные (ФИО, фото, место и т.д), а также связи с родственниками!\n'
-                '\n'
-                'Если подтверждаете, то нажмите <u>Продолжить</u>. Иначе <u>Отмена</u>\n'
-            )
-        else:
-            p_udalen = 'удалён(а)'
-            if profile['is_org']:
-                name = profile['first_name']
-                p_udalen = 'удалена организация:'
+        if profile['is_active']:
+            if profile['uuid'] == owner['uuid']:
+                # Себя обезличиваем
+                prompt = (
+                    f'<b>{profile["first_name"]}</b>\n'
+                    '\n'
+                    'Вы собираетесь <u>обезличить</u> себя в системе.\n'
+                    'Будут удалены Ваши данные (ФИО, фото, место и т.д), а также связи с родственниками!\n'
+                    '\n'
+                    'Если подтверждаете, то нажмите <u>Продолжить</u>. Иначе <u>Отмена</u>\n'
+                )
             else:
-                name = Misc.get_deeplink_with_name(profile, with_lifetime_years=True,)
-                if profile.get('gender') == 'f':
-                    p_udalen = 'удалена'
-            prompt = (
-                f'Будет {p_udalen} {name}!\n\n'
-                'Если подтверждаете удаление, нажмите <u>Продолжить</u>. Иначе <u>Отмена</u>\n'
-            )
-        inline_btn_go = InlineKeyboardButton(
-            text='Продолжить',
-            callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
-                keyboard_type=KeyboardType.DELETE_USER_CONFIRMED,
-                uuid=profile['uuid'],
-                sep=KeyboardType.SEP,
-        ))
-        reply_markup = InlineKeyboardMarkup(inline_keyboard=[[inline_btn_go, Misc.inline_button_cancel()]])
-        await state.set_state(FSMdelete.ask)
-        await state.update_data(uuid=uuid, owner_id=owner['user_id'])
-        await callback.message.reply(prompt, reply_markup=reply_markup)
+                p_udalen = 'удалён(а)'
+                if profile['is_org']:
+                    name = profile['first_name']
+                    p_udalen = 'удалена организация:'
+                else:
+                    name = Misc.get_deeplink_with_name(profile, with_lifetime_years=True,)
+                    if profile.get('gender') == 'f':
+                        p_udalen = 'удалена'
+                prompt = (
+                    f'Будет {p_udalen} {name}!\n\n'
+                    'Если подтверждаете удаление, нажмите <u>Продолжить</u>. Иначе <u>Отмена</u>\n'
+                )
+            inline_btn_go = InlineKeyboardButton(
+                text='Продолжить',
+                callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+                    keyboard_type=KeyboardType.DELETE_USER_CONFIRMED,
+                    uuid=profile['uuid'],
+                    sep=KeyboardType.SEP,
+            ))
+            reply_markup = InlineKeyboardMarkup(inline_keyboard=[[inline_btn_go, Misc.inline_button_cancel()]])
+            await state.set_state(FSMdelete.ask)
+            await state.update_data(uuid=uuid, owner_id=owner['user_id'])
+            await callback.message.reply(prompt, reply_markup=reply_markup)
+        else:
+            await callback.message.reply('Профиль уже обезличен')
     await callback.answer()
 
 
@@ -1183,24 +1186,21 @@ async def cbq_udelete_user_confirmed(callback: CallbackQuery, state: FSMContext)
        (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
         profile = response_check['response_uuid']
         owner = response_check
-        if profile['uuid'] == owner['uuid']:
-            if profile['is_active']:
-                await callback.message.reply('Вы уже восстановлены')
+        if profile['uuid'] == owner['uuid'] and not profile['is_active']:
+            logging.debug('un-depersonalize user')
+            status, response = await Misc.post_tg_user(callback.from_user, activate=True)
+            if status == 400:
+                await callback.message.reply('Ошибка: %s' % response['message'])
+            elif status != 200:
+                await callback.message.reply('Неизвестная ошибка')
             else:
-                logging.debug('un-depersonalize user')
-                status, response = await Misc.post_tg_user(callback.from_user, activate=True)
-                if status == 400:
-                    await callback.message.reply('Ошибка: %s' % response['message'])
-                elif status != 200:
-                    await callback.message.reply('Неизвестная ошибка')
-                else:
-                    await callback.message.reply(
-                        "Теперь Вы восстановлены в системе.\n\nГружу Ваше фото, если оно есть, из Telegram'а..."
-                    )
-                    status_photo, response_photo = await Misc.update_user_photo(callback.from_user, response)
-                    if status_photo == 200:
-                        response = response_photo
-                    await Misc.show_card(response, response, callback.from_user)
+                await callback.message.reply(
+                    "Теперь Вы восстановлены в системе.\n\nГружу Ваше фото, если оно есть, из Telegram'а..."
+                )
+                status_photo, response_photo = await Misc.update_user_photo(callback.from_user, response)
+                if status_photo == 200:
+                    response = response_photo
+                await Misc.show_card(response, response, callback.from_user)
     await state.clear()
     await callback.answer()
 
