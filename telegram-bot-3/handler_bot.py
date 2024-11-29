@@ -293,6 +293,9 @@ async def cmd_start(message: Message, state: FSMContext):
                 profile_sender=response_sender,
                 tg_user_sender=message.from_user,
             )
+        else:
+            await message.reply('Пользователь не найден')
+
     elif m := re.search(r'^m\-([0-9a-z]{10})$', arg, flags=re.I):
         status_to, profile_to = await Misc.get_user_by_sid(m.group(1))
         if status_to == 200:

@@ -46,6 +46,11 @@ class FSMdates(StatesGroup):
 class FSMcomment(StatesGroup):
     ask = State()
 
+class FSMdelete(StatesGroup):
+    ask = State()
+
+class FSMundelete(StatesGroup):
+    ask = State()
 
 @dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.CANCEL_ANY,
@@ -1047,4 +1052,156 @@ async def process_comment(message: Message, state: FSMContext):
             )
             await Misc.show_card(response_put, response_check, message.from_user)
     await state.clear()
+
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.DELETE_USER,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_delete_user(callback: CallbackQuery, state: FSMContext):
+    if (uuid := Misc.get_uuid_from_callback(callback)) and \
+       (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
+        profile = response_check['response_uuid']
+        owner = response_check
+        if profile['uuid'] == owner['uuid']:
+            # Себя обезличиваем
+            prompt = (
+                f'<b>{profile["first_name"]}</b>\n'
+                '\n'
+                'Вы собираетесь <u>обезличить</u> себя в системе.\n'
+                'Будут удалены Ваши данные (ФИО, фото, место и т.д), а также связи с родственниками!\n'
+                '\n'
+                'Если подтверждаете, то нажмите <u>Продолжить</u>. Иначе <u>Отмена</u>\n'
+            )
+        else:
+            p_udalen = 'удалён(а)'
+            if profile['is_org']:
+                name = profile['first_name']
+                p_udalen = 'удалена организация:'
+            else:
+                name = Misc.get_deeplink_with_name(profile, with_lifetime_years=True,)
+                if profile.get('gender') == 'f':
+                    p_udalen = 'удалена'
+            prompt = (
+                f'Будет {p_udalen} {name}!\n\n'
+                'Если подтверждаете удаление, нажмите <u>Продолжить</u>. Иначе <u>Отмена</u>\n'
+            )
+        inline_btn_go = InlineKeyboardButton(
+            text='Продолжить',
+            callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+                keyboard_type=KeyboardType.DELETE_USER_CONFIRMED,
+                uuid=profile['uuid'],
+                sep=KeyboardType.SEP,
+        ))
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=[[inline_btn_go, Misc.inline_button_cancel()]])
+        await state.set_state(FSMdelete.ask)
+        await state.update_data(uuid=uuid, owner_id=owner['user_id'])
+        await callback.message.reply(prompt, reply_markup=reply_markup)
+    await callback.answer()
+
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.DELETE_USER_CONFIRMED,
+        KeyboardType.SEP,
+    )), StateFilter(FSMdelete.ask))
+async def cbq_delete_user_confirmed(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    # Удаление! Доп. проверки!
+    if (uuid := Misc.get_uuid_from_callback(callback)) and \
+       (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)) and \
+       data.get('uuid') and data.get('owner_id') and \
+       response_check['user_id'] == data['owner_id'] and \
+       response_check['response_uuid']['uuid'] == data['uuid'] and \
+       uuid == data['uuid']:
+
+        if response_check['response_uuid']['owner']:
+            msg_debug = 'delete owned user, '
+            msg_deleted = f'Профиль <u>{response_check["response_uuid"]["first_name"]}</u> удалён'
+        else:
+            msg_debug = 'depersonalize user, '
+            msg_deleted = 'Теперь Вы обезличены'
+
+        payload = dict(tg_token=settings.TOKEN, uuid=uuid, owner_id=data['owner_id'])
+        logging.debug(msg_debug + 'payload: %s' % Misc.secret(payload))
+        status_delete, response_delete = await Misc.api_request(
+            path='/api/profile',
+            method='delete',
+            data=payload,
+        )
+        logging.debug(msg_debug + 'status: %s' % status_delete)
+        logging.debug(msg_debug + 'response: %s' % response_delete)
+        if status_delete == 400:
+            await callback.message.reply('Ошибка: %s' % response['message'])
+        elif status_delete != 200:
+            await callback.message.reply('Неизвестная ошибка')
+        else:
+            await callback.message.reply(msg_deleted)
+            if not response_check['response_uuid']['owner']:
+                await Misc.show_card(response_delete, response_check, callback.from_user)
+    await state.clear()
+    await callback.answer()
+
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.UNDELETE_USER,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_undelete_user(callback: CallbackQuery, state: FSMContext):
+    if (uuid := Misc.get_uuid_from_callback(callback)) and \
+       (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
+        profile = response_check['response_uuid']
+        owner = response_check
+        if profile['uuid'] == owner['uuid']:
+            if profile['is_active']:
+                await callback.message.reply('Вы уже восстановлены')
+            else:
+                prompt = (
+                    f'<b>{profile["first_name"]}</b>\n'
+                    '\n'
+                    'Вы собираетесь <u>восстановить</u> себя и свои данные в системе.\n'
+                    '\n'
+                    'Если подтверждаете, то нажмите <u>Продолжить</u>. Иначе <u>Отмена</u>\n'
+                )
+                inline_btn_go = InlineKeyboardButton(
+                    text='Продолжить',
+                    callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+                        keyboard_type=KeyboardType.UNDELETE_USER_CONFIRMED,
+                        uuid=profile['uuid'],
+                        sep=KeyboardType.SEP,
+                ))
+                reply_markup = InlineKeyboardMarkup(inline_keyboard=[[inline_btn_go, Misc.inline_button_cancel()]])
+                await state.set_state(FSMundelete.ask)
+                await callback.message.reply(prompt, reply_markup=reply_markup)
+    await callback.answer()
+
+@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.UNDELETE_USER_CONFIRMED,
+        KeyboardType.SEP,
+    )), StateFilter(FSMundelete.ask))
+async def cbq_udelete_user_confirmed(callback: CallbackQuery, state: FSMContext):
+    if (uuid := Misc.get_uuid_from_callback(callback)) and \
+       (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
+        profile = response_check['response_uuid']
+        owner = response_check
+        if profile['uuid'] == owner['uuid']:
+            if profile['is_active']:
+                await callback.message.reply('Вы уже восстановлены')
+            else:
+                logging.debug('un-depersonalize user')
+                status, response = await Misc.post_tg_user(callback.from_user, activate=True)
+                if status == 400:
+                    await callback.message.reply('Ошибка: %s' % response['message'])
+                elif status != 200:
+                    await callback.message.reply('Неизвестная ошибка')
+                else:
+                    await callback.message.reply(
+                        "Теперь Вы восстановлены в системе.\n\nГружу Ваше фото, если оно есть, из Telegram'а..."
+                    )
+                    status_photo, response_photo = await Misc.update_user_photo(callback.from_user, response)
+                    if status_photo == 200:
+                        response = response_photo
+                    await Misc.show_card(response, response, callback.from_user)
+    await state.clear()
+    await callback.answer()
+
 
