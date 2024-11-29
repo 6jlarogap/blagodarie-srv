@@ -1004,23 +1004,23 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
     parser_classes = (MultiPartParser, FormParser, )
 
     def check_dates(self, request):
-        dob = dob_got = request.data.get('dob')
-        dod = dod_got = request.data.get('dod')
+        dob = request.data.get('dob')
+        dod = request.data.get('dod')
         m = UnclearDate.check_safe_str(dob)
         if m:
-            raise ServiceException('Дата рождения: %s' % m)
+            raise ServiceException('Дата рождения. %s' % m)
         m = UnclearDate.check_safe_str(dod)
         if m:
-            raise ServiceException('Дата смерти: %s' % m)
+            raise ServiceException('Дата смерти. %s' % m)
         dob = UnclearDate.from_str_safe(dob)
         dod = UnclearDate.from_str_safe(dod)
+        today = datetime.datetime.now().date()
+        if dob is not None and dob > today:
+            raise ServiceException(f'Дата рождения: {dob} позже текущей')
+        if dod is not None and dod > today:
+            raise ServiceException(f'Дата смерти: {dod} позже текущей')
         if dob is not None and dod is not None and dob > dod:
-            raise ServiceException('Дата рождения: %(dob)s, позже даты смерти: %(dod)s ' % dict(
-                dod=dod_got,
-                dob=dob_got,
-            ))
-        if dod and dod > datetime.datetime.now().date():
-            raise ServiceException('Дата смерти: %(dod)s позже текущей' % dict(dod=dod))
+            raise ServiceException(f'Дата рождения: {dob}, позже даты смерти: {dod}')
         return dob, dod
 
     def get(self, request):
