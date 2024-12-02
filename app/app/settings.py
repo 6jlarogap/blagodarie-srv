@@ -320,11 +320,11 @@ REDIRECT_FROM_CALLBACK = 'oauth-landing'
 
 # Рисуем графики в формате '3d-force-graph' здесь
 #
-GRAPH_URL = 'https://blagoroda.org'
+GRAPH_URL = 'https://meetgame.us.to'
 
 # Рисуем карту в формате здесь
 #
-MAP_URL = 'https://map.blagoroda.org'
+MAP_URL = 'https://map.meetgame.us.to'
 
 # ------------------------------------------------
 
