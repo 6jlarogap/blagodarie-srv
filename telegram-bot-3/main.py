@@ -30,10 +30,11 @@ async def main_():
     me.dp = dp
     me.bot_data = await bot.get_me()
     from handler_bot import router as router_bot
-    from handler_group import router as router_group
     from handler_callbacks import router as router_callbacks
+    from handler_group import router as router_group
+    from handler_offer import router as router_offer
 
-    dp.include_routers(router_bot, router_group, router_callbacks)
+    dp.include_routers(router_bot, router_callbacks, router_group, router_offer)
 
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(

@@ -22,6 +22,7 @@ from settings import logging
 
 from common import FSMnewPerson, FSMgeo
 from common import Misc, KeyboardType, OperationType
+from handler_offer import Offer
 
 import pymorphy3
 MorphAnalyzer = pymorphy3.MorphAnalyzer()

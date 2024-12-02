@@ -543,6 +543,7 @@ class Misc(object):
             await cls.get_user_photo(tg_user), profile,
         )
 
+
     @classmethod
     async def api_request(cls,
             path,
