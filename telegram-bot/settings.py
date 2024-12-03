@@ -18,7 +18,7 @@ START_MODE = 'webhook'
 
 # Webhook параметры
 #
-WEBHOOK_HOST = 'https://bot-dev.blagoroda.org'
+WEBHOOK_HOST = 'https://bot-dev.meetgame.us.to'
 WEBHOOK_PATH = '/'
 WEBAPP_HOST = '127.0.0.1'
 WEBAPP_PORT = 3001
@@ -67,21 +67,21 @@ HTTP_TIMEOUT = 60
 
 # URL апи, без завершающей/, :
 #
-API_HOST = 'https://api.blagoroda.org'
+API_HOST = 'https://api.meetgame.us.to'
 
 # - домен, прописанный в боте
 # - там находятся ресурсы: <FRONTEND_HOST>/res/telegram-bot/*.txt
 #
-FRONTEND_HOST = 'https://blagoroda.org'
+FRONTEND_HOST = 'https://meetgame.us.to'
 FRONTEND_HOST_TITLE = 'БлагоРода'
 
 # Карта всех пользователей с кластеризацией
 #
-MAP_HOST = 'https://map.blagoroda.org'
+MAP_HOST = 'https://map.meetgame.us.to'
 
 # Ссылка на пространство доверия
 #
-GRAPH_HOST = 'https://blagoroda.org'
+GRAPH_HOST = 'https://meetgame.us.to'
 
 # Ссылка на фронте, которая будет открываться там под авторизованным
 # пользователем:
@@ -89,7 +89,7 @@ GRAPH_HOST = 'https://blagoroda.org'
 #
 FRONTEND_AUTH_PATH = '/auth/telegram/'
 
-SHORT_ID_LINK = 'blagoroda.org/t/%s'
+SHORT_ID_LINK = 'meetgame.us.to/t/%s'
 
 # Админитраторы бота, их telegram ids
 #
@@ -122,7 +122,7 @@ OFFER_MAX_NUM_ANSWERS = 9
 # Подсказки в сообщении о необходимости авторизации для доменов
 #
 AUTH_PROMPT_FOR_DOMAIN = {
-    'blagoroda.org': 'Для доступа к пространству Доверия требуется авторизация',
+    'meetgame.us.to': 'Для доступа к пространству Доверия требуется авторизация',
 }
 
 # Страница голосования по видео
