@@ -74,7 +74,12 @@ API_HOST = 'https://api.meetgame.us.to'
 FRONTEND_HOST = 'https://meetgame.us.to'
 FRONTEND_HOST_TITLE = 'БлагоРода'
 
-# Карта всех пользователей с кластеризацией
+# Карта участников знакомств
+#
+MEET_HOST = FRONTEND_HOST
+
+# Карта всех пользователей с кластеризацией.
+# При других get параметрах карта предложений, доверий юзера и др.
 #
 MAP_HOST = 'https://map.meetgame.us.to'
 

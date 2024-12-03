@@ -4667,7 +4667,7 @@ async def process_meet_from_deeplink_and_command(tg_user_sender, data, bot_data)
         inline_btn_map = InlineKeyboardButton(
             'Карта участников игры',
             login_url=Misc.make_login_url(
-                redirect_path=settings.MAP_HOST + '/?meet=on',
+                redirect_path=settings.MEET_HOST,
                 bot_username=bot_data["username"],
                 keep_user_data='on'
         ))
@@ -4947,7 +4947,7 @@ async def meet_do_or_revoke(data):
             inline_btn_map = InlineKeyboardButton(
                 'Карта участников игры',
                 login_url=Misc.make_login_url(
-                    redirect_path=settings.MAP_HOST + '/?meet=on',
+                    redirect_path=settings.MEET_HOST,
                     bot_username=bot_data["username"],
                     keep_user_data='on'
             ))
