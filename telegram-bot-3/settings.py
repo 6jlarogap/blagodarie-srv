@@ -222,4 +222,5 @@ try:
     from settings_local import *
 except ModuleNotFoundError:
     pass
+
 logging.basicConfig(**LOG_CONFIG)

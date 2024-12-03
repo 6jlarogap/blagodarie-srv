@@ -2089,6 +2089,24 @@ class Misc(object):
         ])
         await cls.send_or_edit_card(text, reply_markup, profile_to, tg_user_from, card_message)
 
+
+    @classmethod
+    async def group_minicard_text (cls, profile, chat):
+        reply = cls.get_deeplink_with_name(profile, plus_trusts=True)
+        status, chat_from_api = await TgGroup.get(chat.id)
+        if status == 200 and chat_from_api.get('pin_message_id'):
+            if chat.username:
+                href = f'https://t.me/{chat.username}/{chat_from_api["pin_message_id"]}'
+            else:
+                chat_id_short = str(chat.id)
+                if chat_id_short.startswith('-100'):
+                    chat_id_short = chat_id_short[4:]
+                href = f'https://t.me/c/{chat_id_short}/{chat_from_api["pin_message_id"]}'
+            reply += f'\n<a href="{href}">Подробнее...</a>'
+        return reply
+
+
+
 class TgGroup(object):
     """
     Список групп, где бот: внесение, удаление
