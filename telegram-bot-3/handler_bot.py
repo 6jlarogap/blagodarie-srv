@@ -6,6 +6,7 @@
 # любого сообщения
 
 import re, redis
+from urllib.parse import urlparse
 
 from aiogram import Router, F, html
 from aiogram.types import Message, ContentType,  \
@@ -230,7 +231,6 @@ async def cmd_map(message: Message, state: FSMContext):
     await bot.send_message(
         message.from_user.id,
         text=Misc.get_html_a(href=settings.MAP_HOST, text='Карта участников'),
-        disable_web_page_preview=True,
     )
 
 
@@ -297,6 +297,52 @@ async def cmd_start(message: Message, state: FSMContext):
         else:
             await message.reply('Пользователь не найден')
 
+    elif m := re.search(
+            r'^auth_redirect\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
+            arg, flags=re.I
+        ):
+            status_token, response_token = await Misc.api_request(
+                path='/api/token/url/',
+                method='GET',
+                params=dict(token=m.group(1)))
+            if status_token == 200:
+                redirect_path = response_token['url']
+                inline_btn_redirect = InlineKeyboardButton(
+                    text='Продолжить',
+                    login_url=Misc.make_login_url(
+                        redirect_path=redirect_path,
+                        keep_user_data='on'
+                    ),
+                )
+                buttons = [ [inline_btn_redirect] ]
+                if redirect_path.lower().startswith(settings.VOTE_URL):
+                    if m := re.search(r'\#(\S+)$', redirect_path):
+                        if m := Misc.get_youtube_id(m.group(1)):
+                            youtube_id, youtube_link = m
+                            await answer_youtube_message(message, youtube_id, youtube_link)
+                            return
+                auth_url_parse = urlparse(redirect_path)
+                auth_text = ''
+                if auth_url_parse.hostname:
+                    for auth_domain in settings.AUTH_PROMPT_FOR_DOMAIN:
+                        if re.search(re.escape(auth_domain) + '$', auth_url_parse.hostname):
+                            auth_text = settings.AUTH_PROMPT_FOR_DOMAIN[auth_domain]
+                            break
+                redirect_path_new = redirect_path
+                if not auth_text:
+                    # Чтобы телеграм не предлагал ссылку, берется после последнего http(s)://,
+                    # впереди ставится троеточие
+                    #
+                    if m:=re.search(r'(?:https?\:\/\/)?([^\:\#]+)$', redirect_path):
+                        redirect_path_new = '...' + m.group(1)
+                    auth_text = f'Нажмите <u>Продолжить</u> для доступа к:\n{redirect_path_new}'
+                await message.reply(
+                    auth_text,
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+                )
+            else:
+                await message.reply('Ссылка устарела или не найдена. Получите новую.')
+
     elif m := re.search(r'^m\-([0-9a-z]{10})$', arg, flags=re.I):
         status_to, profile_to = await Misc.get_user_by_sid(m.group(1))
         if status_to == 200:
@@ -305,10 +351,12 @@ async def cmd_start(message: Message, state: FSMContext):
 
     elif arg == 'setplace':
         await Misc.prompt_location(message, state)
+
     elif arg == 'meet':
         await cmd_meet(message, state)
+
     else:
-        await message.reply(f'arg: ~{arg}~')
+        await message.reply(f'Такая команда — /start {arg} — не предусмотрена!')
 
 
 @router.message(
@@ -351,6 +399,7 @@ async def message_to_bot(message: Message, state: FSMContext):
     #
     if message.content_type == ContentType.TEXT and  Misc.arg_deeplink(message.text):
         await cmd_start(message, state)
+        return
 
     show_response = True
     if message.media_group_id:
@@ -455,7 +504,7 @@ async def message_to_bot(message: Message, state: FSMContext):
         return
     if m := Misc.get_youtube_id(message_text):
         youtube_id, youtube_link = m
-        await Misc.answer_youtube_message(message, youtube_id, youtube_link)
+        await answer_youtube_message(message, youtube_id, youtube_link)
         return
 
     search_phrase = ''
@@ -702,7 +751,6 @@ async def process_meet_from_deeplink_and_command(message, state, data):
         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
     )
 
-
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMnewOrg.ask))
 async def process_new_org_ask(message: Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
@@ -745,4 +793,35 @@ async def process_new_org_ask(message: Message, state: FSMContext):
                 tg_user_sender=message.from_user,
             )
     await state.clear()
+
+async def answer_youtube_message(message, youtube_id, youtube_link):
+    """
+    На запрос авторизации на сайт голосования или в ответ на youtube ссылку в бот
+    """
+    reply = 'Коллективный разум:\n' + youtube_link
+    redirect_path = settings.VOTE_URL + '#' + youtube_link
+    inline_btn_redirect = InlineKeyboardButton(
+        text='Продолжить',
+        login_url=Misc.make_login_url(
+            redirect_path=redirect_path,
+            keep_user_data='on'
+    ))
+    inline_btn_scheme = InlineKeyboardButton(
+        text='Схема',
+        login_url=Misc.make_login_url(
+            redirect_path=f'{settings.GRAPH_HOST}/?videoid={youtube_id}&source=yt',
+            keep_user_data='on',
+        ))
+    inline_btn_map = InlineKeyboardButton(
+        text='Карта',
+        login_url=Misc.make_login_url(
+            redirect_path=f'{settings.MAP_HOST}/?videoid={youtube_id}&source=yt',
+            keep_user_data='on',
+        ))
+    buttons = [ [inline_btn_redirect], [inline_btn_scheme, inline_btn_map] ]
+    await message.reply(
+        reply,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        disable_web_page_preview=False,
+    )
 

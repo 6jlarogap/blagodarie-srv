@@ -438,7 +438,7 @@ class Misc(object):
             try:
                 async with session.request(
                     'GET',
-                    "%s/res/telegram-bot/%s.txt" % (settings.FRONTEND_HOST, template),
+                    "%s/res/telegram-bot/%s.txt" % (settings.GRAPH_HOST, template),
                 ) as resp:
                     status = resp.status
                     response = await resp.text('UTF-8')
@@ -756,14 +756,14 @@ class Misc(object):
         Сформировать ссылку, которая будет открываться авторизованным пользователем
 
         Пример результата:
-        https://blagoroda.org/auth/telegram/?redirect_path=https%3A%2F%2Fblagoroda.org%2F%3Ff%3D0%26q%3D25
+        https://meetgame.us.to/auth/telegram/?redirect_path=https%3A%2F%2Fmeetgame.us.to%2F%3Ff%3D0%26q%3D25
 
         где:
-            https://blagoroda.org/ (в начале)
+            https://meetgame.us.to/ (в начале)
                 прописан /setdomain в боте
             redirect_path
                 куда после авторизации уходим. В этом примере, после расшифровки,
-                это https://blagoroda.org/f=0&q=50
+                это https://meetgame.us.to/f=0&q=50
 
         kwargs:
             дополнительные параметры, которые могут быть добавлены в результат
@@ -803,7 +803,7 @@ class Misc(object):
         )
         logging.debug('get_or_create tg_user by tg_uid in api, status: %s' % status_sender)
         logging.debug('get_or_create tg_user by tg_uid in api, response: %s' % response_sender)
-        if response_sender.get('created'):
+        if status_sender == 200 and response_sender.get('created'):
             status_photo, response_photo = await cls.update_user_photo(tg_user=tg_user_sender, profile=response_sender)
             if status_photo == 200:
                 response_sender = response_photo
