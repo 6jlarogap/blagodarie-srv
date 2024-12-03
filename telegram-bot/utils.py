@@ -448,7 +448,7 @@ class Misc(object):
             try:
                 async with session.request(
                     'GET',
-                    "%s/res/telegram-bot/%s.txt" % (settings.FRONTEND_HOST, template),
+                    "%s/res/telegram-bot/%s.txt" % (settings.GRAPH_HOST, template),
                 ) as resp:
                     status = resp.status
                     response = await resp.text('UTF-8')

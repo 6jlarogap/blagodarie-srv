@@ -70,7 +70,6 @@ HTTP_TIMEOUT = 60
 API_HOST = 'https://api.meetgame.us.to'
 
 # - домен, прописанный в боте
-# - там находятся ресурсы: <FRONTEND_HOST>/res/telegram-bot/*.txt
 #
 FRONTEND_HOST = 'https://meetgame.us.to'
 FRONTEND_HOST_TITLE = 'БлагоРода'
@@ -80,8 +79,9 @@ FRONTEND_HOST_TITLE = 'БлагоРода'
 MAP_HOST = 'https://map.meetgame.us.to'
 
 # Ссылка на пространство доверия
+# И там находятся ресурсы: <GRAPH_HOST>/res/telegram-bot/*.txt
 #
-GRAPH_HOST = 'https://meetgame.us.to'
+GRAPH_HOST = 'https://g.meetgame.us.to'
 
 # Ссылка на фронте, которая будет открываться там под авторизованным
 # пользователем:
