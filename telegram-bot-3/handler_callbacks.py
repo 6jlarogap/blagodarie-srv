@@ -585,7 +585,7 @@ async def cbq_attitude(callback: CallbackQuery, state: FSMContext):
                 text_same ='Доверие самому себе не предусмотрено'
             try:
                 await bot.answer_callback_query(
-                        callback_query.id,
+                        callback.id,
                         text=text_same,
                         show_alert=True,
                     )

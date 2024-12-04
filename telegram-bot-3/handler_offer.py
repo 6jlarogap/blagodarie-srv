@@ -16,7 +16,7 @@ from aiogram.exceptions import TelegramBadRequest
 import settings, me
 from settings import logging
 
-from common import Misc, TgGroup, TgGroupMember
+from common import Misc, KeyboardType, TgGroup, TgGroupMember
 
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data

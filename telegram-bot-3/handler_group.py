@@ -15,7 +15,7 @@ from aiogram.exceptions import TelegramBadRequest
 
 from youtube_upload import upload_video
 
-from common import TgGroup, TgGroupMember
+from common import Misc, KeyboardType, OperationType, TgGroup, TgGroupMember
 from handler_offer import Offer
 
 import settings, me
@@ -256,7 +256,6 @@ async def process_group_message(message: Message, state: FSMContext):
             continue
 
         if not is_previous_his:
-            reply_markup = InlineKeyboardMarkup()
             reply = await Misc.group_minicard_text (response_from, message.chat)
             dict_reply = dict(
                 keyboard_type=KeyboardType.TRUST_THANK,
@@ -274,14 +273,13 @@ async def process_group_message(message: Message, state: FSMContext):
                     '%(group_id)s%(sep)s'
                 )
             inline_btn_thank = InlineKeyboardButton(
-                'Доверяю',
+                text='Доверяю',
                 callback_data=callback_data_template % dict_reply,
             )
-            reply_markup.row(inline_btn_thank)
             logging.debug('minicard in group text: '+ repr(reply))
             answer = await message.answer(
                 reply,
-                reply_markup=reply_markup,
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[inline_btn_thank]]),
                 disable_notification=True,
             )
             if answer and keep_hours:
