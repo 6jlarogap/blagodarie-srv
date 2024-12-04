@@ -2,7 +2,7 @@
 #
 # Константы, функции и т.п., применяемые в handler_*/py
 
-import base64, re, datetime, copy
+import base64, re, datetime, time, copy, redis
 from urllib.parse import urlencode
 from uuid import UUID
 import qrcode
@@ -2114,7 +2114,9 @@ class Misc(object):
         """
         Запрос в телеграм апи.
 
-        Вынужденная мера. Если замечена проблема в aiogram api.
+        Вынужденная мера. В случае подозрения на ошибку в aiogram api.
+        Один раз применялась. Но оказалась не ошибка в aiogram api,
+        а ошибка разработчика :)
         """
         status = response = None
         async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
@@ -2241,3 +2243,33 @@ class TgGroupMember(object):
         logging.debug('delete group member, status: %s' % status)
         logging.debug('delete group member, response: %s' % response)
         return status, response
+
+
+class Schedule(object):
+
+    @classmethod
+    async def cron_remove_cards_in_group(cls):
+        if not settings.GROUPS_WITH_CARDS:
+            return
+        if r := redis.Redis(**settings.REDIS_CONNECT):
+            time_current = int(time.time())
+            for key in r.scan_iter(settings.REDIS_CARD_IN_GROUP_PREFIX + '*'):
+                try:
+                    (prefix, tm, chat_id, message_id) = key.split(settings.REDIS_KEY_SEP)
+                    tm = int(tm); chat_id = int(chat_id); message_id = int(message_id)
+                    if chat_id in settings.GROUPS_WITH_CARDS and settings.GROUPS_WITH_CARDS[chat_id].get('keep_hours'):
+                        try:
+                            keep_secs = int(settings.GROUPS_WITH_CARDS[chat_id]['keep_hours']) * 3600
+                            if tm + keep_secs < time_current:
+                                try:
+                                    await bot.delete_message(chat_id=chat_id, message_id=message_id)
+                                except:
+                                    pass
+                                r.expire(key, 10)
+                        except (ValueError, TypeError,):
+                            r.expire(key, 10)
+                    else:
+                        r.expire(key, 10)
+                except ValueError:
+                    r.expire(key, 10)
+            r.close()

@@ -6,6 +6,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.telegram import TelegramAPIServer
 from aiogram.client.session.aiohttp import AiohttpSession
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 import settings, me
 from settings import logging
 
@@ -33,6 +35,20 @@ async def main_():
     from handler_callbacks import router as router_callbacks
     from handler_group import router as router_group
     from handler_offer import router as router_offer
+
+    schedule_start = False
+    if settings.SCHEDULE_CRON:
+        scheduler = AsyncIOScheduler()
+        from common import Schedule
+        for task in settings.SCHEDULE_CRON:
+            if proc := getattr(Schedule, task, None):
+                try:
+                    if scheduler.add_job(proc, 'cron', **settings.SCHEDULE_CRON[task]):
+                        schedule_start = True
+                except:
+                    pass
+    if schedule_start:
+        scheduler.start()
 
     dp.include_routers(router_bot, router_callbacks, router_group, router_offer)
 

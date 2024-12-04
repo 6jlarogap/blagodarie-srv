@@ -213,6 +213,17 @@ GROUPS_WITH_YOUTUBE_UPLOAD = {}
 #
 DIR_TMP = './tmp'
 
+# Параметры времени запуска задач
+#
+SCHEDULE_CRON = dict(
+    # задача:
+    cron_remove_cards_in_group = dict(
+        # время запуска
+        day_of_week='mon-sun', hour=0, minute=1,
+    )
+)
+
+
 # Запуск через Telegram API Server,
 # например, 'http://localhost:8081'
 #
