@@ -1291,6 +1291,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
             data.update(created=True)
 
         if request.data.get('did_bot_start') and not profile.did_bot_start:
+            # Если пустой did_bot_start, то он не сбрасывается в профиле юзера
             profile.did_bot_start = True
             profile.save(update_fields=('did_bot_start',))
 

@@ -6,7 +6,8 @@ import base64, re, hashlib, redis, time, tempfile
 
 from aiogram import Router, F
 from aiogram.filters import Command
-from aiogram.types import Message, ContentType, InlineKeyboardMarkup, InlineKeyboardButton 
+from aiogram.types import Message, ContentType, InlineKeyboardMarkup, InlineKeyboardButton, \
+                          ChatJoinRequest, CallbackQuery, ChatMemberUpdated
 from aiogram.enums import ChatType
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command, StateFilter
@@ -364,3 +365,111 @@ async def process_group_message(message: Message, state: FSMContext):
                         'Здесь допускаются <b>видео</b>, <u>обязательно <b>с заголовком</b></u>, '
                         'для отправки в Youtube'
                     )
+
+
+@router.my_chat_member(F.chat.type.in_((ChatType.CHANNEL,)))
+async def echo_my_chat_member_for_bot(chat_member: ChatMemberUpdated):
+    """
+    Для формирования ссылки на доверия и карту среди участников канала
+
+    Реакция на подключение к каналу бота
+    """
+    new_chat_member = chat_member.new_chat_member
+    bot_ = new_chat_member.user
+    tg_user_from = chat_member.from_user
+    if tg_user_from and not tg_user_from.is_bot:
+        status, user_from = await Misc.post_tg_user(tg_user_from, did_bot_start=False)
+        if status == 200:
+            await TgGroupMember.add(chat_member.chat.id, chat_member.chat.title, chat_member.chat.type, tg_user_from.id)
+        else:
+            return
+    else:
+        status, response = await TgGroup.post(chat_member.chat.id, chat_member.chat.title, chat_member.chat.type)
+        if status != 200:
+            return
+    if bot_.is_bot and new_chat_member.status == 'administrator':
+        await Misc.send_pin_group_message(chat_member.chat)
+
+
+@router.chat_join_request()
+async def echo_join_chat_request(message: ChatJoinRequest):
+    """
+    Пользователь присоединяется к каналу/группе по ссылке- приглашению
+
+    Работает только ссылка, требующая одобрения.
+    Бот, он всегда администратор канала/группы, одобрит.
+    Но до этого:
+        Нового участника надо завести в базе, если его там нет
+        В канал/группу отправится мини- карточка нового участника
+    """
+    tg_subscriber = message.from_user
+    tg_inviter = message.invite_link.creator if message.invite_link else None
+    if tg_inviter:
+        status_inviter, response_inviter = await Misc.post_tg_user(tg_inviter, did_bot_start=False)
+        if status_inviter != 200:
+            return
+        # Владельца канала/группы сразу в канал/группу. Вдруг его там нет
+        #
+        await TgGroupMember.add(
+            group_chat_id=message.chat.id,
+            group_title=message.chat.title,
+            group_type=message.chat.type,
+            user_tg_uid=tg_inviter.id,
+        )
+
+    is_channel = message.chat.type == ChatType.CHANNEL
+    status, response_subscriber = await Misc.post_tg_user(tg_subscriber, did_bot_start=False)
+    if status != 200:
+        return
+    try:
+        await bot.approve_chat_join_request(
+                chat.id,
+                tg_subscriber.id
+        )
+    except TelegramBadRequest as excpt:
+        in_chat = 'в канале' if is_channel else 'в группе'
+        msg = f'Наверное, вы уже {in_chat}'
+        if excpt.message == 'User_already_participant':
+            msg = 'Вы уже {in_chat}'
+        try:
+            await bot.send_message(
+                chat_id=tg_subscriber.id,
+                text=msg,
+                disable_web_page_preview=True
+            )
+        except TelegramBadRequest:
+            pass
+        return
+
+    status, response_add_member = await TgGroupMember.add(
+        group_chat_id=chat.id,
+        group_title='',
+        group_type='',
+        user_tg_uid=tg_subscriber.id,
+    )
+    if status != 200:
+        return
+
+    to_chat = 'в канал' if is_channel else 'в группу'
+    dl_subscriber = Misc.get_deeplink_with_name(response_subscriber, plus_trusts=True)
+    msg_dict = dict(
+        dl_subscriber=dl_subscriber,
+        to_chat=to_chat,
+        map_link = Misc.get_html_a(href=settings.MAP_HOST, text='карте участников'),
+        group_title=message.chat.title,
+    )
+    msg = (
+            'Ваша заявка на вступление %(to_chat)s %(group_title)s одобрена.\n'
+            'Нажмите /setplace чтобы указать Ваше местоположение на %(map_link)s.'
+    ) %  msg_dict
+    try:
+        await bot.send_message(chat_id=tg_subscriber.id, text=msg)
+    except TelegramBadRequest:
+        pass
+    if is_channel:
+        reply = '%(dl_subscriber)s подключен(а)' % msg_dict
+        await bot.send_message(
+            message.chat.id,
+            reply,
+            disable_notification=True,
+        )

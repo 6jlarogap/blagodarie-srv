@@ -108,15 +108,6 @@ DOWNLOAD_PHOTO_MAX_SIZE = 10
 #
 MIN_LEN_SEARCHED_TEXT = 3
 
-# Туры
-#
-TRIP_DATA = dict(
-    #   chat_id='',
-    #   invite_link='',
-    #   text_with_invite_link='бла бла %(invite_link)s еще бла бла',
-    #   text_agreement='',
-)
-
 OFFER_MAX_NUM_ANSWERS = 9
 
 # Подсказки в сообщении о необходимости авторизации для доменов

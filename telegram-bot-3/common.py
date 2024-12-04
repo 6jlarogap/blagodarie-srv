@@ -13,6 +13,7 @@ from aiogram import types, html
 from aiogram.types.login_url import LoginUrl
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.types.input_file import URLInputFile
+from aiogram.enums import ChatType
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.state import StatesGroup, State
 
@@ -182,7 +183,8 @@ class KeyboardType(object):
 
     SHOW_MESSAGES = 29
 
-    # Согласие от входа в канал
+    # Согласие/отказ допуска в канал
+    # Зарезервировано, пока не используется
     #
     CHAT_JOIN_ACCEPT = 30
     CHAT_JOIN_REFUSE = 31
@@ -793,6 +795,7 @@ class Misc(object):
             first_name=tg_user_sender.first_name or '',
             username=tg_user_sender.username or '',
             activate='1' if activate else '',
+            # Если пустой did_bot_start, то он не сбрасывается в профиле юзера
             did_bot_start='1' if did_bot_start else '',
         )
         logging.debug('get_or_create tg_user by tg_uid in api, payload: %s' % cls.secret(payload_sender))
@@ -1672,7 +1675,7 @@ class Misc(object):
                 ),
                 keep_user_data='on',
             ))
-        reply_markup = InlineKeyboardMarkup(inline_keyboard=[inline_btn_map, inline_btn_trusts])
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=[[inline_btn_map, inline_btn_trusts]])
         return text, reply_markup
 
     @classmethod
@@ -1701,7 +1704,7 @@ class Misc(object):
         except:
             messsage_for_pin = None
         if messsage_for_pin and \
-           chat.type in (types.ChatType.GROUP, types.ChatType.SUPERGROUP,) :
+           chat.type in (ChatType.GROUP, ChatType.SUPERGROUP,) :
             payload = {
                 'old_chat_id': chat.id,
                 'chat_id': chat.id, 'title': chat.title, 'type': chat.type,

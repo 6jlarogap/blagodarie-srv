@@ -52,7 +52,7 @@ class FSMdelete(StatesGroup):
 class FSMundelete(StatesGroup):
     ask = State()
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.CANCEL_ANY,
         KeyboardType.SEP,
         )))
@@ -104,7 +104,7 @@ async def new_iof_ask_gender(message: Message, state: FSMContext):
         '<u>' + data['first_name'] + '</u>:\n\n' + 'Укажите пол', reply_markup=reply_markup,)
 
 
-@dp.callback_query(F.data.regexp(r'^(%s|%s)%s$' % (
+@router.callback_query(F.data.regexp(r'^(%s|%s)%s$' % (
         KeyboardType.NEW_IOF_GENDER_MALE, KeyboardType.NEW_IOF_GENDER_FEMALE,
         KeyboardType.SEP,
     )), StateFilter(FSMnewPerson.ask_gender))
@@ -140,7 +140,7 @@ async def cbq_gender_new_person(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.GENDER,
         KeyboardType.SEP,
     )), StateFilter(None))
@@ -189,7 +189,7 @@ async def got_gender_text(message: Message, state: FSMContext):
     )
 
 
-@dp.callback_query(F.data.regexp(r'^(%s|%s)%s$' % (
+@router.callback_query(F.data.regexp(r'^(%s|%s)%s$' % (
         KeyboardType.GENDER_MALE, KeyboardType.GENDER_FEMALE,
         KeyboardType.SEP,
     )), StateFilter(FSMgender.ask))
@@ -215,7 +215,7 @@ async def cbq_gender(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.LOCATION,
         KeyboardType.SEP,
     )), StateFilter(None))
@@ -345,7 +345,7 @@ async def process_message_meet_dob(message: Message, state: FSMContext):
 
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         f'{KeyboardType.MEET_DO}|{KeyboardType.MEET_REVOKE}',
         KeyboardType.SEP,
         # sid_from         # 1
@@ -407,7 +407,7 @@ async def cbq_meet_do_or_revoke(callback: CallbackQuery, state: FSMContext):
         await meet_do_or_revoke(data)
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         f'{KeyboardType.MEET_GENDER_FEMALE}|{KeyboardType.MEET_GENDER_MALE}',
         KeyboardType.SEP,
     )), StateFilter(FSMmeet.ask_gender))
@@ -491,7 +491,7 @@ async def meet_do_or_revoke(data):
         )
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.MEET_INVITE,
         KeyboardType.SEP,
     )), StateFilter(None))
@@ -510,7 +510,7 @@ async def cbq_meet_invite(callback: CallbackQuery, state: FSMContext):
         )
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.TRUST_THANK,
         KeyboardType.SEP,
     )), StateFilter(None))
@@ -610,7 +610,7 @@ async def cbq_attitude(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.CANCEL_THANK,
         KeyboardType.SEP,
     )), StateFilter(None))
@@ -643,7 +643,7 @@ async def cbq_cancel_thank(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.IOF,
         KeyboardType.SEP,
     )), StateFilter(None))
@@ -703,7 +703,7 @@ async def process_existing_iof(message: Message, state: FSMContext):
     await state.clear()
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.PHOTO,       # 0
         KeyboardType.SEP,
         # uuid, кому              # 1
@@ -768,7 +768,7 @@ async def process_photo(message: Message, state: FSMContext):
     await state.clear()
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.PHOTO_REMOVE,      # 0
         KeyboardType.SEP,
         # uuid, кому                    # 1
@@ -798,7 +798,7 @@ async def process_callback_photo_remove(callback: CallbackQuery, state: FSMConte
     await callback.answer()
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.PHOTO_REMOVE_CONFIRMED,      # 0
         KeyboardType.SEP,
         # uuid, кому                    # 1
@@ -826,7 +826,7 @@ async def cbq_photo_remove_confirmed(callback: CallbackQuery, state: FSMContext)
     await callback.answer()
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.DATES,
         KeyboardType.SEP,
         # uuid, кому                    # 1
@@ -866,7 +866,7 @@ async def cbq_dates(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.DATES_DOB_UNKNOWN,
         KeyboardType.SEP,
     )), StateFilter(FSMdates.dob))
@@ -955,7 +955,7 @@ async def put_dates(message, state, tg_user_sender):
     await state.clear()
 
 
-@dp.callback_query(F.data.regexp(r'^(%s|%s)%s' % (
+@router.callback_query(F.data.regexp(r'^(%s|%s)%s' % (
         KeyboardType.DATES_DOD_NONE, KeyboardType.DATES_DOD_DEAD,
         KeyboardType.SEP,
     )), StateFilter(FSMdates.dod))
@@ -1010,7 +1010,7 @@ async def process_dod(message: Message, state: FSMContext):
         await put_dates(message, state, message.from_user)
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.COMMENT,
         KeyboardType.SEP,
     )), StateFilter(None))
@@ -1052,7 +1052,7 @@ async def process_comment(message: Message, state: FSMContext):
     await state.clear()
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.DELETE_USER,
         KeyboardType.SEP,
     )), StateFilter(None))
@@ -1101,7 +1101,7 @@ async def cbq_delete_user(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.DELETE_USER_CONFIRMED,
         KeyboardType.SEP,
     )), StateFilter(FSMdelete.ask))
@@ -1143,7 +1143,7 @@ async def cbq_delete_user_confirmed(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.UNDELETE_USER,
         KeyboardType.SEP,
     )), StateFilter(None))
@@ -1175,7 +1175,7 @@ async def cbq_undelete_user(callback: CallbackQuery, state: FSMContext):
                 await callback.message.reply(prompt, reply_markup=reply_markup)
     await callback.answer()
 
-@dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.UNDELETE_USER_CONFIRMED,
         KeyboardType.SEP,
     )), StateFilter(FSMundelete.ask))
