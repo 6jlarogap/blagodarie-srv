@@ -2106,6 +2106,33 @@ class Misc(object):
         return reply
 
 
+    @classmethod
+    async def pure_tg_request(cls,
+            method_name,
+            json={},
+        ):
+        """
+        Запрос в телеграм апи.
+
+        Вынужденная мера. Если замечена проблема в aiogram api.
+        """
+        status = response = None
+        async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
+            try:
+                async with session.request(
+                    'POST',
+                    f'https://api.telegram.org/bot{settings.TOKEN}/{method_name}',
+                    json=json,
+                ) as resp:
+                    status = resp.status
+                    response = await resp.json()
+                    if status < 500:
+                        response = await resp.json()
+                    else:
+                        response = await resp.text('UTF-8')
+            except:
+                raise
+        return status, response
 
 class TgGroup(object):
     """

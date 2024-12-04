@@ -530,7 +530,6 @@ async def cbq_attitude(callback: CallbackQuery, state: FSMContext):
         <thank_card>                        # 4, отправлено из карточки после благодарности
         <KeyboardType.SEP>
     """
-    await callback.answer()
     try:
         code = callback.data.split(KeyboardType.SEP)
         try:
@@ -576,8 +575,6 @@ async def cbq_attitude(callback: CallbackQuery, state: FSMContext):
     except ValueError:
         return
 
-    await callback.answer()
-
     if profile_sender['uuid'] == profile_to['uuid']:
         text_same = 'Операция на себя не позволяется'
         if group_member:
@@ -588,7 +585,7 @@ async def cbq_attitude(callback: CallbackQuery, state: FSMContext):
                         callback.id,
                         text=text_same,
                         show_alert=True,
-                    )
+                     )
             except TelegramBadRequest:
                 pass
             return
@@ -610,6 +607,7 @@ async def cbq_attitude(callback: CallbackQuery, state: FSMContext):
     if group_member:
         group_member.update(user_tg_uid=tg_user_sender.id)
     await Misc.put_attitude(data)
+    await callback.answer()
 
 
 @dp.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
