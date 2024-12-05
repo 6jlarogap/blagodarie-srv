@@ -23,7 +23,6 @@ from settings import logging
 
 from common import FSMnewPerson, FSMgeo
 from common import Misc, KeyboardType, OperationType
-from handler_offer import Offer
 
 import pymorphy3
 MorphAnalyzer = pymorphy3.MorphAnalyzer()
@@ -388,6 +387,16 @@ async def cmd_getowned(message: Message, state: FSMContext):
         else:
             await message.reply('У вас нет запрошенных данных')
 
+@router.message(
+    F.text,
+    F.chat.type.in_((ChatType.PRIVATE,)),
+    StateFilter(None),
+    Command(re.compile('^offer|offer_multi$', flags=re.I)),
+)
+async def cmd_offer(message: Message, state: FSMContext):
+    from handler_offer import Offer
+    await Offer.cmd_offer(message, state)
+
 
 # Команды в бот закончились.
 # Просто сообщение в бот. Должно здесь идти после всех команд в бот
@@ -565,6 +574,8 @@ commands_dict = {
     'map': cmd_map,
     'feedback': cmd_feedback,
     'getowned': cmd_getowned,
+    'offer': cmd_offer,
+    'offer_multi': cmd_offer,
 }
 
 

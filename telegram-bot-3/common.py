@@ -302,7 +302,6 @@ class Misc(object):
         'Выберите одно из действий:\n'
     )
 
-    PROMPT_OFFER_GEO = 'Укажите координаты вида: хх.ххх,уу.ууу - их удобно скопировать из карт яндекса или гугла'
     PROMPT_SEARCH_TEXT_TOO_SHORT = 'Минимальное число символов в тексте для поиска: %s\n' % settings.MIN_LEN_SEARCHED_TEXT
     PROMPT_SEARCH_PHRASE_TOO_SHORT = 'Недостаточно для поиска: короткие слова или текст вообще без слов и т.п.'
     PROMPT_NOTHING_FOUND = 'Никто не найден - попробуйте другие слова'
