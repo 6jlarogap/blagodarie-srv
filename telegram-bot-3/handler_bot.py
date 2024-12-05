@@ -286,6 +286,17 @@ async def cmd_start(message: Message, state: FSMContext):
             ))
 
     elif m := re.search(
+            r'^offer\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
+            arg, flags=re.I
+        ):
+            from handler_offer import Offer
+            status_offer, response_offer = await Offer.post_offer_answer(m.group(1), response_sender, [-1])
+            if status_offer == 200:
+                await Offer.show_offer(response_sender, response_offer, message)
+            else:
+                await message.reply('Опрос-предложение не найдено')
+
+    elif m := re.search(
             r'^([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
             arg, flags=re.I
         ):

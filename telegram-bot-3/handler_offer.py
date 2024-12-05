@@ -479,13 +479,12 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
         return
     if number == -5:
         await state.set_state(FSMOfferPutPlace.ask)
-        state = dp.current_state()
         await state.update_data(
             uuid=profile_from['uuid'],
             offer_uuid=offer_uuid,
         )
         await callback.message.reply(
-            Misc.PROMPT_OFFER_GEO,
+            Offer.PROMPT_OFFER_GEO,
             reply_markup=Misc.reply_markup_cancel_row(),
         )
         await callback.answer()
@@ -541,3 +540,36 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
             err_mes = 'Ошибка выполнения запроса'
         await callback.message.reply(err_mes)
     await callback.answer()
+
+
+@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMOfferPutPlace.ask))
+async def process_existing_offer_location(message: Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    data = await state.get_data()
+    status_from, profile_from = await Misc.post_tg_user(message.from_user)
+    if data.get('uuid') and data.get('offer_uuid') and \
+       profile_from['uuid'] == data['uuid']:
+        latitude, longitude = Misc.check_location_str(message.text)
+        if latitude is None or longitude is None:
+            error_message = Misc.MSG_ERR_GEO + '\n\n' + Offer.PROMPT_OFFER_GEO
+            await message.reply(
+                error_message,
+                reply_markup=Misc.reply_markup_cancel_row(),
+            )
+            return
+    status_answer, response_answer = await Offer.post_offer_answer(
+        data['offer_uuid'],
+        profile_from,
+        [-5],
+        latitude=latitude, longitude=longitude,
+    )
+    if status_answer == 200:
+        reply = (
+            f'Координаты <a href="t.me/{bot_data.username}'
+            f'?start=offer-{data["offer_uuid"]}">опроса</a> установлены'
+        )
+    else:
+        reply = Misc.MSG_ERROR_API
+    await message.reply(reply, disable_notification=True)
+    await state.clear()
