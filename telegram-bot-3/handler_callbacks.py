@@ -588,10 +588,10 @@ async def cbq_attitude(callback: CallbackQuery, state: FSMContext):
                      )
             except TelegramBadRequest:
                 pass
-            return
         else:
             await message.reply(text_same, disable_web_page_preview=True,)
-            return
+        await callback.answer()
+        return
 
     data = dict(
         tg_user_sender=tg_user_sender,

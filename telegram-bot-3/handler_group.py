@@ -428,7 +428,7 @@ async def echo_join_chat_request(message: ChatJoinRequest):
         )
     except TelegramBadRequest as excpt:
         in_chat = 'в канале' if is_channel else 'в группе'
-        msg = f'Наверное, вы уже {in_chat}'
+        msg = f'Возможно, вы уже {in_chat}'
         if excpt.message == 'User_already_participant':
             msg = 'Вы уже {in_chat}'
         try:
@@ -442,9 +442,9 @@ async def echo_join_chat_request(message: ChatJoinRequest):
         return
 
     status, response_add_member = await TgGroupMember.add(
-        group_chat_id=chat.id,
-        group_title='',
-        group_type='',
+        group_chat_id=message.chat.id,
+        group_title=message.chat.title,
+        group_type=message.chat.type,
         user_tg_uid=tg_subscriber.id,
     )
     if status != 200:
