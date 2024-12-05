@@ -99,14 +99,6 @@ class Offer(object):
                 ))
                 return
 
-            data = dict(
-                create_offer_dict=dict(
-                    user_uuid=response_sender['uuid'],
-                    question=question,
-                    answers=answers,
-                    is_multi=is_multi,
-                )
-            )
             await state.update_data(
                 create_offer_dict=dict(
                     user_uuid=response_sender['uuid'],
@@ -573,3 +565,68 @@ async def process_existing_offer_location(message: Message, state: FSMContext):
         reply = Misc.MSG_ERROR_API
     await message.reply(reply, disable_notification=True)
     await state.clear()
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMsendMessageToOffer.ask))
+async def process_message_to_offer(message: Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    state_finished = False
+    data = await state.get_data()
+    if data.get('uuid') and data.get('offer_uuid'):
+        status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+        if status_sender == 200 and response_sender.get('uuid') == data['uuid']:
+            payload = dict(
+                tg_token=settings.TOKEN,
+                user_uuid=data['uuid'],
+                offer_uuid=data['offer_uuid']
+            )
+            logging.debug('/api/offer/voted/tg_users %s' % Misc.secret(payload ))
+            status, response = await Misc.api_request(
+                path='/api/offer/voted/tg_users',
+                method='post',
+                json=payload,
+            )
+            logging.debug('/api/offer/voted/tg_users, status: %s' % status)
+            logging.debug('/api/offer/voted/tg_users: %s' % response)
+            if status == 200:
+                n_delivered = 0
+                if response['users']:
+                    bot_data = await bot.get_me()
+                    msg_to = 'Сообщение участникам опроса:\n %(offer_deeplink)s\n от %(sender_deeplink)s' % dict(
+                        offer_deeplink=Misc.get_html_a(
+                            href=f't.me/{bot_data.username}?start=offer-{data["offer_uuid"]}',
+                            text=response['question'],
+                        ),
+                        sender_deeplink=Misc.get_deeplink_with_name(response_sender)
+                    )
+                    await state.clear()
+                    state_finished = True
+                    for user in response['users']:
+                        delivered_to_user = False
+                        for tg_account in user['tg_data']:
+                            tg_uid = tg_account['tg_uid']
+                            try:
+                                await bot.send_message(tg_uid, text=msg_to)
+                                await bot.forward_message(
+                                    tg_uid,
+                                    from_chat_id=message.chat.id,
+                                    message_id=message.message_id,
+                                )
+                                delivered_to_user = True
+                            except TelegramBadRequest:
+                                pass
+                        if delivered_to_user:
+                            n_delivered += 1
+                if n_delivered == 0:
+                    msg = 'Сообщение никому не отправлено'
+                else:
+                    msg = 'Сообщение отправлено %s %s' % (
+                        n_delivered,
+                        'адресату' if n_delivered == 1 else 'адресатам',
+                    )
+                await message.reply(msg)
+            else:
+                await message.reply('Опрос не найден или вы не его ваделец')
+    if not state_finished:
+        await state.clear()

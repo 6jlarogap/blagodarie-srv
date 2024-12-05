@@ -1347,7 +1347,7 @@ class Misc(object):
                     )
                 send_text_message = False
             except TelegramBadRequest as excpt:
-                if excpt.args[0] == 'Media_caption_too_long' and not card_message:
+                if excpt.message == 'Media_caption_too_long' and not card_message:
                     try:
                         await bot.send_photo(
                             chat_id=tg_user_sender.id,
@@ -1475,12 +1475,6 @@ class Misc(object):
             else:
                 his_her = 'её'
         return his_her
-
-    @classmethod
-    async def state_finish(cls, state):
-        # пока держим, часто в коде встречается!
-        if state:
-            await state.clear()
 
     @classmethod
     def inline_button_cancel(cls):
