@@ -35,6 +35,9 @@ class FSMnewPerson(StatesGroup):
 class FSMgeo(StatesGroup):
     geo = State()
 
+class FSMdelete(StatesGroup):
+    ask = State()
+
 class Attitude(object):
 
     ACQ = 'a'
@@ -2131,6 +2134,43 @@ class Misc(object):
             except:
                 raise
         return status, response
+
+
+    @classmethod
+    def message_delete_user(cls, profile, owner):
+        if profile['uuid'] == owner['uuid']:
+            # Себя обезличиваем
+            prompt = (
+                f'<b>{profile["first_name"]}</b>\n'
+                '\n'
+                'Вы собираетесь <u>обезличить</u> себя в системе.\n'
+                'Будут удалены Ваши данные (ФИО, фото, место и т.д), а также связи с родственниками!\n'
+                '\n'
+                'Если подтверждаете, то нажмите <u>Продолжить</u>. Иначе <u>Отмена</u>\n'
+            )
+        else:
+            p_udalen = 'удалён(а)'
+            if profile['is_org']:
+                name = profile['first_name']
+                p_udalen = 'удалена организация:'
+            else:
+                name = cls.get_deeplink_with_name(profile, with_lifetime_years=True,)
+                if profile.get('gender') == 'f':
+                    p_udalen = 'удалена'
+            prompt = (
+                f'Будет {p_udalen} {name}!\n\n'
+                'Если подтверждаете удаление, нажмите <u>Продолжить</u>. Иначе <u>Отмена</u>\n'
+            )
+        inline_btn_go = InlineKeyboardButton(
+            text='Продолжить',
+            callback_data=cls.CALLBACK_DATA_UUID_TEMPLATE % dict(
+                keyboard_type=KeyboardType.DELETE_USER_CONFIRMED,
+                uuid=profile['uuid'],
+                sep=KeyboardType.SEP,
+        ))
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=[[inline_btn_go, Misc.inline_button_cancel()]])
+        return prompt, reply_markup
+
 
 class TgGroup(object):
     """

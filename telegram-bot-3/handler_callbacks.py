@@ -19,7 +19,7 @@ import settings, me
 from settings import logging
 
 from common import Misc, OperationType, KeyboardType
-from common import FSMnewPerson
+from common import FSMnewPerson, FSMdelete
 
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
@@ -44,9 +44,6 @@ class FSMdates(StatesGroup):
     dod = State()
 
 class FSMcomment(StatesGroup):
-    ask = State()
-
-class FSMdelete(StatesGroup):
     ask = State()
 
 class FSMundelete(StatesGroup):
@@ -1061,38 +1058,8 @@ async def cbq_delete_user(callback: CallbackQuery, state: FSMContext):
        (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
         profile = response_check['response_uuid']
         owner = response_check
-        if profile['is_active']:
-            if profile['uuid'] == owner['uuid']:
-                # Себя обезличиваем
-                prompt = (
-                    f'<b>{profile["first_name"]}</b>\n'
-                    '\n'
-                    'Вы собираетесь <u>обезличить</u> себя в системе.\n'
-                    'Будут удалены Ваши данные (ФИО, фото, место и т.д), а также связи с родственниками!\n'
-                    '\n'
-                    'Если подтверждаете, то нажмите <u>Продолжить</u>. Иначе <u>Отмена</u>\n'
-                )
-            else:
-                p_udalen = 'удалён(а)'
-                if profile['is_org']:
-                    name = profile['first_name']
-                    p_udalen = 'удалена организация:'
-                else:
-                    name = Misc.get_deeplink_with_name(profile, with_lifetime_years=True,)
-                    if profile.get('gender') == 'f':
-                        p_udalen = 'удалена'
-                prompt = (
-                    f'Будет {p_udalen} {name}!\n\n'
-                    'Если подтверждаете удаление, нажмите <u>Продолжить</u>. Иначе <u>Отмена</u>\n'
-                )
-            inline_btn_go = InlineKeyboardButton(
-                text='Продолжить',
-                callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
-                    keyboard_type=KeyboardType.DELETE_USER_CONFIRMED,
-                    uuid=profile['uuid'],
-                    sep=KeyboardType.SEP,
-            ))
-            reply_markup = InlineKeyboardMarkup(inline_keyboard=[[inline_btn_go, Misc.inline_button_cancel()]])
+        if profile['is_active'] or profile['owner']:
+            prompt, reply_markup = Misc.message_delete_user(profile, owner)
             await state.set_state(FSMdelete.ask)
             await state.update_data(uuid=uuid, owner_id=owner['user_id'])
             await callback.message.reply(prompt, reply_markup=reply_markup)

@@ -21,7 +21,7 @@ from aiogram.fsm.state import StatesGroup, State
 import settings, me
 from settings import logging
 
-from common import FSMnewPerson, FSMgeo
+from common import FSMnewPerson, FSMgeo, FSMdelete
 from common import Misc, KeyboardType, OperationType
 
 import pymorphy3
@@ -242,7 +242,6 @@ async def cmd_map(message: Message, state: FSMContext):
 async def cmd_feedback(message: Message, state: FSMContext):
     await message.reply(
         Misc.get_html_a(settings.BOT_CHAT['href'], settings.BOT_CHAT['caption']),
-        disable_web_page_preview=True,
     )
 
 
@@ -390,8 +389,7 @@ async def cmd_start(message: Message, state: FSMContext):
     Command(re.compile('^getowned$', flags=re.I)),
 )
 async def cmd_getowned(message: Message, state: FSMContext):
-    tg_user_sender = message.from_user
-    status, response_from = await Misc.post_tg_user(tg_user_sender)
+    status, response_from = await Misc.post_tg_user(message.from_user)
     if status == 200:
         if not Misc.editable(response_from):
             return
@@ -421,6 +419,24 @@ async def cmd_getowned(message: Message, state: FSMContext):
 async def cmd_offer(message: Message, state: FSMContext):
     from handler_offer import Offer
     await Offer.cmd_offer(message, state)
+
+
+@router.message(
+    F.text,
+    F.chat.type.in_((ChatType.PRIVATE,)),
+    StateFilter(None),
+    Command(re.compile('^quit$', flags=re.I)),
+)
+async def cmd_quit(message: Message, state: FSMContext):
+    status, profile = await Misc.post_tg_user(message.from_user)
+    if status == 200:
+        if profile['is_active']:
+            await state.set_state(FSMdelete.ask)
+            await state.update_data(uuid=profile['uuid'], owner_id=profile['user_id'])
+            prompt, reply_markup = Misc.message_delete_user(profile, owner=profile)
+            await message.reply(prompt, reply_markup=reply_markup)
+        else:
+            await message.reply('Вы уже обезличены')
 
 
 # Команды в бот закончились.
@@ -601,6 +617,7 @@ commands_dict = {
     'getowned': cmd_getowned,
     'offer': cmd_offer,
     'offer_multi': cmd_offer,
+    'quit': cmd_quit,
 }
 
 
