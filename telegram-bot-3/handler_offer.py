@@ -6,7 +6,8 @@ import re
 
 from aiogram import Router, F
 from aiogram.filters import Command
-from aiogram.types import Message, ContentType, InlineKeyboardMarkup, InlineKeyboardButton 
+from aiogram.types import Message, CallbackQuery, ContentType, \
+                          InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.enums import ChatType
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command, StateFilter
@@ -121,8 +122,28 @@ class Offer(object):
 
 
     @classmethod
-    async def create_offer(cls, data, profile_from, message):
-        print('creating offer')
+    async def create_offer(cls, data, response_sender, message):
+        create_offer_dict = data['create_offer_dict']
+        create_offer_dict.update(tg_token=settings.TOKEN)
+        logging.debug('create offer in api, payload: %s' % Misc.secret(create_offer_dict))
+        status, response = await Misc.api_request(
+            path='/api/offer',
+            method='post',
+            json=create_offer_dict,
+        )
+        logging.debug('create offer in api, status: %s' % status)
+        logging.debug('create offer in api, response: %s' % response)
+        err_mes = ''
+        if status == 400 and response.get('message'):
+            err_mes = response['message']
+        elif status != 200:
+            err_mes = 'Ошибка сохранения опроса-предложения'
+        if err_mes:
+            await message.reply(err_mes)
+            return
+        await message.reply('Создан опрос:')
+        await cls.show_offer(response_sender, response, message)
+
 
     @classmethod
     async def offer_forwarded_in_group_or_channel(cls, message, state):
@@ -282,30 +303,30 @@ class Offer(object):
                         if message.chat.type == types.ChatType.PRIVATE:
                             answer_text = '(*) ' + answer_text
                     inline_btn_answer = InlineKeyboardButton(
-                        answer_text,
+                        text=answer_text,
                         callback_data=callback_data_template % callback_data_dict
                     )
                     buttons.append([inline_btn_answer])
 
-            if have_i_voted or message.chat.type != types.ChatType.PRIVATE:
+            if have_i_voted or message.chat.type != ChatType.PRIVATE:
                 callback_data_dict.update(number=0)
                 inline_btn_answer = InlineKeyboardButton(
-                    'Отозвать мой выбор',
+                    text='Отозвать мой выбор',
                     callback_data=callback_data_template % callback_data_dict
                 )
                 buttons.append([inline_btn_answer])
 
         callback_data_dict.update(number=-1)
         inline_btn_answer = InlineKeyboardButton(
-            'Обновить результаты',
+            text='Обновить результаты',
             callback_data=callback_data_template % callback_data_dict
         )
         buttons.append([inline_btn_answer])
 
-        if message.chat.type == types.ChatType.PRIVATE and user_from['uuid'] == offer['owner']['uuid']:
+        if message.chat.type == ChatType.PRIVATE and user_from['uuid'] == offer['owner']['uuid']:
             callback_data_dict.update(number=-2)
             inline_btn_answer = InlineKeyboardButton(
-                'Сообщение участникам',
+                text='Сообщение участникам',
                 callback_data=callback_data_template % callback_data_dict
             )
             buttons.append([inline_btn_answer])
@@ -313,20 +334,20 @@ class Offer(object):
             if offer['closed_timestamp']:
                 callback_data_dict.update(number=-4)
                 inline_btn_answer = InlineKeyboardButton(
-                    'Возбновить опрос',
+                    text='Возбновить опрос',
                     callback_data=callback_data_template % callback_data_dict
                 )
             else:
                 callback_data_dict.update(number=-3)
                 inline_btn_answer = InlineKeyboardButton(
-                    'Остановить опрос',
+                    text='Остановить опрос',
                     callback_data=callback_data_template % callback_data_dict
                 )
             buttons.append([inline_btn_answer])
 
             callback_data_dict.update(number=-5)
             inline_btn_answer = InlineKeyboardButton(
-                'Задать координаты',
+                text='Задать координаты',
                 callback_data=callback_data_template % callback_data_dict
             )
             buttons.append([inline_btn_answer])
@@ -368,4 +389,18 @@ async def process_offer_location(message: Message, state: FSMContext):
     data['create_offer_dict']['latitude'], data['create_offer_dict']['longitude'] = latitude, longitude
     await state.clear()
     await Offer.create_offer(data, profile_from, message)
+
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.OFFER_GEO_PASS,
+        KeyboardType.SEP,
+        )))
+async def cbq_offer_geo_pass(callback: CallbackQuery, state: FSMofferPlace.ask):
+    data = await state.get_data()
+    status_from, profile_from = await Misc.post_tg_user(callback.from_user)
+    await state.clear()
+    if status_from == 200 and data.get('create_offer_dict') and \
+       profile_from['uuid'] == data['create_offer_dict']['user_uuid']:
+        await Offer.create_offer(data, profile_from, callback.message)
+    await callback.answer()
 
