@@ -110,7 +110,7 @@ async def process_group_message(message: Message, state: FSMContext):
                 type_=message.chat.type,
             )
             if status == 200:
-                if message.chat.type == types.ChatType.SUPERGROUP:
+                if message.chat.type == ChatType.SUPERGROUP:
                     msg_failover = 'Ура! Группа стала супергруппой'
                 else:
                     # Если что-то случится при понижении статуса, то зачем об этом говорить?

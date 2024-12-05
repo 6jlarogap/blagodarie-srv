@@ -29,6 +29,13 @@ class FSMofferPlace(StatesGroup):
     # После создания оффера спросить о месте
     ask = State()
 
+class FSMsendMessageToOffer(StatesGroup):
+    ask = State()
+
+class FSMOfferPutPlace(StatesGroup):
+    # изменить место существующего оффера
+    ask = State()
+
 class Offer(object):
 
     PROMPT_OFFER_GEO = 'Укажите координаты опроса вида: хх.ххх,уу.ууу - их удобно скопировать из карт яндекса или гугла'
@@ -300,7 +307,7 @@ class Offer(object):
                     answer_text = answer['answer']
                     if user_from and user_from['user_id'] in answer['users']:
                         have_i_voted = True
-                        if message.chat.type == types.ChatType.PRIVATE:
+                        if message.chat.type == ChatType.PRIVATE:
                             answer_text = '(*) ' + answer_text
                     inline_btn_answer = InlineKeyboardButton(
                         text=answer_text,
@@ -354,6 +361,26 @@ class Offer(object):
         return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+    @classmethod
+    async def post_offer_answer(cls, offer_uuid, user_from, answers, **kwargs):
+        payload = dict(
+            tg_token=settings.TOKEN,
+            offer_uuid=offer_uuid,
+            answers=answers,
+            user_uuid=user_from and user_from['uuid'] or None,
+        )
+        payload.update(kwargs)
+        logging.debug('post_offer, payload: %s' % Misc.secret(payload))
+        status, response = await Misc.api_request(
+            path='/api/offer/answer',
+            method='post',
+            json=payload,
+        )
+        logging.debug('post_offer_answer, status: %s' % status)
+        logging.debug('get_offer_answer, response: %s' % response)
+        return status, response
+
+
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMofferPlace.ask))
 async def process_offer_location(message: Message, state: FSMContext):
     if message.content_type != ContentType.TEXT:
@@ -394,8 +421,8 @@ async def process_offer_location(message: Message, state: FSMContext):
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.OFFER_GEO_PASS,
         KeyboardType.SEP,
-        )))
-async def cbq_offer_geo_pass(callback: CallbackQuery, state: FSMofferPlace.ask):
+        )), StateFilter(FSMofferPlace.ask))
+async def cbq_offer_geo_pass(callback: CallbackQuery, state: FSMContext):
     data = await state.get_data()
     status_from, profile_from = await Misc.post_tg_user(callback.from_user)
     await state.clear()
@@ -404,3 +431,113 @@ async def cbq_offer_geo_pass(callback: CallbackQuery, state: FSMofferPlace.ask):
         await Offer.create_offer(data, profile_from, callback.message)
     await callback.answer()
 
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.OFFER_ANSWER,
+        KeyboardType.SEP,
+        )), StateFilter(None))
+        # uuid опроса           # 1
+        # KeyboardType.SEP,
+        # номер ответа          # 2
+        #   >= 1:   подать голос
+        #      0:   отозвать голос
+        #     -1:   обновить результаты
+        #     -2:   сообщение, пока доступно только владельцу опроса
+        #     -3:   остановить опрос
+        #     -4:   возобновить опрос
+        #     -5:   задать координаты
+async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
+    tg_user_sender = callback.from_user
+    code = callback.data.split(KeyboardType.SEP)
+    try:
+        offer_uuid = code[1]
+        number = int(code[2])
+    except (IndexError, ValueError,):
+        return
+    status_from, profile_from = await Misc.post_tg_user(
+        tg_user_sender,
+        did_bot_start=callback.message.chat.type == ChatType.PRIVATE
+    )
+    if status_from != 200:
+        return
+    if number == -2:
+        # Сообщение участникам
+        await state.set_state(FSMsendMessageToOffer.ask)
+        await state.update_data(
+            uuid=profile_from['uuid'],
+            offer_uuid=offer_uuid,
+        )
+        await callback.message.reply(
+            (
+                'Отправьте или перешлите мне сообщение для отправки '
+                'всем проголосовавшим участникам, кроме недоверенных. '
+                'Чтобы не получить недоверия - пишите только по делу!'
+            ),
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+        await callback.answer()
+        return
+    if number == -5:
+        await state.set_state(FSMOfferPutPlace.ask)
+        state = dp.current_state()
+        await state.update_data(
+            uuid=profile_from['uuid'],
+            offer_uuid=offer_uuid,
+        )
+        await callback.message.reply(
+            Misc.PROMPT_OFFER_GEO,
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+        await callback.answer()
+        return
+
+    status_answer, response_answer = await Offer.post_offer_answer(offer_uuid, profile_from, [number])
+    if status_answer == 200:
+        text = Offer.text_offer(profile_from, response_answer, callback.message)
+        reply_markup = Offer.markup_offer(profile_from, response_answer, callback.message)
+        try:
+            await callback.message.edit_text(text, reply_markup=reply_markup)
+        except TelegramBadRequest:
+            pass
+        success_message = ''
+        if number > 0:
+            if response_answer['closed_timestamp']:
+                success_message = 'Владелец остановил голосование'
+            else:
+                if response_answer['is_multi']:
+                    num_answers = response_answer['user_answered'][str(profile_from['user_id'])]['answers']
+                    success_message = 'Вы выбрали вариант%s:\n' % ('ы' if len(num_answers) > 1 else '')
+                    answers_text = '\n'.join([' ' + response_answer['answers'][n]['answer'] for n in num_answers])
+                    success_message += answers_text
+                else:
+                    success_message = 'Вы выбрали вариант: %s' % response_answer['answers'][number]['answer']
+        elif number == 0:
+            if response_answer['closed_timestamp']:
+                success_message = 'Владелец остановил голосование'
+            else:
+                success_message = 'Вы отозвали свой выбор'
+        elif number == -3 and callback.message.chat.type == ChatType.PRIVATE:
+            success_message = 'Опрос остановлен'
+        elif number == -4 and callback.message.chat.type == ChatType.PRIVATE:
+            success_message = 'Опрос возобновлен'
+        elif number == -5 and callback.message.chat.type == ChatType.PRIVATE:
+            success_message = 'Координаты опроса заданы'
+        if success_message:
+            await callback.answer(success_message, show_alert=True,)
+    elif callback.message.chat.type == ChatType.PRIVATE:
+        if number > 0:
+            err_mes = 'Не далось подать голос'
+        elif number == 0:
+            err_mes = 'Не удалось отозвать голос'
+        elif number == -1:
+            err_mes = 'Не удалось обновить'
+        elif number == -3:
+            err_mes = 'Не удалось приостановить опрос'
+        elif number == -4:
+            err_mes = 'Не удалось возобновить опрос'
+        elif number == -5:
+            err_mes = 'Не удалось задать координаты'
+        else:
+            err_mes = 'Ошибка выполнения запроса'
+        await callback.message.reply(err_mes)
+    await callback.answer()
