@@ -49,6 +49,9 @@ class FSMcomment(StatesGroup):
 class FSMundelete(StatesGroup):
     ask = State()
 
+class FSMsendMessage(StatesGroup):
+    ask = State()
+
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.CANCEL_ANY,
         KeyboardType.SEP,
@@ -1170,3 +1173,189 @@ async def cbq_udelete_user_confirmed(callback: CallbackQuery, state: FSMContext)
     await callback.answer()
 
 
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.SEND_MESSAGE,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_send_message(callback: CallbackQuery, state: FSMContext):
+    if uuid := Misc.get_uuid_from_callback(callback):
+        status_to, profile_to = await Misc.get_user_by_uuid(uuid)
+        if status_to == 200:
+            await state.set_state(FSMsendMessage.ask)
+            await state.update_data(uuid=uuid)
+            iof_link = Misc.get_deeplink_with_name(profile_to)
+            await callback.message.reply(
+                f'Напишите или перешлите мне сообщение для отправки <b>{iof_link}</b>',
+                reply_markup=Misc.reply_markup_cancel_row(),
+            )
+    callback.answer()
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMsendMessage.ask))
+async def process_message_to_send(message: Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    msg_saved = 'Сообщение сохранено'
+    data = await state.get_data()
+    if data.get('uuid'):
+        status_to, profile_to = await Misc.get_user_by_uuid(data['uuid'], with_owner_tg_data=True)
+        if status_to == 200:
+            status_from, profile_from = await Misc.post_tg_user(message.from_user)
+            if status_from == 200 and profile_from:
+
+                # Возможны варианты с получателем:
+                #   - самому себе                               нет смысла отправлять
+                #   - своему овнеду                             нет смысла отправлять
+                #   - чужому овнеду с владельцем с телеграмом
+                #   - чужому овнеду с владельцем без телеграма  нет смысла отправлять
+                #   - юзеру с телеграмом
+                #   - юзеру без телеграма                       нет смысла отправлять
+
+                # Есть ли смысл отправлять и если есть то кому?
+                #
+                tg_user_to_tg_data = []
+                user_to_delivered_uuid = None
+                if profile_from['uuid'] == profile_to['uuid']:
+                    # самому себе
+                    user_to_delivered_uuid = profile_to['uuid']
+                elif profile_to['owner'] and profile_to['owner']['uuid'] == profile_from['uuid']:
+                    # своему овнеду
+                    pass
+                elif profile_to['owner'] and profile_to['owner']['uuid'] != profile_from['uuid']:
+                    # чужому овнеду: телеграм у него есть?
+                    if profile_to['owner'].get('tg_data'):
+                        tg_user_to_tg_data = profile_to['owner']['tg_data']
+                        user_to_delivered_uuid = profile_to['owner']['uuid']
+                elif profile_to.get('tg_data'):
+                    tg_user_to_tg_data = profile_to['tg_data']
+                    user_to_delivered_uuid = profile_to['uuid']
+                if tg_user_to_tg_data:
+                    success = False
+                    for tgd in tg_user_to_tg_data:
+                        try:
+                            await bot.send_message(
+                                tgd['tg_uid'],
+                                text=Misc.MSG_YOU_GOT_MESSAGE % Misc.get_deeplink_with_name(profile_from),
+                                disable_web_page_preview=True,
+                            )
+                            await bot.forward_message(
+                                tgd['tg_uid'],
+                                from_chat_id=message.chat.id,
+                                message_id=message.message_id,
+                            )
+                            success = True
+                        except TelegramBadRequest:
+                            pass
+                    if success:
+                        msg_delivered = 'Сообщение доставлено'
+                    else:
+                        msg_delivered = msg_saved
+                        user_to_delivered_uuid = None
+                    await message.reply(msg_delivered)
+                else:
+                    await message.reply(msg_saved)
+            payload_log_message = dict(
+                tg_token=settings.TOKEN,
+                from_chat_id=message.chat.id,
+                message_id=message.message_id,
+                user_from_uuid=profile_from['uuid'],
+                user_to_uuid=profile_to['uuid'],
+                user_to_delivered_uuid=user_to_delivered_uuid,
+            )
+            try:
+                status_log, response_log = await Misc.api_request(
+                    path='/api/tg_message',
+                    method='post',
+                    json=payload_log_message,
+                )
+            except:
+                pass
+    await state.clear()
+
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.SHOW_MESSAGES,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_show_messages(callback: CallbackQuery, state: FSMContext):
+    if user_to_uuid := Misc.get_uuid_from_callback(callback):
+        tg_user_sender = callback.from_user
+        status_from, profile_from = await Misc.post_tg_user(callback.from_user)
+        if status_from == 200:
+            payload = dict(
+                tg_token=settings.TOKEN,
+                user_from_uuid=profile_from['uuid'],
+                user_to_uuid=user_to_uuid,
+            )
+            logging.debug('get_user_messages, payload: %s' % Misc.secret(payload))
+            status, response = await Misc.api_request(
+                path='/api/tg_message/list',
+                method='post',
+                json=payload,
+            )
+            logging.debug('get_user_messages, status: %s' % status)
+            logging.debug('get_user_messages, response: %s' % response)
+            if status == 200:
+                if response:
+                    await bot.send_message(
+                        tg_user_sender.id,
+                        text='Ниже последние сообщения к %s ...' % \
+                            Misc.get_deeplink_with_name(response[0]['user_to']),
+                    )
+                    n = 0
+                    for i in range(len(response)-1, -1, -1):
+                        m = response[i]
+                        n += 1
+                        msg = (
+                            '(%(n)s) %(datetime_string)s\n'
+                            'От %(user_from)s к %(user_to)s\n'
+                        )
+                        if m['operation_type_id']:
+                            if m['operation_type_id'] == OperationType.NULLIFY_ATTITUDE:
+                                msg += 'в связи с тем что не знаком(а)\n'
+                            elif m['operation_type_id'] == OperationType.ACQ:
+                                msg += 'в связи с установкой знакомства\n'
+                            elif m['operation_type_id'] == OperationType.MISTRUST:
+                                msg += 'в связи с утратой доверия\n'
+                            elif m['operation_type_id'] == OperationType.TRUST:
+                                msg += 'в связи с тем что доверяет\n'
+                            elif m['operation_type_id'] == OperationType.THANK:
+                                msg += 'с благодарностью\n'
+                        user_to_delivered = None
+                        if m['user_to_delivered']:
+                            msg += 'Доставлено'
+                            if m['user_to_delivered']['id'] != m['user_to']['id']:
+                                msg += ' к %(user_to_delivered)s !!!'
+                                user_to_delivered = Misc.get_deeplink_with_name(m['user_to_delivered'])
+                        else:
+                            msg += 'Не доставлено, лишь сохранено'
+                        msg += '\nНиже само сообщение:'
+                        msg %= dict(
+                            n=n,
+                            datetime_string=Misc.datetime_string(m['timestamp']),
+                            user_from=Misc.get_deeplink_with_name(m['user_from']),
+                            user_to=Misc.get_deeplink_with_name(m['user_to']),
+                            user_to_delivered=user_to_delivered,
+                        )
+                        await bot.send_message(tg_user_sender.id, text=msg)
+                        try:
+                            await bot.forward_message(
+                                tg_user_sender.id,
+                                from_chat_id=m['from_chat_id'],
+                                message_id=m['message_id'],
+                            )
+                        except:
+                            await bot.send_message(
+                                tg_user_sender.id,
+                                text='Не удалось отобразить сообщение!',
+                            )
+                else:
+                    status_to, profile_to = await Misc.get_user_by_uuid(user_to_uuid)
+                    if status_to == 200:
+                        msg = '%(full_name)s не получал%(a)s от Вас сообщений' % dict(
+                            full_name=Misc.get_deeplink_with_name(profile_to),
+                            a='а' if profile_to.get('gender') == 'f' else '' if profile_to.get('gender') == 'm' else '(а)',
+                        )
+                    else:
+                        msg = 'Сообщения не найдены'
+                    await bot.send_message(tg_user_sender.id, text=msg)
+    callback.answer()

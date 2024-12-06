@@ -1190,7 +1190,7 @@ class Misc(object):
                 ))
 
                 edit_buttons_2 = [inline_btn_location, inline_btn_comment]
-                if editable and is_owned_account:
+                if False: # editable and is_owned_account:
                     dict_change_owner = dict(
                         keyboard_type=KeyboardType.CHANGE_OWNER,
                         uuid=profile['uuid'],
@@ -1215,7 +1215,7 @@ class Misc(object):
                 if edit_buttons_2:
                     buttons.append(edit_buttons_2)
 
-                if editable and not is_org:
+                if False: # editable and not is_org:
                     dict_papa_mama = dict(
                         keyboard_type=KeyboardType.FATHER,
                         uuid=profile['uuid'],
@@ -1253,7 +1253,7 @@ class Misc(object):
                         args_relatives.append(inline_btn_bro_sis)
                     buttons.append(args_relatives)
 
-                if editable:
+                if False: # editable:
                     dict_abwishkey = dict(
                         keyboard_type=KeyboardType.ABILITY,
                         uuid=profile['uuid'] if is_owned_account else '',
@@ -1275,7 +1275,8 @@ class Misc(object):
                     )
                     buttons.append([inline_btn_ability, inline_btn_wish, inline_btn_keys])
 
-        if editable:
+        if not is_own_account and \
+           (not response_relations or response_relations['to_from']['attitude'] != Attitude.MISTRUST):
             dict_message = dict(
                 keyboard_type=KeyboardType.SEND_MESSAGE,
                 uuid=profile['uuid'],
