@@ -3791,9 +3791,9 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
             )
             if m['operation_type_id']:
                 if m['operation_type_id'] == OperationType.NULLIFY_ATTITUDE:
-                    msg += 'в связи с тем что не знаком(а) с\n'
-                if m['operation_type_id'] == OperationType.NULLIFY_ACQ:
-                    msg += 'в связи с установкой знакомства с\n'
+                    msg += 'в связи с тем что не знаком(а)\n'
+                elif m['operation_type_id'] == OperationType.ACQ:
+                    msg += 'в связи с установкой знакомства\n'
                 elif m['operation_type_id'] == OperationType.MISTRUST:
                     msg += 'в связи с утратой доверия\n'
                 elif m['operation_type_id'] == OperationType.TRUST:
@@ -3830,9 +3830,9 @@ async def process_callback_show_messages(callback_query: types.CallbackQuery, st
                     disable_web_page_preview=True,
                 )
     else:
-        status_to, profile_to = await Misc.get_user_by_uuid(uuid)
+        status_to, profile_to = await Misc.get_user_by_uuid(user_to_uuid)
         if status_to == 200:
-            msg = '%(full_name)s не получал%(a)s сообщений' % dict(
+            msg = '%(full_name)s не получал%(a)s от Вас сообщений' % dict(
                 full_name=Misc.get_deeplink_with_name(profile_to, bot_data),
                 a='а' if profile_to.get('gender') == 'f' else '' if profile_to.get('gender') == 'm' else '(а)',
             )

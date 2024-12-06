@@ -1311,7 +1311,8 @@ class Misc(object):
                     )
                     reply_markup.row(inline_btn_ability, inline_btn_wish, inline_btn_keys)
 
-        if editable:
+        if False: # editable:
+            # Оключаем здесь сообщения. В новой версии aiogram включим
             dict_message = dict(
                 keyboard_type=KeyboardType.SEND_MESSAGE,
                 uuid=response_to['uuid'],
