@@ -12,7 +12,7 @@ from aiogram.enums import ChatType
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command, StateFilter
 from aiogram.enums.message_entity_type import MessageEntityType
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
 from youtube_upload import upload_video
 
@@ -322,10 +322,13 @@ async def process_group_message(message: Message, state: FSMContext):
                             os.unlink(fname)
                             fname = None
                     if not fname:
-                        await bot.send_message(
-                            tg_user_sender.id,
-                            'Ошибка скачивания видео из сообщения. Не слишком ли большой файл?'
-                        )
+                        try:
+                            await bot.send_message(
+                                tg_user_sender.id,
+                                'Ошибка скачивания видео из сообщения. Не слишком ли большой файл?'
+                            )
+                        except (TelegramBadRequest, TelegramForbiddenError,):
+                            pass
                     else:
                         description = (
                             f'Профиль автора: {response_from["first_name"]}, '
@@ -341,10 +344,13 @@ async def process_group_message(message: Message, state: FSMContext):
                                 description=description,
                         ))
                         if error:
-                            await bot.send_message(
-                                tg_user_sender.id,
-                                f'Ошибка загрузки видео:\n{error}'
-                            )
+                            try:
+                                await bot.send_message(
+                                    tg_user_sender.id,
+                                    f'Ошибка загрузки видео:\n{error}'
+                                )
+                            except (TelegramBadRequest, TelegramForbiddenError,):
+                                pass
                         else:
                             href = f'https://www.youtube.com/watch?v={response["id"]}'
                             try:
@@ -437,9 +443,9 @@ async def echo_join_chat_request(message: ChatJoinRequest):
                 text=msg,
                 disable_web_page_preview=True
             )
-        except TelegramBadRequest:
+            return
+        except (TelegramBadRequest, TelegramForbiddenError,):
             pass
-        return
 
     status, response_add_member = await TgGroupMember.add(
         group_chat_id=message.chat.id,
@@ -464,7 +470,7 @@ async def echo_join_chat_request(message: ChatJoinRequest):
     ) %  msg_dict
     try:
         await bot.send_message(chat_id=tg_subscriber.id, text=msg)
-    except TelegramBadRequest:
+    except (TelegramBadRequest, TelegramForbiddenError,):
         pass
     if is_channel:
         reply = '%(dl_subscriber)s подключен(а)' % msg_dict

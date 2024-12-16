@@ -14,7 +14,7 @@ from aiogram.types.login_url import LoginUrl
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.types.input_file import URLInputFile
 from aiogram.enums import ChatType
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.fsm.state import StatesGroup, State
 
 import aiohttp
@@ -1950,7 +1950,7 @@ class Misc(object):
                         disable_notification=True,
                         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else None,
                     )
-                except TelegramBadRequest:
+                except (TelegramBadRequest, TelegramForbiddenError,):
                     pass
 
             if not group_member and data.get('callback') and \
@@ -2018,7 +2018,7 @@ class Misc(object):
                             text=text_to_recipient,
                             disable_notification=True,
                         )
-                    except TelegramBadRequest:
+                    except (TelegramBadRequest, TelegramForbiddenError,):
                         pass
                 if operation_done and not profile_to.get('owner') and data.get('message_to_forward_id'):
                     try:

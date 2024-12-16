@@ -11,7 +11,7 @@ from aiogram.types import Message, CallbackQuery, ContentType, \
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.enums import ChatType
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
 from handler_bot import is_it_command
 
@@ -1243,7 +1243,7 @@ async def process_message_to_send(message: Message, state: FSMContext):
                                 message_id=message.message_id,
                             )
                             success = True
-                        except TelegramBadRequest:
+                        except (TelegramBadRequest, TelegramForbiddenError):
                             pass
                     if success:
                         msg_delivered = 'Сообщение доставлено'
@@ -1337,17 +1337,11 @@ async def cbq_show_messages(callback: CallbackQuery, state: FSMContext):
                             user_to_delivered=user_to_delivered,
                         )
                         await bot.send_message(tg_user_sender.id, text=msg)
-                        try:
-                            await bot.forward_message(
-                                tg_user_sender.id,
-                                from_chat_id=m['from_chat_id'],
-                                message_id=m['message_id'],
-                            )
-                        except:
-                            await bot.send_message(
-                                tg_user_sender.id,
-                                text='Не удалось отобразить сообщение!',
-                            )
+                        await bot.forward_message(
+                            tg_user_sender.id,
+                            from_chat_id=m['from_chat_id'],
+                            message_id=m['message_id'],
+                        )
                 else:
                     status_to, profile_to = await Misc.get_user_by_uuid(user_to_uuid)
                     if status_to == 200:

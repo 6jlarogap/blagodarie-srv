@@ -12,7 +12,7 @@ from aiogram.enums import ChatType
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command, StateFilter
 from aiogram.enums.message_entity_type import MessageEntityType
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.fsm.state import StatesGroup, State
 
 from handler_bot import is_it_command
@@ -219,7 +219,7 @@ class Offer(object):
                 text=cls.text_offer(user_from, offer, message),
                 reply_markup=cls.markup_offer(user_from, offer, message),
             )
-        except TelegramBadRequest:
+        except (TelegramBadRequest, TelegramForbiddenError,):
             await message.reply('Опрос-предложение предъявить не удалось')
 
     @classmethod
@@ -614,7 +614,7 @@ async def process_message_to_offer(message: Message, state: FSMContext):
                                     message_id=message.message_id,
                                 )
                                 delivered_to_user = True
-                            except TelegramBadRequest:
+                            except (TelegramBadRequest, TelegramForbiddenError,):
                                 pass
                         if delivered_to_user:
                             n_delivered += 1
