@@ -2517,7 +2517,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 )
                 legend_sympa = (
                     '<label for="table-sympa-%(user_id)s"><span style="color: %(color_sympa)s">Интерес:<span></label><br />'
-                    '<input type="checkbox" class="sympa" id="table-sympa-%(user_id)s" %(sympa_checked)s>'
+                    '<input type="checkbox" class="sympa" id="table-sympa-%(user_id)s" %(sympa_checked)s disabled>'
                 )
 
                 for i in range(max(len_m, len_f)):
