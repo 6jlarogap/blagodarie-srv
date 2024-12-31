@@ -2530,7 +2530,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     if i < len_m:
                         d['m'] = popup % list_m[i]
                         d['m_dob'] = list_m[i]['dob']
-                        if user_auth and list_m[i]['user_id'] != user_auth.pk:
+                        if false and user_auth and list_m[i]['user_id'] != user_auth.pk:
                             sympa_checked='checked' if list_m[i]['user_id'] in my_sympas else ''
                             d_sympa = dict(
                                 color_sympa=color_sympa if sympa_checked else 'system-color',
@@ -2541,7 +2541,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     if i < len_f:
                         d['f'] = popup_f % list_f[i]
                         d['f_dob'] = list_f[i]['dob']
-                        if user_auth and list_f[i]['user_id'] != user_auth.pk:
+                        if false and user_auth and list_f[i]['user_id'] != user_auth.pk:
                             sympa_checked='checked' if list_f[i]['user_id'] in my_sympas else ''
                             d_sympa = dict(
                                 color_sympa=color_sympa if sympa_checked else 'system-color',
