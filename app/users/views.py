@@ -2516,9 +2516,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     '</tr>'
                 )
                 legend_sympa = (
-""" временно скрываем интерес чтобы Женю не дёргать на НГ   
                     '<label for="table-sympa-%(user_id)s"><span style="color: %(color_sympa)s">Интерес:<span></label><br />'
-"""
                     '<input type="checkbox" class="sympa" id="table-sympa-%(user_id)s" %(sympa_checked)s disabled>'
                 )
 
