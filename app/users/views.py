@@ -2515,10 +2515,10 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         '<td align="right" style="border-bottom: 2px solid;"">%(f)s</td>'
                     '</tr>'
                 )
-                legend_sympa = (
-                    '<label for="table-sympa-%(user_id)s"><span style="color: %(color_sympa)s">Интерес:<span></label><br />'
-                    '<input type="checkbox" class="sympa" id="table-sympa-%(user_id)s" %(sympa_checked)s disabled>'
-                )
+                # legend_sympa = (
+                #     '<label for="table-sympa-%(user_id)s"><span style="color: %(color_sympa)s">Интерес:<span></label><br />'
+                #     '<input type="checkbox" class="sympa" id="table-sympa-%(user_id)s" %(sympa_checked)s disabled>'
+                # )
 
                 for i in range(max(len_m, len_f)):
                     d = dict(
@@ -2535,7 +2535,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                                 user_id=list_m[i]['user_id'],
                                 sympa_checked=sympa_checked,
                             )
-                            d['m_sympa'] = legend_sympa % d_sympa
+                            d['m_sympa'] = '' # legend_sympa % d_sympa
                     if i < len_f:
                         d['f'] = popup_f % list_f[i]
                         d['f_dob'] = list_f[i]['dob']
@@ -2546,7 +2546,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                                 user_id=list_f[i]['user_id'],
                                 sympa_checked=sympa_checked,
                             )
-                            d['f_sympa'] = legend_sympa % d_sympa
+                            d['f_sympa'] = '' # legend_sympa % d_sympa
                     legend += legend_user % d
             legend += '</table><br /><br />'
             graph = dict(nodes=nodes, links=links)
