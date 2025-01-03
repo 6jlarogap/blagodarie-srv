@@ -339,7 +339,7 @@ async def process_message_meet_dob(message: Message, state: FSMContext):
             await meet_do_or_revoke(data)
         else:
             await state.set_state(FSMmeet.ask_geo)
-            await meet_quest_geo(state, data)
+            await meet_quest_geo(state)
     else:
         await state.clear()
 
