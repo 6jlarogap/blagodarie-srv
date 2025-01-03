@@ -2353,6 +2353,11 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             num_all = len(coords)
 
         elif meet:
+            if request.GET.get('common'):
+                meet_admin = False
+            else:
+                meet_admin = user_auth and user_auth.profile.editable
+            graph = None
             color_sympa = 'darkorange'
             list_m = []
             list_f = []
@@ -2423,16 +2428,14 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 q_meet &= Q(dob__gte=d_younger)
             except (TypeError, ValueError,):
                 pass
-            nodes = []
-            links = []
-            user_pks = []
-            fmt = '3d-force-graph'
             if user_auth:
                 my_sympas = [
                     cs.user_to.pk for cs in CurrentState.objects.filter(
                         user_from=user_auth, user_to__isnull=False,
                         is_sympa=True, is_sympa_reverse=False,
                 )]
+            nodes = []
+            user_pks = []
             for p in Profile.objects.filter(q_meet).order_by('dob').select_related('user').distinct():
                 color = None; frame = 0
                 if user_auth and p.user.pk in my_sympas:
@@ -2456,30 +2459,35 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     # fool proof
                     continue
                 num_all += 1
-                nodes.append(dict(
-                    id=p.user.pk,
-                    uuid=p.uuid,
-                    username=p.user.username,
-                    first_name=p.user.first_name,
-                    photo=dict_user['url_photo_popup'],
-                    gender=p.gender,
-                ))
-                user_pks.append(p.user.pk)
-            q_connections = \
-                Q(user_to__isnull=False) & \
-                (Q(attitude__isnull=False, is_reverse=False) | Q(is_invite_meet=True, is_invite_meet_reverse=False))
-            links = []
-            for cs in CurrentState.objects.filter(q_connections).filter(
-                    user_from__in=user_pks, user_to__in=user_pks,
-                    ).select_related(
-                        'user_from__profile', 'user_to__profile',
-                    ).distinct():
-                if cs.attitude is not None and not cs.is_reverse:
-                    links.append(cs.data_dict(show_attitude=True,fmt=fmt,))
-                if cs.is_invite_meet and not cs.is_invite_meet_reverse:
-                    links.append(cs.data_dict(show_invite_meet=True,fmt=fmt,))
-                if cs.is_sympa and not cs.is_sympa_reverse:
-                    links.append(cs.data_dict(show_sympa=True,fmt=fmt,))
+                if meet_admin:
+                    nodes.append(dict(
+                        id=p.user.pk,
+                        uuid=p.uuid,
+                        username=p.user.username,
+                        first_name=p.user.first_name,
+                        photo=dict_user['url_photo_popup'],
+                        gender=p.gender,
+                    ))
+                    user_pks.append(p.user.pk)
+            if meet_admin:
+                q_connections = \
+                    Q(user_to__isnull=False) & \
+                    (Q(attitude__isnull=False, is_reverse=False) | Q(is_invite_meet=True, is_invite_meet_reverse=False))
+                links = []
+                fmt = '3d-force-graph'
+                for cs in CurrentState.objects.filter(q_connections).filter(
+                        user_from__in=user_pks, user_to__in=user_pks,
+                        ).select_related(
+                            'user_from__profile', 'user_to__profile',
+                        ).distinct():
+                    if cs.attitude is not None and not cs.is_reverse:
+                        links.append(cs.data_dict(show_attitude=True,fmt=fmt,))
+                    if cs.is_invite_meet and not cs.is_invite_meet_reverse:
+                        links.append(cs.data_dict(show_invite_meet=True,fmt=fmt,))
+                    if cs.is_sympa and not cs.is_sympa_reverse:
+                        links.append(cs.data_dict(show_sympa=True,fmt=fmt,))
+                graph = dict(nodes=nodes, links=links)
+
             len_m = len(list_m)
             len_f = len(list_f)
             popup_f = (
@@ -2515,10 +2523,10 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         '<td align="right" style="border-bottom: 2px solid;"">%(f)s</td>'
                     '</tr>'
                 )
-                # legend_sympa = (
-                #     '<label for="table-sympa-%(user_id)s"><span style="color: %(color_sympa)s">Интерес:<span></label><br />'
-                #     '<input type="checkbox" class="sympa" id="table-sympa-%(user_id)s" %(sympa_checked)s disabled>'
-                # )
+                legend_sympa = (
+                    '<label for="table-sympa-%(user_id)s"><span style="color: %(color_sympa)s">Интерес:<span></label><br />'
+                    '<input type="checkbox" class="sympa" id="table-sympa-%(user_id)s" %(sympa_checked)s >'
+                )
 
                 for i in range(max(len_m, len_f)):
                     d = dict(
@@ -2535,7 +2543,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                                 user_id=list_m[i]['user_id'],
                                 sympa_checked=sympa_checked,
                             )
-                            d['m_sympa'] = '' # legend_sympa % d_sympa
+                            d['m_sympa'] = legend_sympa % d_sympa
                     if i < len_f:
                         d['f'] = popup_f % list_f[i]
                         d['f_dob'] = list_f[i]['dob']
@@ -2546,12 +2554,11 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                                 user_id=list_f[i]['user_id'],
                                 sympa_checked=sympa_checked,
                             )
-                            d['f_sympa'] = '' # legend_sympa % d_sympa
+                            d['f_sympa'] = legend_sympa % d_sympa
                     legend += legend_user % d
             legend += '</table><br /><br />'
-            graph = dict(nodes=nodes, links=links)
 
-            if request.GET.get('with_offers'):
+            if meet_admin and request.GET.get('with_offers'):
                 q_offer_geo = Q(closed_timestamp__isnull=True)
                 if in_rectangle:
                     q_offer_geo &= q_rectangle
