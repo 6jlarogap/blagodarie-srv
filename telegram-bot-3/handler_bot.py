@@ -107,7 +107,7 @@ async def cmd_setplace(message: Message, state: FSMContext):
 async def cmd_new_person(message: Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
-        if not Misc.editable(response_sender):
+        if not Misc.is_power(response_sender):
             return
         await state.set_state(FSMnewPerson.ask)
         await state.update_data(uuid=response_sender['uuid'])
@@ -123,7 +123,7 @@ async def cmd_new_person(message: Message, state: FSMContext):
 async def cmd_new_org(message: Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
-        if not Misc.editable(response_sender):
+        if not Misc.is_power(response_sender):
             return
         await state.set_state(FSMnewOrg.ask)
         await message.reply(Misc.PROMPT_NEW_ORG, reply_markup=Misc.reply_markup_cancel_row())
@@ -139,7 +139,7 @@ async def cmd_find(message: Message, state: FSMContext):
     message_text = message.text.split()[0].lstrip('/')
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
-        if not Misc.editable(response_sender):
+        if not Misc.is_power(response_sender):
             return
         if message_text == 'findpotr':
             what = 'query_wish'
@@ -391,7 +391,7 @@ async def cmd_start(message: Message, state: FSMContext):
 async def cmd_getowned(message: Message, state: FSMContext):
     status, response_from = await Misc.post_tg_user(message.from_user)
     if status == 200:
-        if not Misc.editable(response_from):
+        if not Misc.is_power(response_from):
             return
         try:
             status, a_response_to = await Misc.api_request(

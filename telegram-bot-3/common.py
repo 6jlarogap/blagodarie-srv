@@ -629,7 +629,7 @@ class Misc(object):
         return result
 
     @classmethod
-    def reply_user_card(cls, response_from, response_to, editable):
+    def reply_user_card(cls, response_from, response_to, is_power):
         """
         Карточка пользователя, каким он на сайте
 
@@ -682,7 +682,7 @@ class Misc(object):
         reply += '\n'
 
         keys = []
-        if editable and (response_to['is_active'] or response_to.get('owner')):
+        if is_power and (response_to['is_active'] or response_to.get('owner')):
             abilities_text = '\n'.join(
                 html.quote(ability['text']) for ability in response_to['abilities']
             ) if response_to.get('abilities') else 'не заданы'
@@ -728,7 +728,7 @@ class Misc(object):
         return reply
 
     @classmethod
-    def editable(cls, profile, sender=None):
+    def is_power(cls, profile, sender=None):
         """
         Можно ли sender'у править в карточке profile
 
@@ -737,10 +737,10 @@ class Misc(object):
         if not sender:
             sender = profile
         return      profile.get('owner') and \
-                        profile['owner'].get('editable') and profile['owner']['uuid'] == sender['uuid'] \
+                        profile['owner'].get('is_power_telegram') and profile['owner']['uuid'] == sender['uuid'] \
                or \
                     not profile.get('owner') and \
-                    profile.get('editable') and profile['uuid'] == sender['uuid']
+                    profile.get('is_power_telegram') and profile['uuid'] == sender['uuid']
 
 
     @classmethod
@@ -1035,9 +1035,9 @@ class Misc(object):
         is_own_account = user_from_id == profile['user_id']
         is_owned_account = profile.get('owner') and profile['owner']['user_id'] == user_from_id
         is_org = profile.get('is_org')
-        editable = cls.editable(profile=profile, sender=profile_sender)
+        is_power = cls.is_power(profile=profile, sender=profile_sender)
 
-        reply = cls.reply_user_card(profile_sender, profile, editable)
+        reply = cls.reply_user_card(profile_sender, profile, is_power)
         response_relations = {}
         if user_from_id != profile['user_id']:
             status_relations, response_relations = await cls.call_response_relations(profile_sender, profile)
@@ -1108,7 +1108,7 @@ class Misc(object):
             ))
         login_url_buttons = [inline_btn_trusts, ]
 
-        if editable and not is_org:
+        if is_power and not is_org:
             inline_btn_genesis = InlineKeyboardButton(
                 text='Род',
                 login_url=cls.make_login_url(
@@ -1153,7 +1153,7 @@ class Misc(object):
                     sep=KeyboardType.SEP,
                 ))
                 edit_buttons_1 = []
-                if editable:
+                if is_power:
                     edit_buttons_1 += [inline_btn_iof, inline_btn_photo,]
                 if not is_org:
                     inline_btn_gender = InlineKeyboardButton(
@@ -1190,7 +1190,7 @@ class Misc(object):
                 ))
 
                 edit_buttons_2 = [inline_btn_location, inline_btn_comment]
-                if False: # editable and is_owned_account:
+                if False: # is_power and is_owned_account:
                     dict_change_owner = dict(
                         keyboard_type=KeyboardType.CHANGE_OWNER,
                         uuid=profile['uuid'],
@@ -1215,7 +1215,7 @@ class Misc(object):
                 if edit_buttons_2:
                     buttons.append(edit_buttons_2)
 
-                if False: # editable and not is_org:
+                if False: # is_power and not is_org:
                     dict_papa_mama = dict(
                         keyboard_type=KeyboardType.FATHER,
                         uuid=profile['uuid'],
@@ -1253,7 +1253,7 @@ class Misc(object):
                         args_relatives.append(inline_btn_bro_sis)
                     buttons.append(args_relatives)
 
-                if False: # editable:
+                if False: # is_power:
                     dict_abwishkey = dict(
                         keyboard_type=KeyboardType.ABILITY,
                         uuid=profile['uuid'] if is_owned_account else '',

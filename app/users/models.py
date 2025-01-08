@@ -364,7 +364,6 @@ class Profile(PhotoModel, GeoPointAddressModel):
     uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
     middle_name = models.CharField(_("Отчество"), max_length=255, blank=True, default='')
     is_notified = models.BooleanField(_("Принимает уведомления"), default=True)
-    editable = models.BooleanField(_("Допущено редактирование"), default=False)
     fame = models.PositiveIntegerField(_("Известность"), default=0)
     sum_thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
     trust_count = models.PositiveIntegerField(_("Число оказанных доверий"), default=0)
@@ -433,7 +432,6 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 first_name=user.first_name,
                 trust_count=self.trust_count,
                 acq_count=self.acq_count,
-                editable=self.editable,
                 did_meet=self.did_meet,
             )
         else:
@@ -446,7 +444,8 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 middle_name=self.middle_name,
                 photo=photo,
                 is_notified=self.is_notified,
-                editable=self.editable,
+                is_meetgame_admin=self.is_meetgame_admin(),
+                is_power_telegram=self.is_power_telegram(),
                 sum_thanks_count=self.sum_thanks_count,
                 fame=self.fame,
                 mistrust_count=self.mistrust_count,
@@ -468,6 +467,12 @@ class Profile(PhotoModel, GeoPointAddressModel):
             )
         return result
 
+    def is_power_telegram(self):
+        return self.user.groups.filter(pk=settings.GROUP_IDS['power_telegram']).exists()
+
+    def is_meetgame_admin(self):
+        return self.user.groups.filter(pk=settings.GROUP_IDS['meetgame_admin']).exists()
+
     def owner_dict(self, request=None):
         owner = {}
         if self.owner:
@@ -476,7 +481,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 uuid=self.owner.profile.uuid,
                 username=self.owner.username,
                 first_name=self.owner.first_name,
-                editable=self.owner.profile.editable,
+                is_power=self.owner.profile.is_power(),
             )
         return dict(owner=owner)
 

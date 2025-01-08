@@ -2353,10 +2353,10 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             num_all = len(coords)
 
         elif meet:
-            if request.GET.get('common'):
-                meet_admin = False
+            if request.GET.get('admin'):
+                meet_admin = user_auth and user_auth.profile.is_meetgame_admin()
             else:
-                meet_admin = user_auth and user_auth.profile.editable
+                meet_admin = False
             graph = None
             color_sympa = 'darkorange'
             list_m = []

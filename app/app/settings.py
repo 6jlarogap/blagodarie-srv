@@ -503,6 +503,15 @@ LOGGING = {
 
 VIDEO_VOTE_URL = 'https://6jlarogap.github.io/razum/'
 
+# ИД группы пользователей, которые что-то могут
+#
+GROUP_IDS = dict(
+    # могут расширенно править свой профиль в телеграме, например, вносить родственников
+    #
+    power_telegram=1,
+    meetgame_admin=2,
+)
+
 try:
     from app.local_settings import *
 except ModuleNotFoundError:
