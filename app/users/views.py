@@ -2429,7 +2429,10 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             nodes = []
             user_pks = []
             popup_meet = (
-                '<table>'
+                '<table style="width:100%%">'
+                '<col width="15%%" />'
+                '<col width="25%%" />'
+                '<col width="60%%" />'
                 '<tr>'
                     '<td valign=center>'
                         '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
@@ -2498,7 +2501,10 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             len_f = len(list_f)
             popup_m = popup_meet
             popup_f = (
-                '<table>'
+                '<table style="width:100%%">'
+                '<col width="60%%" />'
+                '<col width="25%%" />'
+                '<col width="15%%" />'
                 '<tr>'
                     '<td valign=center">%(comment)s'
                     '</td>'
