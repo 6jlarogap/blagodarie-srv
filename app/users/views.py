@@ -2198,6 +2198,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             url_deeplink=url_deeplink,
             latitude=profile.latitude,
             longitude=profile.longitude,
+            comment=profile.comment and profile.comment.replace("\n", "<br />") or '',
             url_photo_popup=Profile.image_thumb(
                 self.request, profile.photo,
                 method=method,
@@ -2365,35 +2366,25 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             list_f = []
             legend = (
                 '<br />'
-                '<table style="border-spacing: 0;border-top: 2px solid;width: 100%;">'
-                '<col width="30%" />'
+                '<table style="border-spacing: 0;border-top: 2px solid;width:100%;">'
+                '<col width="40%" />'
                 '<col width="10%" />'
                 '<col width="10%" />'
-                '<col width="10%" />'
-                '<col width="10%" />'
-                '<col width="30%" />'
+                '<col width="40%" />'
                 '<tr>'
                     '<td style="text-align:center;border-bottom: 2px solid";">М</td>'
-                    '<td style="text-align:center;border-bottom: 2px solid;"></td>'
                     '<td style="text-align:center;border-bottom: 2px solid;border-right: 1px solid;"></td>'
-                    '<td style="text-align:center;border-bottom: 2px solid";"></td>'
                     '<td style="text-align:center;border-bottom: 2px solid";"></td>'
                     '<td style="text-align:center;border-bottom: 2px solid;">Ж</td>'
                 '</tr>'
-            ) if user_auth else (
+            ) if meet_admin else (
                 '<br />'
-                '<table style="border-spacing: 0;border-top: 2px solid;width: 100%;">'
-                '<col width="40%" />'
+                '<table style="border-spacing: 0;border-top: 2px solid;width:100%;">'
+                '<col width="80%" />'
                 '<col width="10%" />'
                 '<col width="10%" />'
-                '<col width="40%" />'
-                '<tr>'
-                    '<td style="text-align:center;border-bottom: 2px solid";">М</td>'
-                    '<td style="text-align:center;border-bottom: 2px solid;border-right: 1px solid;"></td>'
-                    '<td style="text-align:center;border-bottom: 2px solid";"></td>'
-                    '<td style="text-align:center;border-bottom: 2px solid;">Ж</td>'
-                '</tr>'
             )
+
             # Участники игры должны указывать пол, д.р. и место,
             # однако не исключаем, что место и д.р. затёрли
             #
@@ -2437,6 +2428,20 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             )]
             nodes = []
             user_pks = []
+            popup_meet = (
+                '<table>'
+                '<tr>'
+                    '<td valign=center>'
+                        '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
+                    '</td>'
+                    '<td valign=center>'
+                        ' %(full_name)s (%(trust_count)s)<br />'
+                    '</td>'
+                    '<td valign=center align=center">%(comment)s'
+                    '</td>'
+                '</tr>'
+                '</table>'
+            )
             for p in Profile.objects.filter(q_meet).order_by('dob').select_related('user').distinct():
                 color = None; frame = 0
                 if p.user.pk in my_sympas:
@@ -2447,7 +2452,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         latitude=p.latitude,
                         longitude=p.longitude,
                         title=title_template % dict_user,
-                        popup=popup % dict_user,
+                        popup=popup_meet % dict_user,
                         icon=dict_user['url_photo_icon'],
                         is_of_found_user=False,
                         size_icon=dict_user['thumb_size_icon'],
@@ -2491,30 +2496,40 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
 
             len_m = len(list_m)
             len_f = len(list_f)
+            popup_m = popup_meet
             popup_f = (
                 '<table>'
                 '<tr>'
-                    '<td valign=top>'
-                        ' %(full_name)s (%(trust_count)s)<br />'
-                        ' <a href="%(url_deeplink)s" target="_blank">Профиль</a><br />'
-                        '%(link_on_map)s'
-                        ' <a href="%(url_profile)s" target="_blank">Доверия</a>'
+                    '<td valign=center">%(comment)s'
                     '</td>'
-                    '<td valign=top>'
+                    '<td valign=center>'
+                        ' %(full_name)s (%(trust_count)s)'
+                    '</td>'
+                    '<td valign=center>'
                         '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
                     '</td>'
                 '</tr>'
                 '</table>'
-            )
+            ) if meet_admin else popup_m
             if len_f or len_m:
                 legend_user = (
                     '<tr style="border-bottom: 2px solid">'
                         '<td align="left" style="border-bottom: 2px solid;">%(m)s</td>'
-                        '<td style="text-align:center;border-bottom: 2px solid;">%(m_dob)s</td>'
-                        '<td style="text-align:center;border-bottom: 2px solid;border-right: 1px solid;">%(m_sympa)s</td>'
-                        '<td style="text-align:center;border-bottom: 2px solid">%(f_sympa)s</td>'
+                        '<td style="text-align:center;border-bottom: 2px solid;border-right: 1px solid;">%(m_dob)s</td>'
                         '<td style="text-align:center;border-bottom: 2px solid;">%(f_dob)s</td>'
                         '<td align="right" style="border-bottom: 2px solid;"">%(f)s</td>'
+                    '</tr>'
+                ) if meet_admin else (
+                    '<tr style="border-bottom: 2px solid">'
+                        '<td align="left" style="border-bottom: 2px solid;">%(m)s</td>'
+                        '<td style="text-align:center;border-bottom: 2px solid;">%(m_dob)s</td>'
+                        '<td style="text-align:center;border-bottom: 2px solid;">%(m_sympa)s</td>'
+                    '</tr>'
+                ) if user_auth.profile.gender == 'f' else (
+                    '<tr style="border-bottom: 2px solid">'
+                        '<td align="left" style="border-bottom: 2px solid;">%(f)s</td>'
+                        '<td style="text-align:center;border-bottom: 2px solid;">%(f_dob)s</td>'
+                        '<td style="text-align:center;border-bottom: 2px solid;">%(f_sympa)s</td>'
                     '</tr>'
                 )
                 legend_sympa = (
@@ -2528,9 +2543,9 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         f='', f_dob='', f_sympa='',
                     )
                     if i < len_m:
-                        d['m'] = popup % list_m[i]
+                        d['m'] = popup_m % list_m[i]
                         d['m_dob'] = list_m[i]['dob']
-                        if list_m[i]['user_id'] != user_auth.pk:
+                        if list_m[i]['user_id'] != user_auth.pk and not meet_admin:
                             sympa_checked='checked' if list_m[i]['user_id'] in my_sympas else ''
                             d_sympa = dict(
                                 color_sympa=color_sympa if sympa_checked else 'system-color',
@@ -2541,7 +2556,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     if i < len_f:
                         d['f'] = popup_f % list_f[i]
                         d['f_dob'] = list_f[i]['dob']
-                        if list_f[i]['user_id'] != user_auth.pk:
+                        if list_f[i]['user_id'] != user_auth.pk and not meet_admin:
                             sympa_checked='checked' if list_f[i]['user_id'] in my_sympas else ''
                             d_sympa = dict(
                                 color_sympa=color_sympa if sympa_checked else 'system-color',
