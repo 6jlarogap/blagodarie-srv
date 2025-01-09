@@ -2353,8 +2353,10 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             num_all = len(coords)
 
         elif meet:
+            if not user_auth:
+                raise NotAuthenticated
             if request.GET.get('admin'):
-                meet_admin = user_auth and user_auth.profile.is_meetgame_admin()
+                meet_admin = user_auth.profile.is_meetgame_admin()
             else:
                 meet_admin = False
             graph = None
@@ -2428,17 +2430,16 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 q_meet &= Q(dob__gte=d_younger)
             except (TypeError, ValueError,):
                 pass
-            if user_auth:
-                my_sympas = [
-                    cs.user_to.pk for cs in CurrentState.objects.filter(
-                        user_from=user_auth, user_to__isnull=False,
-                        is_sympa=True, is_sympa_reverse=False,
-                )]
+            my_sympas = [
+                cs.user_to.pk for cs in CurrentState.objects.filter(
+                    user_from=user_auth, user_to__isnull=False,
+                    is_sympa=True, is_sympa_reverse=False,
+            )]
             nodes = []
             user_pks = []
             for p in Profile.objects.filter(q_meet).order_by('dob').select_related('user').distinct():
                 color = None; frame = 0
-                if user_auth and p.user.pk in my_sympas:
+                if p.user.pk in my_sympas:
                     color = color_sympa; frame=5
                 dict_user = self.popup_data(p, color, frame)
                 if p.latitude is not None and p.longitude is not None:
@@ -2515,13 +2516,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         '<td style="text-align:center;border-bottom: 2px solid;">%(f_dob)s</td>'
                         '<td align="right" style="border-bottom: 2px solid;"">%(f)s</td>'
                     '</tr>'
-                ) if user_auth else (
-                    '<tr style="border-bottom: 2px solid">'
-                        '<td align="left" style="border-bottom: 2px solid;">%(m)s</td>'
-                        '<td style="text-align:center;border-bottom: 2px solid;border-right: 1px solid;">%(m_dob)s</td>'
-                        '<td style="text-align:center;border-bottom: 2px solid;">%(f_dob)s</td>'
-                        '<td align="right" style="border-bottom: 2px solid;"">%(f)s</td>'
-                    '</tr>'
                 )
                 legend_sympa = (
                     '<label for="table-sympa-%(user_id)s"><span style="color: %(color_sympa)s">Интерес:<span></label><br />'
@@ -2536,7 +2530,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     if i < len_m:
                         d['m'] = popup % list_m[i]
                         d['m_dob'] = list_m[i]['dob']
-                        if user_auth and list_m[i]['user_id'] != user_auth.pk:
+                        if list_m[i]['user_id'] != user_auth.pk:
                             sympa_checked='checked' if list_m[i]['user_id'] in my_sympas else ''
                             d_sympa = dict(
                                 color_sympa=color_sympa if sympa_checked else 'system-color',
@@ -2547,7 +2541,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     if i < len_f:
                         d['f'] = popup_f % list_f[i]
                         d['f_dob'] = list_f[i]['dob']
-                        if user_auth and list_f[i]['user_id'] != user_auth.pk:
+                        if list_f[i]['user_id'] != user_auth.pk:
                             sympa_checked='checked' if list_f[i]['user_id'] in my_sympas else ''
                             d_sympa = dict(
                                 color_sympa=color_sympa if sympa_checked else 'system-color',
