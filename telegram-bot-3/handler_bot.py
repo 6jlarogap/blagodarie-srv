@@ -794,7 +794,7 @@ async def process_meet_from_deeplink_and_command(message, state, data):
         inline_btn_map = InlineKeyboardButton(
             text='Карта участников игры',
             login_url=Misc.make_login_url(
-                redirect_path=settings.MAP_HOST + '/?meet=on',
+                redirect_path=settings.MEET_HOST,
                 keep_user_data='on'
         ))
         buttons.append([inline_btn_map])
