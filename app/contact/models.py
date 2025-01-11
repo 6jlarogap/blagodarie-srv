@@ -785,6 +785,7 @@ class ApiAddOperationMixin(object):
             )
 
         elif operationtype_id == OperationType.SET_SYMPA:
+            is_sympa_previous = None
             currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
                 user_from=user_from,
                 user_to=user_to,
@@ -792,6 +793,8 @@ class ApiAddOperationMixin(object):
                     is_sympa=True,
             ))
             if not created_:
+                if not currentstate.is_sympa_reverse:
+                    is_sympa_previous = currentstate.is_sympa
                 if not currentstate.is_sympa_reverse and currentstate.is_sympa == True:
                     # Уже установлена симпатия
                     pass
@@ -801,6 +804,7 @@ class ApiAddOperationMixin(object):
                     currentstate.is_sympa = True
                     currentstate.save()
 
+            data.update(previousstate=dict(is_sympa=is_sympa_previous))
             reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
                 user_to=user_from,
                 user_from=user_to,

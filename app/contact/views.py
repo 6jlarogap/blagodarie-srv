@@ -363,7 +363,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     profile_to=profile_to_data,
                 )
 
-            if not got_tg_token and profile_to.is_notified and settings.SEND_TO_TELEGRAM and \
+            if not got_tg_token and settings.SEND_TO_TELEGRAM and \
                operationtype_id in (
                    OperationType.TRUST_OR_THANK,
                    OperationType.THANK,
@@ -371,8 +371,13 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                    OperationType.TRUST,
                    OperationType.NULLIFY_ATTITUDE,
                    OperationType.ACQ,
+                   OperationType.SET_SYMPA,
                ):
-                message = None
+                message_to = message_from = None
+                options = dict(
+                    disable_web_page_preview=True,
+                    disable_notification=True,
+                )
                 bot_username = self.get_bot_username()
                 dl_from_t = (
                     f'{self.get_deeplink_name(user_from, bot_username)} '
@@ -384,24 +389,49 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 )
                 if operationtype_id == OperationType.TRUST_OR_THANK:
                     if data['previousstate']['attitude'] == CurrentState.TRUST:
-                        message = f'{dl_from_t} благодарит ({data["currentstate"]["thanks_count"]}) {dl_to_t}'
+                        message_to = f'{dl_from_t} благодарит ({data["currentstate"]["thanks_count"]}) {dl_to_t}'
                     else:
-                        message = f'{dl_from_t} доверяет {dl_to_t}'
+                        message_to = f'{dl_from_t} доверяет {dl_to_t}'
                 elif operationtype_id == OperationType.THANK:
-                    message = f'{dl_from_t} благодарит ({data["currentstate"]["thanks_count"]}) {dl_to_t}'
+                    message_to = f'{dl_from_t} благодарит ({data["currentstate"]["thanks_count"]}) {dl_to_t}'
                 elif operationtype_id == OperationType.MISTRUST:
-                    message = f'{dl_from_t} не доверяет {dl_to_t}'
+                    message_to = f'{dl_from_t} не доверяет {dl_to_t}'
                 elif operationtype_id == OperationType.TRUST:
-                    message = f'{dl_from_t} доверяет {dl_to_t}'
+                    message_to = f'{dl_from_t} доверяет {dl_to_t}'
                 elif operationtype_id == OperationType.ACQ:
-                    message = f'{dl_from_t} знаком(а) с {dl_to_t}'
+                    message_to = f'{dl_from_t} знаком(а) с {dl_to_t}'
                 elif operationtype_id == OperationType.NULLIFY_ATTITUDE:
-                    message = f'{dl_from_t} не знаком(а) с {dl_to_t}'
-                if message:
-                    self.send_to_telegram(message, user=user_to, options=dict(
-                        disable_web_page_preview=True,
-                        disable_notification=True,
-                    ))
+                    message_to = f'{dl_from_t} не знаком(а) с {dl_to_t}'
+
+                elif operationtype_id == OperationType.SET_SYMPA and \
+                    'is_sympa' in data.get('previousstate', {}) and \
+                     not data['previousstate']['is_sympa'] and \
+                     CurrentState.objects.filter(
+                         user_from=user_to, user_to=user_from,
+                         is_sympa=True, is_sympa_reverse=False,
+                     ).exists():
+                    message_to = message_from = f'У вас взаимный интерес! Желаем удачи!'
+                    options.update(
+                        reply_markup=dict(
+                            inline_keyboard=[[
+                                dict(
+                                    text='Продолжить',
+                                    url=None,
+                                )
+                    ]]))
+
+                if message_to and profile_to.is_notified:
+                    if operationtype_id == OperationType.SET_SYMPA:
+                        (options['reply_markup']['inline_keyboard'][0][0]).update(
+                            url=self.get_deeplink(user_from, bot_username)
+                        )
+                    self.send_to_telegram(message_to, user=user_to, options=options)
+                if message_from and profile_from.is_notified:
+                    if operationtype_id == OperationType.SET_SYMPA:
+                        (options['reply_markup']['inline_keyboard'][0][0]).update(
+                            url=self.get_deeplink(user_to, bot_username)
+                        )
+                    self.send_to_telegram(message_from, user=user_from, options=options)
 
             status_code = status.HTTP_200_OK
 
