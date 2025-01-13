@@ -1196,7 +1196,6 @@ async def process_message_to_send(message: Message, state: FSMContext):
         return
     msg_saved = 'Сообщение сохранено'
     data = await state.get_data()
-    await state.clear()
     if data.get('uuid'):
         status_to, profile_to = await Misc.get_user_by_uuid(data['uuid'], with_owner_tg_data=True)
         if status_to == 200:
@@ -1270,6 +1269,7 @@ async def process_message_to_send(message: Message, state: FSMContext):
                 )
             except:
                 pass
+    await state.clear()
 
 
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
