@@ -2173,6 +2173,40 @@ class Misc(object):
         return prompt, reply_markup
 
 
+    @classmethod
+    def redis_is_key_first_up(cls, key, ex=86400):
+        """
+        Вызывающий эту функцию первым установил ключ key?
+
+        Ключ должен быть достаточно уникальным, чтоб в течение
+        времени ex жизни ключа произошел вызов функции с этим
+        ключом. В телеграме это нетрудно достигнуть, например,
+        в случае коллажа сообщений с одним media_group_id
+        уникальность ключа, относящегося к коллажу,
+        будет достигнута: messsage.chat.id . media_group_id
+        """
+        value = 0
+        if r := redis.Redis(**settings.REDIS_CONNECT):
+            with r.pipeline() as pipe:
+                while True:
+                    try:
+                        pipe.watch(key)
+                        x = int(pipe.get(key) or 0)
+                        pipe.multi()
+                        value = x + 1
+                        pipe.set(key, value, ex=ex)
+                        pipe.execute()
+                        break
+                    except redis.WatchError as e:
+                        # https://learn.codesignal.com/preview/lessons/2765
+                        # if another client changes the key before the transaction is executed,
+                        # a redis.WatchError exception is raised,
+                        # and the transaction is retried - hence the continue statement.
+                        # Т.е.он снова выйдет на value = x + 1, но x к этому времени будет
+                        # уже больше.
+                        continue
+        return int(value) <= 1
+
 class TgGroup(object):
     """
     Список групп, где бот: внесение, удаление
