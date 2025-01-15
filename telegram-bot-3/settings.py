@@ -21,38 +21,22 @@ WEBAPP_PORT = 3001
 import logging
 LOG_CONFIG = dict(
     level = logging.INFO,
-
-    # Могут быть и другие параметры для журнала,
-    # например, для журнала в файл:
-    #
-    # filename='/path/to/file.log',
-    # filemode='a',
-    # format='%(asctime)s %(levelname)s %(message)s',
-    # datefmt='%d.%m.%y %H:%M:%S',
-    #
-    #
-)
-
-LOG_CONFIG = dict(
-    level = logging.INFO,
+    format='%(asctime)s.%(msecs)03d %(levelname)s %(message)s',
+    datefmt='%d.%m.%y %H:%M:%S',
 
     # Могут быть и другие параметры для журнала,
     # например, для ротируемого журнала в файл
-    #
-    #handlers=[
-        #RotatingFileHandler(
-            #filename='/path/to/bot.log',
-            #maxBytes=10*1024*1024,
-            #backupCount=10,
-    #)],
-    #format='%(asctime)s %(levelname)s %(message)s',
-    #datefmt='%d.%m.%y %H:%M:%S',
-
-    # Тогда надо переопределить LOG_CONFIG в
-    # settings_local.py.
-    # И если применяется RotatingFileHandler,
-    # то определить его:
+    # Тогда надо переопределить параметры LOG_CONFIG['handlers'] в
+    # settings_local.py, например:
     # from logging.handlers import RotatingFileHandler
+    # from settings import LOG_CONFIG
+    # LOG_CONFIG['handlers'] = [
+    #         StreamHandler(),
+    #         RotatingFileHandler(
+    #             filename='/home/user/tg-bot-log/tg-bot.log',
+    #             maxBytes=10*1024*1024,
+    #             backupCount=10,
+    # )]
 )
 
 
@@ -226,3 +210,4 @@ except ModuleNotFoundError:
     pass
 
 logging.basicConfig(**LOG_CONFIG)
+
