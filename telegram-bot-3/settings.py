@@ -136,6 +136,7 @@ VOTE_URL = 'https://6jlarogap.github.io/razum/'
 #           group_chat_id + REDIS_KEY_SEP +
 #           message.message_id
 #       с любым значением
+#   -   Написать сообщение в коллаже
 #
 REDIS_CONNECT =dict(
     # Параметры инициализации redis connection,
@@ -151,6 +152,7 @@ REDIS_MEDIA_GROUP_PREFIX = 'media_group_id_'
 REDIS_MEDIA_GROUP_TTL = 60
 REDIS_LAST_USERIN_GROUP_PREFIX = 'last_user_in_group_'
 REDIS_CARD_IN_GROUP_PREFIX = 'card_in_group'
+REDIS_SEND_MESSAGE_PREFIX = 'send_message'
 REDIS_KEY_SEP = '~'
 
 # Ид групп, в которые шлём карточки после сообщений участников, с параметрами.

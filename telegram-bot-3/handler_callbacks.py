@@ -1200,7 +1200,15 @@ async def process_message_to_send(message: Message, state: FSMContext):
         status_to, profile_to = await Misc.get_user_by_uuid(data['uuid'], with_owner_tg_data=True)
         if status_to == 200:
             status_from, profile_from = await Misc.post_tg_user(message.from_user)
-            if status_from == 200 and profile_from:
+            if status_from == 200:
+                # первое сообщение в коллаже или единственное
+                is_first = True
+                if message.media_group_id:
+                    key = (
+                        f'{settings.REDIS_SEND_MESSAGE_PREFIX}{settings.REDIS_KEY_SEP}'
+                        f'{message.from_user.id}{settings.REDIS_KEY_SEP}{message.media_group_id}'
+                    )
+                    is_first = Misc.redis_is_key_first_up(key, ex=300)
 
                 # Возможны варианты с получателем:
                 #   - самому себе                               нет смысла отправлять
@@ -1232,11 +1240,12 @@ async def process_message_to_send(message: Message, state: FSMContext):
                     success = False
                     for tgd in tg_user_to_tg_data:
                         try:
-                            await bot.send_message(
-                                tgd['tg_uid'],
-                                text=Misc.MSG_YOU_GOT_MESSAGE % Misc.get_deeplink_with_name(profile_from),
-                                disable_web_page_preview=True,
-                            )
+                            if is_first:
+                                await bot.send_message(
+                                    tgd['tg_uid'],
+                                    text=Misc.MSG_YOU_GOT_MESSAGE % Misc.get_deeplink_with_name(profile_from),
+                                    disable_web_page_preview=True,
+                                )
                             await bot.forward_message(
                                 tgd['tg_uid'],
                                 from_chat_id=message.chat.id,
@@ -1250,9 +1259,11 @@ async def process_message_to_send(message: Message, state: FSMContext):
                     else:
                         msg_delivered = msg_saved
                         user_to_delivered_uuid = None
-                    await message.reply(msg_delivered)
+                    if is_first:
+                        await message.reply(msg_delivered)
                 else:
-                    await message.reply(msg_saved)
+                    if is_first:
+                        await message.reply(msg_saved)
             payload_log_message = dict(
                 tg_token=settings.TOKEN,
                 from_chat_id=message.chat.id,
