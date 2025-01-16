@@ -1246,7 +1246,7 @@ async def process_message_to_send(message: Message, state: FSMContext):
                                     text=Misc.MSG_YOU_GOT_MESSAGE % Misc.get_deeplink_with_name(profile_from),
                                     disable_web_page_preview=True,
                                 )
-                            await bot.forward_message(
+                            await bot.copy_message(
                                 tgd['tg_uid'],
                                 from_chat_id=message.chat.id,
                                 message_id=message.message_id,
