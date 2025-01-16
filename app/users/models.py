@@ -384,6 +384,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
 
     comment = models.TextField(verbose_name=_("Примечание"), null=True)
     offer_answers = models.ManyToManyField('users.OfferAnswer', verbose_name=_("Ответы на опросы/предложения"))
+    tgdesc = models.ManyToManyField('users.TgDesc', verbose_name=_("Сообщения с описаниями"))
 
     did_meet = models.BigIntegerField(_("Установил знакомство (принял участие в игре знакомств)"), null=True)
 
@@ -936,37 +937,64 @@ class TelegramApiMixin(object):
     API_TELEGRAM = 'https://api.telegram.org'
     API_TIMEOUT = 20
 
-    def send_to_telegram(self, message, user=None, telegram_uid=None, options={}):
-        """
-        Сообщение в телеграм или пользователю user, или по telegram uid
-        """
+    def __get_tg_ids(self, user, telegram_uid):
+        result = []
         if not settings.SEND_TO_TELEGRAM:
             return
-
         uids = []
         if user:
             uids = [oauth.uid for oauth in Oauth.objects.filter(user=user, provider=Oauth.PROVIDER_TELEGRAM)]
         elif telegram_uid:
             uids = [telegram_uid]
+        return uids
 
-        for uid in uids:
-            url = '%s/bot%s/sendMessage' % (self.API_TELEGRAM, settings.TELEGRAM_BOT_TOKEN)
-            parms = dict(
-                chat_id=uid,
-                parse_mode='html',
-                text=message,
+    def __get_url_parms(self, func, options):
+        url = '%s/bot%s/%s' % (self.API_TELEGRAM, settings.TELEGRAM_BOT_TOKEN, func)
+        return url
+
+    def __make_request(self, url, parms):
+        success = False
+        try:
+            req = urllib.request.Request(
+                url,
+                json.dumps(parms).encode(),
+                headers={"Content-Type":"application/json"},
+                method='POST',
             )
-            parms.update(options)
-            try:
-                req = urllib.request.Request(
-                    url,
-                    json.dumps(parms).encode(),
-                    headers={"Content-Type":"application/json"},
-                    method='POST',
-                )
-                urllib.request.urlopen(req, timeout=self.API_TIMEOUT)
-            except (urllib.error.URLError, ):
-                pass
+            urllib.request.urlopen(req, timeout=self.API_TIMEOUT)
+            success = True
+        except urllib.error.URLError:
+            pass
+        return success
+
+
+    def send_to_telegram(self, message, user=None, telegram_uid=None, options={}):
+        success = False
+        uids = self.__get_tg_ids(user, telegram_uid)
+        if uids:
+            url = self.__get_url_parms('sendMessage', options)
+            if not options.get('parse_mode'):
+                options.update(parse_mode='html')
+            options.update(text=message)
+            for uid in uids:
+                options.update(chat_id=uid)
+                sent = self.__make_request(url, options)
+                if sent:
+                    success = True
+        return success
+
+    def copy_to_telegram(self, message_id, from_chat_id, user, options={}):
+        success = False
+        uids = self.__get_tg_ids(user)
+        if uids:
+            url = self.__get_url_parms('copyMessage', options)
+            options.update(message_id=message_id, from_chat_id=from_chat_id)
+            for uid in uids:
+                options.update(chat_id=uid)
+                self.__make_request(url, options)
+                if sent:
+                    success = True
+        return success
 
     def get_bot_data(self):
         """
@@ -1141,3 +1169,16 @@ class OfferAnswer(BaseModelInsertTimestamp):
 
     def __str__(self):
         return '%s: %s' % (self.number, self.answer)
+
+
+class TgDesc(BaseModelInsertTimestamp):
+    """
+    Для описаний: персоны или оффера
+
+    Здесь сообщения телеграма, в которых картинки, видео и т.п.
+    Или просто текст.
+    """
+
+    message_id = models.BigIntegerField(_("Message Id"))
+    chat_id = models.BigIntegerField(_("Chat Id"))
+    media_group_id = models.CharField(_("media_group_id"), max_length=255, blank=True, default='')

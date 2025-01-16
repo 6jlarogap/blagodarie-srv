@@ -31,7 +31,7 @@ from app.models import UnclearDate, PhotoModel, GenderMixin
 from django.contrib.auth.models import User
 from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TgGroup, \
     TempToken, UuidMixin, TelegramApiMixin, \
-    TgPoll, TgPollAnswer, Offer, OfferAnswer
+    TgPoll, TgPollAnswer, Offer, OfferAnswer, TgDesc
 from contact.models import Key, KeyType, CurrentState, OperationType, Wish, Ability, \
                            ApiAddOperationMixin, Journal
 from wote.models import Video, Vote
@@ -1535,6 +1535,26 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                     profile.delete_from_media()
                     profile.photo = None
                     profile.photo_original_filename = ''
+            if 'tgdesc' in request.data:
+                # Строка типа '<message_id>~<chat_id>~<is_first>~<media_group_id>'
+                tgdesc_got = request.data['tgdesc'].split('~', 3)
+                try:
+                    message_id = int(tgdesc_got[0])
+                    chat_id = int(tgdesc_got[1])
+                    # '' или '1':
+                    is_first = tgdesc_got[2]
+                    media_group_id = tgdesc_got[3]
+                except (IndexError, ValueError, TypeError):
+                    raise ServiceException('Неверный tgdesc')
+                if is_first:
+                    profile.tgdesc.filter(
+                        (~Q(media_group_id=media_group_id)) | Q(media_group_id='')
+                    ).delete()
+                tgdesc = TgDesc.objects.create(
+                    message_id=message_id, chat_id=chat_id,
+                    media_group_id=media_group_id,
+                )
+                profile.tgdesc.add(tgdesc)
             if 'did_meet' in request.data:
                 did_meet = request.data.get('did_meet')
                 unix_time_now = int(time.time())

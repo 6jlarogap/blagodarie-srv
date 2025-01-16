@@ -257,6 +257,10 @@ class KeyboardType(object):
     #
     OFFER_GEO_PASS = 62
 
+    # Описание юзера
+    #
+    USER_DESC = 63
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -305,6 +309,15 @@ class Misc(object):
         'Выберите одно из действий:\n'
     )
 
+    PROMPT_USER_DESC = (
+        'Отправьте мне сообщение, содержащее фото/видео/текстовую информацию о '
+        'Вашем игровом профиле - для отправки тем, кто проявит к нему интерес - '
+        'укажите рост, вес, религиозные верования, курите ли Вы, наличие детей, '
+        'их возраст - и другую на Ваш взгляд существенную информацию. '
+        'Не указывайте контакты - чтобы не получать нежелательные сообщения. '
+        'Будьте внимательны - жалобы от пользователей приведут к утрате доверия и '
+        'исключению из игры.'
+    )
     PROMPT_SEARCH_TEXT_TOO_SHORT = 'Минимальное число символов в тексте для поиска: %s\n' % settings.MIN_LEN_SEARCHED_TEXT
     PROMPT_SEARCH_PHRASE_TOO_SHORT = 'Недостаточно для поиска: короткие слова или текст вообще без слов и т.п.'
     PROMPT_NOTHING_FOUND = 'Никто не найден - попробуйте другие слова'
@@ -1190,6 +1203,17 @@ class Misc(object):
                 ))
 
                 edit_buttons_2 = [inline_btn_location, inline_btn_comment]
+                if is_own_account and profile['did_meet']:
+                    inline_btn_desc = InlineKeyboardButton(
+                        text='Описание',
+                        callback_data=callback_data_template % dict(
+                        keyboard_type=KeyboardType.USER_DESC,
+                        uuid=profile['uuid'],
+                        sep=KeyboardType.SEP,
+                    ))
+                    edit_buttons_2.append(inline_btn_desc)
+                
+
                 if False: # is_power and is_owned_account:
                     dict_change_owner = dict(
                         keyboard_type=KeyboardType.CHANGE_OWNER,

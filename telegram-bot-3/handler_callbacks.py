@@ -52,6 +52,9 @@ class FSMundelete(StatesGroup):
 class FSMsendMessage(StatesGroup):
     ask = State()
 
+class FSMpersonDesc(StatesGroup):
+    ask = State()
+
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.CANCEL_ANY,
         KeyboardType.SEP,
@@ -1188,7 +1191,7 @@ async def cbq_send_message(callback: CallbackQuery, state: FSMContext):
                 f'Напишите или перешлите мне сообщение для отправки <b>{iof_link}</b>',
                 reply_markup=Misc.reply_markup_cancel_row(),
             )
-    callback.answer()
+    await callback.answer()
 
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMsendMessage.ask))
 async def process_message_to_send(message: Message, state: FSMContext):
@@ -1363,4 +1366,52 @@ async def cbq_show_messages(callback: CallbackQuery, state: FSMContext):
                     else:
                         msg = 'Сообщения не найдены'
                     await bot.send_message(tg_user_sender.id, text=msg)
-    callback.answer()
+    await callback.answer()
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.USER_DESC,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_get_user_desc(callback: CallbackQuery, state: FSMContext):
+    if uuid := Misc.get_uuid_from_callback(callback):
+        status, profile = await Misc.get_user_by_uuid(uuid)
+        if status == 200:
+            await state.set_state(FSMpersonDesc.ask)
+            await state.update_data(uuid=uuid)
+            await callback.message.reply(
+                Misc.PROMPT_USER_DESC,
+                reply_markup=Misc.reply_markup_cancel_row(),
+            )
+    await callback.answer()
+
+
+async def do_get_user_desc(message: Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    data = await state.get_data()
+    if not data.get('uuid'):
+        return
+    status, profile = await Misc.post_tg_user(message.from_user)
+    if status != 200 or profile['uuid'] != data['uuid']:
+        return
+    # первое сообщение в коллаже или единственное
+    is_first = True
+    media_group_id = str(message.media_group_id or '')
+    if media_group_id:
+        key = (
+            f'{settings.REDIS_USER_DESC_PREFIX}{settings.REDIS_KEY_SEP}'
+            f'{message.from_user.id}{settings.REDIS_KEY_SEP}{media_group_id}'
+        )
+        is_first = Misc.redis_is_key_first_up(key, ex=300)
+    is_first = '1' if is_first else ''
+    tgdesc  = '~'.join((str(message.message_id), str(message.chat.id), is_first, media_group_id,))
+    status, response = await Misc.put_user_properties(uuid=data['uuid'], tgdesc=tgdesc)
+    return status, response, is_first
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMpersonDesc.ask))
+async def process_get_user_desc(message: Message, state: FSMContext):
+    status, response, is_first = await do_get_user_desc(message, state)
+    if status == 200 and is_first:
+        await message.reply('Описание сохранено')
+    await state.clear()
