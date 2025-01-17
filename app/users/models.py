@@ -937,7 +937,7 @@ class TelegramApiMixin(object):
     API_TELEGRAM = 'https://api.telegram.org'
     API_TIMEOUT = 20
 
-    def __get_tg_ids(self, user, telegram_uid):
+    def __get_tg_ids(self, user=None, telegram_uid=None):
         result = []
         if not settings.SEND_TO_TELEGRAM:
             return
@@ -991,7 +991,7 @@ class TelegramApiMixin(object):
             options.update(message_id=message_id, from_chat_id=from_chat_id)
             for uid in uids:
                 options.update(chat_id=uid)
-                self.__make_request(url, options)
+                sent = self.__make_request(url, options)
                 if sent:
                     success = True
         return success
