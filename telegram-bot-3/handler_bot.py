@@ -162,8 +162,11 @@ async def cmd_find(message: Message, state: FSMContext):
 )
 async def cmd_meet(message: Message, state: FSMContext):
     status, profile = await Misc.post_tg_user(message.from_user)
-    data = dict(profile_from = profile, profile_to=None)
-    await process_meet_from_deeplink_and_command(message, state, data)
+    if status == 200:
+        data = dict(profile_from = profile, profile_to=None)
+        await process_meet_from_deeplink_and_command(message, state, data)
+    else:
+        await message.reply(Misc.MSG_ERROR_API)
 
 
 @router.message(

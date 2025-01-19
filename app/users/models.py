@@ -465,6 +465,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 dod=self.dod and self.dod.str_safe() or None,
                 comment=self.comment or '',
                 did_meet=self.did_meet,
+                has_tgdesc=self.tgdesc.exists(),
             )
         return result
 
