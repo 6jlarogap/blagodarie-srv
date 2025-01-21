@@ -182,7 +182,7 @@ class KeyboardType(object):
 
     CHANGE_OWNER_CONFIRM = 27
 
-    KEYS = 28
+    BANKING = 28
 
     SHOW_MESSAGES = 29
 
@@ -269,6 +269,10 @@ class Misc(object):
     """
     Различные функции, сообщения, константы
     """
+
+    # Ид ключа с банковскими реквизитами
+    #
+    BANKING_DETAILS_ID = 4
 
     MSG_YOU_GOT_MESSAGE = 'Вам сообщение от <b>%s</b>'
     MSG_YOU_CANCELLED_INPUT = 'Вы отказались от ввода данных'
@@ -912,11 +916,12 @@ class Misc(object):
         return result
 
     @classmethod
-    async def check_owner_by_uuid(cls, owner_tg_user, uuid, check_owned_only=False):
+    async def check_owner_by_uuid(cls, owner_tg_user, uuid, check_owned_only=False, check_own_only=False):
         """
         Проверить, принадлежит ли uuid к owner_tg_user или им является
 
-        При check_onwed_only проверяет исключительно, принадлежит ли.
+        При check_onwed_only проверяет исключительно собственного, принадлежит ли.
+        При check_onw_only проверяет исключительно не является ли проверяемый им самим.
         Если принадлежит и им является, то возвращает данные из апи по owner_tg_user,
         а внутри словарь response_uuid, данные из апи по uuid:
         """
@@ -926,7 +931,8 @@ class Misc(object):
             status_uuid, response_uuid = await cls.get_user_by_uuid(uuid)
             if status_uuid == 200 and response_uuid:
                 if response_uuid.get('owner'):
-                    result = response_uuid['owner']['user_id'] == response_sender['user_id']
+                    if not check_own_only:
+                        result = response_uuid['owner']['user_id'] == response_sender['user_id']
                 elif not check_owned_only:
                     result = response_uuid['user_id'] == response_sender['user_id']
                 if result:
@@ -1212,7 +1218,16 @@ class Misc(object):
                         sep=KeyboardType.SEP,
                     ))
                     edit_buttons_2.append(inline_btn_desc)
-                
+
+                if is_own_account:
+                    inline_btn_bank = InlineKeyboardButton(
+                        text='Реквизиты',
+                        callback_data=callback_data_template % dict(
+                        keyboard_type=KeyboardType.BANKING,
+                        uuid=profile['uuid'],
+                        sep=KeyboardType.SEP,
+                    ))
+                    edit_buttons_2.append(inline_btn_bank)
 
                 if False: # is_power and is_owned_account:
                     dict_change_owner = dict(
@@ -1292,12 +1307,7 @@ class Misc(object):
                         text='Потребности',
                         callback_data=callback_data_template % dict_abwishkey,
                     )
-                    dict_abwishkey.update(keyboard_type=KeyboardType.KEYS, uuid=profile['uuid'])
-                    inline_btn_keys = InlineKeyboardButton(
-                        text='Контакты',
-                        callback_data=callback_data_template % dict_abwishkey,
-                    )
-                    buttons.append([inline_btn_ability, inline_btn_wish, inline_btn_keys])
+                    buttons.append([inline_btn_ability, inline_btn_wish,])
 
         if not is_own_account and \
            (not response_relations or response_relations['to_from']['attitude'] != Attitude.MISTRUST):

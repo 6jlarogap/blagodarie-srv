@@ -1115,12 +1115,12 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                     mode = 'fulltext'
                 elif request.GET.get('query_person'):
                     query = request.GET['query_person']
-                    fields = ('first_name', 'key__value',)
+                    fields = ('first_name', )
                     mode = 'icontains'
                 else:
                     # аналог query_person
                     query = request.GET['query']
-                    fields = ('first_name', 'key__value',)
+                    fields = ('first_name', )
                     mode = 'icontains'
                 if len(query) >= settings.MIN_LEN_SEARCHED_TEXT:
                     operation = request.GET.get('operation', 'and')

@@ -17,7 +17,7 @@
     "model": "contact.keytype",
     "pk": 4,
     "fields": {
-      "title": "CreditCard"
+      "title": "Banking Details"
     }
   },
   {

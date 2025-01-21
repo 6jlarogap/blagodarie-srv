@@ -1933,7 +1933,13 @@ class ApiGetUserKeys(UuidMixin, APIView):
         try:
             uuid = request.GET.get('uuid')
             user, profile = self.check_user_uuid(uuid)
-            qs = Key.objects.filter(owner=user).order_by('pk')
+            q = Q(owner=user)
+            if keytype_id := request.data.get('keytype_id'):
+                q &= Q(type__pk=keytype_id)
+            qs = Key.objects.filter(q)
+            if not (request.user.is_authenticated and request.user == user):
+                qs = qs.exclude(type__pk=KeyType.BANKING_DETAILS_ID)
+            qs = qs.order_by('pk')
             try:
                 from_ = request.GET.get("from", 0)
                 from_ = int(from_) if from_ else 0
@@ -1945,6 +1951,29 @@ class ApiGetUserKeys(UuidMixin, APIView):
                 qs = qs[from_ : from_ + count]
             else:
                 qs = qs[from_:]
+            data = dict(
+                keys = [ key.data_dict() for key in qs ]
+            )
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+    def post(self, request):
+        '''
+        Получить ключи. Секретно, с токеном бота
+        '''
+        try:
+            uuid = request.data.get('uuid')
+            user, profile = self.check_user_uuid(uuid)
+            tg_token = request.data.get('tg_token')
+            if not tg_token or tg_token != settings.TELEGRAM_BOT_TOKEN:
+                raise ServiceException('Неверный или не задан токен телеграм бота')
+            q = Q(owner=user)
+            if keytype_id := request.data.get('keytype_id'):
+                q &= Q(type__pk=keytype_id)
+            qs = Key.objects.filter(q).order_by('pk')
             data = dict(
                 keys = [ key.data_dict() for key in qs ]
             )
@@ -2008,17 +2037,19 @@ class ApiAddKeyView(UuidMixin, APIView):
                     user, user_profile = self.check_user_uuid(request.data['user_uuid'], related=('owner', ))
                     if owner != user_profile.owner:
                         raise ServiceException('Профиль user_uuid не подлежит правке пользователем owner_uuid')
-                Key.objects.filter(type__pk=KeyType.OTHER_ID, owner=user).delete()
+                keytype_id = request.data.get("keytype_id") or KeyType.BANKING_DETAILS_ID
+                Key.objects.filter(type__pk=keytype_id, owner=user).delete()
                 for value in request.data['keys']:
                     key, created_ = Key.objects.get_or_create(
-                        type_id=KeyType.OTHER_ID,
+                        type_id=keytype_id,
                         value=value,
                         defaults=dict(
                             owner=user,
                     ))
                     if not created_:
-                        raise ServiceException('Контакт "%s" есть уже у другого человека' % value,
-                            '%s' % key.owner.pk,
+                        key_title = 'Банковские реквизиты' if type_id == KeyType.BANKING_DETAILS_ID else 'Контакт'
+                        raise ServiceException(f'{key_title } "{value}" есть уже у другого человека',
+                            str(key.owner.pk)
                         )
                 data = user_profile.data_dict(request)
                 data.update(user_profile.parents_dict(request))

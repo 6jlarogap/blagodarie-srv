@@ -499,6 +499,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
         Wish = get_model('contact', 'Wish')
         Ability = get_model('contact', 'Ability')
         Key = get_model('contact', 'Key')
+        KeyType = get_model('contact', 'KeyType')
         user = self.user
         wishes = [
             wish.data_dict(
@@ -510,7 +511,8 @@ class Profile(PhotoModel, GeoPointAddressModel):
         ]
         keys = [
             key.data_dict(
-            )  for key in Key.objects.filter(owner=user).order_by('type__pk', 'pk')
+            )  for key in Key.objects.filter(owner=user
+                    ).exclude(type__pk=KeyType.BANKING_DETAILS_ID).order_by('type__pk', 'pk')
         ]
         return dict(wishes=wishes, abilities=abilities, keys=keys)
 

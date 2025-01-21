@@ -23,6 +23,7 @@ from app.models import BaseModelInsertTimestamp, BaseModelInsertUpdateTimestamp,
 
 class KeyType(models.Model):
 
+    BANKING_DETAILS_ID = 4
     LINK_ID = 5
     OTHER_ID = 6
 
@@ -259,7 +260,7 @@ class Key(BaseModelInsertTimestamp):
 
     owner = models.ForeignKey('auth.User', verbose_name=_("Владелец"), on_delete=models.CASCADE)
     type = models.ForeignKey(KeyType, on_delete=models.CASCADE)
-    value = models.CharField(_("Значение"), max_length=255, db_index=True)
+    value = models.TextField(verbose_name=_("Значение"), db_index=True)
 
     class Meta:
         unique_together = ('type', 'value', )

@@ -4,7 +4,7 @@
 
 import re, base64
 
-from aiogram import Router, F
+from aiogram import Router, F, html
 from aiogram.filters import Command, StateFilter
 from aiogram.types import Message, CallbackQuery, ContentType, \
                           InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
@@ -54,6 +54,9 @@ class FSMsendMessage(StatesGroup):
     ask = State()
 
 class FSMpersonDesc(StatesGroup):
+    ask = State()
+
+class FSMbanking(StatesGroup):
     ask = State()
 
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
@@ -1454,4 +1457,69 @@ async def process_get_user_desc(message: Message, state: FSMContext):
     status, response, is_first = await do_get_user_desc(message, state)
     if status == 200 and is_first:
         await message.reply('Описание сохранено')
+    await state.clear()
+
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.BANKING,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_get_banking(callback: CallbackQuery, state: FSMContext):
+    if uuid := Misc.get_uuid_from_callback(callback):
+        status_sender, response_sender = await Misc.post_tg_user(callback.from_user)
+        if status_sender != 200 or response_sender['uuid'] != uuid:
+            return
+        status_bank, response_bank = await Misc.api_request(
+            '/api/getuserkeys',
+            method='POST',
+            json = dict(
+                tg_token=settings.TOKEN,
+                uuid=uuid,
+                keytype_id = Misc.BANKING_DETAILS_ID
+        ))
+        if status_bank != 200:
+            return
+        text = (
+            'Напишите мне сообщение с реквизитами для получения '
+            'благодарственных пожертвований от других пользователей'
+        )
+        if response_bank.get('keys'):
+            text += (
+                '.\n\n'
+                '<b>Ваши текущие реквизиты:</b>\n\n'
+                f'{html.quote(response_bank['keys'][0]['value'])}\n\n'
+                '<b>будут заменены</b>'
+            )
+        await state.set_state(FSMbanking.ask)
+        await state.update_data(uuid=uuid)
+        await callback.message.reply(text, reply_markup=Misc.reply_markup_cancel_row())
+    await callback.answer()
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMbanking.ask))
+async def process_message_banking(message: Message, state: FSMContext):
+    if (message.content_type != ContentType.TEXT) or \
+       not (message_text := message.text.strip()):
+        await message.reply(
+            Misc.MSG_ERROR_TEXT_ONLY,
+            reply_markup=Misc.reply_markup_cancel_row()
+        )
+        return
+    if await is_it_command(message, state):
+        return
+    data = await state.get_data()
+    if (uuid := data.get('uuid')) and \
+       (response_check := await Misc.check_owner_by_uuid(message.from_user, uuid, check_own_only=True)):
+        status, response = await Misc.api_request(
+            path='/api/addkey',
+            method='post',
+            json=dict(
+                tg_token=settings.TOKEN,
+                keytype_id=Misc.BANKING_DETAILS_ID,
+                owner_uuid=response_check['uuid'],
+                user_uuid=response_check['uuid'],
+                keys=[message_text],
+        ))
+        if status == 200:
+            await message.reply('Реквизиты записаны')
     await state.clear()
