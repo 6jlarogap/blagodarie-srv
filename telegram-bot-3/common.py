@@ -2208,7 +2208,7 @@ class Misc(object):
 
 
     @classmethod
-    def redis_is_key_first_up(cls, key, ex=86400):
+    def redis_is_key_first_up(cls, key, ex=300):
         """
         Вызывающий эту функцию первым установил ключ key?
 
@@ -2240,6 +2240,25 @@ class Misc(object):
                         # уже больше.
                         continue
         return int(value) <= 1
+
+    @classmethod
+    async def get_bank_details(cls, uuid):
+        """
+        Получить банковские реквизиты юзера с uuid
+        """
+        result = ''
+        status_bank, response_bank = await cls.api_request(
+            '/api/getuserkeys',
+            method='POST',
+            json = dict(
+                tg_token=settings.TOKEN,
+                uuid=uuid,
+                keytype_id = Misc.BANKING_DETAILS_ID
+        ))
+        if status_bank == 200 and response_bank.get('keys'):
+            result = response_bank['keys'][0]['value']
+        return result
+
 
 class TgGroup(object):
     """
