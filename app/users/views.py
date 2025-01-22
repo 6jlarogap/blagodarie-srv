@@ -1658,6 +1658,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                     raise NotAuthenticated
                 user, profile = self.check_user_or_owned_uuid(request, need_uuid=False)
             if profile.owner:
+                profile.tgdesc.all().delete()
                 profile.delete()
                 user.delete()
                 data = {}

@@ -446,7 +446,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 photo=photo,
                 is_notified=self.is_notified,
                 is_meetgame_admin=self.is_meetgame_admin(),
-                is_power_telegram=self.is_power_telegram(),
+                is_power = self.is_power(),
                 sum_thanks_count=self.sum_thanks_count,
                 fame=self.fame,
                 mistrust_count=self.mistrust_count,
@@ -469,7 +469,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
             )
         return result
 
-    def is_power_telegram(self):
+    def is_power(self):
         return self.user.groups.filter(pk=settings.GROUP_IDS['power_telegram']).exists()
 
     def is_meetgame_admin(self):

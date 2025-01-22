@@ -86,6 +86,7 @@ class Journal(BaseModelInsertTimestamp):
     operationtype = models.ForeignKey(OperationType,
                     verbose_name=_("Тип операции"), on_delete=models.CASCADE)
     comment = models.TextField(verbose_name=_("Комментарий"), null=True)
+    tgdesc = models.ManyToManyField('users.TgDesc', verbose_name=_("Описание: (составное) сообщение из телеграма"))
 
 class UserDictMixin(object):
     def user_dict(self, user):

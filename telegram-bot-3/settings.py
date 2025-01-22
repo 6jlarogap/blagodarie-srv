@@ -154,6 +154,7 @@ REDIS_LAST_USERIN_GROUP_PREFIX = 'last_user_in_group_'
 REDIS_CARD_IN_GROUP_PREFIX = 'card_in_group'
 REDIS_SEND_MESSAGE_PREFIX = 'send_message'
 REDIS_USER_DESC_PREFIX = 'user_desc'
+REDIS_ASK_MONEY_PREFIX = 'ask_money'
 REDIS_KEY_SEP = '~'
 
 # Ид групп, в которые шлём карточки после сообщений участников, с параметрами.

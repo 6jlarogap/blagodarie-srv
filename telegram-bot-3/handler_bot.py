@@ -284,7 +284,7 @@ async def cmd_start(message: Message, state: FSMContext):
                 message_to_forward_id = None,
                 group_member=None,
                 is_thank_card=False,
-                state=None,
+                state=state,
             ))
 
     elif m := re.search(

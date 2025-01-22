@@ -38,6 +38,9 @@ class FSMgeo(StatesGroup):
 class FSMdelete(StatesGroup):
     ask = State()
 
+class FSMaskMoney(StatesGroup):
+    ask = State()
+
 class Attitude(object):
 
     ACQ = 'a'
@@ -754,10 +757,10 @@ class Misc(object):
         if not sender:
             sender = profile
         return      profile.get('owner') and \
-                        profile['owner'].get('is_power_telegram') and profile['owner']['uuid'] == sender['uuid'] \
+                        profile['owner'].get('is_power') and profile['owner']['uuid'] == sender['uuid'] \
                or \
                     not profile.get('owner') and \
-                    profile.get('is_power_telegram') and profile['uuid'] == sender['uuid']
+                    profile.get('is_power') and profile['uuid'] == sender['uuid']
 
 
     @classmethod
@@ -1515,7 +1518,7 @@ class Misc(object):
         return his_her
 
     @classmethod
-    def inline_button_cancel(cls):
+    def inline_button_cancel(cls, caption='Отмена'):
         """
         Inline кнопка с 'Отмена'
         """
@@ -1524,7 +1527,7 @@ class Misc(object):
             sep=KeyboardType.SEP,
         )
         return InlineKeyboardButton(
-            text='Отмена',
+            text=caption,
             callback_data=callback_data,
         )
 
@@ -1539,11 +1542,11 @@ class Misc(object):
         return s
 
     @classmethod
-    def reply_markup_cancel_row(cls):
+    def reply_markup_cancel_row(cls, caption='Отмена'):
         """
         Ряд с одна inline кнопкой с 'Отмена'
         """
-        inline_btn_cancel = cls.inline_button_cancel()
+        inline_btn_cancel = cls.inline_button_cancel(caption)
         reply_markup = InlineKeyboardMarkup(inline_keyboard=[[inline_btn_cancel]])
         return reply_markup
 
@@ -1947,7 +1950,8 @@ class Misc(object):
         if text:
             buttons = []
             if do_thank:
-                if response.get('journal_id'):
+                if journal_id := response.get('journal_id'):
+                    data.update(journal_id=journal_id)
                     inline_btn_cancel_thank = InlineKeyboardButton(
                         text='Отменить благодарность',
                         callback_data=cls.CALLBACK_DATA_ID__TEMPLATE % dict(
@@ -2009,6 +2013,28 @@ class Misc(object):
                     f'Установите отношение к {full_name_to_link}:',
                     profile_from, profile_to, tg_user_sender, card_message=None,
                 )
+
+            if do_thank and data.get('journal_id'):
+                # Запрос на помоги материально
+                if bank_details := await cls.get_bank_details(profile_to['uuid']):
+                    text = (
+                        'Пришлите мне снимок экрана добровольного пожертвования любой суммы '
+                        'в качестве благодарности на реквизиты ниже, '
+                        'добавьте в сообщение фото/видео и текстовый комментарий\n'
+                        '\n'
+                        f'{html.quote(bank_details)}\n\n'
+                    )
+                    try:
+                        await data['state'].set_state(FSMaskMoney.ask)
+                        await data['state'].update_data(data)
+                        await bot.send_message(
+                            tg_user_sender.id,
+                            text=text,
+                            reply_markup=cls.reply_markup_cancel_row(caption='Пропустить'),
+                        )
+                        return
+                    except (TelegramBadRequest, TelegramForbiddenError,):
+                        pass
 
         # Это в группу
         #

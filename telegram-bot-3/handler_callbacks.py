@@ -1,4 +1,4 @@
-# handler_calls.py
+# handler_callbacks.py
 #
 # Сallback реакции
 
@@ -6,6 +6,7 @@ import re, base64
 
 from aiogram import Router, F, html
 from aiogram.filters import Command, StateFilter
+from aiogram.filters.logic import or_f
 from aiogram.types import Message, CallbackQuery, ContentType, \
                           InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
 from aiogram.fsm.context import FSMContext
@@ -19,7 +20,7 @@ import settings, me
 from settings import logging
 
 from common import Misc, OperationType, KeyboardType
-from common import FSMnewPerson, FSMdelete
+from common import FSMnewPerson, FSMdelete, FSMaskMoney
 
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
@@ -559,7 +560,9 @@ async def cbq_meet_invite(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.TRUST_THANK,
         KeyboardType.SEP,
-    )), StateFilter(None))
+    )),
+    StateFilter(None)
+)
 async def cbq_attitude(callback: CallbackQuery, state: FSMContext):
     """
     Действия по нажатию кнопок доверия, недоверия, не знакомы
@@ -635,7 +638,7 @@ async def cbq_attitude(callback: CallbackQuery, state: FSMContext):
             except TelegramBadRequest:
                 pass
         else:
-            await message.reply(text_same, disable_web_page_preview=True,)
+            await message.reply(text_same,)
         await callback.answer()
         return
 
@@ -648,7 +651,7 @@ async def cbq_attitude(callback: CallbackQuery, state: FSMContext):
         message_to_forward_id = message_to_forward_id,
         group_member=group_member,
         is_thank_card=is_thank_card,
-        state=None,
+        state=state,
     )
     if group_member:
         group_member.update(user_tg_uid=tg_user_sender.id)
@@ -907,7 +910,6 @@ async def cbq_dates(callback: CallbackQuery, state: FSMContext):
         await callback.message.reply(
             prompt_dob,
             reply_markup=reply_markup,
-            disable_web_page_preview=True,
         )
     await callback.answer()
 
@@ -1290,7 +1292,6 @@ async def process_message_to_send(message: Message, state: FSMContext):
                                 await bot.send_message(
                                     tgd['tg_uid'],
                                     text=Misc.MSG_YOU_GOT_MESSAGE % Misc.get_deeplink_with_name(profile_from),
-                                    disable_web_page_preview=True,
                                 )
                             await bot.copy_message(
                                 tgd['tg_uid'],
@@ -1512,4 +1513,60 @@ async def process_message_banking(message: Message, state: FSMContext):
         ))
         if status == 200:
             await message.reply('Реквизиты записаны')
+    await state.clear()
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMaskMoney.ask))
+async def process_message_thank_ask_money(message: Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    data = await state.get_data()
+    if not (profile_to := data.get('profile_to')) or not (journal_id := data.get('journal_id')):
+        await state.clear(); return
+    status_from, profile_from = await Misc.post_tg_user(message.from_user)
+    if status_from != 200 or profile_from['uuid'] != data.get('profile_from', {}).get('uuid', ''):
+        await state.clear(); return
+
+    is_first = True
+    media_group_id = str(message.media_group_id or '')
+    if media_group_id:
+        key = (
+            f'{settings.REDIS_ASK_MONEY_PREFIX}{settings.REDIS_KEY_SEP}'
+            f'{message.from_user.id}{settings.REDIS_KEY_SEP}'
+            f'{media_group_id}{settings.REDIS_KEY_SEP}'
+            f'{journal_id}'
+        )
+        is_first = Misc.redis_is_key_first_up(key, ex=300)
+    tgdesc_payload  = dict(
+        tg_token=settings.TOKEN,
+        journal_id=journal_id,
+        message_id=message.message_id,
+        chat_id=message.chat.id,
+        media_group_id=media_group_id
+    )
+    logging.debug('post thank_bank, payload: %s' % Misc.secret(tgdesc_payload))
+    status, response = await Misc.api_request(
+        '/api/thank_bank',
+        method='POST',
+        json = dict(
+            tg_token=settings.TOKEN,
+            journal_id=journal_id,
+            message_id=message.message_id,
+            chat_id=message.chat.id,
+            media_group_id=media_group_id
+    ))
+    logging.debug('post thank_bank, status: %s' % status)
+    logging.debug('post thank_bank, response: %s' % response)
+    if status == 200:
+        if is_first:
+            await message.reply('Сведения о пожертвовании переданы получившему благодарность')
+        for tgd in profile_to['tg_data']:
+            try:
+                await bot.copy_message(
+                    tgd['tg_uid'],
+                    from_chat_id=message.chat.id,
+                    message_id=message.message_id,
+                )
+            except (TelegramBadRequest, TelegramForbiddenError):
+                pass
     await state.clear()
