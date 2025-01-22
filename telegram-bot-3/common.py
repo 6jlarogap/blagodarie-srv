@@ -2017,7 +2017,7 @@ class Misc(object):
             if do_thank and data.get('journal_id'):
                 # Запрос на помоги материально
                 if bank_details := await cls.get_bank_details(profile_to['uuid']):
-                    text = (
+                    text_after_thank = (
                         'Пришлите мне снимок экрана добровольного пожертвования любой суммы '
                         'в качестве благодарности на реквизиты ниже, '
                         'добавьте в сообщение фото/видео и текстовый комментарий\n'
@@ -2029,10 +2029,9 @@ class Misc(object):
                         await data['state'].update_data(data)
                         await bot.send_message(
                             tg_user_sender.id,
-                            text=text,
+                            text=text_after_thank,
                             reply_markup=cls.reply_markup_cancel_row(caption='Пропустить'),
                         )
-                        return
                     except (TelegramBadRequest, TelegramForbiddenError,):
                         pass
 

@@ -1559,10 +1559,10 @@ async def process_message_thank_ask_money(message: Message, state: FSMContext):
     logging.debug('post thank_bank, response: %s' % response)
     if status == 200:
         if is_first:
-            await message.reply('Сведения о пожертвовании переданы получившему благодарность')
+            await message.reply('Сообщение передано получателю благодарности')
         for tgd in profile_to['tg_data']:
             try:
-                await bot.copy_message(
+                await bot.forward_message(
                     tgd['tg_uid'],
                     from_chat_id=message.chat.id,
                     message_id=message.message_id,
