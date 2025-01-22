@@ -2016,24 +2016,27 @@ class Misc(object):
 
             if do_thank and data.get('journal_id'):
                 # Запрос на помоги материально
-                if bank_details := await cls.get_bank_details(profile_to['uuid']):
-                    text_after_thank = (
-                        'Пришлите мне снимок экрана добровольного пожертвования любой суммы '
-                        'в качестве благодарности на реквизиты ниже, '
-                        'добавьте в сообщение фото/видео и текстовый комментарий\n'
-                        '\n'
-                        f'{html.quote(bank_details)}\n\n'
+                bank_details = await cls.get_bank_details(profile_to['uuid'])
+                data.update(profile_to_has_bank_details=bool(bank_details))
+                text_after_thank = (
+                    'Пришлите мне снимок экрана добровольного пожертвования любой суммы '
+                    'в качестве благодарности на реквизиты ниже, '
+                    'добавьте в сообщение фото/видео и текстовый комментарий\n'
+                    '\n'
+                    f'{html.quote(bank_details)}\n\n'
+                ) if bank_details else (
+                    'Пришлите мне сообщение о благодарности, включающее фото/видео и текстовый комментарий'
+                )
+                try:
+                    await data['state'].set_state(FSMaskMoney.ask)
+                    await data['state'].update_data(data)
+                    await bot.send_message(
+                        tg_user_sender.id,
+                        text=text_after_thank,
+                        reply_markup=cls.reply_markup_cancel_row(caption='Пропустить'),
                     )
-                    try:
-                        await data['state'].set_state(FSMaskMoney.ask)
-                        await data['state'].update_data(data)
-                        await bot.send_message(
-                            tg_user_sender.id,
-                            text=text_after_thank,
-                            reply_markup=cls.reply_markup_cancel_row(caption='Пропустить'),
-                        )
-                    except (TelegramBadRequest, TelegramForbiddenError,):
-                        pass
+                except (TelegramBadRequest, TelegramForbiddenError,):
+                    pass
 
         # Это в группу
         #

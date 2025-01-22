@@ -1569,4 +1569,13 @@ async def process_message_thank_ask_money(message: Message, state: FSMContext):
                 )
             except (TelegramBadRequest, TelegramForbiddenError):
                 pass
+            if is_first and not data.get('profile_to_has_bank_details'):
+                try:
+                    await bot.send_message(
+                        tgd['tg_uid'], (
+                        'Укажите Ваши Реквизиты для пожертвований в профиле - и '
+                        'они будут предложены всем кто Вас будет благодарить!'
+                    ))
+                except (TelegramBadRequest, TelegramForbiddenError):
+                    pass
     await state.clear()
