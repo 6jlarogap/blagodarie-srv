@@ -429,7 +429,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                         message_to = (
                             'Поздравляем! Вами кто-то интересуется! '
                             'Ставьте больше интересов на '
-                            f'<a href="{settings.MAP_URL}">карте</a> '
+                            f'<a href="{settings.MEET_URL}">карте</a> '
                             '- чтобы скорее найти совпадения!'
                         )
 

@@ -326,6 +326,9 @@ GRAPH_URL = 'https://g.meetgame.us.to'
 #
 MAP_URL = 'https://map.meetgame.us.to'
 
+MEET_URL = 'https://meetgame.us.to'
+
+
 # ------------------------------------------------
 
 # Это надо полностью переписать в local_settings.py:
