@@ -365,6 +365,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 )
 
             data.update(message_sent=False, desc_sent=False)
+            reciprocal_sympa = False
             if not got_tg_token and settings.SEND_TO_TELEGRAM and \
                operationtype_id in (
                    OperationType.TRUST_OR_THANK,
@@ -409,21 +410,12 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     'is_sympa' in data.get('previousstate', {}) and \
                      not data['previousstate']['is_sympa']:
 
-                    if profile_to.tgdesc.exists():
-                        desc_sent = False
-                        for tgdesc in profile_to.tgdesc.all().order_by('message_id'):
-                            if self.copy_to_telegram(
-                                    tgdesc.message_id,
-                                    tgdesc.chat_id,
-                                    user_from
-                               ):
-                                desc_sent = True
-                        data['desc_sent'] = desc_sent
-
+                    data.update(profile_to=profile_to.data_dict(short=True))
                     if CurrentState.objects.filter(
                             user_from=user_to, user_to=user_from,
                             is_sympa=True, is_sympa_reverse=False,
                         ).exists():
+                        reciprocal_sympa = True
                         message_to = message_from = f'У вас взаимный интерес! Желаем удачи!'
                         options.update(
                             reply_markup=dict(
@@ -433,9 +425,25 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                                         url=None,
                                     )
                         ]]))
+                    else:
+                        message_to = (
+                            'Поздравляем! Вами кто-то интересуется! '
+                            'Ставьте больше интересов на '
+                            f'<a href="{settings.MAP_URL}">карте</a> '
+                            '- чтобы скорее найти совпадения!'
+                        )
+
+                    if profile_to.tgdesc.exists():
+                        for tgdesc in profile_to.tgdesc.all().order_by('message_id'):
+                            self.copy_to_telegram(
+                                    tgdesc.message_id,
+                                    tgdesc.chat_id,
+                                    user_from
+                            )
+                        data['desc_sent'] = True
 
                 if message_to and profile_to.is_notified:
-                    if operationtype_id == OperationType.SET_SYMPA:
+                    if operationtype_id == OperationType.SET_SYMPA and reciprocal_sympa:
                         (options['reply_markup']['inline_keyboard'][0][0]).update(
                             url=self.get_deeplink(user_from, bot_username)
                         )
