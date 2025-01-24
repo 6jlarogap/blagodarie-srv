@@ -701,7 +701,6 @@ class Misc(object):
             reply += f'Приглашений <a href=\'https://t.me/{bot_data.username}?start=meet\'>в игру</a>: {response_to["invite_meet_count"]}\n'
         reply += '\n'
 
-        keys = []
         if is_power and (response_to['is_active'] or response_to.get('owner')):
             abilities_text = '\n'.join(
                 html.quote(ability['text']) for ability in response_to['abilities']
@@ -733,18 +732,21 @@ class Misc(object):
                 ) % dict(papa=papa, mama=mama, children=children)
                 reply += parents
 
-        keys += ['@%s' % tgd['tg_username'] for tgd in response_to.get('tg_data', []) if tgd['tg_username']]
-        keys += [key['value'] for key in response_to.get('keys', [])]
-        keys.append(cls.get_deeplink(response_to))
-
-        if response_to.get('username'):
-            keys.append(settings.SHORT_ID_LINK % response_to['username'])
-
-        keys_text = '\n' + '\n'.join(
-            key for key in keys
-        ) if keys else 'не задано'
-        reply += (('Контакты:' if len(keys) > 1 else 'Контакт:') + ' %s' % keys_text) + '\n\n'
-
+        keys = []
+        if is_power or response_from['uuid'] == response_to['uuid'] or response_to['owner']:
+            keys += ['@%s' % tgd['tg_username'] for tgd in response_to.get('tg_data', []) if tgd['tg_username']]
+            keys += [key['value'] for key in response_to.get('keys', [])]
+            keys.append(cls.get_deeplink(response_to))
+            if response_to.get('username'):
+                keys.append(settings.SHORT_ID_LINK % response_to['username'])
+            keys_text = '\n' + '\n'.join(
+                key for key in keys
+            ) if keys else 'не задано'
+            reply += (('Контакты:' if len(keys) > 1 else 'Контакт:') + ' %s' % keys_text)
+        else:
+            igre = cls.get_html_a(f"t.me/{bot_data.username}?start=meet", "игре знакомств")
+            reply += f'Контакты профиля можно получить в {igre}'
+        reply += '\n\n'
         return reply
 
     @classmethod
