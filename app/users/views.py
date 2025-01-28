@@ -1535,6 +1535,17 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                     profile.delete_from_media()
                     profile.photo = None
                     profile.photo_original_filename = ''
+            if 'bank' in request.data:
+                keytype_id = KeyType.BANKING_DETAILS_ID
+                Key.objects.filter(type__pk=keytype_id, owner=user).delete()
+                key, created_ = Key.objects.get_or_create(
+                    type_id=keytype_id,
+                    value=request.data['bank'],
+                    defaults=dict(
+                        owner=user,
+                ))
+                if not created_:
+                    raise ServiceException(f'Банковские реквизиты "{value}" есть уже у другого человека')
             if 'tgdesc' in request.data:
                 # Строка типа '<message_id>~<chat_id>~<is_first>~<media_group_id>'
                 tgdesc_got = request.data['tgdesc'].split('~', 3)

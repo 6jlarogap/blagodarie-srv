@@ -32,6 +32,7 @@ class FSMmeet(StatesGroup):
     ask_gender = State()
     ask_dob = State()
     ask_geo = State()
+    ask_bank = State()
     ask_tgdesc = State()
 
 class FSMexistingIOF(StatesGroup):
@@ -305,6 +306,15 @@ async def meet_quest_geo(state, error_message=None):
     )
 
 
+async def meet_quest_bank(state):
+    data = await state.get_data()
+    await bot.send_message(
+        chat_id=data['tg_user_sender_id'],
+        text=Misc.PROMPT_BANK,
+        reply_markup=Misc.reply_markup_cancel_row(),
+    )
+
+
 async def meet_quest_tgdesc(state):
     data = await state.get_data()
     await bot.send_message(
@@ -343,13 +353,34 @@ async def process_message_meet_geo(message: Message, state: FSMContext):
     if latitude is None or longitude is None:
         await meet_quest_geo(state, error_message=Misc.MSG_ERR_GEO)
         return
-    data.update(latitude=latitude, longitude=longitude)
+    await state.update_data(latitude=latitude, longitude=longitude)
+    if not data['has_bank']:
+        await state.set_state(FSMmeet.ask_bank)
+        await meet_quest_bank(state)
+    elif not data['has_tgdesc']:
+        await state.set_state(FSMmeet.ask_tgdesc)
+        await meet_quest_tgdesc(state)
+    else:
+        await state.clear()
+        await meet_do_or_revoke(data)
+
+
+@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMmeet.ask_bank))
+async def process_message_meet_bank(message: Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    data = await state.get_data()
+    status_from, profile_from = await Misc.post_tg_user(message.from_user)
+    if status_from != 200 or profile_from['uuid'] != data['uuid']:
+        await state.clear()
+        return
+    await state.update_data(bank=message.text.strip())
     if not data['has_tgdesc']:
         await state.set_state(FSMmeet.ask_tgdesc)
         await meet_quest_tgdesc(state)
-        return
-    await state.clear()
-    await meet_do_or_revoke(data)
+    else:
+        await state.clear()
+        await meet_do_or_revoke(data)
 
 
 @router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMmeet.ask_dob))
@@ -374,6 +405,9 @@ async def process_message_meet_dob(message: Message, state: FSMContext):
         if data['latitude'] is None or data['longitude'] is None:
             await state.set_state(FSMmeet.ask_geo)
             await meet_quest_geo(state)
+        elif not data['has_bank']:
+            await state.set_state(FSMmeet.ask_bank)
+            await meet_quest_bank(state)
         elif not data['has_tgdesc']:
             await state.set_state(FSMmeet.ask_tgdesc)
             await meet_quest_tgdesc(state)
@@ -401,11 +435,11 @@ async def cbq_meet_do_or_revoke(callback: CallbackQuery, state: FSMContext):
         return
     text_scram = ''
     if profile_from['did_meet'] and what == KeyboardType.MEET_DO:
-        text_scram = 'Вы уже участвуете в игре знакомств'
+        text_scram = 'Вы уже участвуете в игре знакомств. Выход из игры: посредством команды /meet'
     elif not profile_from['did_meet'] and what == KeyboardType.MEET_REVOKE:
-        text_scram = 'Вы и так не участвуете в игре знакомств'
+        text_scram = 'Вы и так не участвуете в игре знакомств. Для участия: команда /meet'
     if text_scram:
-        await callback_query.message.reply(text=text_scram)
+        await callback.message.reply(text=text_scram)
         return
     username_inviter = ''
     try:
@@ -422,33 +456,35 @@ async def cbq_meet_do_or_revoke(callback: CallbackQuery, state: FSMContext):
         dob=profile_from['dob'],
         latitude=profile_from['latitude'],
         longitude=profile_from['longitude'],
+        has_bank=profile_from['has_bank'],
+        bank='',
         has_tgdesc=profile_from['has_tgdesc'],
         tg_user_sender_id=callback.from_user.id,
         message_id=callback.message.message_id,
     )
     await callback.answer()
     if what == KeyboardType.MEET_DO:
-        if profile_from['gender'] and profile_from['dob'] and \
-           profile_from['latitude'] is not None and profile_from['longitude'] is not None and \
-           profile_from['has_tgdesc']:
-            await meet_do_or_revoke(data)
-        else:
-            if not profile_from['gender']:
-                await state.set_state(FSMmeet.ask_gender)
-                next_proc = meet_quest_gender
-            elif not profile_from['dob']:
-                await state.set_state(FSMmeet.ask_dob)
-                next_proc = meet_quest_dob
-            elif not (profile_from['latitude'] and profile_from['longitude']):
-                await state.set_state(FSMmeet.ask_geo)
-                next_proc = meet_quest_geo
-            elif not profile_from['has_tgdesc']:
-                await state.set_state(FSMmeet.ask_tgdesc)
-                next_proc = meet_quest_tgdesc
+        next_proc = None
+        if not profile_from['gender']:
+            await state.set_state(FSMmeet.ask_gender)
+            next_proc = meet_quest_gender
+        elif not profile_from['dob']:
+            await state.set_state(FSMmeet.ask_dob)
+            next_proc = meet_quest_dob
+        elif not (profile_from['latitude'] and profile_from['longitude']):
+            await state.set_state(FSMmeet.ask_geo)
+            next_proc = meet_quest_geo
+        elif not profile_from['has_bank']:
+            await state.set_state(FSMmeet.ask_bank)
+            next_proc = meet_quest_bank
+        elif not profile_from['has_tgdesc']:
+            await state.set_state(FSMmeet.ask_tgdesc)
+            next_proc = meet_quest_tgdesc
+        if next_proc:
             await state.update_data(**data)
             await next_proc(state)
-    else:
-        await meet_do_or_revoke(data)
+            return
+    await meet_do_or_revoke(data)
 
 
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
@@ -471,6 +507,9 @@ async def cbq_meet_ask_gender(callback: CallbackQuery, state: FSMContext):
     elif response_sender['latitude'] is None or response_sender['longitude'] is None:
         await state.set_state(FSMmeet.ask_geo)
         next_proc = meet_quest_geo
+    elif not data['has_bank']:
+        await state.set_state(FSMmeet.ask_bank)
+        next_proc = meet_quest_bank
     elif not data['has_tgdesc']:
         await state.set_state(FSMmeet.ask_tgdesc)
         next_proc = meet_quest_tgdesc
@@ -496,7 +535,9 @@ async def meet_do_or_revoke(data):
             )
         parms = dict(did_meet=did_meet)
         if data['what'] == KeyboardType.MEET_DO:
-            fields = ('uuid', 'username_inviter', 'gender', 'dob', 'latitude', 'longitude',)
+            fields = ['uuid', 'username_inviter', 'gender', 'dob', 'latitude', 'longitude',]
+            if data.get('bank'):
+                fields.append('bank')
         else:
             fields = ('uuid', 'username_inviter',)
         for k in fields:
@@ -535,6 +576,11 @@ async def meet_do_or_revoke(data):
                 data['tg_user_sender_id'],
                 text=text_to_sender,
                 reply_markup=reply_markup,
+            )
+        elif status == 400 and response.get('message'):
+            await bot.send_message(
+                data['tg_user_sender_id'],
+                text=f'Ошибка ввода данных: {response["message"]}'
             )
 
 
@@ -1470,10 +1516,7 @@ async def cbq_get_banking(callback: CallbackQuery, state: FSMContext):
         status_sender, response_sender = await Misc.post_tg_user(callback.from_user)
         if status_sender != 200 or response_sender['uuid'] != uuid:
             return
-        text = (
-            'Напишите мне сообщение с реквизитами для получения '
-            'благодарственных пожертвований от других пользователей'
-        )
+        text = Misc.PROMPT_BANK
         if bank_details := await Misc.get_bank_details(uuid):
             text += (
                 '.\n\n'

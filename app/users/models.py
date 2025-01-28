@@ -466,8 +466,17 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 comment=self.comment or '',
                 did_meet=self.did_meet,
                 has_tgdesc=self.tgdesc.exists(),
+                has_bank=self.has_bank(),
             )
         return result
+
+    def has_bank(self):
+        """
+        Имеет ли банковские реквизиты
+        """
+        Key = get_model('contact', 'Key')
+        KeyType = get_model('contact', 'KeyType')
+        return Key.objects.filter(owner=self.user, type__pk=KeyType.BANKING_DETAILS_ID).exists()
 
     def is_power(self):
         return self.user.groups.filter(pk=settings.GROUP_IDS['power_telegram']).exists()
