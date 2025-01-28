@@ -2513,7 +2513,11 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             if meet_admin:
                 q_connections = \
                     Q(user_to__isnull=False) & \
-                    (Q(attitude__isnull=False, is_reverse=False) | Q(is_invite_meet=True, is_invite_meet_reverse=False))
+                    (
+                        Q(attitude__isnull=False, is_reverse=False) | \
+                        Q(is_invite_meet=True, is_invite_meet_reverse=False) | \
+                        Q(is_sympa=True, is_sympa_reverse=False)
+                    )
                 links = []
                 fmt = '3d-force-graph'
                 for cs in CurrentState.objects.filter(q_connections).filter(
