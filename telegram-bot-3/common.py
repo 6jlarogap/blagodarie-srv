@@ -71,6 +71,7 @@ class OperationType(object):
     SET_MOTHER = 10
     # Acquainted
     ACQ = 11
+    SET_SYMPA = 14
 
     CALLBACK_DATA_TEMPLATE = (
         '%(keyboard_type)s%(sep)s'
@@ -1886,6 +1887,8 @@ class Misc(object):
             tg_user_id_from=str(tg_user_sender.id),
             user_id_to=profile_to['uuid'],
         )
+        if operation_type_id == OperationType.SET_SYMPA:
+            post_op.update(is_confirmed='1')
         if data.get('message_to_forward_id'):
             post_op.update(
                 tg_from_chat_id=tg_user_sender.id,
@@ -1919,6 +1922,11 @@ class Misc(object):
                 text = '%(full_name_from_link)s не знаком(а) с %(full_name_to_link)s'
             elif operation_type_id == OperationType.TRUST:
                 text = '%(full_name_from_link)s доверяет %(full_name_to_link)s'
+            elif operation_type_id == OperationType.SET_SYMPA:
+                if response.get('previousstate') and response['previousstate'].get('is_sympa_confirmed'):
+                    text = 'Ваша симпатия к %(full_name_to_link)s уже установлена'
+                else:
+                    text = 'Поздравляем! У Вас симпатия!'
             profile_from = response['profile_from']
             profile_to = response['profile_to']
 
@@ -2069,7 +2077,7 @@ class Misc(object):
 
         # Это получателю благодарности и т.п. или владельцу получателя, если получатель собственный
         #
-        if text:
+        if text and operation_type_id != OperationType.SET_SYMPA:
             text_to_recipient = text
             if operation_done and data.get('message_to_forward_id'):
                 text_to_recipient += ' в связи с сообщением, см. ниже...'
@@ -2097,7 +2105,7 @@ class Misc(object):
                             message_id=data['message_to_forward_id'],
                             disable_notification=True,
                         )
-                    except TelegramBadRequest:
+                    except (TelegramBadRequest, TelegramForbiddenError,):
                         pass
 
 

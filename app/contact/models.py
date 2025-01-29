@@ -814,6 +814,8 @@ class ApiAddOperationMixin(object):
                     currentstate.is_sympa = True
                     if is_confirmed is not None:
                         currentstate.is_sympa_confirmed = is_confirmed
+                    else:
+                        currentstate.is_sympa_confirmed = False
                     currentstate.save()
 
             data.update(previousstate=dict(
@@ -834,6 +836,8 @@ class ApiAddOperationMixin(object):
                 reverse_cs.is_sympa = True
                 if is_confirmed is not None:
                     reverse_cs.is_sympa_confirmed = is_confirmed
+                else:
+                    reverse_cs.is_sympa_confirmed = currentstate.is_sympa_confirmed
                 reverse_cs.save()
 
         elif operationtype_id == OperationType.REVOKE_SYMPA:

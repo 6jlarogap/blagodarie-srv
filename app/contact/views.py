@@ -408,7 +408,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 if message_to and profile_to.is_notified:
                     data['message_sent'] = self.send_to_telegram(message_to, user=user_to, options=options)
 
-            if operationtype_id == OperationType.SET_SYMPA:
+            if operationtype_id == OperationType.SET_SYMPA and not got_tg_token:
                 data.update(profile_to=profile_to.data_dict(short=True))
                 message_from = message_to = None
                 if 'is_sympa' in data.get('previousstate', {}) and \
@@ -421,11 +421,27 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     )
 
                 if profile_to.tgdesc.exists():
-                    for tgdesc in profile_to.tgdesc.all().order_by('message_id'):
+                    qs_tgdesc = profile_to.tgdesc.all().order_by('message_id')
+                    options_last = options.copy()
+                    uuid_stripped = str(profile_to.uuid).replace('-', '')
+                    options_last.update(
+                        reply_markup=dict(
+                            inline_keyboard=[[
+                                dict(
+                                    text='Симпатия',
+                                    callback_data=f'2~{OperationType.SET_SYMPA}~{uuid_stripped}~~2~'
+                                ),
+                                dict(
+                                    text='Недоверие',
+                                    callback_data=f'2~{OperationType.MISTRUST}~{uuid_stripped}~~2~'
+                                ),
+                    ]]))
+                    for tgdesc in qs_tgdesc:
                         success = self.copy_to_telegram(
                                 tgdesc.message_id,
                                 tgdesc.chat_id,
-                                user_from
+                                user_from,
+                                options=options_last if tgdesc == qs_tgdesc.last() else options,
                         )
                         if success:
                             data['desc_sent'] = True

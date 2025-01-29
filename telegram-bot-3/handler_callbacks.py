@@ -667,6 +667,7 @@ async def cbq_attitude(callback: CallbackQuery, state: FSMContext):
                 OperationType.TRUST,
                 OperationType.MISTRUST, OperationType.NULLIFY_ATTITUDE,
                 OperationType.ACQ, OperationType.THANK,
+                OperationType.SET_SYMPA,
             ):
             raise ValueError
         status_to, profile_to = await Misc.get_user_by_uuid(uuid)
