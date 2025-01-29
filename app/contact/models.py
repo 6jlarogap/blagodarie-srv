@@ -202,8 +202,9 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
     is_reverse = models.BooleanField(_("Обратное отношение"), default=False, db_index=True)
 
     # Аналогично для симпатий: "прямая" симпатия и фейковая обратная
-    is_sympa = models.BooleanField(_("Симпатия"), default=False, db_index=True)
-    is_sympa_reverse = models.BooleanField(_("Симпатия: обратное отношение"), default=False, db_index=True)
+    is_sympa = models.BooleanField(_("Интерес"), default=False, db_index=True)
+    is_sympa_reverse = models.BooleanField(_("Интерес: обратное отношение"), default=False, db_index=True)
+    is_sympa_confirmed = models.BooleanField(_("Подтверждение интереса"), default=False, db_index=True)
 
     # Аналогично для приглашений в игру знакомств: прямое приглашение и фейковое обратное
     is_invite_meet = models.BooleanField(_("Приглашение в игру знакомств"), default=False, db_index=True)
@@ -445,6 +446,8 @@ class ApiAddOperationMixin(object):
         insert_timestamp,
         tg_from_chat_id=None,
         tg_message_id=None,
+        # При None не изменяем подтверждение
+        is_confirmed=None,
     ):
         try:
             operationtype = OperationType.objects.get(pk=operationtype_id)
@@ -788,6 +791,7 @@ class ApiAddOperationMixin(object):
 
         elif operationtype_id == OperationType.SET_SYMPA:
             is_sympa_previous = None
+            is_sympa_confirmed_previous = None
             currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
                 user_from=user_from,
                 user_to=user_to,
@@ -797,27 +801,39 @@ class ApiAddOperationMixin(object):
             if not created_:
                 if not currentstate.is_sympa_reverse:
                     is_sympa_previous = currentstate.is_sympa
+                    is_sympa_confirmed_previous = currentstate.is_sympa_confirmed
                 if not currentstate.is_sympa_reverse and currentstate.is_sympa == True:
-                    # Уже установлена симпатия
-                    pass
+                    # Уже установлена симпатия, но могло прийти подтверждение
+                    if is_confirmed is not None and currentstate.is_sympa_confirmed != is_confirmed:
+                        currentstate.update_timestamp = update_timestamp
+                        currentstate.is_sympa_confirmed = is_confirmed
+                        currentstate.save()
                 else:
                     currentstate.update_timestamp = update_timestamp
                     currentstate.is_sympa_reverse = False
                     currentstate.is_sympa = True
+                    if is_confirmed is not None:
+                        currentstate.is_sympa_confirmed = is_confirmed
                     currentstate.save()
 
-            data.update(previousstate=dict(is_sympa=is_sympa_previous))
+            data.update(previousstate=dict(
+                is_sympa=is_sympa_previous,
+                is_sympa_confirmed=is_sympa_confirmed_previous,
+            ))
             reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
                 user_to=user_from,
                 user_from=user_to,
                 defaults=dict(
                     is_sympa_reverse=True,
                     is_sympa=True,
+                    is_sympa_confirmed=is_confirmed if is_confirmed is not None else False,
             ))
             if not reverse_created and (reverse_cs.is_sympa_reverse or reverse_cs.is_sympa == False):
                 reverse_cs.update_timestamp = update_timestamp
                 reverse_cs.is_sympa_reverse = True
                 reverse_cs.is_sympa = True
+                if is_confirmed is not None:
+                    reverse_cs.is_sympa_confirmed = is_confirmed
                 reverse_cs.save()
 
         elif operationtype_id == OperationType.REVOKE_SYMPA:
@@ -828,6 +844,7 @@ class ApiAddOperationMixin(object):
                 pass
             else:
                 currentstate.is_sympa = False
+                currentstate.is_sympa_confirmed = False
                 currentstate.update_timestamp = update_timestamp
                 currentstate.save()
 
@@ -839,6 +856,7 @@ class ApiAddOperationMixin(object):
             ).update(
                 is_sympa=False,
                 is_sympa_reverse=False,
+                is_sympa_confirmed=False,
                 update_timestamp=update_timestamp,
             )
 

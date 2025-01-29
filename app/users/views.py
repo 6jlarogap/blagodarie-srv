@@ -2516,7 +2516,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     (
                         Q(attitude__isnull=False, is_reverse=False) | \
                         Q(is_invite_meet=True, is_invite_meet_reverse=False) | \
-                        Q(is_sympa=True, is_sympa_reverse=False)
+                        Q(is_sympa_confirmed=True, is_sympa_reverse=False)
                     )
                 links = []
                 fmt = '3d-force-graph'
@@ -2529,7 +2529,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         links.append(cs.data_dict(show_attitude=True,fmt=fmt,))
                     if cs.is_invite_meet and not cs.is_invite_meet_reverse:
                         links.append(cs.data_dict(show_invite_meet=True,fmt=fmt,))
-                    if cs.is_sympa and not cs.is_sympa_reverse:
+                    if cs.is_sympa and not cs.is_sympa_reverse and cs.is_sympa_confirmed:
                         links.append(cs.data_dict(show_sympa=True,fmt=fmt,))
                 graph = dict(nodes=nodes, links=links)
 

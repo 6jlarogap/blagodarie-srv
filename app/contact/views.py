@@ -335,6 +335,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 insert_timestamp,
                 tg_from_chat_id,
                 tg_message_id,
+                is_confirmed= request.data.get('is_confirmed')
             )
 
             if got_tg_token:
@@ -364,8 +365,11 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     profile_to=profile_to_data,
                 )
 
-            data.update(message_sent=False, desc_sent=False)
-            reciprocal_sympa = False
+            data.update(message_sent=False, desc_sent=False, desc_sent_error=False)
+            options = dict(
+                disable_web_page_preview=True,
+                disable_notification=True,
+            )
             if not got_tg_token and settings.SEND_TO_TELEGRAM and \
                operationtype_id in (
                    OperationType.TRUST_OR_THANK,
@@ -374,13 +378,8 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                    OperationType.TRUST,
                    OperationType.NULLIFY_ATTITUDE,
                    OperationType.ACQ,
-                   OperationType.SET_SYMPA,
                ):
-                message_to = message_from = None
-                options = dict(
-                    disable_web_page_preview=True,
-                    disable_notification=True,
-                )
+                message_to = None
                 bot_username = self.get_bot_username()
                 dl_from_t = (
                     f'{self.get_deeplink_name(user_from, bot_username)} '
@@ -406,54 +405,37 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 elif operationtype_id == OperationType.NULLIFY_ATTITUDE:
                     message_to = f'{dl_from_t} не знаком(а) с {dl_to_t}'
 
-                elif operationtype_id == OperationType.SET_SYMPA and \
-                    'is_sympa' in data.get('previousstate', {}) and \
-                     not data['previousstate']['is_sympa']:
+                if message_to and profile_to.is_notified:
+                    data['message_sent'] = self.send_to_telegram(message_to, user=user_to, options=options)
 
-                    data.update(profile_to=profile_to.data_dict(short=True))
-                    if CurrentState.objects.filter(
-                            user_from=user_to, user_to=user_from,
-                            is_sympa=True, is_sympa_reverse=False,
-                        ).exists():
-                        reciprocal_sympa = True
-                        message_to = message_from = f'У вас взаимный интерес! Желаем удачи!'
-                        options.update(
-                            reply_markup=dict(
-                                inline_keyboard=[[
-                                    dict(
-                                        text='Продолжить',
-                                        url=None,
-                                    )
-                        ]]))
-                    else:
-                        message_to = (
-                            'Поздравляем! Вами кто-то интересуется! '
-                            'Ставьте больше интересов на '
-                            f'<a href="{settings.MEET_URL}">карте</a> '
-                            '- чтобы скорее найти совпадения!'
+            if operationtype_id == OperationType.SET_SYMPA:
+                data.update(profile_to=profile_to.data_dict(short=True))
+                message_from = message_to = None
+                if 'is_sympa' in data.get('previousstate', {}) and \
+                   not data['previousstate']['is_sympa']:
+                    message_to = (
+                        'Поздравляем! Вами кто-то интересуется! '
+                        'Ставьте больше интересов на '
+                        f'<a href="{settings.MEET_URL}">карте</a> '
+                        '- чтобы скорее найти совпадения!'
+                    )
+
+                if profile_to.tgdesc.exists():
+                    for tgdesc in profile_to.tgdesc.all().order_by('message_id'):
+                        success = self.copy_to_telegram(
+                                tgdesc.message_id,
+                                tgdesc.chat_id,
+                                user_from
                         )
-
-                    if profile_to.tgdesc.exists():
-                        for tgdesc in profile_to.tgdesc.all().order_by('message_id'):
-                            self.copy_to_telegram(
-                                    tgdesc.message_id,
-                                    tgdesc.chat_id,
-                                    user_from
-                            )
-                        data['desc_sent'] = True
+                        if success:
+                            data['desc_sent'] = True
+                    if not data['desc_sent']:
+                        data['desc_sent_error'] = True
 
                 if message_to and profile_to.is_notified:
-                    if operationtype_id == OperationType.SET_SYMPA and reciprocal_sympa:
-                        (options['reply_markup']['inline_keyboard'][0][0]).update(
-                            url=self.get_deeplink(user_from, bot_username)
-                        )
                     data['message_sent'] = self.send_to_telegram(message_to, user=user_to, options=options)
 
                 if message_from and profile_from.is_notified:
-                    if operationtype_id == OperationType.SET_SYMPA:
-                        (options['reply_markup']['inline_keyboard'][0][0]).update(
-                            url=self.get_deeplink(user_to, bot_username)
-                        )
                     data['message_sent'] = self.send_to_telegram(message_from, user=user_from, options=options)
 
             status_code = status.HTTP_200_OK
