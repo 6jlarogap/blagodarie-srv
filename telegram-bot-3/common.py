@@ -2006,7 +2006,7 @@ class Misc(object):
                         profile_from, profile_to, tg_user_sender,
                         card_message=data['callback'].message,
                     )
-                else:
+                elif not data.get('is_tgdesc_card'):
                     await cls.show_card(
                         profile=profile_to,
                         profile_sender=profile_from,
@@ -2124,9 +2124,9 @@ class Misc(object):
             sep=KeyboardType.SEP,
             user_to_uuid_stripped=cls.uuid_strip(profile_to['uuid']),
             message_to_forward_id='',
-            is_thank_card='1',
+            card_type='1',
         )
-        callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE + '%(is_thank_card)s%(sep)s'
+        callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE + '%(card_type)s%(sep)s'
         asterisk = ' (*)'
 
         dict_reply.update(operation=OperationType.ACQ)

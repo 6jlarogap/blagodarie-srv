@@ -622,7 +622,9 @@ async def cbq_attitude(callback: CallbackQuery, state: FSMContext):
         <KeyboardType.SEP>
         <message_to_forward_id>             # 3
         <KeyboardType.SEP>
-        <thank_card>                        # 4, отправлено из карточки после благодарности
+        <card_type>                         # 4,
+                    '1':    отправлено из карточки после благодарности
+                    '2':    отправлено из карточки вместе с описанием
         <KeyboardType.SEP>
     """
     try:
@@ -639,9 +641,12 @@ async def cbq_attitude(callback: CallbackQuery, state: FSMContext):
         except (ValueError, IndexError,):
             message_to_forward_id = None
         try:
-            is_thank_card = bool(code[4])
+            card_type = code[4]
+            is_thank_card = code[4] == '1'
+            is_tgdesc_card = code[4] == '2'
         except (IndexError,):
             is_thank_card = False
+            is_tgdesc_card = False
         message = callback.message
         group_member = \
             message.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP) and \
@@ -697,6 +702,7 @@ async def cbq_attitude(callback: CallbackQuery, state: FSMContext):
         message_to_forward_id = message_to_forward_id,
         group_member=group_member,
         is_thank_card=is_thank_card,
+        is_tgdesc_card=is_tgdesc_card,
         state=state,
     )
     if group_member:
