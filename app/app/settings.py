@@ -515,6 +515,10 @@ GROUP_IDS = dict(
     meetgame_admin=2,
 )
 
+# Ид автора проекта
+#
+AUTHOR_USER_ID = 331
+
 try:
     from app.local_settings import *
 except ModuleNotFoundError:

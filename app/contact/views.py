@@ -454,6 +454,47 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 if message_from and profile_from.is_notified:
                     data['message_sent'] = self.send_to_telegram(message_from, user=user_from, options=options)
 
+            if operationtype_id == OperationType.SET_SYMPA and \
+               got_tg_token and request.data.get('is_confirmed'):
+               # data.get('previousstate') and not data['previousstate'].get('is_sympa_confirmed') and \
+
+                is_reciprocal = CurrentState.objects.filter(
+                    user_from=user_to, user_to=user_from, is_sympa_reverse=False, is_sympa_confirmed=True
+                ).exists()
+                if is_reciprocal:
+                    donate_him = None
+                    # найти того, кто пригласил женщину
+                    if profile_from.gender == 'f':
+                        user_f = user_from
+                        user_m = user_to
+                    else:
+                        user_m = user_from
+                        user_f = user_to
+                    try:
+                        inviter = CurrentState.objects.filter(
+                            user_to=user_f, is_invite_meet_reverse= False, is_invite_meet=True,
+                        )[0].user_from
+                        bank = Key.objects.filter(
+                            owner=inviter, type__pk=KeyType.BANKING_DETAILS_ID
+                        )[0]
+                        donate_him = inviter
+                    except IndexError:
+                        pass
+                    if not donate_him:
+                        try:
+                            author = User.objects.filter(pk=settings.AUTHOR_USER_ID)[0]
+                            bank = Key.objects.filter(
+                                owner=author, type__pk=KeyType.BANKING_DETAILS_ID,
+                            )[0]
+                            donate_him = author
+                        except IndexError:
+                            pass
+                    if donate_him:
+                        data['donate'] = dict(
+                            bank=bank.value,
+                            tg_data=donate_him.profile.tg_data(),
+                        )
+
             status_code = status.HTTP_200_OK
 
         except ServiceException as excpt:
@@ -1002,7 +1043,7 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
             try:
                 uuid = request.GET.get('uuid')
                 q_rel = Q(is_invite_meet=True, is_invite_meet_reverse=False) | \
-                    Q(is_sympa=True, is_sympa_reverse=False)
+                    Q(is_sympa_confirmed=True, is_sympa_reverse=False)
                 q_users = Q(user_from__profile__uuid=uuid) | Q(user_to__profile__uuid=uuid)
                 for cs in CurrentState.objects.filter(
                             q_rel & q_users
@@ -1011,7 +1052,7 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
                           ).distinct():
                     if str(cs.user_from.profile.uuid) == uuid and cs.is_invite_meet and not cs.is_invite_meet_reverse:
                         invited += 1
-                    if cs.is_sympa and not cs.is_sympa_reverse:
+                    if cs.is_sympa_confirmed and not cs.is_sympa_reverse:
                         if str(cs.user_from.profile.uuid) == uuid:
                             sympa_from += 1
                         if str(cs.user_to.profile.uuid) == uuid:

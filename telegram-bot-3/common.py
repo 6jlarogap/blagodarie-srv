@@ -1976,7 +1976,7 @@ class Misc(object):
                     ))
                     buttons.append([inline_btn_cancel_thank])
 
-            if not group_member and (operation_done or operation_already):
+            if not group_member and (operation_done or operation_already) and not data.get('is_tgdesc_card'):
                 if not buttons:
                     inline_btn_trusts = InlineKeyboardButton(
                         text='Сеть доверия',
@@ -2108,6 +2108,8 @@ class Misc(object):
                     except (TelegramBadRequest, TelegramForbiddenError,):
                         pass
 
+        if donate := response.get('donate'):
+            pass
 
     @classmethod
     async def quest_after_thank_if_no_attitude(
