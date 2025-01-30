@@ -9,7 +9,9 @@ urlpatterns = [
     re_path(r'^api/addoperation/?$', views.api_add_operation),
     re_path(r'^api/getuseroperations/?$', views.api_get_user_operations),
     re_path(r'^api/cancel_thank/?$', views.api_cancel_thank),
+
     re_path(r'^api/thank_bank/?$', views.api_thank_bank),
+    re_path(r'^api/donate_to/?$', views.api_donate_to),
 
     re_path(r'^api/addtextoperation/?$', views.api_add_text_operation),
     re_path(r'^api/gettextinfo/?$', views.api_get_textinfo),

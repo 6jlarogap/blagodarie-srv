@@ -438,6 +438,48 @@ class Ability(BaseModelInsertUpdateTimestamp):
 
 class ApiAddOperationMixin(object):
 
+    def find_donate_to(self, user_f, user_m=None):
+        """
+        Найти того кому над будет донатить
+
+        Это или пригласивший user_f (женщину), если у него есть банковские реквизиты
+        и если он не user_m (мужчина), с которым она во взаимной симпатии
+        или автор проекта, если он с банковскими реквизитами
+        """
+        result = donate_him = None
+        for j in Journal.objects.filter(
+                user_to=user_f, operationtype_id=OperationType.DID_MEET,
+            ).order_by('-insert_timestamp'):
+            inviter = j.user_from
+            if user_m and inviter == user_m:
+                pass
+                # continue
+            try:
+                bank = Key.objects.filter(
+                    owner=inviter, type__pk=KeyType.BANKING_DETAILS_ID
+                )[0]
+                donate_him = inviter
+                break
+            except IndexError:
+                pass
+        if not donate_him:
+            try:
+                author = User.objects.filter(pk=settings.AUTHOR_USER_ID)[0]
+                if not user_m or author != user_m:
+                    bank = Key.objects.filter(
+                        owner=author, type__pk=KeyType.BANKING_DETAILS_ID,
+                    )[0]
+                    donate_him = author
+            except IndexError:
+                pass
+        if donate_him:
+            result = dict(
+                bank=bank.value,
+                profile=donate_him.profile.data_dict(),
+                tg_data=donate_him.profile.tg_data(),
+            )
+        return result
+
     def add_operation(self,
         user_from,
         profile_to,

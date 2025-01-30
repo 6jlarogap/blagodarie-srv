@@ -454,15 +454,13 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 if message_from and profile_from.is_notified:
                     data['message_sent'] = self.send_to_telegram(message_from, user=user_from, options=options)
 
+            is_reciprocal = CurrentState.objects.filter(
+                user_from=user_to, user_to=user_from, is_sympa_reverse=False, is_sympa_confirmed=True
+            ).exists()
+            data['is_reciprocal'] = is_reciprocal
             if operationtype_id == OperationType.SET_SYMPA and \
                got_tg_token and request.data.get('is_confirmed'):
-               # data.get('previousstate') and not data['previousstate'].get('is_sympa_confirmed') and \
-
-                is_reciprocal = CurrentState.objects.filter(
-                    user_from=user_to, user_to=user_from, is_sympa_reverse=False, is_sympa_confirmed=True
-                ).exists()
-                if is_reciprocal:
-                    donate_him = None
+                if is_reciprocal and data.get('previousstate') and not data['previousstate'].get('is_sympa_confirmed'):
                     # найти того, кто пригласил женщину
                     if profile_from.gender == 'f':
                         user_f = user_from
@@ -470,31 +468,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     else:
                         user_m = user_from
                         user_f = user_to
-                    try:
-                        inviter = CurrentState.objects.filter(
-                            user_to=user_f, is_invite_meet_reverse= False, is_invite_meet=True,
-                        )[0].user_from
-                        bank = Key.objects.filter(
-                            owner=inviter, type__pk=KeyType.BANKING_DETAILS_ID
-                        )[0]
-                        donate_him = inviter
-                    except IndexError:
-                        pass
-                    if not donate_him:
-                        try:
-                            author = User.objects.filter(pk=settings.AUTHOR_USER_ID)[0]
-                            bank = Key.objects.filter(
-                                owner=author, type__pk=KeyType.BANKING_DETAILS_ID,
-                            )[0]
-                            donate_him = author
-                        except IndexError:
-                            pass
-                    if donate_him:
-                        data['donate'] = dict(
-                            bank=bank.value,
-                            tg_data=donate_him.profile.tg_data(),
-                        )
-
+                    data['donate'] = self.find_donate_to(user_f, user_m)
             status_code = status.HTTP_200_OK
 
         except ServiceException as excpt:
@@ -4256,3 +4230,45 @@ class ApiThankBank(APIView):
         return Response(data=data, status=status_code)
 
 api_thank_bank = ApiThankBank.as_view()
+
+class ApiDonateTo(ApiAddOperationMixin, APIView):
+    """
+    Найти кому донатить деньги, исходя из пары взаимных симпатизантов
+    """
+
+    @transaction.atomic
+    def post(self, request):
+        """
+        Получить сведения о том, кому надо донатить (на чей счет) по ид в журнале операций
+        """
+        try:
+            msg_not_found = 'Симпатия не найдена'
+            if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                raise ServiceException('Неверный токен телеграм бота')
+            try:
+                journal_id = int(request.data.get('journal_id'))
+            except (TypeError, ValueError,):
+                raise ServiceException('Неверный journal_id')
+            try:
+                j = Journal.objects.select_related(
+                    'user_from', 'user_from__profile',
+                    'user_to', 'user_to__profile',
+                ).get(pk=journal_id)
+            except Journal.DoesNotExist:
+                raise ServiceException(msg_not_found)
+            if j.operationtype_id !=OperationType.SET_SYMPA or not j.user_to:
+                raise ServiceException(msg_not_found)
+            if j.user_from.profile.gender == 'f':
+                user_f = j.user_from
+                user_m = j.user_to
+            else:
+                user_m = j.user_from
+                user_f = j.user_to
+            data = self.find_donate_to(user_f, user_m) or {}
+            status_code = status.HTTP_200_OK if data else status.HTTP_404_NOT_FOUND
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_donate_to = ApiDonateTo.as_view()
