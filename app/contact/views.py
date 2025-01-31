@@ -455,20 +455,22 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 if message_from and profile_from.is_notified:
                     data['message_sent'] = self.send_to_telegram(message_from, user=user_from, options=options)
 
-            is_reciprocal = is_confirmed and CurrentState.objects.filter(
-                user_from=user_to, user_to=user_from, is_sympa_reverse=False, is_sympa_confirmed=True
-            ).exists()
-            data['is_reciprocal'] = is_reciprocal
-            if operationtype_id == OperationType.SET_SYMPA and got_tg_token and is_confirmed:
-                if is_reciprocal and data.get('previousstate') and not data['previousstate'].get('is_sympa_confirmed'):
-                    # найти того, кто пригласил женщину
-                    if profile_from.gender == 'f':
-                        user_f = user_from
-                        user_m = user_to
-                    else:
-                        user_m = user_from
-                        user_f = user_to
-                    data['donate'] = self.find_donate_to(user_f, user_m)
+            if operationtype_id == OperationType.SET_SYMPA:
+                is_reciprocal = is_confirmed and CurrentState.objects.filter(
+                    user_from=user_to, user_to=user_from, is_sympa_reverse=False, is_sympa_confirmed=True
+                ).exists()
+                data['is_reciprocal'] = is_reciprocal
+                if operationtype_id == OperationType.SET_SYMPA and got_tg_token and is_confirmed:
+                    if is_reciprocal and data.get('previousstate') and not data['previousstate'].get('is_sympa_confirmed'):
+                        # найти того, кто пригласил женщину
+                        if profile_from.gender == 'f':
+                            user_f = user_from
+                            user_m = user_to
+                        else:
+                            user_m = user_from
+                            user_f = user_to
+                        data['donate'] = self.find_donate_to(user_f, user_m)
+
             status_code = status.HTTP_200_OK
 
         except ServiceException as excpt:
