@@ -2047,7 +2047,8 @@ class Misc(object):
                     if donate_btn_cancel:
                         await data['state'].set_state(FSMdonateSympa.ask)
                         await data['state'].update_data(
-                            uuid=profile_from['uuid'],
+                            user_m=profile_from,
+                            user_f=profile_to,
                             donate=response['donate'],
                             journal_id=response.get('journal_id')
                         )

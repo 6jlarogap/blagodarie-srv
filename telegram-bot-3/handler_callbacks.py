@@ -1595,7 +1595,8 @@ async def process_message_thank_ask_money(message: Message, state: FSMContext):
         journal_id=journal_id,
         message_id=message.message_id,
         chat_id=message.chat.id,
-        media_group_id=media_group_id
+        media_group_id=media_group_id,
+        is_first=is_first,
     )
     logging.debug('post thank_bank, payload: %s' % Misc.secret(tgdesc_payload))
     status, response = await Misc.api_request(
@@ -1648,7 +1649,7 @@ async def cbq_get_sympa_donate(callback: CallbackQuery, state: FSMContext):
         )
         logging.debug('find_donate_to, payload: %s' % Misc.secret(donate_to_payload))
         status, response = await Misc.api_request(
-            '/api/donate_to',
+            '/api/get_donate_to',
             method='POST',
             json = donate_to_payload
         )
@@ -1657,13 +1658,12 @@ async def cbq_get_sympa_donate(callback: CallbackQuery, state: FSMContext):
         if status != 200:
             return
         await state.set_state(FSMdonateSympa.ask)
-        await state.update_data(
-            uuid=response_sender['uuid'],
-            donate=response,
-            journal_id=journal_id
-        )
+        await state.update_data(response)
         await callback.message.reply(
-                text='По случаю взаимной симпатии оправьте донат РЕФЕРЕРУ/АВТОРУ ПО РЕКВИЗИТАМ:\n\n',
+                text=(
+                    'По случаю взаимной симпатии оправьте донат РЕФЕРЕРУ/АВТОРУ ПО РЕКВИЗИТАМ:\n\n'
+                    f'{response["donate"]["bank"]}'
+                ),
                 reply_markup=Misc.reply_markup_cancel_row()
         )
         await callback.answer()
@@ -1673,7 +1673,47 @@ async def process_message_donate_after_sympa(message: Message, state: FSMContext
     if await is_it_command(message, state):
         return
     data = await state.get_data()
-    await message.reply(
-        text='Передача доната пока не реализована',
+    status_from, profile_from = await Misc.post_tg_user(message.from_user)
+    if status_from != 200 or \
+       profile_from['uuid'] != data.get('user_m', {}).get('uuid') or \
+       not data.get('journal_id'):
+        await state.clear(); return
+    is_first = True
+    media_group_id = str(message.media_group_id or '')
+    if media_group_id:
+        key = (
+            f'{settings.REDIS_ASK_MONEY_PREFIX}{settings.REDIS_KEY_SEP}'
+            f'{message.from_user.id}{settings.REDIS_KEY_SEP}'
+            f'{media_group_id}{settings.REDIS_KEY_SEP}'
+            f'{data["journal_id"]}'
+        )
+        is_first = Misc.redis_is_key_first_up(key, ex=300)
+    tgdesc_payload  = dict(
+        tg_token=settings.TOKEN,
+        journal_id=data['journal_id'],
+        message_id=message.message_id,
+        chat_id=message.chat.id,
+        media_group_id=media_group_id,
+        is_first=is_first,
     )
+    logging.debug('post donate_reciprocal_sympathy, payload: %s' % Misc.secret(tgdesc_payload))
+    status, response = await Misc.api_request(
+        '/api/thank_bank',
+        method='POST',
+        json = tgdesc_payload
+    )
+    logging.debug('post donate_reciprocal_sympathy, status: %s' % status)
+    logging.debug('post donate_reciprocal_sympathy, response: %s' % response)
+    if status == 200:
+        if is_first:
+            await message.reply('Сообщение передано получателю доната')
+        for tgd in data['donate']['tg_data']:
+            try:
+                await bot.forward_message(
+                    tgd['tg_uid'],
+                    from_chat_id=message.chat.id,
+                    message_id=message.message_id,
+                )
+            except (TelegramBadRequest, TelegramForbiddenError):
+                pass
     await state.clear()

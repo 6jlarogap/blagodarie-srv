@@ -438,7 +438,7 @@ class Ability(BaseModelInsertUpdateTimestamp):
 
 class ApiAddOperationMixin(object):
 
-    def find_donate_to(self, user_f, user_m=None):
+    def find_donate_to(self, user_f, user_m):
         """
         Найти того кому над будет донатить
 
@@ -451,9 +451,8 @@ class ApiAddOperationMixin(object):
                 user_to=user_f, operationtype_id=OperationType.DID_MEET,
             ).order_by('-insert_timestamp'):
             inviter = j.user_from
-            if user_m and inviter == user_m:
-                pass
-                # continue
+            if inviter == user_m:
+                continue
             try:
                 bank = Key.objects.filter(
                     owner=inviter, type__pk=KeyType.BANKING_DETAILS_ID
@@ -465,7 +464,7 @@ class ApiAddOperationMixin(object):
         if not donate_him:
             try:
                 author = User.objects.filter(pk=settings.AUTHOR_USER_ID)[0]
-                if not user_m or author != user_m:
+                if author != user_m:
                     bank = Key.objects.filter(
                         owner=author, type__pk=KeyType.BANKING_DETAILS_ID,
                     )[0]

@@ -327,6 +327,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
             comment = request.data.get("comment", None)
             insert_timestamp = request.data.get('timestamp', int(time.time()))
 
+            is_confirmed = request.data.get('is_confirmed')
             data = self.add_operation(
                 user_from,
                 profile_to,
@@ -335,7 +336,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 insert_timestamp,
                 tg_from_chat_id,
                 tg_message_id,
-                is_confirmed= request.data.get('is_confirmed')
+                is_confirmed=is_confirmed,
             )
 
             if got_tg_token:
@@ -454,12 +455,11 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 if message_from and profile_from.is_notified:
                     data['message_sent'] = self.send_to_telegram(message_from, user=user_from, options=options)
 
-            is_reciprocal = CurrentState.objects.filter(
+            is_reciprocal = is_confirmed and CurrentState.objects.filter(
                 user_from=user_to, user_to=user_from, is_sympa_reverse=False, is_sympa_confirmed=True
             ).exists()
             data['is_reciprocal'] = is_reciprocal
-            if operationtype_id == OperationType.SET_SYMPA and \
-               got_tg_token and request.data.get('is_confirmed'):
+            if operationtype_id == OperationType.SET_SYMPA and got_tg_token and is_confirmed:
                 if is_reciprocal and data.get('previousstate') and not data['previousstate'].get('is_sympa_confirmed'):
                     # найти того, кто пригласил женщину
                     if profile_from.gender == 'f':
@@ -4192,11 +4192,13 @@ class ApiThankBank(APIView):
     @transaction.atomic
     def post(self, request):
         """
-        Получить сведения о пожертвованию к благодарности. Вызывается только из телеграм бота
+        Получить сведения о пожертвованию к благодарности или симпатии.
+
+        Вызывается только из телеграм бота
         """
         try:
             data = request.data
-            msg_not_found = 'Благодарность не найдена'
+            msg_not_found = 'Запись об операции не найдена'
             if data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
                 raise ServiceException('Неверный токен телеграм бота')
             try:
@@ -4207,16 +4209,26 @@ class ApiThankBank(APIView):
                 journal = Journal.objects.get(pk=journal_id)
             except Journal.DoesNotExist:
                 raise ServiceException(msg_not_found)
-            if journal.operationtype_id not in (OperationType.TRUST_OR_THANK, OperationType.THANK):
+            if journal.operationtype_id not in (
+                    OperationType.TRUST_OR_THANK, OperationType.THANK, OperationType.SET_SYMPA
+               ):
                 raise ServiceException(msg_not_found)
             try:
                 profile_to = Profile.objects.get(user_id=journal.user_to_id)
             except Profile.DoesNotExist:
                 raise ServiceException(msg_not_found)
+            media_group_id = data['media_group_id']
+            is_first = True
+            if 'is_first' in data:
+                is_first = data['is_first']
+            if is_first:
+                journal.tgdesc.filter(
+                    (~Q(media_group_id=media_group_id)) | Q(media_group_id='')
+                ).delete()
             try:
                 tgdesc = TgDesc.objects.create(
                     message_id=data['message_id'], chat_id=data['chat_id'],
-                    media_group_id=data['media_group_id'],
+                    media_group_id=media_group_id,
                 )
             except KeyError:
                 raise ServiceException('Не верные данные, отсутствуют message_id, chat_id или media_group_id')
@@ -4231,9 +4243,9 @@ class ApiThankBank(APIView):
 
 api_thank_bank = ApiThankBank.as_view()
 
-class ApiDonateTo(ApiAddOperationMixin, APIView):
+class ApiGetDonateTo(ApiAddOperationMixin, APIView):
     """
-    Найти кому донатить деньги, исходя из пары взаимных симпатизантов
+    Найти на чей счет донатить деньги, исходя из пары взаимных симпатизантов
     """
 
     @transaction.atomic
@@ -4256,7 +4268,7 @@ class ApiDonateTo(ApiAddOperationMixin, APIView):
                 ).get(pk=journal_id)
             except Journal.DoesNotExist:
                 raise ServiceException(msg_not_found)
-            if j.operationtype_id !=OperationType.SET_SYMPA or not j.user_to:
+            if j.operationtype_id != OperationType.SET_SYMPA or not j.user_to:
                 raise ServiceException(msg_not_found)
             if j.user_from.profile.gender == 'f':
                 user_f = j.user_from
@@ -4264,11 +4276,21 @@ class ApiDonateTo(ApiAddOperationMixin, APIView):
             else:
                 user_m = j.user_from
                 user_f = j.user_to
-            data = self.find_donate_to(user_f, user_m) or {}
-            status_code = status.HTTP_200_OK if data else status.HTTP_404_NOT_FOUND
+            donate = self.find_donate_to(user_f, user_m) or {}
+            if donate:
+                status_code = status.HTTP_200_OK
+                data = dict(
+                    user_m=user_m.profile.data_dict(),
+                    user_f=user_f.profile.data_dict(),
+                    donate=donate,
+                    journal_id=journal_id
+                )
+            else:
+                data = {}
+                status_code = status.HTTP_404_NOT_FOUND
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
-api_donate_to = ApiDonateTo.as_view()
+api_get_donate_to = ApiGetDonateTo.as_view()
