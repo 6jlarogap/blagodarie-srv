@@ -464,11 +464,10 @@ class ApiAddOperationMixin(object):
         if not donate_him:
             try:
                 author = User.objects.filter(pk=settings.AUTHOR_USER_ID)[0]
-                if author != user_m:
-                    bank = Key.objects.filter(
-                        owner=author, type__pk=KeyType.BANKING_DETAILS_ID,
-                    )[0]
-                    donate_him = author
+                bank = Key.objects.filter(
+                    owner=author, type__pk=KeyType.BANKING_DETAILS_ID,
+                )[0]
+                donate_him = author
             except IndexError:
                 pass
         if donate_him:
