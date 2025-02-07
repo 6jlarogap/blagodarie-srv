@@ -51,9 +51,12 @@ class OperationType(models.Model):
     # Revoked Part in Acquaintance Game
     # В этом случае запись только в journal.user_to: отказался от игры знакомств
     REVOKED_MEET = 13
-    # Сброс и установка симпатии
+    # Установка интереса/симпатии
     SET_SYMPA = 14
+    # Удалить и симпатию, и интерес
     REVOKE_SYMPA = 15
+    # Удалить только симпатию, интерес оставить
+    REVOKE_SYMPA_ONLY = 16
 
     title = models.CharField(_("Тип операции"), max_length=255, unique=True)
 
@@ -881,16 +884,28 @@ class ApiAddOperationMixin(object):
                 reverse_cs.save()
 
         elif operationtype_id == OperationType.REVOKE_SYMPA:
+            # Пока нигде не используется
+            is_sympa_previous = None
+            is_sympa_confirmed_previous = None
             q = Q(user_from=user_from, user_to=user_to, is_sympa=True)
             try:
-                currentstate = CurrentState.objects.get(user_from=user_from, user_to=user_to, is_sympa=True)
+                currentstate = CurrentState.objects.get(
+                    user_from=user_from, user_to=user_to, is_sympa_reverse=False, is_sympa=True
+                )
             except CurrentState.DoesNotExist:
                 pass
             else:
+                is_sympa_previous = currentstate.is_sympa
+                is_sympa_confirmed_previous = currentstate.is_sympa_confirmed
                 currentstate.is_sympa = False
                 currentstate.is_sympa_confirmed = False
                 currentstate.update_timestamp = update_timestamp
                 currentstate.save()
+
+            data.update(previousstate=dict(
+                is_sympa=is_sympa_previous,
+                is_sympa_confirmed=is_sympa_confirmed_previous,
+            ))
 
             CurrentState.objects.filter(
                 user_to=user_from,
@@ -900,6 +915,43 @@ class ApiAddOperationMixin(object):
             ).update(
                 is_sympa=False,
                 is_sympa_reverse=False,
+                is_sympa_confirmed=False,
+                update_timestamp=update_timestamp,
+            )
+
+        elif operationtype_id == OperationType.REVOKE_SYMPA_ONLY:
+            is_sympa_previous = None
+            is_sympa_confirmed_previous = None
+            is_sympa_reciprocal_previous = None
+            q = Q(user_from=user_from, user_to=user_to, is_sympa=True)
+            try:
+                currentstate = CurrentState.objects.get(
+                    user_from=user_from, user_to=user_to, is_sympa_reverse=False, is_sympa_confirmed=True
+                )
+            except CurrentState.DoesNotExist:
+                pass
+            else:
+                is_sympa_reciprocal_previous = CurrentState.objects.filter(
+                    user_from=user_to, user_to=user_from, is_sympa_reverse=False, is_sympa_confirmed=True
+                ).exists()
+                is_sympa_previous = currentstate.is_sympa
+                is_sympa_confirmed_previous = currentstate.is_sympa_confirmed
+                currentstate.is_sympa_confirmed = False
+                currentstate.update_timestamp = update_timestamp
+                currentstate.save()
+
+            data.update(previousstate=dict(
+                is_sympa=is_sympa_previous,
+                is_sympa_confirmed=is_sympa_confirmed_previous,
+                is_sympa_reciprocal= is_sympa_reciprocal_previous,
+            ))
+
+            CurrentState.objects.filter(
+                user_to=user_from,
+                user_from=user_to,
+                is_sympa_reverse=True,
+                is_sympa_confirmed=True,
+            ).update(
                 is_sympa_confirmed=False,
                 update_timestamp=update_timestamp,
             )

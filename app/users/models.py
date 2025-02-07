@@ -386,7 +386,10 @@ class Profile(PhotoModel, GeoPointAddressModel):
     offer_answers = models.ManyToManyField('users.OfferAnswer', verbose_name=_("Ответы на опросы/предложения"))
     tgdesc = models.ManyToManyField('users.TgDesc', verbose_name=_("Сообщения с описаниями"))
 
-    did_meet = models.BigIntegerField(_("Установил знакомство (принял участие в игре знакомств)"), null=True)
+    did_meet = models.BigIntegerField(_("Принял участие в игре знакомств"), null=True)
+    r_sympa = models.ForeignKey('auth.User', verbose_name=_("Взаимная симпатия к"),
+                                on_delete=models.CASCADE, null=True, related_name='profile_r_sympa_set')
+
 
     class Meta:
         ordering = ('user__first_name', )
@@ -467,6 +470,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
                 did_meet=self.did_meet,
                 has_tgdesc=self.tgdesc.exists(),
                 has_bank=self.has_bank(),
+                r_sympa_username=self.r_sympa.username if self.r_sympa else None,
             )
         return result
 

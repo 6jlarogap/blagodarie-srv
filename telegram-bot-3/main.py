@@ -35,6 +35,7 @@ async def main_():
     from handler_callbacks import router as router_callbacks
     from handler_group import router as router_group
     from handler_offer import router as router_offer
+    from handler_sympas import router as router_sympas
 
     schedule_start = False
     if settings.SCHEDULE_CRON:
@@ -50,7 +51,7 @@ async def main_():
     if schedule_start:
         scheduler.start()
 
-    dp.include_routers(router_bot, router_callbacks, router_group, router_offer)
+    dp.include_routers(router_bot, router_callbacks, router_group, router_offer, router_sympas)
 
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(

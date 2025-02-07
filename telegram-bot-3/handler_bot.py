@@ -284,8 +284,6 @@ async def cmd_start(message: Message, state: FSMContext):
                 message_to_forward_id = None,
                 group_member=None,
                 is_thank_card=False,
-                is_tgdesc_card=False,
-                is_donate_card=False,
                 state=state,
             ))
 

@@ -2464,16 +2464,12 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 '<table style="width:100%%">'
                 '<col width="15%%" />'
                 '<col width="25%%" />'
-                '<col width="60%%" />'
                 '<tr>'
                     '<td valign=center>'
                         '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
                     '</td>'
                     '<td valign=center>'
                         ' %(full_name)s<br />'
-                    '</td>'
-                    '<td valign=center align=center">%(comment)s'
-                    '</td>'
                 '</tr>'
                 '</table>'
             )
@@ -2538,16 +2534,13 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             popup_m = popup_meet
             popup_f = (
                 '<table style="width:100%%">'
-                '<col width="60%%" />'
                 '<col width="25%%" />'
                 '<col width="15%%" />'
                 '<tr>'
-                    '<td valign=center">%(comment)s'
-                    '</td>'
-                    '<td valign=center>'
+                    '<td valign=center align=center>'
                         ' %(full_name)s'
                     '</td>'
-                    '<td valign=center>'
+                    '<td valign=center align=right>'
                         '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
                     '</td>'
                 '</tr>'
@@ -2576,7 +2569,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 )
                 legend_sympa = (
                     '<label for="table-sympa-%(user_id)s"><span style="color: %(color_sympa)s">Интерес:<span></label><br />'
-                    '<input type="checkbox" class="sympa" id="table-sympa-%(user_id)s" %(sympa_checked)s >'
+                    '<input type="checkbox" class="sympa" id="table-sympa-%(user_id)s" %(sympa_checked)s %(sympa_disabled)s>'
                 )
 
                 for i in range(max(len_m, len_f)):
@@ -2593,6 +2586,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                                 color_sympa=color_sympa if sympa_checked else 'system-color',
                                 user_id=list_m[i]['user_id'],
                                 sympa_checked=sympa_checked,
+                                sympa_disabled='disabled' if sympa_checked else ''
                             )
                             d['m_sympa'] = legend_sympa % d_sympa
                     if i < len_f:
@@ -2604,6 +2598,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                                 color_sympa=color_sympa if sympa_checked else 'system-color',
                                 user_id=list_f[i]['user_id'],
                                 sympa_checked=sympa_checked,
+                                sympa_disabled='disabled="disabled"' if sympa_checked else ''
                             )
                             d['f_sympa'] = legend_sympa % d_sympa
                     legend += legend_user % d

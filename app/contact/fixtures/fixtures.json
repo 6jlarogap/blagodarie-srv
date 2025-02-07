@@ -137,7 +137,14 @@
     "model": "contact.operationtype",
     "pk": 15,
     "fields": {
-      "title": "Revoke Sympathy"
+      "title": "Revoke Sympathy and Interest"
+    }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 16,
+    "fields": {
+      "title": "Revoke Sympathy only"
     }
   }
 ]

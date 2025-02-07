@@ -366,7 +366,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     profile_to=profile_to_data,
                 )
 
-            data.update(message_sent=False, desc_sent=False, desc_sent_error=False)
+            data.update(desc_sent=False, desc_sent_error=False)
             options = dict(
                 disable_web_page_preview=True,
                 disable_notification=True,
@@ -407,11 +407,10 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     message_to = f'{dl_from_t} не знаком(а) с {dl_to_t}'
 
                 if message_to and profile_to.is_notified:
-                    data['message_sent'] = self.send_to_telegram(message_to, user=user_to, options=options)
+                    self.send_to_telegram(message_to, user=user_to, options=options)
 
             if operationtype_id == OperationType.SET_SYMPA and not got_tg_token:
                 data.update(profile_to=profile_to.data_dict(short=True))
-                message_from = message_to = None
                 if 'is_sympa' in data.get('previousstate', {}) and \
                    not data['previousstate']['is_sympa']:
                     message_to = (
@@ -420,46 +419,53 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                         f'<a href="{settings.MEET_URL}">карте</a> '
                         '- чтобы скорее найти совпадения!'
                     )
-
-                if profile_to.tgdesc.exists():
-                    qs_tgdesc = profile_to.tgdesc.all().order_by('message_id')
-                    options_last = options.copy()
-                    uuid_stripped = str(profile_to.uuid).replace('-', '')
-                    options_last.update(
-                        reply_markup=dict(
-                            inline_keyboard=[[
-                                dict(
-                                    text='Симпатия',
-                                    callback_data=f'2~{OperationType.SET_SYMPA}~{uuid_stripped}~~2~'
-                                ),
-                                dict(
-                                    text='Недоверие',
-                                    callback_data=f'2~{OperationType.MISTRUST}~{uuid_stripped}~~2~'
-                                ),
+                    self.send_to_telegram(message_to, user=user_to, options=options)
+                    if profile_to.tgdesc.exists():
+                        qs_tgdesc = profile_to.tgdesc.all().order_by('message_id')
+                        for tgdesc in qs_tgdesc:
+                            success = self.copy_to_telegram(
+                                    tgdesc.message_id,
+                                    tgdesc.chat_id,
+                                    user_from,
+                                    options=options,
+                            )
+                            if success:
+                                data['desc_sent'] = True
+                        if not data['desc_sent']:
+                            data['desc_sent_error'] = True
+                    message_from = f'Установить симпатию к {user_to.first_name} ?'
+                    options_quest_set_sympa = options.copy()
+                    options_quest_set_sympa.update(reply_markup=dict(
+                        inline_keyboard=[[
+                            dict(
+                                text='Да',
+                                callback_data=(
+                                    f'{settings.KEYBOARD_TYPE.SYMPA_SET}{settings.KEYBOARD_TYPE.SEP}'
+                                    f'{user_from.username}{settings.KEYBOARD_TYPE.SEP}'
+                                    f'{user_to.username}{settings.KEYBOARD_TYPE.SEP}'
+                                    f'{data["journal_id"]}{settings.KEYBOARD_TYPE.SEP}'
+                            )),
+                            dict(
+                                text='Нет',
+                                callback_data=(
+                                    f'{settings.KEYBOARD_TYPE.SYMPA_SET_CANCEL}{settings.KEYBOARD_TYPE.SEP}'
+                                    f'{user_from.username}{settings.KEYBOARD_TYPE.SEP}'
+                                    f'{user_to.username}{settings.KEYBOARD_TYPE.SEP}'
+                                    f'{data["journal_id"]}{settings.KEYBOARD_TYPE.SEP}'
+                            )),
                     ]]))
-                    for tgdesc in qs_tgdesc:
-                        success = self.copy_to_telegram(
-                                tgdesc.message_id,
-                                tgdesc.chat_id,
-                                user_from,
-                                options=options_last if tgdesc == qs_tgdesc.last() else options,
-                        )
-                        if success:
-                            data['desc_sent'] = True
-                    if not data['desc_sent']:
-                        data['desc_sent_error'] = True
+                    self.send_to_telegram(message_from, user=user_from, options=options_quest_set_sympa)
 
-                if message_to and profile_to.is_notified:
-                    data['message_sent'] = self.send_to_telegram(message_to, user=user_to, options=options)
-
-                if message_from and profile_from.is_notified:
-                    data['message_sent'] = self.send_to_telegram(message_from, user=user_from, options=options)
-
-            if operationtype_id == OperationType.SET_SYMPA:
+            if operationtype_id == OperationType.SET_SYMPA and got_tg_token:
                 is_reciprocal = is_confirmed and CurrentState.objects.filter(
                     user_from=user_to, user_to=user_from, is_sympa_reverse=False, is_sympa_confirmed=True
                 ).exists()
                 data['is_reciprocal'] = is_reciprocal
+                if is_reciprocal:
+                    profile_from.r_sympa = user_to
+                    profile_from.save(update_fields=('r_sympa',))
+                    profile_to.r_sympa = user_from
+                    profile_to.save(update_fields=('r_sympa',))
                 if operationtype_id == OperationType.SET_SYMPA and got_tg_token and is_confirmed:
                     if is_reciprocal and data.get('previousstate') and not data['previousstate'].get('is_sympa_confirmed'):
                         # найти того, кто пригласил женщину
@@ -470,8 +476,12 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                             user_m = user_from
                             user_f = user_to
                         data['donate'] = self.find_donate_to(user_f, user_m)
-
             status_code = status.HTTP_200_OK
+
+            if operationtype_id in (OperationType.REVOKE_SYMPA, OperationType.REVOKE_SYMPA_ONLY) and got_tg_token:
+                profile_from.r_sympa = profile_to.r_sympa = None
+                profile_from.save(update_fields=('r_sympa',))
+                profile_to.save(update_fields=('r_sympa',))
 
         except ServiceException as excpt:
             transaction.set_rollback(True)
@@ -4281,11 +4291,15 @@ class ApiGetDonateTo(ApiAddOperationMixin, APIView):
             donate = self.find_donate_to(user_f, user_m) or {}
             if donate:
                 status_code = status.HTTP_200_OK
+                user_m_profile = user_m.profile.data_dict()
+                user_m_profile.update(tg_data=user_m.profile.tg_data())
+                user_f_profile = user_f.profile.data_dict()
+                user_f_profile.update(tg_data=user_f.profile.tg_data())
                 data = dict(
-                    user_m=user_m.profile.data_dict(),
-                    user_f=user_f.profile.data_dict(),
+                    user_m=user_m_profile,
+                    user_f=user_f_profile,
                     donate=donate,
-                    journal_id=journal_id
+                    journal_id=journal_id,
                 )
             else:
                 data = {}

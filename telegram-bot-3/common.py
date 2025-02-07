@@ -41,9 +41,6 @@ class FSMdelete(StatesGroup):
 class FSMaskMoney(StatesGroup):
     ask = State()
 
-class FSMdonateSympa(StatesGroup):
-    ask = State()
-
 class Attitude(object):
 
     ACQ = 'a'
@@ -75,6 +72,7 @@ class OperationType(object):
     # Acquainted
     ACQ = 11
     SET_SYMPA = 14
+    REVOKE_SYMPA_ONLY = 16
 
     CALLBACK_DATA_TEMPLATE = (
         '%(keyboard_type)s%(sep)s'
@@ -269,9 +267,18 @@ class KeyboardType(object):
     #
     USER_DESC = 63
 
-    # Донатить при симпатии
+    # Смпатии
     #
     SYMPA_DONATE = 64
+
+    SYMPA_SET = 65
+    SYMPA_REVOKE = 66
+
+    SYMPA_SET_CANCEL = 67
+    SYMPA_REVOKE_CANCEL = 68
+    SYMPA_DONATE_REFUSE = 69
+
+    SYMPA_SEND_PROFILE = 70
 
     # Разделитель данных в call back data
     #
@@ -747,7 +754,10 @@ class Misc(object):
                 reply += parents
 
         keys = []
-        if is_power or response_from['uuid'] == response_to['uuid'] or response_to['owner']:
+        if is_power or \
+            response_from['uuid'] == response_to['uuid'] or \
+            response_to['owner'] or \
+            response_from['r_sympa_username'] and response_from['r_sympa_username'] == response_to['username']:
             keys += ['@%s' % tgd['tg_username'] for tgd in response_to.get('tg_data', []) if tgd['tg_username']]
             keys += [key['value'] for key in response_to.get('keys', [])]
             keys.append(cls.get_deeplink(response_to))
@@ -960,13 +970,14 @@ class Misc(object):
         return result
 
     @classmethod
-    async def check_owner_by_sid(cls, owner_tg_user, sid, check_owned_only=False):
+    async def check_owner_by_sid(cls, owner_tg_user, sid, check_owned_only=False, check_own_only=False):
         """
         Проверить, принадлежит ли user c sid к owner_tg_user или им является
 
-        При check_onwed_only проверяет исключительно, принадлежит ли.
+        При check_onwed_only проверяет исключительно собственного, принадлежит ли.
+        При check_onw_only проверяет исключительно не является ли проверяемый им самим.
         Если принадлежит и им является, то возвращает данные из апи по owner_tg_user,
-        а внутри словарь response_uuid, данные из апи по sid:
+        а внутри словарь response_uuid, данные из апи по uuid:
         """
         result = False
         status_sender, response_sender = await cls.post_tg_user(owner_tg_user)
@@ -974,7 +985,8 @@ class Misc(object):
             status_uuid, response_uuid = await cls.get_user_by_sid(sid)
             if status_uuid == 200 and response_uuid:
                 if response_uuid.get('owner'):
-                    result = response_uuid['owner']['user_id'] == response_sender['user_id']
+                    if not check_own_only:
+                        result = response_uuid['owner']['user_id'] == response_sender['user_id']
                 elif not check_owned_only:
                     result = response_uuid['user_id'] == response_sender['user_id']
                 if result:
@@ -1895,8 +1907,6 @@ class Misc(object):
             tg_user_id_from=str(tg_user_sender.id),
             user_id_to=profile_to['uuid'],
         )
-        if operation_type_id == OperationType.SET_SYMPA:
-            post_op.update(is_confirmed='1')
         if data.get('message_to_forward_id'):
             post_op.update(
                 tg_from_chat_id=tg_user_sender.id,
@@ -1930,22 +1940,6 @@ class Misc(object):
                 text = '%(full_name_from_link)s не знаком(а) с %(full_name_to_link)s'
             elif operation_type_id == OperationType.TRUST:
                 text = '%(full_name_from_link)s доверяет %(full_name_to_link)s'
-            elif operation_type_id == OperationType.SET_SYMPA:
-                if response.get('previousstate') and response['previousstate'].get('is_sympa_confirmed'):
-                    text = 'Ваша симпатия к %(full_name_to_link)s уже установлена.'
-                else:
-                    text = 'Поздравляем! У Вас симпатия!'
-                if response.get('is_reciprocal'):
-                    text += ' Симпатия взаимна!'
-                    if response.get('donate'):
-                        if profile_from['gender'] == 'f':
-                            text = 'Поздравляем! Взаимная симпатия! %(full_name_to_link)s предложено задонатить'
-                        else:
-                            text = (
-                                'Поздравляем! Взаимная симпатия - оправьте донат РЕФЕРЕРУ/АВТОРУ ПО РЕКВИЗИТАМ:\n\n'
-                                f'{response["donate"]["bank"]}'
-                            )
-                        # ниже будут заданы кнопки
             profile_from = response['profile_from']
             profile_to = response['profile_to']
 
@@ -1996,8 +1990,7 @@ class Misc(object):
                     ))
                     buttons.append([inline_btn_cancel_thank])
 
-            if not group_member and (operation_done or operation_already) and \
-               operation_type_id != OperationType.SET_SYMPA:
+            if not group_member and (operation_done or operation_already):
                 if not buttons:
                     inline_btn_trusts = InlineKeyboardButton(
                         text='Сеть доверия',
@@ -2016,26 +2009,6 @@ class Misc(object):
                     ))
                     buttons.append([inline_btn_trusts, inline_btn_map])
 
-            donate_btn_cancel = None
-            if operation_type_id == OperationType.SET_SYMPA and response.get('donate'):
-                if profile_from['gender'] == 'm':
-                    donate_btn_cancel = cls.inline_button_cancel(caption='Без доната')
-                    buttons.append([donate_btn_cancel])
-                elif profile_from['gender'] == 'f':
-                    callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE_CARD
-                    dict_reply =  dict(
-                        keyboard_type=KeyboardType.TRUST_THANK,
-                        operation=OperationType.MISTRUST,
-                        sep=KeyboardType.SEP,
-                        user_to_uuid_stripped=cls.uuid_strip(profile_to['uuid']),
-                        message_to_forward_id='',
-                        card_type='3',
-                    )
-                    donate_btn_mistrust = InlineKeyboardButton(
-                        text='Недоверие', callback_data=callback_data_template % dict_reply
-                    )
-                    buttons.append([donate_btn_mistrust])
-
             if not group_member:
                 try:
                     await bot.send_message(
@@ -2044,14 +2017,6 @@ class Misc(object):
                         disable_notification=True,
                         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else None,
                     )
-                    if donate_btn_cancel:
-                        await data['state'].set_state(FSMdonateSympa.ask)
-                        await data['state'].update_data(
-                            user_m=profile_from,
-                            user_f=profile_to,
-                            donate=response['donate'],
-                            journal_id=response.get('journal_id')
-                        )
 
                 except (TelegramBadRequest, TelegramForbiddenError,):
                     pass
@@ -2064,7 +2029,7 @@ class Misc(object):
                         profile_from, profile_to, tg_user_sender,
                         card_message=data['callback'].message,
                     )
-                elif not data.get('is_tgdesc_card') and not data.get('is_donate_card'):
+                else:
                     await cls.show_card(
                         profile=profile_to,
                         profile_sender=profile_from,
@@ -2138,41 +2103,6 @@ class Misc(object):
                     tg_user_to_notify_tg_data = profile_to['owner'].get('tg_data', [])
             else:
                 tg_user_to_notify_tg_data = profile_to.get('tg_data', [])
-
-            if operation_type_id == OperationType.SET_SYMPA:
-                text_to_recipient = ''
-                if response.get('donate') and response.get('journal_id'):
-                    if profile_to['gender'] == 'm':
-                        # Сдесь важно положение f'{response["donate"]["bank"]}
-                        text_to_recipient = (
-                            'Поздравляем! Взаимная симпатия! '
-                            'Нажмите <u>"Донатить"</u> для отправки доната'
-                        )
-                        donate_btn_donate = InlineKeyboardButton(
-                            text='Донатить', callback_data= (
-                                # Тип кнопки ~ кому выложить деньги ~ username_m ~ journal_id
-                                f'{KeyboardType.SYMPA_DONATE}{KeyboardType.SEP}'
-                                f'{profile_to["username"]}{KeyboardType.SEP}'
-                                f'{response["journal_id"]}{KeyboardType.SEP}'
-                        ))
-                        buttons.append([donate_btn_donate])
-                    elif profile_to['gender'] == 'f':
-                        text_to_recipient = (
-                            'Поздравляем! Взаимная симпатия! %(full_name_from_link)s предложено задонатить'
-                        ) % dict_reply_from
-                        callback_data_template = OperationType.CALLBACK_DATA_TEMPLATE_CARD
-                        dict_reply =  dict(
-                            keyboard_type=KeyboardType.TRUST_THANK,
-                            operation=OperationType.MISTRUST,
-                            sep=KeyboardType.SEP,
-                            user_to_uuid_stripped=cls.uuid_strip(profile_from['uuid']),
-                            message_to_forward_id='',
-                            card_type='3',
-                        )
-                        donate_btn_mistrust = InlineKeyboardButton(
-                            text='Недоверие', callback_data=callback_data_template % dict_reply
-                        )
-                        buttons.append([donate_btn_mistrust])
 
             if text_to_recipient:
                 for tgd in tg_user_to_notify_tg_data:
@@ -2388,6 +2318,31 @@ class Misc(object):
         if status_bank == 200 and response_bank.get('keys'):
             result = response_bank['keys'][0]['value']
         return result
+
+    @classmethod
+    async def check_sids_from_callback(cls, callback):
+
+        # Из апи приходит типа:
+        #   f'{KeyboardType.что-то}'
+        #   f'{user_from.username}{KeyboardType.SEP}'
+        #   f'{user_to.username}{KeyboardType.SEP}'
+        #   ...
+        #
+        #   user_from должен быть текущим юзером. user_to должен существовать
+
+        profile_from, profile_to = None, None
+        if username_from := cls.get_sid_from_callback(callback):
+            code = callback.data.split(KeyboardType.SEP)
+            if profile_from := await Misc.check_owner_by_sid(
+                        callback.from_user, username_from, check_own_only=True
+               ):
+                try:
+                    status, response = await Misc.get_user_by_sid(code[2])
+                    if status == 200:
+                        profile_to = response
+                except IndexError:
+                    profile_from = None
+        return profile_from, profile_to
 
 
 class TgGroup(object):
