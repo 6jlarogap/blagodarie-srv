@@ -306,7 +306,7 @@ async def cbq_sympa_set(callback: CallbackQuery, state: FSMContext):
                         f'Ставьте больше интересов на карте - чтобы скорее найти совпадения!'
                     )
     if text_from:
-        await bot.edit_message_text(
+        await Misc.remove_n_send_message(
             chat_id=callback.from_user.id,
             message_id=callback.message.message_id,
             text=text_from,
@@ -375,7 +375,7 @@ async def cbq_sympa_revoke(callback: CallbackQuery, state: FSMContext):
                 profile_from, profile_to, journal_id, message_pre
             )
     if text:
-        await bot.edit_message_text(
+        await Misc.remove_n_send_message(
             chat_id=callback.from_user.id,
             message_id=callback.message.message_id,
             text=text,
@@ -411,7 +411,7 @@ async def cbq_get_sympa_donate(callback: CallbackQuery, state: FSMContext):
             response_get_donate=response_get_donate,
             callback=callback,
         )
-        await bot.edit_message_text(
+        await Misc.remove_n_send_message(
             chat_id=callback.from_user.id,
             message_id=callback.message.message_id,
             text=text,
@@ -483,7 +483,7 @@ async def process_message_donate_after_sympa(message: Message, state: FSMContext
                 message_pre=(
                     f'Донат отправлен. Ожидайте решения {html.quote(user_f["first_name"])} о передаче контактов'
             ))
-            await bot.edit_message_text(
+            await Misc.remove_n_send_message(
                 chat_id=data['callback'].from_user.id,
                 message_id=data['callback'].message.message_id,
                 text=text,
@@ -566,7 +566,7 @@ async def cbq_sympa_donate_refuse(callback: CallbackQuery, state: FSMContext):
         message_pre=(
             f'Ожидайте решения {html.quote(user_f["first_name"])} о передаче контактов'
     ))
-    await bot.edit_message_text(
+    await Misc.remove_n_send_message(
         chat_id=callback.from_user.id,
         message_id=callback.message.message_id,
         text=text,

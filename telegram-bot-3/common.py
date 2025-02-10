@@ -2400,6 +2400,17 @@ class Misc(object):
         return profile_from, profile_to
 
 
+    @classmethod
+    async def remove_n_send_message(cls,
+            chat_id, message_id,
+            text=None, reply_markup=None, **kwargs):
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=message_id)
+            if text:
+                await bot.send_message(chat_id, text, reply_markup=reply_markup)
+        except (TelegramBadRequest, TelegramForbiddenError):
+            pass
+
 class TgGroup(object):
     """
     Список групп, где бот: внесение, удаление
