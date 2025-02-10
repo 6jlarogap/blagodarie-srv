@@ -58,20 +58,16 @@ class Common(object):
 
     @classmethod
     def make_sympa_revoke(cls, profile_from, profile_to, journal_id, message_pre=''):
-        text = message_pre + '\n\n' if message_pre else ''
-        text += f'Отменить симпатию к {profile_to["first_name"]}'
-        callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
-        callback_dict.update(keyboard_type=KeyboardType.SYMPA_REVOKE)
-        button_yes = InlineKeyboardButton(
-            text=cls.YES,
-            callback_data=cls.CALLBACK_DATA_TEMPLATE % callback_dict
-        )
-        callback_dict.update(keyboard_type=KeyboardType.SYMPA_REVOKE_CANCEL)
-        button_no = InlineKeyboardButton(
-            text=cls.NO,
-            callback_data=cls.CALLBACK_DATA_TEMPLATE % callback_dict
-        )
-        reply_markup = InlineKeyboardMarkup(inline_keyboard=[ [button_yes, button_no] ])
+        text = message_pre
+        reply_markup = None
+        if text:
+            callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
+            callback_dict.update(keyboard_type=KeyboardType.SYMPA_REVOKE)
+            button_yes = InlineKeyboardButton(
+                text='Отменить',
+                callback_data=cls.CALLBACK_DATA_TEMPLATE % callback_dict
+            )
+            reply_markup = InlineKeyboardMarkup(inline_keyboard=[ [button_yes] ])
         return text, reply_markup
 
 
@@ -146,7 +142,7 @@ class Common(object):
         text = message_pre + '\n\n' if message_pre else ''
         text += (
                 f'Поздравляем! Взаимная симпатия! '
-                f'{profile_to["first_name"]} предложено задонатить'
+                f'{html.quote(profile_to["first_name"])} предложено задонатить'
         )
         callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
         callback_dict.update(keyboard_type=KeyboardType.SYMPA_REVOKE)
@@ -161,7 +157,7 @@ class Common(object):
     @classmethod
     def make_sympa_do(cls, profile_from, profile_to, journal_id, message_pre=''):
         text = message_pre + '\n\n' if message_pre else ''
-        text += f'Установить симпатию к {profile_to["first_name"]}'
+        text += f'Установить симпатию к {html.quote(profile_to["first_name"])}'
         callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
         callback_dict.update(keyboard_type=KeyboardType.SYMPA_SET)
         button_yes = InlineKeyboardButton(
@@ -212,11 +208,11 @@ class Common(object):
 
 # --- end of class Common ---
 
-@router.callback_query(F.data.regexp(r'^(%s|%s)%s' % (
-        KeyboardType.SYMPA_SET_CANCEL, KeyboardType.SYMPA_REVOKE_CANCEL,
+@router.callback_query(F.data.regexp(r'^%s%s' % (
+        KeyboardType.SYMPA_SET_CANCEL,
         KeyboardType.SEP,
     )), StateFilter(None))
-async def cbq_sympa_cancel(callback: CallbackQuery, state: FSMContext):
+async def cbq_sympa_set_cancel(callback: CallbackQuery, state: FSMContext):
 
     # Из апи приходит:
     #   f'{KeyboardType.что-то}{KeyboardType.SEP}'
@@ -227,11 +223,7 @@ async def cbq_sympa_cancel(callback: CallbackQuery, state: FSMContext):
     if not profile_to:
         return
     what = int((callback.data.split(KeyboardType.SEP))[0])
-    if what == KeyboardType.SYMPA_SET_CANCEL:
-        message = f'Вы отказались от установки симпатии к {profile_to["first_name"]}'
-    else:
-        # KeyboardType.SYMPA_REVOKE_CANCEL
-        message = f'Вы отказались от снятия симпатии к {profile_to["first_name"]}'
+    message = f'Вы отказались от установки симпатии к {html.quote(profile_to["first_name"])}'
     await bot.answer_callback_query(
         callback.id,
         text=message,
@@ -277,7 +269,7 @@ async def cbq_sympa_set(callback: CallbackQuery, state: FSMContext):
         journal_id = response['journal_id']
         if response.get('previousstate'):
             if response['previousstate']['is_sympa_confirmed']:
-                message_pre = f'Симпатия к {profile_to["first_name"]} уже установлена'
+                message_pre = f'Симпатия к {html.quote(profile_to["first_name"])} уже установлена'
             else:
                 if response.get('is_reciprocal'):
                     if profile_to['gender'] == 'f':
@@ -303,7 +295,7 @@ async def cbq_sympa_set(callback: CallbackQuery, state: FSMContext):
                         )
 
                 else:
-                    message_pre = f'Симпатия к {profile_to["first_name"]} установлена'
+                    message_pre = f'Симпатия к {html.quote(profile_to["first_name"])} установлена'
                     text_from, reply_markup_from = Common.make_sympa_revoke(
                         profile_from, profile_to, journal_id, message_pre
                     )
@@ -311,9 +303,7 @@ async def cbq_sympa_set(callback: CallbackQuery, state: FSMContext):
                     text_to = (
                         f'Поздравляем! Кто-то установил{"a" if profile_from["gender"] == "f" else ""} '
                         f'Вам симпатию.\n'
-                        f'Ставьте больше интересов на '
-                        f'<a href="{settings.MEET_HOST}">карте</a> - '
-                        f'чтобы скорее найти совпадения!'
+                        f'Ставьте больше интересов на карте - чтобы скорее найти совпадения!'
                     )
     if text_from:
         await bot.edit_message_text(
@@ -366,7 +356,7 @@ async def cbq_sympa_revoke(callback: CallbackQuery, state: FSMContext):
         journal_id = response['journal_id']
         if response.get('previousstate'):
             if response['previousstate']['is_sympa_confirmed']:
-                message_pre = f'Симпатия к {profile_to["first_name"]} отменена'
+                message_pre = f'Симпатия к {html.quote(profile_to["first_name"])} отменена'
                 for tgd in profile_to['tg_data']:
                     try:
                         await bot.send_message(
@@ -380,7 +370,7 @@ async def cbq_sympa_revoke(callback: CallbackQuery, state: FSMContext):
                     except (TelegramBadRequest, TelegramForbiddenError):
                         pass
             else:
-                message_pre = f'Симпатия к {profile_to["first_name"]} уже отменена'
+                message_pre = f'Симпатия к {html.quote(profile_to["first_name"])} уже отменена'
             text, reply_markup = Common.make_sympa_do(
                 profile_from, profile_to, journal_id, message_pre
             )
@@ -406,7 +396,7 @@ async def cbq_get_sympa_donate(callback: CallbackQuery, state: FSMContext):
     if not profile_from['r_sympa_username'] or profile_from['r_sympa_username'] != profile_to['username']:
         await bot.answer_callback_query(
             callback.id,
-            text=f'Этот донат уже не актуален. У вас нет взаимной симпатии к {profile_to["first_name"]}',
+            text=f'Этот донат уже не актуален. У вас нет взаимной симпатии к {html.quote(profile_to["first_name"])}',
             show_alert=True,
         )
         await callback.answer()
@@ -491,7 +481,7 @@ async def process_message_donate_after_sympa(message: Message, state: FSMContext
             text, reply_markup = Common.after_donate_or_not_donate(
                 user_m, user_f, data['journal_id'],
                 message_pre=(
-                    f'Донат отправлен. Ожидайте решения {user_f["first_name"]} о передаче контактов'
+                    f'Донат отправлен. Ожидайте решения {html.quote(user_f["first_name"])} о передаче контактов'
             ))
             await bot.edit_message_text(
                 chat_id=data['callback'].from_user.id,
@@ -503,7 +493,7 @@ async def process_message_donate_after_sympa(message: Message, state: FSMContext
             text, reply_markup = Common.after_donate_or_not_donate(
                 user_f, user_m, data['journal_id'],
                 message_pre=(
-                    f'Получен запрос от {user_m["first_name"]} на Ваши контакты'
+                    f'Получен запрос от {html.quote(user_m["first_name"])} на Ваши контакты'
             ))
             for tgd in user_f['tg_data']:
                 try:
@@ -529,7 +519,7 @@ async def cbq_get_sympa_send_profile(callback: CallbackQuery, state: FSMContext)
     if not profile_from['r_sympa_username'] or profile_from['r_sympa_username'] != profile_to['username']:
         await bot.answer_callback_query(
             callback.id,
-            text=f'Этот уже не актуально. У вас нет взаимной симпатии к {profile_to["first_name"]}',
+            text=f'Этот уже не актуально. У вас нет взаимной симпатии к {html.quote(profile_to["first_name"])}',
             show_alert=True,
         )
         await callback.answer()
@@ -564,7 +554,7 @@ async def cbq_sympa_donate_refuse(callback: CallbackQuery, state: FSMContext):
     if not user_m['r_sympa_username'] or user_m['r_sympa_username'] != user_f['username']:
         await bot.answer_callback_query(
             callback.id,
-            text=f'Этот уже не актуально. У вас нет взаимной симпатии к {user_f["first_name"]}',
+            text=f'Этот уже не актуально. У вас нет взаимной симпатии к {html.quote(user_f["first_name"])}',
             show_alert=True,
         )
         await state.clear()
@@ -574,7 +564,7 @@ async def cbq_sympa_donate_refuse(callback: CallbackQuery, state: FSMContext):
     text, reply_markup = Common.after_donate_or_not_donate(
         user_m, user_f, journal_id,
         message_pre=(
-            f'Ожидайте решения {user_f["first_name"]} о передаче контактов'
+            f'Ожидайте решения {html.quote(user_f["first_name"])} о передаче контактов'
     ))
     await bot.edit_message_text(
         chat_id=callback.from_user.id,
@@ -585,7 +575,7 @@ async def cbq_sympa_donate_refuse(callback: CallbackQuery, state: FSMContext):
     text, reply_markup = Common.after_donate_or_not_donate(
         user_f, user_m, journal_id,
         message_pre=(
-            f'Получен запрос от {user_m["first_name"]} на Ваши контакты'
+            f'Получен запрос от {html.quote(user_m["first_name"])} на Ваши контакты'
     ))
     for tgd in user_f['tg_data']:
         try:

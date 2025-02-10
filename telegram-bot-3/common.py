@@ -95,7 +95,11 @@ class Rcache(object):
             group_chat_id + KEY_SEP +
             message.message_id
         с любым значением
-    -   Написать сообщение в коллаже
+    -   Аналогично и другие случаи применения redis кэша
+            * отправка составных сообщений, из карточки пользователя,
+              написать (SEND_MESSAGE_PREFIX)
+            * Отправка 'квитанции об оплате' при благодарности
+              или взаимной симпатии
     """
 
     MEDIA_GROUP_PREFIX = 'media_group_id_'
@@ -323,8 +327,9 @@ class KeyboardType(object):
     SYMPA_SET = 65
     SYMPA_REVOKE = 66
 
+    # Кнопка "Нет" в вопросу "Установить симпатию"
     SYMPA_SET_CANCEL = 67
-    SYMPA_REVOKE_CANCEL = 68
+    # свободный: 68
     SYMPA_DONATE_REFUSE = 69
 
     SYMPA_SEND_PROFILE = 70
@@ -804,9 +809,10 @@ class Misc(object):
 
         keys = []
         if is_power or \
-            response_from['uuid'] == response_to['uuid'] or \
-            response_to['owner'] or \
-            response_from['r_sympa_username'] and response_from['r_sympa_username'] == response_to['username']:
+           response_from['uuid'] == response_to['uuid'] or \
+           response_to['owner'] or \
+           response_from['r_sympa_username'] and response_from['r_sympa_username'] == response_to['username'] or \
+           not response_to['did_meet']:
             keys += ['@%s' % tgd['tg_username'] for tgd in response_to.get('tg_data', []) if tgd['tg_username']]
             keys += [key['value'] for key in response_to.get('keys', [])]
             keys.append(cls.get_deeplink(response_to))

@@ -1,4 +1,4 @@
-import os, datetime, time, json, re
+import os, datetime, time, json, re, html
 
 from django.shortcuts import redirect
 from django.db import transaction, IntegrityError, connection
@@ -414,25 +414,28 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 if 'is_sympa' in data.get('previousstate', {}) and \
                    not data['previousstate']['is_sympa']:
                     message_to = (
-                        'Поздравляем! Вами кто-то интересуется! '
-                        'Ставьте больше интересов на '
-                        f'<a href="{settings.MEET_URL}">карте</a> '
-                        '- чтобы скорее найти совпадения!'
+                        'Поздравляем! Вами кто-то интересуется!\n'
+                        'Ставьте больше интересов на карте - чтобы скорее найти совпадения!'
                     )
                     self.send_to_telegram(message_to, user=user_to, options=options)
+
+                    success = self.send_to_telegram(
+                        f'Описание {html.escape(user_to.first_name)}',
+                        user=user_from, options=options
+                    )
+                    if success:
+                        data['desc_sent'] = True
+                    else:
+                        data['desc_sent_error'] = True
                     if profile_to.tgdesc.exists():
                         qs_tgdesc = profile_to.tgdesc.all().order_by('message_id')
                         for tgdesc in qs_tgdesc:
-                            success = self.copy_to_telegram(
+                            self.copy_to_telegram(
                                     tgdesc.message_id,
                                     tgdesc.chat_id,
                                     user_from,
                                     options=options,
                             )
-                            if success:
-                                data['desc_sent'] = True
-                        if not data['desc_sent']:
-                            data['desc_sent_error'] = True
                     message_from = f'Установить симпатию к {user_to.first_name} ?'
                     options_quest_set_sympa = options.copy()
                     options_quest_set_sympa.update(reply_markup=dict(
