@@ -59,6 +59,55 @@ class Attitude(object):
         return result
 
 
+class Rcache(object):
+    """
+    Redis Cache Constants
+
+    Параметры для redis кэша, где хранится временно:
+    -   media_group_id сообщений с кучей фоток.
+        Такое пересылаемое сообщение в бот состоит из нескольких
+        сообщений, но показать карточку автора пересылаемоего сообщения
+        надо лишь раз. Посему в кэше redis ставится запись с ключом:
+            MEDIA_GROUP_PREFIX +
+            message.media_group_id
+        Запись имеет время жизни MEDIA_GROUP_TTL секунд,
+        после чего redis этот мусор удаляет.
+        (
+            При пересылке в бот того же сообщения
+            с кучей картинок у этого сообщения будет другой
+            media_group_id, нежели у такого же предыдущего
+        )
+        Если при поступлении очередного перенаправленного сообщения
+        в бот запись в redis, соответствующая media_group_id,
+        существует, то карточка автора пересылаемоего сообщения
+        не показывается. Иначе ставится та запись в redis кэше
+        и бот выводит карточку автора пересылаемоего сообщения.
+    -   Последний юзер, отправивший сообщение в группу.
+        Вносится бессрочная запись:
+            LAST_USER_IN_GROUP_PREFIX +
+            group_chat_id  + KEY_SEP +
+            message.message_thread_id
+        со значением telegram user_id пользователя,
+        отправившего сообщение
+    -   Карточка, выданная после сообщения пользователя в группе:
+            CARD_IN_GROUP_PREFIX + KEY_SEP +
+            время (int(time.time()))  + KEY_SEP +
+            group_chat_id + KEY_SEP +
+            message.message_id
+        с любым значением
+    -   Написать сообщение в коллаже
+    """
+
+    MEDIA_GROUP_PREFIX = 'media_group_id_'
+    MEDIA_GROUP_TTL = 60
+    LAST_USER_IN_GROUP_PREFIX = 'last_user_in_group_'
+    CARD_IN_GROUP_PREFIX = 'card_in_group'
+    SEND_MESSAGE_PREFIX = 'send_message'
+    USER_DESC_PREFIX = 'user_desc'
+    ASK_MONEY_PREFIX = 'ask_money'
+    KEY_SEP = '~'
+
+
 class OperationType(object):
     THANK = 1
     MISTRUST = 2
@@ -2462,9 +2511,9 @@ class Schedule(object):
             return
         if r := redis.Redis(**settings.REDIS_CONNECT):
             time_current = int(time.time())
-            for key in r.scan_iter(settings.REDIS_CARD_IN_GROUP_PREFIX + '*'):
+            for key in r.scan_iter(Rcache.CARD_IN_GROUP_PREFIX + '*'):
                 try:
-                    (prefix, tm, chat_id, message_id) = key.split(settings.REDIS_KEY_SEP)
+                    (prefix, tm, chat_id, message_id) = key.split(Rcache.KEY_SEP)
                     tm = int(tm); chat_id = int(chat_id); message_id = int(message_id)
                     if chat_id in settings.GROUPS_WITH_CARDS and settings.GROUPS_WITH_CARDS[chat_id].get('keep_hours'):
                         try:

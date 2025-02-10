@@ -22,7 +22,7 @@ import settings, me
 from settings import logging
 
 from common import FSMnewPerson, FSMgeo, FSMdelete
-from common import Misc, KeyboardType, OperationType
+from common import Misc, KeyboardType, OperationType, Rcache
 
 import pymorphy3
 MorphAnalyzer = pymorphy3.MorphAnalyzer()
@@ -458,7 +458,7 @@ async def message_to_bot(message: Message, state: FSMContext):
     if message.media_group_id:
         if r := redis.Redis(**settings.REDIS_CONNECT):
             check_str = (
-                f'{settings.REDIS_MEDIA_GROUP_PREFIX}'
+                f'{Rcache.MEDIA_GROUP_PREFIX}'
                 f'{message.media_group_id}'
             )
             if r.get(check_str):

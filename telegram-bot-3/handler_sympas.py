@@ -17,7 +17,7 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 import settings, me
 from settings import logging
 
-from common import Misc, OperationType, KeyboardType
+from common import Misc, OperationType, KeyboardType, Rcache
 
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
@@ -443,9 +443,9 @@ async def process_message_donate_after_sympa(message: Message, state: FSMContext
     media_group_id = str(message.media_group_id or '')
     if media_group_id:
         key = (
-            f'{settings.REDIS_ASK_MONEY_PREFIX}{settings.REDIS_KEY_SEP}'
-            f'{message.from_user.id}{settings.REDIS_KEY_SEP}'
-            f'{media_group_id}{settings.REDIS_KEY_SEP}'
+            f'{Rcache.ASK_MONEY_PREFIX}{Rcache.KEY_SEP}'
+            f'{message.from_user.id}{Rcache.KEY_SEP}'
+            f'{media_group_id}{Rcache.KEY_SEP}'
             f'{data["journal_id"]}'
         )
         is_first = Misc.redis_is_key_first_up(key, ex=300)
@@ -523,7 +523,6 @@ async def process_message_donate_after_sympa(message: Message, state: FSMContext
         KeyboardType.SEP,
     )), StateFilter(None))
 async def cbq_get_sympa_send_profile(callback: CallbackQuery, state: FSMContext):
-    print(callback.data)
     profile_from, profile_to, journal_id = await Common.check_common_callback(callback)
     if not profile_to:
         return

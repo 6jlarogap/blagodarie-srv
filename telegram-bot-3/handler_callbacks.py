@@ -19,7 +19,7 @@ from handler_bot import is_it_command
 import settings, me
 from settings import logging
 
-from common import Misc, OperationType, KeyboardType
+from common import Misc, OperationType, KeyboardType, Rcache
 from common import FSMnewPerson, FSMdelete, FSMaskMoney
 
 router = Router()
@@ -1302,8 +1302,8 @@ async def process_message_to_send(message: Message, state: FSMContext):
                 is_first = True
                 if message.media_group_id:
                     key = (
-                        f'{settings.REDIS_SEND_MESSAGE_PREFIX}{settings.REDIS_KEY_SEP}'
-                        f'{message.from_user.id}{settings.REDIS_KEY_SEP}{message.media_group_id}'
+                        f'{Rcache.SEND_MESSAGE_PREFIX}{Rcache.KEY_SEP}'
+                        f'{message.from_user.id}{Rcache.KEY_SEP}{message.media_group_id}'
                     )
                     is_first = Misc.redis_is_key_first_up(key, ex=300)
 
@@ -1492,8 +1492,8 @@ async def do_get_user_desc(message: Message, state: FSMContext):
     media_group_id = str(message.media_group_id or '')
     if media_group_id:
         key = (
-            f'{settings.REDIS_USER_DESC_PREFIX}{settings.REDIS_KEY_SEP}'
-            f'{message.from_user.id}{settings.REDIS_KEY_SEP}{media_group_id}'
+            f'{Rcache.USER_DESC_PREFIX}{Rcache.KEY_SEP}'
+            f'{message.from_user.id}{Rcache.KEY_SEP}{media_group_id}'
         )
         is_first = Misc.redis_is_key_first_up(key, ex=300)
     is_first = '1' if is_first else ''
@@ -1577,9 +1577,9 @@ async def process_message_thank_ask_money(message: Message, state: FSMContext):
     media_group_id = str(message.media_group_id or '')
     if media_group_id:
         key = (
-            f'{settings.REDIS_ASK_MONEY_PREFIX}{settings.REDIS_KEY_SEP}'
-            f'{message.from_user.id}{settings.REDIS_KEY_SEP}'
-            f'{media_group_id}{settings.REDIS_KEY_SEP}'
+            f'{Rcache.ASK_MONEY_PREFIX}{Rcache.KEY_SEP}'
+            f'{message.from_user.id}{Rcache.KEY_SEP}'
+            f'{media_group_id}{Rcache.KEY_SEP}'
             f'{journal_id}'
         )
         is_first = Misc.redis_is_key_first_up(key, ex=300)

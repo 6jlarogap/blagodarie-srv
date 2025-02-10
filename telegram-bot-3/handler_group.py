@@ -16,7 +16,7 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
 from youtube_upload import upload_video
 
-from common import Misc, KeyboardType, OperationType, TgGroup, TgGroupMember
+from common import Misc, KeyboardType, OperationType, TgGroup, TgGroupMember, Rcache
 from handler_offer import Offer
 
 import settings, me
@@ -196,9 +196,9 @@ async def process_group_message(message: Message, state: FSMContext):
        ):
         if r := redis.Redis(**settings.REDIS_CONNECT):
             last_user_in_grop_rec = (
-                settings.REDIS_LAST_USERIN_GROUP_PREFIX + \
+                Rcache.LAST_USER_IN_GROUP_PREFIX + \
                 str(message.chat.id) + \
-                settings.REDIS_KEY_SEP + \
+                Rcache.KEY_SEP + \
                 str(message.message_thread_id)
             )
             previous_user_in_group = r.get(last_user_in_grop_rec)
@@ -286,9 +286,9 @@ async def process_group_message(message: Message, state: FSMContext):
             if answer and keep_hours:
                 if r := redis.Redis(**settings.REDIS_CONNECT):
                     s = (
-                        f'{settings.REDIS_CARD_IN_GROUP_PREFIX}{settings.REDIS_KEY_SEP}'
-                        f'{int(time.time())}{settings.REDIS_KEY_SEP}'
-                        f'{answer.chat.id}{settings.REDIS_KEY_SEP}'
+                        f'{Rcache.CARD_IN_GROUP_PREFIX}{Rcache.KEY_SEP}'
+                        f'{int(time.time())}{Rcache.KEY_SEP}'
+                        f'{answer.chat.id}{Rcache.KEY_SEP}'
                         f'{answer.message_id}'
                     )
                     r.set(name=s, value='1')

@@ -104,40 +104,6 @@ AUTH_PROMPT_FOR_DOMAIN = {
 #
 VOTE_URL = 'https://6jlarogap.github.io/razum/'
 
-# Параметры для redis кэша, где хранится временно:
-#   -   media_group_id сообщений с кучей фоток.
-#       Такое пересылаемое сообщение в бот состоит из нескольких
-#       сообщений, но показать карточку автора пересылаемоего сообщения
-#       надо лишь раз. Посему в кэше redis ставится запись с ключом:
-#           REDIS_MEDIA_GROUP_PREFIX +
-#           message.media_group_id
-#       Запись имеет время жизни REDIS_MEDIA_GROUP_TTL секунд,
-#       после чего redis этот мусор удаляет.
-#       (
-#           При пересылке в бот того же сообщения
-#           с кучей картинок у этого сообщения будет другой
-#           media_group_id, нежели у такого же предыдущего
-#       )
-#       Если при поступлении очередного перенаправленного сообщения
-#       в бот запись в redis, соответствующая media_group_id,
-#       существует, то карточка автора пересылаемоего сообщения
-#       не показывается. Иначе ставится та запись в redis кэше
-#       и бот выводит карточку автора пересылаемоего сообщения.
-#   -   Последний юзер, отправивший сообщение в группу.
-#       Вносится бессрочная запись:
-#           REDIS_LAST_USERIN_GROUP_PREFIX +
-#           group_chat_id  + REDIS_KEY_SEP +
-#           message.message_thread_id
-#       со значением telegram user_id пользователя,
-#       отправившего сообщение
-#   -   Карточка, выданная после сообщения пользователя в группе:
-#           REDIS_CARD_IN_GROUP_PREFIX + REDIS_KEY_SEP +
-#           время (int(time.time()))  + REDIS_KEY_SEP +
-#           group_chat_id + REDIS_KEY_SEP +
-#           message.message_id
-#       с любым значением
-#   -   Написать сообщение в коллаже
-#
 REDIS_CONNECT =dict(
     # Параметры инициализации redis connection,
     # те же, что в redis.Redis()
@@ -148,14 +114,6 @@ REDIS_CONNECT =dict(
     db=2,
     decode_responses=True,
 )
-REDIS_MEDIA_GROUP_PREFIX = 'media_group_id_'
-REDIS_MEDIA_GROUP_TTL = 60
-REDIS_LAST_USERIN_GROUP_PREFIX = 'last_user_in_group_'
-REDIS_CARD_IN_GROUP_PREFIX = 'card_in_group'
-REDIS_SEND_MESSAGE_PREFIX = 'send_message'
-REDIS_USER_DESC_PREFIX = 'user_desc'
-REDIS_ASK_MONEY_PREFIX = 'ask_money'
-REDIS_KEY_SEP = '~'
 
 # Ид групп, в которые шлём карточки после сообщений участников, с параметрами.
 # Например, в группе с таким ид показывать карточки после сообщений юзеров
