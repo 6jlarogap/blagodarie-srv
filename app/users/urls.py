@@ -48,6 +48,8 @@ urlpatterns = [
     re_path(r'^api/token/authdata/?$', views.api_token_authdata),
     re_path(r'^api/token/invite/?$', views.api_token_invite),
 
+    re_path(r'^api/get_bot_data/?$', views.api_get_bot_data),
+
     re_path(r'^t/(?P<short_id>[A-Za-z0-9]{10})/?$', views.api_short_id),
 
     re_path(r'^test/goto/(?P<temp_token>[a-f0-9]{40})/link/?$', views.test_goto_auth_link),

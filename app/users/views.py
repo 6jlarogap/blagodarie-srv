@@ -4322,3 +4322,19 @@ class ApiCheckDateView(APIView):
         return Response(data=data, status=status_code)
 
 api_check_date = ApiCheckDateView.as_view()
+
+
+class ApiGetBotData(TelegramApiMixin, APIView):
+
+    def get(self, request):
+        try:
+            data = self.get_bot_data()
+            if not data:
+                raise ServiceException('Не удалось получить данные бота')
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_get_bot_data = ApiGetBotData.as_view()
