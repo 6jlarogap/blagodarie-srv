@@ -1182,7 +1182,13 @@ async def cbq_delete_user_confirmed(callback: CallbackQuery, state: FSMContext):
        response_check['response_uuid']['uuid'] == data['uuid'] and \
        uuid == data['uuid']:
 
-        if response_check['response_uuid']['owner']:
+        profile = response_check['response_uuid']; 
+        profile_sympa = None
+        if profile['r_sympa_username']:
+            status_r_sympa, profile_sympa = await Misc.get_user_by_sid(profile['r_sympa_username'])
+            if status_r_sympa != 200:
+                profile_sympa = None
+        if profile['owner']:
             msg_debug = 'delete owned user, '
             msg_deleted = f'Профиль <u>{response_check["response_uuid"]["first_name"]}</u> удалён'
         else:
@@ -1204,8 +1210,21 @@ async def cbq_delete_user_confirmed(callback: CallbackQuery, state: FSMContext):
             await callback.message.reply('Неизвестная ошибка')
         else:
             await callback.message.reply(msg_deleted)
-            if not response_check['response_uuid']['owner']:
+            if not profile['owner']:
                 await Misc.show_card(response_delete, response_check, callback.from_user)
+                if profile_sympa:
+                    for tgd in profile_sympa['tg_data']:
+                        try:
+                            await bot.send_message(
+                                tgd['tg_uid'],
+                                text=(
+                                    f'Симпатия к Вам отменена. Приглашайте новых игроков '
+                                    f'и ставьте больше интересов на '
+                                    f'<a href="{settings.MEET_HOST}">карте</a> - '
+                                    f'чтобы скорее найти совпадения!'
+                            ))
+                        except (TelegramBadRequest, TelegramForbiddenError):
+                            pass
     await state.clear()
     await callback.answer()
 

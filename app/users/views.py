@@ -1674,9 +1674,21 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 user.delete()
                 data = {}
             else:
+
+                if profile.r_sympa:
+                    profile_sympa = Profile.objects.filter(user=profile.r_sympa).update(
+                        r_sympa=None,
+                    )
+                profile.tgdesc.all().delete()
+                CurrentState.objects.filter(Q(user_from=user) | Q(user_to=user)).update(
+                    is_sympa=False,
+                    is_sympa_reverse=False,
+                    is_sympa_confirmed=False,
+                    update_timestamp=int(time.time()),
+                )
                 for f in ('middle_name',):
                         setattr(profile, f, '')
-                for f in ('latitude', 'longitude', 'ability', 'comment', 'address', 'dob', 'dod'):
+                for f in ('latitude', 'longitude', 'ability', 'comment', 'address', 'dob', 'dod', 'did_meet', 'r_sympa',):
                     setattr(profile, f, None)
                 profile.is_dead = False
                 profile.delete_from_media()
