@@ -406,16 +406,19 @@ async def cbq_get_sympa_donate(callback: CallbackQuery, state: FSMContext):
     )
     if text:
         await state.set_state(FSMdonateSympa.ask)
-        await state.update_data(
-            journal_id=journal_id,
-            response_get_donate=response_get_donate,
-            callback=callback,
-        )
-        await Misc.remove_n_send_message(
+        message = await Misc.remove_n_send_message(
             chat_id=callback.from_user.id,
             message_id=callback.message.message_id,
             text=text,
             reply_markup=reply_markup,
+        )
+        await state.update_data(
+            journal_id=journal_id,
+            response_get_donate=response_get_donate,
+            # Это для того, если щелкнет Отказ от симпатии или Отказ от доната
+            callback=callback,
+            # Это для отравки доната
+            message=message,
         )
     await callback.answer()
 
@@ -478,17 +481,18 @@ async def process_message_donate_after_sympa(message: Message, state: FSMContext
                 pass
 
         if is_first and success:
-            text, reply_markup = Common.after_donate_or_not_donate(
-                user_m, user_f, data['journal_id'],
-                message_pre=(
-                    f'Донат отправлен. Ожидайте решения {html.quote(user_f["first_name"])} о передаче контактов'
-            ))
-            await Misc.remove_n_send_message(
-                chat_id=data['callback'].from_user.id,
-                message_id=data['callback'].message.message_id,
-                text=text,
-                reply_markup=reply_markup,
-            )
+            if data.get('message'):
+                text, reply_markup = Common.after_donate_or_not_donate(
+                    user_m, user_f, data['journal_id'],
+                    message_pre=(
+                        f'Донат отправлен. Ожидайте решения {html.quote(user_f["first_name"])} о передаче контактов'
+                ))
+                await Misc.remove_n_send_message(
+                    chat_id=message.from_user.id,
+                    message_id=data['message'].message_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                )
 
             text, reply_markup = Common.after_donate_or_not_donate(
                 user_f, user_m, data['journal_id'],

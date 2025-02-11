@@ -2404,12 +2404,17 @@ class Misc(object):
     async def remove_n_send_message(cls,
             chat_id, message_id,
             text=None, reply_markup=None, **kwargs):
+        result = None
         try:
             await bot.delete_message(chat_id=chat_id, message_id=message_id)
-            if text:
-                await bot.send_message(chat_id, text, reply_markup=reply_markup)
         except (TelegramBadRequest, TelegramForbiddenError):
             pass
+        if text:
+            try:
+                result = await bot.send_message(chat_id, text, reply_markup=reply_markup)
+            except (TelegramBadRequest, TelegramForbiddenError):
+                result = None
+        return result
 
 class TgGroup(object):
     """
