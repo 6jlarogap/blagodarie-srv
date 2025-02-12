@@ -847,10 +847,22 @@ class Misc(object):
     @classmethod
     def reply_relations(cls, response, profile):
         result = ''
-        arr = ['От Вас: %s' % Attitude.text(response['from_to']['attitude']),]
+        attitude = response['from_to']['attitude']
+        if not attitude and response['from_to']['is_sympa_confirmed']:
+            text = 'симпатия'
+        else:
+            text = Attitude.text(attitude)
+        arr = [f'От Вас: {text}']
+
         # Организация может доверять только, если у нее не собственный аккаунт
+        #
         if not profile.get('is_org') and not profile.get('owner'):
-            arr.append('К Вам: %s' % Attitude.text(response['to_from']['attitude']))
+            attitude = response['to_from']['attitude']
+            if not attitude and response['to_from']['is_sympa_confirmed']:
+                text = 'симпатия'
+            else:
+                text = Attitude.text(attitude)
+            arr.append(f'К Вам: {text}')
         arr.append('\n')
         result = '\n'.join(arr)
         return result

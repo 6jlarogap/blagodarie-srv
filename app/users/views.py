@@ -1732,7 +1732,7 @@ api_profile = ApiProfile.as_view()
 
 class ApiUserRelations(UuidMixin, APIView):
     """
-    Как user_id_to относится к user_id_from
+    Как user_id_to относится к user_id_from, включая симпатии
 
     Пример:
         api/user/relations?user_id_to=...&user_id_from=...я все ключи
@@ -1741,10 +1741,12 @@ class ApiUserRelations(UuidMixin, APIView):
         "from_to": {
             "attitude": 't',
             "thanks_count": 2,
+            "is_sympa_confirmed": true
             },
         "to_from": {
             "attitude": null,
             "thanks_count": 0,
+            "is_sympa_confirmed": false
             },
         }
     """
@@ -1760,8 +1762,8 @@ class ApiUserRelations(UuidMixin, APIView):
                 comment='user_id_to. ',
             )
             data = dict(
-                from_to=dict(attitude=None, thanks_count=0),
-                to_from=dict(attitude=None, thanks_count=0),
+                from_to=dict(attitude=None, thanks_count=0, is_sympa_confirmed=False),
+                to_from=dict(attitude=None, thanks_count=0, is_sympa_confirmed=False),
             )
             users = (user_from, user_to,)
             for cs in CurrentState.objects.filter(
@@ -1775,6 +1777,15 @@ class ApiUserRelations(UuidMixin, APIView):
                 elif cs.user_from == user_to:
                     data['to_from']['attitude'] = cs.attitude
                     data['to_from']['thanks_count'] = cs.thanks_count
+            for cs in CurrentState.objects.filter(
+                user_from__in=users,
+                user_to__in=users,
+                is_sympa_reverse=False,
+                ):
+                if cs.user_from == user_from:
+                    data['from_to']['is_sympa_confirmed'] = cs.is_sympa_confirmed
+                elif cs.user_from == user_to:
+                    data['to_from']['is_sympa_confirmed'] = cs.is_sympa_confirmed
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
             status_code = 400
@@ -4325,7 +4336,6 @@ api_check_date = ApiCheckDateView.as_view()
 
 
 class ApiGetBotData(TelegramApiMixin, APIView):
-
     def get(self, request):
         try:
             data = self.get_bot_data()
