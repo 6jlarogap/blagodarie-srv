@@ -529,21 +529,45 @@ async def cbq_get_sympa_send_profile(callback: CallbackQuery, state: FSMContext)
         await callback.answer()
         return
     success = False
+    text_to = (
+        f'{Misc.get_deeplink_with_name(profile_from)}\n'
+        f'Контакты переданы. Вы покидаете игру знакомств - для личного общения! Удачи!'
+    )
+    inline_btn_invite = InlineKeyboardButton(
+        text='Пригласить в игру',
+        callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
+        keyboard_type=KeyboardType.MEET_INVITE,
+        sep=KeyboardType.SEP,
+    ))
+    reply_markup = InlineKeyboardMarkup(inline_keyboard=[ [ inline_btn_invite ] ])
     for tgd in profile_to['tg_data']:
         try:
             await bot.send_message(
                 tgd['tg_uid'],
-                text=Misc.get_deeplink_with_name(profile_from),
+                text=text_to,
+                reply_markup=reply_markup
             )
             success = True
         except (TelegramBadRequest, TelegramForbiddenError):
             pass
-    await bot.answer_callback_query(
-        callback.id,
-        text='Контакты отправлены' if success else 'Не удалось отправить контакты',
-        show_alert=True,
-    )
+    if success:
+        text_from = (
+            f'Контакты переданы. Вы покидаете игру знакомств - для личного общения! Удачи!'
+        )
+        await Misc.remove_n_send_message(
+            chat_id=callback.from_user.id,
+            message_id=callback.message.message_id,
+            text=text_from,
+            reply_markup=reply_markup,
+        )
+    else:
+        await bot.answer_callback_query(
+            callback.id,
+            text='Не удалось передать контакты',
+            show_alert=True,
+        )
     await callback.answer()
+
 
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.SYMPA_DONATE_REFUSE, KeyboardType.SEP,
