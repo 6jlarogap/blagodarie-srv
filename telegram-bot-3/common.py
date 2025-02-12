@@ -100,6 +100,7 @@ class Rcache(object):
               написать (SEND_MESSAGE_PREFIX)
             * Отправка 'квитанции об оплате' при благодарности
               или взаимной симпатии
+            * чтоб не отменял.ставил симпатию, т.е. флудил другого
     """
 
     MEDIA_GROUP_PREFIX = 'media_group_id_'
@@ -109,6 +110,9 @@ class Rcache(object):
     SEND_MESSAGE_PREFIX = 'send_message'
     USER_DESC_PREFIX = 'user_desc'
     ASK_MONEY_PREFIX = 'ask_money'
+    SET_NEXT_SYMPA_WAIT_PREFIX = 'set_next_sympa_wait'
+    SET_NEXT_SYMPA_WAIT = settings.REDIS_SET_NEXT_SYMPA_WAIT
+
     KEY_SEP = '~'
 
 
@@ -2427,6 +2431,27 @@ class Misc(object):
             except (TelegramBadRequest, TelegramForbiddenError):
                 result = None
         return result
+
+    @classmethod
+    def d_h_m_s(cls, lapse):
+        """
+        Промежуток вресени в секудах в удобо читаемое время
+
+        Например, d_h_m_s(3500) -> 58 мин. 20 сек.
+        """
+        d = int (lapse / 86400);
+        lapse -= d * 86400;
+        h = int (lapse / 3600);
+        lapse -= h * 3600;
+        m = int (lapse / 60);
+        s = lapse - m * 60;
+        return (
+            f'{str(d) + " дн. "  if d else ""}'
+            f'{str(h) + " ч. "   if h else ""}'
+            f'{str(m) + " мин. " if m else ""}'
+            f'{str(s) + " сек."  if s else ""}'
+        ).rstrip()
+
 
 class TgGroup(object):
     """

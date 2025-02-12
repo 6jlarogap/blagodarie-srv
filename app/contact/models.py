@@ -501,6 +501,7 @@ class ApiAddOperationMixin(object):
         update_timestamp = int(time.time())
         user_to = profile_to.user
         already_code = 'already'
+        profile_from = user_from.profile
 
         if operationtype_id == OperationType.THANK:
             currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
@@ -833,6 +834,12 @@ class ApiAddOperationMixin(object):
             )
 
         elif operationtype_id == OperationType.SET_SYMPA:
+            if profile_from.r_sympa and profile_from.r_sympa != user_to:
+                raise ServiceException(
+                    f'Вы можете ставить {"симпатию" if is_confirmed else "интерес"} кому бы то ни было '
+                    f'только если отмените в телеграме Вашу взаимную симпатию c '
+                    f'{profile_from.r_sympa.first_name}'
+                )
             if profile_to.r_sympa:
                 raise ServiceException(
                     f'{"Участница" if profile_to.gender == 'f' else "Участник"} игры уже во взаимной симпатии'

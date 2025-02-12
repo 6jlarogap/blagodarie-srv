@@ -2,7 +2,7 @@
 #
 # Сallback реакции
 
-import re, base64
+import re, base64, time, redis
 
 from aiogram import Router, F, html
 from aiogram.filters import Command, StateFilter
@@ -247,6 +247,30 @@ async def cbq_sympa_set(callback: CallbackQuery, state: FSMContext):
     if not profile_to:
         return
 
+    r_key = (
+        Rcache.SET_NEXT_SYMPA_WAIT_PREFIX + \
+        profile_from['username'] + Rcache.KEY_SEP + \
+        profile_to['username']
+    )
+    if r := redis.Redis(**settings.REDIS_CONNECT):
+        r_rec = r.get(r_key)
+        r.close()
+        if r_rec:
+            time_current = int(time.time())
+            tm_diff = int(r_rec) - time_current
+            if tm_diff > 0:
+                await bot.answer_callback_query(
+                    callback.id,
+                    text=(
+                        f'Вы можете снова установить симпатию к '
+                        f'{html.quote(profile_to["first_name"])} '
+                        f'только через {Misc.d_h_m_s(tm_diff)}'
+                    ),
+                    show_alert=True,
+                )
+                await callback.answer()
+                return
+
     post_op = dict(
         tg_token=settings.TOKEN,
         operation_type_id=str(OperationType.SET_SYMPA),
@@ -311,6 +335,15 @@ async def cbq_sympa_set(callback: CallbackQuery, state: FSMContext):
                         f'Вам симпатию.\n'
                         f'Ставьте больше интересов на карте - чтобы скорее найти совпадения!'
                     )
+                if r := redis.Redis(**settings.REDIS_CONNECT):
+                    time_current = int(time.time())
+                    r.set(
+                        r_key,
+                        str(time_current + Rcache.SET_NEXT_SYMPA_WAIT),
+                        ex=Rcache.SET_NEXT_SYMPA_WAIT,
+                    )
+                    r.close()
+
     if text_from:
         await Misc.remove_n_send_message(
             chat_id=callback.from_user.id,
