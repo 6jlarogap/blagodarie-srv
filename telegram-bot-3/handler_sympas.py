@@ -265,7 +265,13 @@ async def cbq_sympa_set(callback: CallbackQuery, state: FSMContext):
     message_pre = ''
     text_from = reply_markup_from = None
     text_to = reply_markup_to = None
-    if status == 200:
+    if status == 400 and response.get('message'):
+        await bot.answer_callback_query(
+            callback.id,
+            text=f'Симпатия не установлена:\n{response["message"]}',
+            show_alert=True,
+        )
+    elif status == 200:
         journal_id = response['journal_id']
         if response.get('previousstate'):
             if response['previousstate']['is_sympa_confirmed']:
@@ -323,7 +329,6 @@ async def cbq_sympa_set(callback: CallbackQuery, state: FSMContext):
                 )
             except (TelegramBadRequest, TelegramForbiddenError):
                 pass
-
     await callback.answer()
 
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (

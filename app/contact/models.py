@@ -833,6 +833,10 @@ class ApiAddOperationMixin(object):
             )
 
         elif operationtype_id == OperationType.SET_SYMPA:
+            if profile_to.r_sympa:
+                raise ServiceException(
+                    f'{"Участница" if profile_to.gender == 'f' else "Участник"} игры уже во взаимной симпатии'
+                )
             is_sympa_previous = None
             is_sympa_confirmed_previous = None
             currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(

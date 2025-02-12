@@ -2444,6 +2444,8 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             # однако не исключаем, что место и д.р. затёрли
             #
             q_meet = Q(did_meet__isnull=False, gender__isnull=False)
+            if not meet_admin:
+                q_meet &= Q(r_sympa__isnull=True)
             in_rectangle = False
             try:
                 # это для обновлении легенды, когда меняются границы карты
@@ -2463,6 +2465,8 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     longitude__lte=lng_east,
                 )
                 q_meet &= q_rectangle
+            else:
+                q_meet &= Q(latitude__isnull=False, longitude__isnull=False)
             if request.GET.get('gender'):
                 q_meet &= Q(gender=request.GET['gender'])
             today = datetime.date.today()
