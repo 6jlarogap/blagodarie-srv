@@ -51,12 +51,18 @@ class OperationType(models.Model):
     # Revoked Part in Acquaintance Game
     # В этом случае запись только в journal.user_to: отказался от игры знакомств
     REVOKED_MEET = 13
+
     # Установка интереса/симпатии
     SET_SYMPA = 14
     # Удалить и симпатию, и интерес
     REVOKE_SYMPA = 15
     # Удалить только симпатию, интерес оставить
     REVOKE_SYMPA_ONLY = 16
+
+    # Скрыть пользователя в игре знакомств
+    MEET_USER_HIDE = 17
+    # Раскрыть пользователя в игре знакомств
+    MEET_USER_SHOW = 18
 
     title = models.CharField(_("Тип операции"), max_length=255, unique=True)
 
@@ -213,6 +219,9 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
     is_invite_meet = models.BooleanField(_("Приглашение в игру знакомств"), default=False, db_index=True)
     is_invite_meet_reverse = models.BooleanField(_("Приглашение в игру знакомств: обратное отношение"), default=False, db_index=True)
 
+    # Для скрытых связок вряд ли потребуется строить рекурсивные графы
+    is_hide_meet = models.BooleanField(_("Скрыт в игре знакомств"), default=False, db_index=True)
+
 
     def data_dict(
         self,
@@ -221,6 +230,7 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
         show_id_fio=False,
         show_sympa=False,
         show_invite_meet=False,
+        show_hide_meet=False,
         fmt='d3js'
     ):
 
@@ -253,6 +263,8 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
             result.update(is_sympa=self.is_sympa)
         if show_invite_meet:
             result.update(is_invite_meet=self.is_invite_meet)
+        if show_hide_meet:
+            result.update(is_hide_meet=self.is_hide_meet)
         return result
 
     class Meta:
@@ -999,6 +1011,32 @@ class ApiAddOperationMixin(object):
                 reverse_cs.is_invite_meet_reverse = True
                 reverse_cs.is_invite_meet = True
                 reverse_cs.save()
+
+        elif operationtype_id == OperationType.MEET_USER_HIDE:
+            currentstate, created_ = CurrentState.objects.select_for_update().get_or_create(
+                user_from=user_from,
+                user_to=user_to,
+                defaults=dict(
+                    is_hide_meet=True,
+            ))
+            if created_:
+                currentstate.user_from.profile.recount_invite_meet_count()
+            else:
+                if not currentstate.is_invite_meet_reverse and currentstate.is_hide_meet == True:
+                    # Уже скрыт
+                    pass
+                else:
+                    currentstate.update_timestamp = update_timestamp
+                    currentstate.is_hide_meet = True
+                    currentstate.save()
+
+        elif operationtype_id == OperationType.MEET_USER_SHOW:
+            currentstate = CurrentState.objects.filter(
+                user_from=user_from, user_to=user_to, is_hide_meet=True,
+            ).update(
+                is_hide_meet=False,
+                update_timestamp = update_timestamp,
+            )
 
         else:
             raise ServiceException('Неизвестный operation_type_id')

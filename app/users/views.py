@@ -2435,7 +2435,8 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             ) if meet_admin else (
                 '<br />'
                 '<table style="border-spacing: 0;border-top: 2px solid;width:100%;">'
-                '<col width="80%" />'
+                '<col width="70%" />'
+                '<col width="10%" />'
                 '<col width="10%" />'
                 '<col width="10%" />'
             )
@@ -2469,6 +2470,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 q_meet &= Q(latitude__isnull=False, longitude__isnull=False)
             if request.GET.get('gender'):
                 q_meet &= Q(gender=request.GET['gender'])
+            show_hidden = request.GET.get('show_hidden')
             today = datetime.date.today()
             try:
                 d_older = datetime.date(today.year - int(request.GET.get('older')), 12, 31)
@@ -2484,6 +2486,10 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 cs.user_to.pk for cs in CurrentState.objects.filter(
                     user_from=user_auth, user_to__isnull=False,
                     is_sympa=True, is_sympa_reverse=False,
+            )]
+            my_hidden = [
+                cs.user_to.pk for cs in CurrentState.objects.filter(
+                    user_from=user_auth, user_to__isnull=False, is_hide_meet=True,
             )]
             nodes = []
             user_pks = []
@@ -2501,20 +2507,29 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 '</table>'
             )
             for p in Profile.objects.filter(q_meet).order_by('dob').select_related('user').distinct():
+                if not meet_admin:
+                    if show_hidden:
+                        if p.user.pk not in my_hidden:
+                            continue
+                    else:
+                        if p.user.pk in my_hidden:
+                            continue
+                lat_sum += p.latitude
+                lng_sum += p.longitude
+
                 color = None; frame = 0
                 if p.user.pk in my_sympas:
                     color = color_sympa; frame=5
                 dict_user = self.popup_data(p, color, frame)
-                if p.latitude is not None and p.longitude is not None:
-                    points.append(dict(
-                        latitude=p.latitude,
-                        longitude=p.longitude,
-                        title=title_template % dict_user,
-                        popup=popup_meet % dict_user,
-                        icon=dict_user['url_photo_icon'],
-                        is_of_found_user=False,
-                        size_icon=dict_user['thumb_size_icon'],
-                    ))
+                points.append(dict(
+                    latitude=p.latitude,
+                    longitude=p.longitude,
+                    title=title_template % dict_user,
+                    popup=popup_meet % dict_user,
+                    icon=dict_user['url_photo_icon'],
+                    is_of_found_user=False,
+                    size_icon=dict_user['thumb_size_icon'],
+                ))
                 if p.gender == GenderMixin.GENDER_MALE:
                     list_m.append(dict_user)
                 elif p.gender == GenderMixin.GENDER_FEMALE:
@@ -2539,21 +2554,35 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     (
                         Q(attitude__isnull=False, is_reverse=False) | \
                         Q(is_invite_meet=True, is_invite_meet_reverse=False) | \
-                        Q(is_sympa_confirmed=True, is_sympa_reverse=False)
+                        Q(is_sympa_confirmed=True, is_sympa_reverse=False) |
+                        Q(is_hide_meet=True)
                     )
                 links = []
-                fmt = '3d-force-graph'
                 for cs in CurrentState.objects.filter(q_connections).filter(
                         user_from__in=user_pks, user_to__in=user_pks,
                         ).select_related(
                             'user_from__profile', 'user_to__profile',
                         ).distinct():
+                    link_pattern = dict(
+                        source=cs.user_from.pk,
+                        target=cs.user_to.pk,
+                    )
                     if cs.attitude is not None and not cs.is_reverse:
-                        links.append(cs.data_dict(show_attitude=True,fmt=fmt,))
+                        link = link_pattern.copy()
+                        link.update(attitude=cs.attitude)
+                        links.append(link)
                     if cs.is_invite_meet and not cs.is_invite_meet_reverse:
-                        links.append(cs.data_dict(show_invite_meet=True,fmt=fmt,))
+                        link = link_pattern.copy()
+                        link.update(is_invite_meet=True)
+                        links.append(link)
                     if cs.is_sympa and not cs.is_sympa_reverse and cs.is_sympa_confirmed:
-                        links.append(cs.data_dict(show_sympa=True,fmt=fmt,))
+                        link = link_pattern.copy()
+                        link.update(is_sympa=True)
+                        links.append(link)
+                    if cs.is_hide_meet:
+                        link = link_pattern.copy()
+                        link.update(is_hide_meet=True)
+                        links.append(link)
                 graph = dict(nodes=nodes, links=links)
 
             len_m = len(list_m)
@@ -2585,12 +2614,14 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     '<tr style="border-bottom: 2px solid">'
                         '<td align="left" style="border-bottom: 2px solid;">%(m)s</td>'
                         '<td style="text-align:center;border-bottom: 2px solid;">%(m_dob)s</td>'
+                        '<td style="text-align:center;border-bottom: 2px solid;">%(m_hide)s</td>'
                         '<td style="text-align:center;border-bottom: 2px solid;">%(m_sympa)s</td>'
                     '</tr>'
                 ) if user_auth.profile.gender == 'f' else (
                     '<tr style="border-bottom: 2px solid">'
                         '<td align="left" style="border-bottom: 2px solid;">%(f)s</td>'
                         '<td style="text-align:center;border-bottom: 2px solid;">%(f_dob)s</td>'
+                        '<td style="text-align:center;border-bottom: 2px solid;">%(f_hide)s</td>'
                         '<td style="text-align:center;border-bottom: 2px solid;">%(f_sympa)s</td>'
                     '</tr>'
                 )
@@ -2598,36 +2629,48 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     '<label for="table-sympa-%(user_id)s"><span style="color: %(color_sympa)s">Интерес:<span></label><br />'
                     '<input type="checkbox" class="sympa" id="table-sympa-%(user_id)s" %(sympa_checked)s %(sympa_disabled)s>'
                 )
+                legend_hide = (
+                    '<label for="table-hide-%(user_id)s">''<span style="color: system-color">%(str_hidden)s:<span></label><br />'
+                    '<input type="checkbox" class="hide_him_her" id="table-hide-%(user_id)s" %(hide_checked)s>'
+                )
 
                 for i in range(max(len_m, len_f)):
                     d = dict(
-                        m='', m_dob='', m_sympa='',
-                        f='', f_dob='', f_sympa='',
+                        m='', m_dob='', m_sympa='', m_hide='',
+                        f='', f_dob='', f_sympa='', f_hide='',
                     )
                     if i < len_m:
                         d['m'] = popup_m % list_m[i]
                         d['m_dob'] = list_m[i]['dob']
                         if list_m[i]['user_id'] != user_auth.pk and not meet_admin:
+                            hide_checked='checked' if list_m[i]['user_id'] in my_hidden else ''
                             sympa_checked='checked' if list_m[i]['user_id'] in my_sympas else ''
                             d_sympa = dict(
+                                str_hidden='Скрыт',
                                 color_sympa=color_sympa if sympa_checked else 'system-color',
                                 user_id=list_m[i]['user_id'],
                                 sympa_checked=sympa_checked,
-                                sympa_disabled='disabled' if sympa_checked else ''
+                                sympa_disabled='disabled' if sympa_checked else '',
+                                hide_checked=hide_checked,
                             )
                             d['m_sympa'] = legend_sympa % d_sympa
+                            d['m_hide'] = legend_hide % d_sympa
                     if i < len_f:
                         d['f'] = popup_f % list_f[i]
                         d['f_dob'] = list_f[i]['dob']
                         if list_f[i]['user_id'] != user_auth.pk and not meet_admin:
+                            hide_checked='checked' if list_f[i]['user_id'] in my_hidden else ''
                             sympa_checked='checked' if list_f[i]['user_id'] in my_sympas else ''
                             d_sympa = dict(
+                                str_hidden='Скрыта',
                                 color_sympa=color_sympa if sympa_checked else 'system-color',
                                 user_id=list_f[i]['user_id'],
                                 sympa_checked=sympa_checked,
-                                sympa_disabled='disabled="disabled"' if sympa_checked else ''
+                                sympa_disabled='disabled="disabled"' if sympa_checked else '',
+                                hide_checked=hide_checked,
                             )
                             d['f_sympa'] = legend_sympa % d_sympa
+                            d['f_hide'] = legend_hide % d_sympa
                     legend += legend_user % d
             legend += '</table><br /><br />'
 

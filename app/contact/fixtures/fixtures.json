@@ -146,5 +146,19 @@
     "fields": {
       "title": "Revoke Sympathy only"
     }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 17,
+    "fields": {
+      "title": "Hide User from Meet Game"
+    }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 18,
+    "fields": {
+      "title": "Show User at Meet Game"
+    }
   }
 ]
