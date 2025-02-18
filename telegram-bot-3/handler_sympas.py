@@ -42,7 +42,7 @@ class Common(object):
         profile_from = profile_to = journal_id = None
         profile_from, profile_to = await Misc.check_sids_from_callback(callback)
         if profile_from and profile_to:
-            if not (journal_id := Common.check_journal_id(callback)):
+            if not (journal_id := cls.check_journal_id(callback)):
                 profile_from = profile_to = journal_id = None
         return profile_from, profile_to, journal_id
 
@@ -270,6 +270,19 @@ async def cbq_sympa_set(callback: CallbackQuery, state: FSMContext):
                 )
                 await callback.answer()
                 return
+
+    if profile_from['r_sympa_username'] or profile_to['r_sympa_username']:
+        if profile_from['r_sympa_username']:
+            message = 'У Вас уже есть взаимная симпатия'
+        else:
+            message = f'У {profile_to["first_name"]} уже есть взаимная симпатия'
+        await bot.answer_callback_query(
+            callback.id,
+            text=message,
+            show_alert=True,
+        )
+        await callback.answer()
+        return
 
     post_op = dict(
         tg_token=settings.TOKEN,

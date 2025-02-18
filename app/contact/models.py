@@ -910,6 +910,7 @@ class ApiAddOperationMixin(object):
             # Пока нигде не используется
             is_sympa_previous = None
             is_sympa_confirmed_previous = None
+            is_sympa_reciprocal_previous = None
             q = Q(user_from=user_from, user_to=user_to, is_sympa=True)
             try:
                 currentstate = CurrentState.objects.get(
@@ -918,6 +919,9 @@ class ApiAddOperationMixin(object):
             except CurrentState.DoesNotExist:
                 pass
             else:
+                is_sympa_reciprocal_previous = CurrentState.objects.filter(
+                    user_from=user_to, user_to=user_from, is_sympa_reverse=False, is_sympa_confirmed=True
+                ).exists()
                 is_sympa_previous = currentstate.is_sympa
                 is_sympa_confirmed_previous = currentstate.is_sympa_confirmed
                 currentstate.is_sympa = False
@@ -928,6 +932,7 @@ class ApiAddOperationMixin(object):
             data.update(previousstate=dict(
                 is_sympa=is_sympa_previous,
                 is_sympa_confirmed=is_sympa_confirmed_previous,
+                is_sympa_reciprocal= is_sympa_reciprocal_previous,
             ))
 
             CurrentState.objects.filter(

@@ -481,7 +481,8 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                         data['donate'] = self.find_donate_to(user_f, user_m)
             status_code = status.HTTP_200_OK
 
-            if operationtype_id in (OperationType.REVOKE_SYMPA, OperationType.REVOKE_SYMPA_ONLY) and got_tg_token:
+            if operationtype_id in (OperationType.REVOKE_SYMPA, OperationType.REVOKE_SYMPA_ONLY) and \
+               data['previousstate']['is_sympa_reciprocal']:
                 profile_from.r_sympa = profile_to.r_sympa = None
                 profile_from.save(update_fields=('r_sympa',))
                 profile_to.save(update_fields=('r_sympa',))
