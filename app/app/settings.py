@@ -538,19 +538,3 @@ if DEBUG:
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
     )
-
-class KEYBOARD_TYPE(object):
-    '''
-    Коды "комманд" в кнопках inline keyboard для бота
-
-    Должны быть теми же, что в telegram-bot/common.py/KeyboardType
-    '''
-
-#   Внимание: в seetings.py все параметры должны быть на верхнем регистре
-
-    SYMPA_SET = 65
-    SYMPA_SET_CANCEL = 67
-
-    # Разделитель данных в call back data
-    #
-    SEP = '~'

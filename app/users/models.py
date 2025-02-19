@@ -950,6 +950,21 @@ class UuidMixin(object):
 
 class TelegramApiMixin(object):
 
+    class KeyboardType(object):
+        '''
+        Коды "комманд" в кнопках inline keyboard для бота
+
+        Должны быть теми же, что в telegram-bot/common.py/KeyboardType
+        '''
+
+        SYMPA_SET = 65
+        SYMPA_REVOKE = 66
+        SYMPA_SET_CANCEL = 67
+
+        # Разделитель данных в call back data
+        #
+        SEP = '~'
+
     API_TELEGRAM = 'https://api.telegram.org'
     API_TIMEOUT = 20
 

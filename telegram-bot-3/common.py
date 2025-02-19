@@ -162,7 +162,11 @@ class OperationType(object):
 class KeyboardType(object):
     """
     Варианты клавиатур и служебный символ для call back data из кнопок клавиатур
+
+    ВНИМАНИЕ! Некоторые из этих кодов должны быить согласованы
+    с ../app/users/models.py:TelegramApiMixin.KeyboardType
     """
+
     # Багодарность, доверие, недоверие...
     #
     TRUST_THANK = 2

@@ -409,6 +409,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 if message_to and profile_to.is_notified:
                     self.send_to_telegram(message_to, user=user_to, options=options)
 
+            KeyboardType = TelegramApiMixin.KeyboardType
             if operationtype_id == OperationType.SET_SYMPA and not got_tg_token:
                 data.update(profile_to=profile_to.data_dict(short=True))
                 if 'is_sympa' in data.get('previousstate', {}) and \
@@ -436,25 +437,25 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                                     user_from,
                                     options=options,
                             )
-                    message_from = f'Установить симпатию к {user_to.first_name} ?'
+                    message_from = f'Установить симпатию к {html.escape(user_to.first_name)} ?'
                     options_quest_set_sympa = options.copy()
                     options_quest_set_sympa.update(reply_markup=dict(
                         inline_keyboard=[[
                             dict(
                                 text='Да',
                                 callback_data=(
-                                    f'{settings.KEYBOARD_TYPE.SYMPA_SET}{settings.KEYBOARD_TYPE.SEP}'
-                                    f'{user_from.username}{settings.KEYBOARD_TYPE.SEP}'
-                                    f'{user_to.username}{settings.KEYBOARD_TYPE.SEP}'
-                                    f'{data["journal_id"]}{settings.KEYBOARD_TYPE.SEP}'
+                                    f'{KeyboardType.SYMPA_SET}{KeyboardType.SEP}'
+                                    f'{user_from.username}{KeyboardType.SEP}'
+                                    f'{user_to.username}{KeyboardType.SEP}'
+                                    f'{data["journal_id"]}{KeyboardType.SEP}'
                             )),
                             dict(
                                 text='Нет',
                                 callback_data=(
-                                    f'{settings.KEYBOARD_TYPE.SYMPA_SET_CANCEL}{settings.KEYBOARD_TYPE.SEP}'
-                                    f'{user_from.username}{settings.KEYBOARD_TYPE.SEP}'
-                                    f'{user_to.username}{settings.KEYBOARD_TYPE.SEP}'
-                                    f'{data["journal_id"]}{settings.KEYBOARD_TYPE.SEP}'
+                                    f'{KeyboardType.SYMPA_SET_CANCEL}{KeyboardType.SEP}'
+                                    f'{user_from.username}{KeyboardType.SEP}'
+                                    f'{user_to.username}{KeyboardType.SEP}'
+                                    f'{data["journal_id"]}{KeyboardType.SEP}'
                             )),
                     ]]))
                     self.send_to_telegram(message_from, user=user_from, options=options_quest_set_sympa)
@@ -481,8 +482,28 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                         data['donate'] = self.find_donate_to(user_f, user_m)
             status_code = status.HTTP_200_OK
 
-            if operationtype_id in (OperationType.REVOKE_SYMPA, OperationType.REVOKE_SYMPA_ONLY) and \
-               data['previousstate']['is_sympa_reciprocal']:
+            if operationtype_id in (OperationType.REVOKE_SYMPA, OperationType.REVOKE_SYMPA_ONLY) \
+               and data['previousstate']['is_sympa_confirmed'] \
+               and not got_tg_token:
+                message_to = (
+                    f'{html.escape(user_from.first_name)} отменил к Вам симпатию.\n\n'
+                    f'Отменить симпатию к {html.escape(user_from.first_name)} ?'
+                )
+                options_quest_set_sympa = options.copy()
+                options_quest_set_sympa.update(reply_markup=dict(
+                    inline_keyboard=[[
+                        dict(
+                            text='Отменить',
+                            callback_data=(
+                                f'{KeyboardType.SYMPA_REVOKE}{KeyboardType.SEP}'
+                                f'{user_to.username}{KeyboardType.SEP}'
+                                f'{user_from.username}{KeyboardType.SEP}'
+                                f'{data["journal_id"]}{KeyboardType.SEP}'
+                        )),
+                ]]))
+                self.send_to_telegram(message_to, user=user_to, options=options_quest_set_sympa)
+
+            if operationtype_id in (OperationType.REVOKE_SYMPA, OperationType.REVOKE_SYMPA_ONLY):
                 profile_from.r_sympa = profile_to.r_sympa = None
                 profile_from.save(update_fields=('r_sympa',))
                 profile_to.save(update_fields=('r_sympa',))
