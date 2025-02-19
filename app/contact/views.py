@@ -489,8 +489,8 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     f'{html.escape(user_from.first_name)} отменил к Вам симпатию.\n\n'
                     f'Отменить симпатию к {html.escape(user_from.first_name)} ?'
                 )
-                options_quest_set_sympa = options.copy()
-                options_quest_set_sympa.update(reply_markup=dict(
+                options_quest_revoke_sympa = options.copy()
+                options_quest_revoke_sympa.update(reply_markup=dict(
                     inline_keyboard=[[
                         dict(
                             text='Отменить',
@@ -501,7 +501,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                                 f'{data["journal_id"]}{KeyboardType.SEP}'
                         )),
                 ]]))
-                self.send_to_telegram(message_to, user=user_to, options=options_quest_set_sympa)
+                self.send_to_telegram(message_to, user=user_to, options=options_quest_revoke_sympa)
 
             if operationtype_id in (OperationType.REVOKE_SYMPA, OperationType.REVOKE_SYMPA_ONLY):
                 profile_from.r_sympa = profile_to.r_sympa = None
