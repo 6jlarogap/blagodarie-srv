@@ -2218,6 +2218,10 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
     #
     FMT = '3d-force-graph'
 
+    # Каким цветом обрамляем себя на карте игры
+    #
+    SELF_FRAME_COLOR = 'blue'
+
     def popup_data(self, profile,
             color=None,
             frame=0,
@@ -2482,15 +2486,18 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 q_meet &= Q(dob__gte=d_younger)
             except (TypeError, ValueError,):
                 pass
-            my_sympas = [
-                cs.user_to.pk for cs in CurrentState.objects.filter(
-                    user_from=user_auth, user_to__isnull=False,
-                    is_sympa=True, is_sympa_reverse=False,
-            )]
-            my_hidden = [
-                cs.user_to.pk for cs in CurrentState.objects.filter(
-                    user_from=user_auth, user_to__isnull=False, is_hide_meet=True,
-            )]
+            if meet_admin:
+                my_sympas = my_hidden = []
+            else:
+                my_sympas = [
+                    cs.user_to.pk for cs in CurrentState.objects.filter(
+                        user_from=user_auth, user_to__isnull=False,
+                        is_sympa=True, is_sympa_reverse=False,
+                )]
+                my_hidden = [
+                    cs.user_to.pk for cs in CurrentState.objects.filter(
+                        user_from=user_auth, user_to__isnull=False, is_hide_meet=True,
+                )]
             nodes = []
             user_pks = []
             popup_meet = (
@@ -2506,6 +2513,10 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 '</tr>'
                 '</table>'
             )
+
+            profile_auth = Profile.objects.select_related('user').get(user=user_auth)
+            user_auth = profile_auth.user
+
             for p in Profile.objects.filter(q_meet).order_by('dob').select_related('user').distinct():
                 if not meet_admin:
                     if show_hidden:
@@ -2518,9 +2529,13 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 lng_sum += p.longitude
 
                 color = None; frame = 0
-                if p.user.pk in my_sympas:
-                    color = color_sympa; frame=5
-                dict_user = self.popup_data(p, color, frame)
+                thumb_size_popup = self.THUMB_SIZE_POPUP; thumb_size_icon = self.THUMB_SIZE_ICON
+                if not meet_admin and p.user.pk in my_sympas:
+                    color = color_sympa; frame=5;
+                if meet_admin and user_auth.pk == p.user.pk:
+                    color = self.SELF_FRAME_COLOR; frame=5
+                    thumb_size_icon *= 5/4
+                dict_user = self.popup_data(p, color, frame, int(thumb_size_popup), int(thumb_size_icon))
                 points.append(dict(
                     latitude=p.latitude,
                     longitude=p.longitude,
@@ -2548,6 +2563,24 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         gender=p.gender,
                     ))
                     user_pks.append(p.user.pk)
+
+            if not meet_admin and profile_auth.latitude and profile_auth.longitude:
+                dict_auth = self.popup_data(
+                    profile_auth,
+                    color=self.SELF_FRAME_COLOR,
+                    frame=5,
+                    thumb_size_icon=int(self.THUMB_SIZE_ICON * 5/4)
+                )
+                points.append(dict(
+                    latitude=profile_auth.latitude,
+                    longitude=profile_auth.longitude,
+                    title=title_template % dict_auth,
+                    popup=popup_meet % dict_auth,
+                    icon=dict_auth['url_photo_icon'],
+                    is_of_found_user=False,
+                    size_icon=dict_auth['thumb_size_icon'],
+                ))
+
             if meet_admin:
                 q_connections = \
                     Q(user_to__isnull=False) & \
