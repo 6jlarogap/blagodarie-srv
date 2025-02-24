@@ -529,10 +529,7 @@ async def meet_do_or_revoke(data):
             count_meet_invited_.update(already='', vy=Misc.get_html_a(Misc.get_deeplink(data), 'Вы'))
             text_to_sender = Misc.PROMT_MEET_DOING % count_meet_invited_
         else:
-            text_to_sender = (
-                'Вы вышли из игры знакомств. Нам вас будет не хватать.\n\n'
-                'Для участия в игре знакомств: команда /meet'
-            )
+            text_to_sender = ('Вы вышли из игры знакомств. Нам вас будет не хватать')
         parms = dict(did_meet=did_meet)
         if data['what'] == KeyboardType.MEET_DO:
             fields = ['uuid', 'username_inviter', 'gender', 'dob', 'latitude', 'longitude',]
