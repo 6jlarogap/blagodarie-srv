@@ -382,14 +382,18 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                ):
                 message_to = None
                 bot_username = self.get_bot_username()
-                dl_from_t = (
-                    f'{self.get_deeplink_name(user_from, bot_username)} '
-                    f'(+{profile_from.trust_count}, -{profile_from.mistrust_count})'
-                )
-                dl_to_t = (
-                    f'{self.get_deeplink_name(user_to, bot_username)} '
-                    f'(+{profile_to.trust_count}, -{profile_to.mistrust_count})'
-                )
+                if not bot_username or request.data.get('hide_deeplink'):
+                    dl_from_t = html.escape(user_from.first_name)
+                    dl_to_t = html.escape(user_to.first_name)
+                else:
+                    dl_from_t = (
+                        f'{self.get_deeplink_name(user_from, bot_username)} '
+                        f'(+{profile_from.trust_count}, -{profile_from.mistrust_count})'
+                    )
+                    dl_to_t = (
+                        f'{self.get_deeplink_name(user_to, bot_username)} '
+                        f'(+{profile_to.trust_count}, -{profile_to.mistrust_count})'
+                    )
                 if operationtype_id == OperationType.TRUST_OR_THANK:
                     if data['previousstate']['attitude'] == CurrentState.TRUST:
                         message_to = f'{dl_from_t} благодарит ({data["currentstate"]["thanks_count"]}) {dl_to_t}'
@@ -507,6 +511,9 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 profile_from.r_sympa = profile_to.r_sympa = None
                 profile_from.save(update_fields=('r_sympa',))
                 profile_to.save(update_fields=('r_sympa',))
+
+            if operationtype_id in (OperationType.MEET_USER_HIDE, OperationType.MEET_USER_HIDE):
+                data.update(profile_to=profile_to.data_dict(short=True))
 
         except ServiceException as excpt:
             transaction.set_rollback(True)

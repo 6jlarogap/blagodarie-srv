@@ -718,7 +718,7 @@ class Misc(object):
         или с числом доверий и не доверий, жирно, типа (+2 -1)
         """
         href = cls.get_deeplink(response, https=True)
-        iof = html.quote(response['first_name'])
+        iof = response['first_name']
         if with_lifetime_years:
             lifetime_years_str = cls.get_lifetime_years_str(response)
             if lifetime_years_str:
@@ -760,7 +760,7 @@ class Misc(object):
         """
         if not response_to:
             return ''
-        reply = f'<b>{response_to["first_name"]}</b>\n'
+        reply = f'<b>{html.quote(response_to["first_name"])}</b>\n'
         if (comment := response_to.get('comment', '').strip()) and comment:
             reply += f'{comment}\n'
         if not response_to.get('is_org'):

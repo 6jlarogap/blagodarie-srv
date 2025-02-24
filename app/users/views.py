@@ -1,5 +1,5 @@
 import os, re, hmac, hashlib, json, time, datetime, copy
-import uuid, redis
+import uuid, redis, html
 import urllib.request, urllib.error, urllib.parse
 from urllib.parse import urlparse
 
@@ -2536,6 +2536,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     color = self.SELF_FRAME_COLOR; frame=5
                     thumb_size_icon *= 5/4
                 dict_user = self.popup_data(p, color, frame, int(thumb_size_popup), int(thumb_size_icon))
+                dict_user['full_name'] = html.escape(dict_user['full_name'])
                 points.append(dict(
                     latitude=p.latitude,
                     longitude=p.longitude,
