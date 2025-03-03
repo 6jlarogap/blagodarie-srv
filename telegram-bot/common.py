@@ -2177,7 +2177,7 @@ class Misc(object):
 
             if do_thank and journal_id and not bank_details:
                 text_to_recipient += (
-                    'Чтобы получать добровольные дары - заполните платёжные реквизиты'
+                    '\n\nЧтобы получать добровольные дары - заполните платёжные реквизиты'
                 )
                 callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE
                 inline_btn_bank = InlineKeyboardButton(
