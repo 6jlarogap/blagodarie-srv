@@ -1261,6 +1261,7 @@ class Misc(object):
         callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE
         if profile['is_active'] or profile['owner']:
             if is_own_account or is_owned_account:
+                edit_buttons_1 = []
                 # Карточка самому пользователю или его родственнику
                 #
                 inline_btn_iof = InlineKeyboardButton(
@@ -1270,6 +1271,8 @@ class Misc(object):
                     uuid=profile['uuid'],
                     sep=KeyboardType.SEP,
                 ))
+                edit_buttons_1 += [inline_btn_iof]
+
                 inline_btn_photo = InlineKeyboardButton(
                     text='Фото',
                     callback_data=callback_data_template % dict(
@@ -1277,9 +1280,9 @@ class Misc(object):
                     uuid=profile['uuid'],
                     sep=KeyboardType.SEP,
                 ))
-                edit_buttons_1 = []
                 if is_power:
-                    edit_buttons_1 += [inline_btn_iof, inline_btn_photo,]
+                    edit_buttons_1 += [inline_btn_photo,]
+
                 if not is_org:
                     inline_btn_gender = InlineKeyboardButton(
                         text='Пол',
