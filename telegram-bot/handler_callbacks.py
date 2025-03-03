@@ -1665,27 +1665,28 @@ async def cbq_donate_thank(callback: CallbackQuery, state: FSMContext):
     if status_to != 200:
         return
     bank_details = await Misc.get_bank_details(profile_to['uuid'])
-    text_after_thank = (
-        'Пришлите мне снимок экрана добровольного пожертвования любой суммы '
-        'в качестве благодарности на реквизиты ниже, '
-        'добавьте в сообщение фото/видео и текстовый комментарий\n'
-        '\n'
-        f'{html.quote(bank_details)}\n\n'
-    ) if bank_details else (
-        'Пришлите мне сообщение о благодарности, включающее фото/видео и текстовый комментарий'
-    )
-    try:
-        await state.set_state(FSMaskMoney.ask)
-        await state.update_data(
-            profile_to=profile_to,
-            profile_from=profile_from,
-            journal_id=journal_id,
+    if bank_details:
+        text_after_thank = (
+            'Пришлите мне снимок экрана добровольного пожертвования любой суммы '
+            'в качестве благодарности на реквизиты ниже, '
+            'добавьте в сообщение фото/видео и текстовый комментарий\n'
+            '\n'
+            f'{html.quote(bank_details)}\n\n'
         )
-        await bot.send_message(
-            callback.from_user.id,
-            text=text_after_thank,
-            reply_markup=Misc.reply_markup_cancel_row(caption='Пропустить'),
-        )
-    except (TelegramBadRequest, TelegramForbiddenError,):
-        pass
+        try:
+            await state.set_state(FSMaskMoney.ask)
+            await state.update_data(
+                profile_to=profile_to,
+                profile_from=profile_from,
+                journal_id=journal_id,
+            )
+            await bot.send_message(
+                callback.from_user.id,
+                text=text_after_thank,
+                reply_markup=Misc.reply_markup_cancel_row(),
+            )
+        except (TelegramBadRequest, TelegramForbiddenError,):
+            pass
+    else:
+        await callback.message.reply(f'{profile_to["first_name"]} не имеет банковских реквизитов')
     await callback.answer()

@@ -2053,6 +2053,7 @@ class Misc(object):
 
         # Это отправителю благодарности и т.п., даже если произошла ошибка
         #
+        bank_details = journal_id = None
         if text:
             text_to_sender = text
             buttons = []
@@ -2173,6 +2174,20 @@ class Misc(object):
                     tg_user_to_notify_tg_data = profile_to['owner'].get('tg_data', [])
             else:
                 tg_user_to_notify_tg_data = profile_to.get('tg_data', [])
+
+            if do_thank and journal_id and not bank_details:
+                text_to_recipient += (
+                    'Чтобы получать добровольные дары - заполните платёжные реквизиты'
+                )
+                callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE
+                inline_btn_bank = InlineKeyboardButton(
+                    text='Реквизиты',
+                    callback_data=callback_data_template % dict(
+                    keyboard_type=KeyboardType.BANKING,
+                    uuid=profile_to['uuid'],
+                    sep=KeyboardType.SEP,
+                ))
+                buttons = [ [ inline_btn_bank ] ]
 
             if text_to_recipient:
                 for tgd in tg_user_to_notify_tg_data:
