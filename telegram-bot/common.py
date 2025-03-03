@@ -38,9 +38,6 @@ class FSMgeo(StatesGroup):
 class FSMdelete(StatesGroup):
     ask = State()
 
-class FSMaskMoney(StatesGroup):
-    ask = State()
-
 class Attitude(object):
 
     ACQ = 'a'
@@ -341,6 +338,8 @@ class KeyboardType(object):
     SYMPA_DONATE_REFUSE = 69
 
     SYMPA_SEND_PROFILE = 70
+
+    DONATE_THANK = 71
 
     # Разделитель данных в call back data
     #
@@ -2055,6 +2054,7 @@ class Misc(object):
         # Это отправителю благодарности и т.п., даже если произошла ошибка
         #
         if text:
+            text_to_sender = text
             buttons = []
             if do_thank:
                 if journal_id := response.get('journal_id'):
@@ -2066,7 +2066,24 @@ class Misc(object):
                             id_=response['journal_id'],
                             sep=KeyboardType.SEP,
                     ))
-                    buttons.append([inline_btn_cancel_thank])
+                    bank_details = await cls.get_bank_details(profile_to['uuid'])
+                    if bank_details:
+                        text_to_sender += (
+                            '\n\n'
+                            'Чтобы сделать добровольный дар - нажмите "Сделать дар"\n'
+                            'Чтобы отменить благодарность - нажмите "Отменить"'
+                        )
+                        inline_btn_donate_thank = InlineKeyboardButton(
+                            text='Сделать дар',
+                            callback_data=(cls.CALLBACK_DATA_ID__TEMPLATE + '%(sid)s%(sep)s')% dict(
+                                keyboard_type=KeyboardType.DONATE_THANK,
+                                id_=response['journal_id'],
+                                sid=profile_to['username'],
+                                sep=KeyboardType.SEP,
+                        ))
+                        buttons.append([inline_btn_donate_thank, inline_btn_cancel_thank])
+                    else:
+                        buttons.append([inline_btn_cancel_thank])
 
             if not group_member and (operation_done or operation_already):
                 if not buttons:
@@ -2087,18 +2104,6 @@ class Misc(object):
                     ))
                     buttons.append([inline_btn_trusts, inline_btn_map])
 
-            if not group_member:
-                try:
-                    await bot.send_message(
-                        tg_user_sender.id,
-                        text=text,
-                        disable_notification=True,
-                        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else None,
-                    )
-
-                except (TelegramBadRequest, TelegramForbiddenError,):
-                    pass
-
             if not group_member and data.get('callback') and \
                (operation_done or operation_already):
                 if data.get('is_thank_card'):
@@ -2115,33 +2120,20 @@ class Misc(object):
                         card_message=data['callback'].message,
                     )
 
-            if do_thank and response.get('currentstate') and response['currentstate'].get('attitude', '') is None:
+            if False and do_thank and response.get('currentstate') and response['currentstate'].get('attitude', '') is None:
                 # Благодарность незнакомому. Нужен вопрос, как он к этому незнакомому относится
                 await cls.quest_after_thank_if_no_attitude(
                     f'Установите отношение к {full_name_to_link}:',
                     profile_from, profile_to, tg_user_sender, card_message=None,
                 )
 
-            if do_thank and data.get('journal_id'):
-                # Запрос на помоги материально
-                bank_details = await cls.get_bank_details(profile_to['uuid'])
-                data.update(profile_to_has_bank_details=bool(bank_details))
-                text_after_thank = (
-                    'Пришлите мне снимок экрана добровольного пожертвования любой суммы '
-                    'в качестве благодарности на реквизиты ниже, '
-                    'добавьте в сообщение фото/видео и текстовый комментарий\n'
-                    '\n'
-                    f'{html.quote(bank_details)}\n\n'
-                ) if bank_details else (
-                    'Пришлите мне сообщение о благодарности, включающее фото/видео и текстовый комментарий'
-                )
+            if not group_member:
                 try:
-                    await data['state'].set_state(FSMaskMoney.ask)
-                    await data['state'].update_data(data)
                     await bot.send_message(
                         tg_user_sender.id,
-                        text=text_after_thank,
-                        reply_markup=cls.reply_markup_cancel_row(caption='Пропустить'),
+                        text=text_to_sender,
+                        disable_notification=True,
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons) if buttons else None,
                     )
                 except (TelegramBadRequest, TelegramForbiddenError,):
                     pass

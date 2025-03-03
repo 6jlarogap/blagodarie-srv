@@ -20,7 +20,7 @@ import settings, me
 from settings import logging
 
 from common import Misc, OperationType, KeyboardType, Rcache
-from common import FSMnewPerson, FSMdelete, FSMaskMoney
+from common import FSMnewPerson, FSMdelete
 
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
@@ -59,6 +59,9 @@ class FSMpersonDesc(StatesGroup):
     ask = State()
 
 class FSMbanking(StatesGroup):
+    ask = State()
+
+class FSMaskMoney(StatesGroup):
     ask = State()
 
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
@@ -1633,7 +1636,7 @@ async def process_message_thank_ask_money(message: Message, state: FSMContext):
                 )
             except (TelegramBadRequest, TelegramForbiddenError):
                 pass
-            if is_first and not data.get('profile_to_has_bank_details'):
+            if is_first and not profile_to.get('has_bank'):
                 try:
                     await bot.send_message(
                         tgd['tg_uid'], (
@@ -1644,3 +1647,45 @@ async def process_message_thank_ask_money(message: Message, state: FSMContext):
                     pass
     await state.clear()
 
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.DONATE_THANK,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_donate_thank(callback: CallbackQuery, state: FSMContext):
+    try:
+        journal_id = int(callback.data.split(KeyboardType.SEP)[1])
+        sid = callback.data.split(KeyboardType.SEP)[2]
+    except (TypeError, ValueError, IndexError,):
+        return
+    status_from, profile_from = await Misc.post_tg_user(callback.from_user)
+    if status_from != 200:
+        return
+    status_to, profile_to = await Misc.get_user_by_sid(sid)
+    if status_to != 200:
+        return
+    bank_details = await Misc.get_bank_details(profile_to['uuid'])
+    text_after_thank = (
+        'Пришлите мне снимок экрана добровольного пожертвования любой суммы '
+        'в качестве благодарности на реквизиты ниже, '
+        'добавьте в сообщение фото/видео и текстовый комментарий\n'
+        '\n'
+        f'{html.quote(bank_details)}\n\n'
+    ) if bank_details else (
+        'Пришлите мне сообщение о благодарности, включающее фото/видео и текстовый комментарий'
+    )
+    try:
+        await state.set_state(FSMaskMoney.ask)
+        await state.update_data(
+            profile_to=profile_to,
+            profile_from=profile_from,
+            journal_id=journal_id,
+        )
+        await bot.send_message(
+            callback.from_user.id,
+            text=text_after_thank,
+            reply_markup=Misc.reply_markup_cancel_row(caption='Пропустить'),
+        )
+    except (TelegramBadRequest, TelegramForbiddenError,):
+        pass
+    await callback.answer()
