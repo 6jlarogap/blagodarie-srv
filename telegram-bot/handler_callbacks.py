@@ -1276,7 +1276,7 @@ async def cbq_udelete_user_confirmed(callback: CallbackQuery, state: FSMContext)
                 await callback.message.reply('Неизвестная ошибка')
             else:
                 await callback.message.reply(
-                    "Теперь Вы восстановлены в системе.\n\nГружу Ваше фото, если оно есть, из Telegram'а..."
+                    "Ваш профиль восстановлен."
                 )
                 status_photo, response_photo = await Misc.update_user_photo(callback.from_user, response)
                 if status_photo == 200:
