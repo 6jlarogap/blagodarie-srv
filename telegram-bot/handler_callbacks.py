@@ -362,6 +362,7 @@ async def process_message_meet_geo(message: Message, state: FSMContext):
         await meet_quest_tgdesc(state)
     else:
         await state.clear()
+        data.update(latitude=latitude, longitude=longitude)
         await meet_do_or_revoke(data)
 
 
@@ -374,12 +375,14 @@ async def process_message_meet_bank(message: Message, state: FSMContext):
     if status_from != 200 or profile_from['uuid'] != data['uuid']:
         await state.clear()
         return
-    await state.update_data(bank=message.text.strip())
+    bank = message.text.strip()
+    await state.update_data(bank=bank)
     if not data['has_tgdesc']:
         await state.set_state(FSMmeet.ask_tgdesc)
         await meet_quest_tgdesc(state)
     else:
         await state.clear()
+        data.update(bank=bank)
         await meet_do_or_revoke(data)
 
 
@@ -413,6 +416,7 @@ async def process_message_meet_dob(message: Message, state: FSMContext):
             await meet_quest_tgdesc(state)
         else:
             await state.clear()
+            data.update(dob=dob)
             await meet_do_or_revoke(data)
     else:
         await state.clear()
@@ -498,7 +502,8 @@ async def cbq_meet_ask_gender(callback: CallbackQuery, state: FSMContext):
         await state.clear()
         return
     code = callback.data.split(KeyboardType.SEP)
-    await state.update_data(gender='m' if int(code[0]) == KeyboardType.MEET_GENDER_MALE else 'f')
+    gender = 'm' if int(code[0]) == KeyboardType.MEET_GENDER_MALE else 'f'
+    await state.update_data(gender=gender)
     data = await state.get_data()
     next_proc = None
     if not response_sender['dob']:
@@ -518,6 +523,7 @@ async def cbq_meet_ask_gender(callback: CallbackQuery, state: FSMContext):
         await next_proc(state)
     else:
         await state.clear()
+        data.update(gender=gender)
         await meet_do_or_revoke(data)
 
 
