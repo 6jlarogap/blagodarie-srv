@@ -31,7 +31,6 @@ class FSMgender(StatesGroup):
 class FSMmeet(StatesGroup):
     ask_gender = State()
     ask_dob = State()
-    ask_geo = State()
     ask_bank = State()
     ask_tgdesc = State()
 
@@ -297,18 +296,6 @@ async def meet_quest_dob(state, error_message=None):
     )
 
 
-async def meet_quest_geo(state, error_message=None):
-    text = Misc.MSG_LOCATION_MANDAT
-    if error_message:
-        text = f'{error_message}\n\n{text}'
-    data = await state.get_data()
-    await bot.send_message(
-        chat_id=data['tg_user_sender_id'],
-        text=text,
-        reply_markup=Misc.reply_markup_cancel_row(),
-    )
-
-
 async def meet_quest_bank(state):
     data = await state.get_data()
     await bot.send_message(
@@ -341,32 +328,6 @@ async def process_message_meet_tgdesc(message: Message, state: FSMContext):
         data.update(tgdesc_first=is_first)
     await state.clear()
     await meet_do_or_revoke(data)
-
-
-@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMmeet.ask_geo))
-async def process_message_meet_geo(message: Message, state: FSMContext):
-    if await is_it_command(message, state):
-        return
-    data = await state.get_data()
-    status_from, profile_from = await Misc.post_tg_user(message.from_user)
-    if status_from != 200 or profile_from['uuid'] != data['uuid']:
-        await state.clear()
-        return
-    latitude, longitude = Misc.check_location_str(message.text)
-    if latitude is None or longitude is None:
-        await meet_quest_geo(state, error_message=Misc.MSG_ERR_GEO)
-        return
-    await state.update_data(latitude=latitude, longitude=longitude)
-    if not data['has_bank']:
-        await state.set_state(FSMmeet.ask_bank)
-        await meet_quest_bank(state)
-    elif not data['has_tgdesc']:
-        await state.set_state(FSMmeet.ask_tgdesc)
-        await meet_quest_tgdesc(state)
-    else:
-        await state.clear()
-        data.update(latitude=latitude, longitude=longitude)
-        await meet_do_or_revoke(data)
 
 
 @router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMmeet.ask_bank))
@@ -408,10 +369,7 @@ async def process_message_meet_dob(message: Message, state: FSMContext):
         await meet_quest_dob(state, error_message=response['message'])
     elif status == 200:
         await state.update_data(dob=dob)
-        if data['latitude'] is None or data['longitude'] is None:
-            await state.set_state(FSMmeet.ask_geo)
-            await meet_quest_geo(state)
-        elif not data['has_bank']:
+        if not data['has_bank']:
             await state.set_state(FSMmeet.ask_bank)
             await meet_quest_bank(state)
         elif not data['has_tgdesc']:
@@ -478,9 +436,6 @@ async def cbq_meet_do_or_revoke(callback: CallbackQuery, state: FSMContext):
         elif not profile_from['dob']:
             await state.set_state(FSMmeet.ask_dob)
             next_proc = meet_quest_dob
-        elif not (profile_from['latitude'] and profile_from['longitude']):
-            await state.set_state(FSMmeet.ask_geo)
-            next_proc = meet_quest_geo
         elif not profile_from['has_bank']:
             await state.set_state(FSMmeet.ask_bank)
             next_proc = meet_quest_bank
@@ -512,9 +467,6 @@ async def cbq_meet_ask_gender(callback: CallbackQuery, state: FSMContext):
     if not response_sender['dob']:
         await state.set_state(FSMmeet.ask_dob)
         next_proc = meet_quest_dob
-    elif response_sender['latitude'] is None or response_sender['longitude'] is None:
-        await state.set_state(FSMmeet.ask_geo)
-        next_proc = meet_quest_geo
     elif not data['has_bank']:
         await state.set_state(FSMmeet.ask_bank)
         next_proc = meet_quest_bank
@@ -541,7 +493,7 @@ async def meet_do_or_revoke(data):
             text_to_sender = ('Вы вышли из игры знакомств. Нам вас будет не хватать')
         parms = dict(did_meet=did_meet)
         if data['what'] == KeyboardType.MEET_DO:
-            fields = ['uuid', 'username_inviter', 'gender', 'dob', 'latitude', 'longitude',]
+            fields = ['uuid', 'username_inviter', 'gender', 'dob',]
             if data.get('bank'):
                 fields.append('bank')
         else:
