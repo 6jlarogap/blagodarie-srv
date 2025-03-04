@@ -341,6 +341,8 @@ class KeyboardType(object):
 
     DONATE_THANK = 71
 
+    AGREE_TO_RULES = 72
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -551,11 +553,6 @@ class Misc(object):
             except:
                 pass
         return status, response
-
-    @classmethod
-    async def help_text(cls):
-        status, response = await cls.get_template('help')
-        return response if status == 200 and response else cls.MSG_ERROR_API
 
     @classmethod
     async def chat_pin_message_text(cls):

@@ -9,7 +9,7 @@ import re, redis
 from urllib.parse import urlparse
 
 from aiogram import Router, F, html
-from aiogram.types import Message, ContentType,  \
+from aiogram.types import Message, CallbackQuery, ContentType,  \
                             MessageOriginUser, MessageOriginHiddenUser, \
                             InlineKeyboardMarkup, InlineKeyboardButton, \
                             BufferedInputFile
@@ -34,6 +34,9 @@ class FSMquery(StatesGroup):
     ask = State()
 
 class FSMnewOrg(StatesGroup):
+    ask = State()
+
+class FSMagreeToRules(StatesGroup):
     ask = State()
 
 @router.message(
@@ -85,7 +88,9 @@ async def cmd_ya(message: Message, state: FSMContext):
 )
 async def cmd_help(message: Message, state: FSMContext):
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
-    await message.reply(await Misc.help_text())
+    status, response = await Misc.get_template('help')
+    if status == 200 and response:
+        await message.reply(response)
 
 
 @router.message(
@@ -247,6 +252,21 @@ async def cmd_feedback(message: Message, state: FSMContext):
         Misc.get_html_a(settings.BOT_CHAT['href'], settings.BOT_CHAT['caption']),
     )
 
+async def show_start(message, state, set_state=True):
+    status, response = await Misc.get_template('start')
+    if status == 200 and response:
+        inline_btn_agree = InlineKeyboardButton(
+            text='Соглашаюсь',
+            callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
+            keyboard_type=KeyboardType.AGREE_TO_RULES,
+            sep=KeyboardType.SEP,
+        ))
+        if set_state:
+            await state.set_state(FSMagreeToRules.ask)
+        await message.reply(
+            response,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[ [inline_btn_agree] ])
+        )
 
 @router.message(
     F.text,
@@ -255,9 +275,6 @@ async def cmd_feedback(message: Message, state: FSMContext):
     Command(re.compile('^start$', flags=re.I)),
 )
 async def cmd_start(message: Message, state: FSMContext):
-    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
-    if status_sender != 200:
-        return
     arg = Misc.arg_deeplink(message.text)
     if not arg:
         # команда /start
@@ -265,13 +282,13 @@ async def cmd_start(message: Message, state: FSMContext):
             arg = m.group(1) or ''
     if not arg:
         # Просто /start
-        await message.reply(await Misc.help_text())
-        await Misc.show_card(
-            profile=response_sender,
-            profile_sender=response_sender,
-            tg_user_sender=message.from_user,
-        )
-    elif m := re.search(r'^(t|th)\-([0-9a-z]{10})$', arg, flags=re.I):
+        await show_start(message, state)
+        return
+
+    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
+    if status_sender != 200:
+        return
+    if m := re.search(r'^(t|th)\-([0-9a-z]{10})$', arg, flags=re.I):
         status_to, profile_to = await Misc.get_user_by_sid(m.group(2))
         if status_to == 200:
             status_from, profile_from = await Misc.post_tg_user(message.from_user)
@@ -889,3 +906,23 @@ async def answer_youtube_message(message, youtube_id, youtube_link):
         disable_web_page_preview=False,
     )
 
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMagreeToRules.ask))
+async def process_agree_to_rules(message: Message, state: FSMContext):
+    # Что бы не ввел, повтор правил
+    await show_start(message, state, set_state=False)
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.AGREE_TO_RULES,
+        KeyboardType.SEP,
+    )), StateFilter(FSMagreeToRules))
+async def cbq_agree_to_rules(callback: CallbackQuery, state: FSMContext):
+    status_sender, response_sender = await Misc.post_tg_user(callback.from_user)
+    if status_sender == 200:
+        await Misc.show_card(
+            profile=response_sender,
+            profile_sender=response_sender,
+            tg_user_sender=callback.from_user,
+        )
+    await state.clear()
+    await callback.answer()
