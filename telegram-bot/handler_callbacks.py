@@ -31,7 +31,6 @@ class FSMgender(StatesGroup):
 class FSMmeet(StatesGroup):
     ask_gender = State()
     ask_dob = State()
-    ask_bank = State()
     ask_tgdesc = State()
 
 class FSMexistingIOF(StatesGroup):
@@ -58,6 +57,9 @@ class FSMpersonDesc(StatesGroup):
     ask = State()
 
 class FSMbanking(StatesGroup):
+    ask = State()
+
+class FSMbankingBeforeInivite(StatesGroup):
     ask = State()
 
 class FSMaskMoney(StatesGroup):
@@ -300,7 +302,10 @@ async def meet_quest_bank(state):
     data = await state.get_data()
     await bot.send_message(
         chat_id=data['tg_user_sender_id'],
-        text=Misc.PROMPT_BANK,
+        text = (
+                'Напишите мне сообщение с реквизитами для получения '
+                'благодарственных пожертвований от других пользователей'
+        ),
         reply_markup=Misc.reply_markup_cancel_row(),
     )
 
@@ -330,30 +335,6 @@ async def process_message_meet_tgdesc(message: Message, state: FSMContext):
     await meet_do_or_revoke(data)
 
 
-@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMmeet.ask_bank))
-async def process_message_meet_bank(message: Message, state: FSMContext):
-    if await is_it_command(message, state):
-        return
-    data = await state.get_data()
-    status_from, profile_from = await Misc.post_tg_user(message.from_user)
-    if status_from != 200 or profile_from['uuid'] != data['uuid']:
-        await state.clear()
-        return
-    bank = message.text.strip()
-    status, response = await Misc.put_user_properties(
-        uuid=data['uuid'],
-        bank=bank,
-    )
-    await state.update_data(bank=bank)
-    if not data['has_tgdesc']:
-        await state.set_state(FSMmeet.ask_tgdesc)
-        await meet_quest_tgdesc(state)
-    else:
-        await state.clear()
-        data.update(bank=bank)
-        await meet_do_or_revoke(data)
-
-
 @router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMmeet.ask_dob))
 async def process_message_meet_dob(message: Message, state: FSMContext):
     if await is_it_command(message, state):
@@ -380,10 +361,7 @@ async def process_message_meet_dob(message: Message, state: FSMContext):
         await meet_quest_dob(state, error_message=response['message'])
     elif status == 200:
         await state.update_data(dob=dob)
-        if not data['has_bank']:
-            await state.set_state(FSMmeet.ask_bank)
-            await meet_quest_bank(state)
-        elif not data['has_tgdesc']:
+        if not data['has_tgdesc']:
             await state.set_state(FSMmeet.ask_tgdesc)
             await meet_quest_tgdesc(state)
         else:
@@ -447,9 +425,6 @@ async def cbq_meet_do_or_revoke(callback: CallbackQuery, state: FSMContext):
         elif not profile_from['dob']:
             await state.set_state(FSMmeet.ask_dob)
             next_proc = meet_quest_dob
-        elif not profile_from['has_bank']:
-            await state.set_state(FSMmeet.ask_bank)
-            next_proc = meet_quest_bank
         elif not profile_from['has_tgdesc']:
             await state.set_state(FSMmeet.ask_tgdesc)
             next_proc = meet_quest_tgdesc
@@ -482,9 +457,6 @@ async def cbq_meet_ask_gender(callback: CallbackQuery, state: FSMContext):
     if not response_sender['dob']:
         await state.set_state(FSMmeet.ask_dob)
         next_proc = meet_quest_dob
-    elif not data['has_bank']:
-        await state.set_state(FSMmeet.ask_bank)
-        next_proc = meet_quest_bank
     elif not data['has_tgdesc']:
         await state.set_state(FSMmeet.ask_tgdesc)
         next_proc = meet_quest_tgdesc
@@ -556,6 +528,66 @@ async def meet_do_or_revoke(data):
             )
 
 
+async def send_qr(profile, tg_user):
+    url = f'https://t.me/{bot_data.username}?start=m-{profile["username"]}'
+    link = Misc.get_html_a(url, 'Вход...')
+    caption = f'Перешлите одиноким — приглашение в игру знакомств! {link}'
+    bytes_io = await Misc.get_qrcode(profile, url)
+    await bot.send_photo(
+        chat_id=tg_user.id,
+        photo=BufferedInputFile(bytes_io.getvalue(), filename=bytes_io.name),
+        caption=caption,
+    )
+
+
+async def put_banking(message, state):
+    status, response = None, None
+    data = await state.get_data()
+    if (uuid := data.get('uuid')) and \
+       (response_check := await Misc.check_owner_by_uuid(message.from_user, uuid, check_own_only=True)):
+        status, response = await Misc.api_request(
+            path='/api/addkey',
+            method='post',
+            json=dict(
+                tg_token=settings.TOKEN,
+                keytype_id=Misc.BANKING_DETAILS_ID,
+                owner_uuid=response_check['uuid'],
+                user_uuid=response_check['uuid'],
+                keys=[message.text.strip()],
+        ))
+    return status, response
+
+
+async def quest_bank_after_invite(message, state, prefix=''):
+    inline_btn_pass = InlineKeyboardButton(
+        text='Пропустить',
+        callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
+        keyboard_type=KeyboardType.MEET_INVITE_BANK_PASS,
+        sep=KeyboardType.SEP,
+    ))
+    text= (
+        'Чтобы получать добровольные дары - в благодарность за приглашения в игру - '
+        'напишите Ваши платёжные реквизиты для переводов'
+    )
+    if prefix:
+        text = prefix + '\n\n' + text
+    await message.reply(
+        text= text,
+        reply_markup= InlineKeyboardMarkup(inline_keyboard=[ [inline_btn_pass] ])
+    )
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.MEET_INVITE_BANK_PASS,
+        KeyboardType.SEP,
+    )), StateFilter(FSMbankingBeforeInivite.ask))
+async def cbq_meet_invite_pass_banking(callback: CallbackQuery, state: FSMContext):
+    status, profile = await Misc.post_tg_user(callback.from_user)
+    if status == 200:
+        await send_qr(profile, callback.from_user)
+    await callback.answer()
+    await state.clear()
+
+
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.MEET_INVITE,
         KeyboardType.SEP,
@@ -564,15 +596,25 @@ async def cbq_meet_invite(callback: CallbackQuery, state: FSMContext):
     status, profile = await Misc.post_tg_user(callback.from_user)
     await callback.answer()
     if status == 200:
-        url = f'https://t.me/{bot_data.username}?start=m-{profile["username"]}'
-        link = Misc.get_html_a(url, 'Вход...')
-        caption = f'Перешлите одиноким — приглашение в игру знакомств! {link}'
-        bytes_io = await Misc.get_qrcode(profile, url)
-        await bot.send_photo(
-            chat_id=callback.from_user.id,
-            photo=BufferedInputFile(bytes_io.getvalue(), filename=bytes_io.name),
-            caption=caption,
-        )
+        if profile.get('has_bank'):
+            await send_qr(profile, callback.from_user)
+        else:
+            await state.set_state(FSMbankingBeforeInivite.ask)
+            await state.update_data(uuid=profile['uuid'])
+            await quest_bank_after_invite(callback.message, state)
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMbankingBeforeInivite.ask))
+async def process_message_banking_after_invite(message: Message, state: FSMContext):
+    if (message.content_type != ContentType.TEXT) or not message.text.strip():
+        await quest_bank_after_invite(message, state, prefix='Это не банковские реквизиты')
+        return
+    if await is_it_command(message, state):
+        return
+    status, response = await put_banking(message, state)
+    if status == 200:
+        await send_qr(response, message.from_user)
+    await state.clear()
 
 
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
@@ -1510,7 +1552,10 @@ async def cbq_get_banking(callback: CallbackQuery, state: FSMContext):
         status_sender, response_sender = await Misc.post_tg_user(callback.from_user)
         if status_sender != 200 or response_sender['uuid'] != uuid:
             return
-        text = Misc.PROMPT_BANK
+        text = (
+            'Напишите мне сообщение с реквизитами для получения '
+            'благодарственных пожертвований от других пользователей'
+        )
         if bank_details := await Misc.get_bank_details(uuid):
             text += (
                 '.\n\n'
@@ -1535,21 +1580,9 @@ async def process_message_banking(message: Message, state: FSMContext):
         return
     if await is_it_command(message, state):
         return
-    data = await state.get_data()
-    if (uuid := data.get('uuid')) and \
-       (response_check := await Misc.check_owner_by_uuid(message.from_user, uuid, check_own_only=True)):
-        status, response = await Misc.api_request(
-            path='/api/addkey',
-            method='post',
-            json=dict(
-                tg_token=settings.TOKEN,
-                keytype_id=Misc.BANKING_DETAILS_ID,
-                owner_uuid=response_check['uuid'],
-                user_uuid=response_check['uuid'],
-                keys=[message_text],
-        ))
-        if status == 200:
-            await message.reply('Реквизиты записаны')
+    status, response = await put_banking(message, state)
+    if status == 200:
+        await message.reply('Реквизиты записаны')
     await state.clear()
 
 
