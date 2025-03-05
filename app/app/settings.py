@@ -328,6 +328,10 @@ MAP_URL = 'https://map.meetgame.us.to'
 
 MEET_URL = 'https://meetgame.us.to'
 
+# Для кнопок loginUrl в телеграме
+#
+TG_LOGIN_URL = 'https://meetgame.us.to/auth/telegram/'
+
 
 # ------------------------------------------------
 

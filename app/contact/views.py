@@ -1,4 +1,5 @@
 import os, datetime, time, json, re, html
+from urllib.parse import urlencode
 
 from django.shortcuts import redirect
 from django.db import transaction, IntegrityError, connection
@@ -418,11 +419,30 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                 data.update(profile_to=profile_to.data_dict(short=True))
                 if 'is_sympa' in data.get('previousstate', {}) and \
                    not data['previousstate']['is_sympa']:
+                    bot_username = self.get_bot_username()
+                    parms = dict(
+                        redirect_path=settings.MEET_URL,
+                        keep_user_data='on'
+                    )
+                    url = f'{settings.TG_LOGIN_URL}?{urlencode(parms)}'
                     message_to = (
                         'Поздравляем! Вами кто-то интересуется!\n'
                         'Ставьте больше интересов на карте - чтобы скорее найти совпадения!'
                     )
-                    self.send_to_telegram(message_to, user=user_to, options=options)
+                    options_congrat = options.copy()
+                    options_congrat.update(reply_markup=dict(
+                        inline_keyboard=[[
+                            dict(
+                                text='Карта участников игры',
+
+                                # https://meetgame.us.to/auth/telegram/?redirect_path=http%3A%2F%2Fmeetgame.us.to&keep_user_data=on
+                                #
+                                login_url=dict(
+                                    url=url,
+                                    bot_username=bot_username
+                            )),
+                    ]]))
+                    self.send_to_telegram(message_to, user=user_to, options=options_congrat)
 
                     success = self.send_to_telegram(
                         f'Описание {html.escape(user_to.first_name)}',
