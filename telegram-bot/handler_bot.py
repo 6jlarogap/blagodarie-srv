@@ -814,18 +814,15 @@ async def process_meet_from_deeplink_and_command(message, state, data):
         sep=KeyboardType.SEP,
     ))
     if profile_from['did_meet']:
-        buttons = [inline_btn_invite, inline_btn_do_or_revoke]
-    else:
-        buttons = [inline_btn_do_or_revoke]
-    buttons = [buttons]
-    if profile_from['did_meet']:
         inline_btn_map = InlineKeyboardButton(
             text='Карта участников игры',
             login_url=Misc.make_login_url(
                 redirect_path=settings.MEET_HOST,
                 keep_user_data='on'
         ))
-        buttons.append([inline_btn_map])
+        buttons = [ [inline_btn_invite ], [inline_btn_map], [inline_btn_quit] ]
+    else:
+        buttons = [ [inline_btn_do_or_revoke] ]
     await bot.send_message(
         message.from_user.id,
         text=text,

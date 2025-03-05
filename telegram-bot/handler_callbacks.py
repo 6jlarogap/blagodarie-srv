@@ -535,7 +535,6 @@ async def meet_do_or_revoke(data):
                     keyboard_type=KeyboardType.MEET_INVITE,
                     sep=KeyboardType.SEP,
                 ))
-                buttons = [[inline_btn_invite, inline_btn_quit]]
                 bot_data = await bot.get_me()
                 inline_btn_map = InlineKeyboardButton(
                     text='Карта участников игры',
@@ -543,7 +542,7 @@ async def meet_do_or_revoke(data):
                         redirect_path=settings.MEET_HOST,
                         keep_user_data='on'
                 ))
-                buttons.append([inline_btn_map])
+                buttons = [ [inline_btn_invite ], [inline_btn_map], [inline_btn_quit] ]
                 reply_markup = InlineKeyboardMarkup(inline_keyboard=buttons)
             await bot.send_message(
                 data['tg_user_sender_id'],
