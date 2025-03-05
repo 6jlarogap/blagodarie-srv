@@ -820,7 +820,7 @@ async def process_meet_from_deeplink_and_command(message, state, data):
                 redirect_path=settings.MEET_HOST,
                 keep_user_data='on'
         ))
-        buttons = [ [inline_btn_invite ], [inline_btn_map], [inline_btn_quit] ]
+        buttons = [ [inline_btn_invite ], [inline_btn_map], [inline_btn_do_or_revoke] ]
     else:
         buttons = [ [inline_btn_do_or_revoke] ]
     await bot.send_message(
