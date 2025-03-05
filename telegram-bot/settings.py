@@ -51,7 +51,6 @@ API_HOST = 'https://api.meetgame.us.to'
 # - домен, прописанный в боте
 #
 FRONTEND_HOST = 'https://meetgame.us.to'
-FRONTEND_HOST_TITLE = 'БлагоРода'
 
 # Карта участников знакомств
 #

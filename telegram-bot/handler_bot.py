@@ -560,7 +560,7 @@ async def message_to_bot(message: Message, state: FSMContext):
         return
     if len(message_text) < settings.MIN_LEN_SEARCHED_TEXT:
         await message.reply(
-            f'Поиск участников {settings.FRONTEND_HOST_TITLE} по:\n'
+            f'Поиск участников по:\n'
             '\n'
             '- @имени участника в телеграме,\n'
             '- фамилии, имени, возможностям, потребностям.\n'
