@@ -340,6 +340,10 @@ async def process_message_meet_bank(message: Message, state: FSMContext):
         await state.clear()
         return
     bank = message.text.strip()
+    status, response = await Misc.put_user_properties(
+        uuid=data['uuid'],
+        bank=bank,
+    )
     await state.update_data(bank=bank)
     if not data['has_tgdesc']:
         await state.set_state(FSMmeet.ask_tgdesc)
@@ -364,6 +368,13 @@ async def process_message_meet_dob(message: Message, state: FSMContext):
         path='/api/check/date',
         method='get',
         params=dict(date=dob, min_age='10', max_age='100')
+    )
+    if status == 400:
+        await meet_quest_dob(state, error_message=response['message'])
+        return
+    status, response = await Misc.put_user_properties(
+        uuid=data['uuid'],
+        dob=dob,
     )
     if status == 400:
         await meet_quest_dob(state, error_message=response['message'])
@@ -461,6 +472,10 @@ async def cbq_meet_ask_gender(callback: CallbackQuery, state: FSMContext):
         return
     code = callback.data.split(KeyboardType.SEP)
     gender = 'm' if int(code[0]) == KeyboardType.MEET_GENDER_MALE else 'f'
+    status, response = await Misc.put_user_properties(
+        uuid=response_sender['uuid'],
+        gender=gender,
+    )
     await state.update_data(gender=gender)
     data = await state.get_data()
     next_proc = None
