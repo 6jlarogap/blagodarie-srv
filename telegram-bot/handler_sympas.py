@@ -347,10 +347,16 @@ async def cbq_sympa_set(callback: CallbackQuery, state: FSMContext):
                     )
 
                     text_to = (
-                        f'Поздравляем! Кто-то установил{"a" if profile_from["gender"] == "f" else ""} '
-                        f'Вам симпатию.\n'
-                        f'Ставьте больше интересов на карте - чтобы скорее найти совпадения!'
+                        'Вам установлена симпатия! '
+                        'Отмечайте интересы на карте и ставьте симпатии чтобы найти взаимные'
                     )
+                    inline_btn_map = InlineKeyboardButton(
+                        text='Карта участников игры',
+                        login_url=Misc.make_login_url(
+                            redirect_path=settings.MEET_HOST,
+                            keep_user_data='on'
+                    ))
+                    reply_markup_to = InlineKeyboardMarkup(inline_keyboard=[ [inline_btn_map] ])
                 if r := redis.Redis(**settings.REDIS_CONNECT):
                     time_current = int(time.time())
                     r.set(
