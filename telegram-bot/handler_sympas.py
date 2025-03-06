@@ -38,6 +38,15 @@ class Common(object):
 
 
     @classmethod
+    def inline_btn_map(cls):
+        return InlineKeyboardButton(
+            text='Карта участников игры',
+            login_url=Misc.make_login_url(
+                redirect_path=settings.MEET_HOST,
+                keep_user_data='on'
+        ))
+
+    @classmethod
     async def check_common_callback(cls, callback):
         profile_from = profile_to = journal_id = None
         profile_from, profile_to = await Misc.check_sids_from_callback(callback)
@@ -382,13 +391,7 @@ async def cbq_sympa_set(callback: CallbackQuery, state: FSMContext):
                         'Вам установлена симпатия! '
                         'Отмечайте интересы на карте и ставьте симпатии чтобы найти взаимные'
                     )
-                    inline_btn_map = InlineKeyboardButton(
-                        text='Карта участников игры',
-                        login_url=Misc.make_login_url(
-                            redirect_path=settings.MEET_HOST,
-                            keep_user_data='on'
-                    ))
-                    reply_markup_to = InlineKeyboardMarkup(inline_keyboard=[ [inline_btn_map] ])
+                    reply_markup_to = InlineKeyboardMarkup(inline_keyboard=[ [Common.inline_btn_map()] ])
                 if r := redis.Redis(**settings.REDIS_CONNECT):
                     time_current = int(time.time())
                     r.set(
@@ -449,16 +452,25 @@ async def cbq_sympa_revoke(callback: CallbackQuery, state: FSMContext):
         if response.get('previousstate'):
             if response['previousstate']['is_sympa_confirmed']:
                 message_pre = f'Симпатия к {html.quote(profile_to["first_name"])} отменена'
+                if response['previousstate'].get('is_sympa_reciprocal'):
+                    text_to = (
+                        f'Взаимная симпатия отменена {html.quote(profile_from["first_name"])}. '
+                        f'Ваш профиль снова доступен для других участников Игры знакомств!'
+                    )
+                else:
+                    text_to = (
+                        f'Симпатия к Вам отменена. Приглашайте новых игроков '
+                        f'и ставьте больше интересов на карте - '
+                        f'чтобы скорее найти совпадения!'
+                    )
+                reply_markup_to = InlineKeyboardMarkup(inline_keyboard=[ [Common.inline_btn_map()] ])
                 for tgd in profile_to['tg_data']:
                     try:
                         await bot.send_message(
                             tgd['tg_uid'],
-                            text=(
-                                f'Симпатия к Вам отменена. Приглашайте новых игроков '
-                                f'и ставьте больше интересов на '
-                                f'<a href="{settings.MEET_HOST}">карте</a> - '
-                                f'чтобы скорее найти совпадения!'
-                        ))
+                            text=text_to,
+                            reply_markup=reply_markup_to
+                        )
                     except (TelegramBadRequest, TelegramForbiddenError):
                         pass
             else:
