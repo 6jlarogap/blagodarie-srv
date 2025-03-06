@@ -72,21 +72,33 @@ class Common(object):
 
 
     @classmethod
-    def make1_donate(cls, profile_from, profile_to, journal_id, message_pre=''):
+    async def make1_donate(cls, profile_from, profile_to, journal_id, message_pre=''):
         text = message_pre + '\n\n' if message_pre else ''
-        text += (
-            f'Поздравляем! Взаимная симпатия!'
-            f'Нажмите "Донатить" для отправки доната РЕФЕРЕРУ/АВТОРУ'
-        )
+        status, response = await cls.get_donate_to(journal_id)
+        if status == 200 and response.get('donate', {}).get('profile'):
+            user_f_name = response['user_f']['first_name']
+            text += (
+                f'Поздравляем! У Вас взаимная симпатия - ваши профили скрыты от других участников игры.\n'
+                f'Перед запросом контактов {user_f_name}, предлагаем добровольно поблагодарить '
+                f'{response["donate"]["profile"]["first_name"]}. '
+                f'Ваша благодарность будет передана {user_f_name}, '
+                f'но не обязательна для её решения о передаче контактов.'
+            )
+        else:
+            text += (
+                f'Поздравляем! Взаимная симпатия!'
+                f'Нажмите "Донатить" для отправки доната'
+            )
+
         callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
         callback_dict.update(keyboard_type=KeyboardType.SYMPA_DONATE)
         button_donate = InlineKeyboardButton(
-            text='Донатить',
+            text='Добровольный дар',
             callback_data=cls.CALLBACK_DATA_TEMPLATE % callback_dict
         )
         callback_dict.update(keyboard_type=KeyboardType.SYMPA_DONATE_REFUSE)
         button_refuse_donate = InlineKeyboardButton(
-            text='Продолжить без доната',
+            text='Без благодарности',
             callback_data=cls.CALLBACK_DATA_TEMPLATE % callback_dict
         )
         callback_dict.update(keyboard_type=KeyboardType.SYMPA_REVOKE)
@@ -95,15 +107,18 @@ class Common(object):
             callback_data=cls.CALLBACK_DATA_TEMPLATE % callback_dict
         )
         reply_markup = InlineKeyboardMarkup(
-            inline_keyboard=[ [button_donate, button_refuse_donate, button_cancel_sympa] ]
+            inline_keyboard=[
+                [button_donate],
+                [button_refuse_donate],
+                [button_cancel_sympa]
+            ]
         )
         return text, reply_markup
 
 
     @classmethod
-    async def make2_donate(cls, profile_from, profile_to, journal_id, message_pre=''):
-        text = message_pre + '\n\n' if message_pre else ''
-        text += 'Пожалуйста, пришлите мне снимок экрана с подтверждением перевода по указанным ниже реквизитам:\n\n'
+    async def get_donate_to(cls, journal_id):
+        status, response = None, None
         donate_to_payload  = dict(
             tg_token=settings.TOKEN,
             journal_id=journal_id,
@@ -116,6 +131,14 @@ class Common(object):
         )
         logging.debug('find_donate_to, status: %s' % status)
         logging.debug('find_donate_to, response: %s' % response)
+        return status, response
+
+
+    @classmethod
+    async def make2_donate(cls, profile_from, profile_to, journal_id, message_pre=''):
+        text = message_pre + '\n\n' if message_pre else ''
+        text += 'Пожалуйста, пришлите мне снимок экрана с подтверждением перевода по указанным ниже реквизитам:\n\n'
+        status, response = await cls.get_donate_to(journal_id)
         if status != 200 or not response.get('donate', {}).get('bank'):
             return None, None
         text += f'{response["donate"]["bank"]}\n'
@@ -323,7 +346,7 @@ async def cbq_sympa_set(callback: CallbackQuery, state: FSMContext):
                         # М (from) донатить  с кнопкой отмены симпатии.
                         # Ж (to) уведомление с кнопкой отмены симпатии
                         #
-                        text_from, reply_markup_from = Common.make1_donate(
+                        text_from, reply_markup_from = await Common.make1_donate(
                             profile_from, profile_to, journal_id, message_pre=''
                         )
                         text_to, reply_markup_to = Common.inform_her_about_reciprocal(
@@ -336,7 +359,7 @@ async def cbq_sympa_set(callback: CallbackQuery, state: FSMContext):
                         text_from, reply_markup_from = Common.inform_her_about_reciprocal(
                             profile_from, profile_to, journal_id, message_pre=''
                         )
-                        text_to, reply_markup_to = Common.make1_donate(
+                        text_to, reply_markup_to = await Common.make1_donate(
                             profile_to, profile_from, journal_id, message_pre=''
                         )
 
@@ -520,6 +543,20 @@ async def process_message_donate_after_sympa(message: Message, state: FSMContext
     logging.debug('post donate_reciprocal_sympathy, response: %s' % response)
     if status == 200:
         success = False
+        if is_first:
+            for tgd in data['response_get_donate']['donate']['tg_data']:
+                try:
+                    await bot.send_message(
+                        tgd['tg_uid'],
+                        text=(
+                            f'Получена благодарность за приглашение '
+                            f'{Misc.get_deeplink_with_name(user_f)} '
+                            f'в игру знакомств'
+                    ))
+                    success = True
+                except (TelegramBadRequest, TelegramForbiddenError):
+                    pass
+
         for tgd in data['response_get_donate']['donate']['tg_data']:
             try:
                 await bot.forward_message(
