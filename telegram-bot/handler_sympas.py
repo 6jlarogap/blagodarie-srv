@@ -606,7 +606,8 @@ async def process_message_donate_after_sympa(message: Message, state: FSMContext
                 text, reply_markup = Common.after_donate_or_not_donate(
                     user_m, user_f, data['journal_id'],
                     message_pre=(
-                        f'Донат отправлен. Ожидайте решения {html.quote(user_f["first_name"])} о передаче контактов'
+                        f'Добровольный дар отправлен.\n'
+                        f'Контакты запрошены. Ожидайте решения {html.quote(user_f["first_name"])} о передаче контактов.'
                 ))
                 await Misc.remove_n_send_message(
                     chat_id=message.from_user.id,
