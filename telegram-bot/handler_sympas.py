@@ -313,6 +313,9 @@ async def cbq_sympa_set(callback: CallbackQuery, state: FSMContext):
         if response.get('previousstate'):
             if response['previousstate']['is_sympa_confirmed']:
                 message_pre = f'Симпатия к {html.quote(profile_to["first_name"])} уже установлена'
+                text_from, reply_markup_from = Common.make_sympa_revoke(
+                    profile_from, profile_to, journal_id, message_pre
+                )
             else:
                 if response.get('is_reciprocal'):
                     if profile_to['gender'] == 'f':
