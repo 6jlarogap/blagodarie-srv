@@ -503,7 +503,7 @@ async def cbq_get_sympa_donate(callback: CallbackQuery, state: FSMContext):
     if not profile_from['r_sympa_username'] or profile_from['r_sympa_username'] != profile_to['username']:
         await bot.answer_callback_query(
             callback.id,
-            text=f'Этот донат уже не актуален. У вас нет взаимной симпатии к {html.quote(profile_to["first_name"])}',
+            text=f'Эта благодарность не актуальна. У Вас нет взаимной симпатии с {html.quote(profile_to["first_name"])}',
             show_alert=True,
         )
         await callback.answer()

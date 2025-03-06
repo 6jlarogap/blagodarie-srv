@@ -1207,7 +1207,7 @@ async def cbq_delete_user_confirmed(callback: CallbackQuery, state: FSMContext):
             msg_deleted = f'Профиль <u>{response_check["response_uuid"]["first_name"]}</u> удалён'
         else:
             msg_debug = 'depersonalize user, '
-            msg_deleted = 'Теперь Вы обезличены'
+            msg_deleted = 'Ваш профиль обезличен.'
 
         payload = dict(tg_token=settings.TOKEN, uuid=uuid, owner_id=data['owner_id'])
         logging.debug(msg_debug + 'payload: %s' % Misc.secret(payload))
