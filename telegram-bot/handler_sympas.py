@@ -146,16 +146,19 @@ class Common(object):
     @classmethod
     async def make2_donate(cls, profile_from, profile_to, journal_id, message_pre=''):
         text = message_pre + '\n\n' if message_pre else ''
-        text += 'Пожалуйста, пришлите мне снимок экрана с подтверждением перевода по указанным ниже реквизитам:\n\n'
+        text += (
+            'Пожалуйста, пришлите мне снимок экрана с '
+            'подтверждением перевода добровольного дара по указанным ниже реквизитам:\n\n'
+        )
         status, response = await cls.get_donate_to(journal_id)
         if status != 200 or not response.get('donate', {}).get('bank'):
-            return None, None
+            return None, None, None
         text += f'{response["donate"]["bank"]}\n'
 
         callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
         callback_dict.update(keyboard_type=KeyboardType.SYMPA_DONATE_REFUSE)
         button_refuse_donate = InlineKeyboardButton(
-            text='Продолжить без доната',
+            text='Продолжить без благодарности',
             callback_data=cls.CALLBACK_DATA_TEMPLATE % callback_dict
         )
         callback_dict.update(keyboard_type=KeyboardType.SYMPA_REVOKE)
@@ -164,7 +167,7 @@ class Common(object):
             callback_data=cls.CALLBACK_DATA_TEMPLATE % callback_dict
         )
         reply_markup = InlineKeyboardMarkup(
-            inline_keyboard=[ [button_refuse_donate, button_cancel_sympa] ]
+            inline_keyboard=[ [button_refuse_donate], [button_cancel_sympa] ]
         )
         return text, reply_markup, response
 
