@@ -80,7 +80,7 @@ class Common(object):
             text += (
                 f'Поздравляем! У Вас взаимная симпатия - ваши профили скрыты от других участников игры.\n'
                 f'Перед запросом контактов {user_f_name}, предлагаем добровольно поблагодарить '
-                f'{response["donate"]["profile"]["first_name"]}. '
+                f'{html.quote(response["donate"]["profile"]["first_name"])}. '
                 f'Ваша благодарность будет передана {user_f_name}, '
                 f'но не обязательна для её решения о передаче контактов.'
             )
@@ -161,12 +161,21 @@ class Common(object):
 
 
     @classmethod
-    def inform_her_about_reciprocal(cls, profile_from, profile_to, journal_id, message_pre=''):
+    async def inform_her_about_reciprocal(cls, profile_from, profile_to, journal_id, message_pre=''):
         text = message_pre + '\n\n' if message_pre else ''
-        text += (
-                f'Поздравляем! Взаимная симпатия! '
-                f'{html.quote(profile_to["first_name"])} предложено задонатить'
-        )
+        status, response = await cls.get_donate_to(journal_id)
+        if status == 200 and response.get('donate', {}).get('profile'):
+            text += (
+                f'Поздравляем! У Вас взаимная симпатия - ваши профили скрыты от других участников игры.\n'
+                f'Перед запросом Ваших контактов {html.quote(profile_to["first_name"])} '
+                f'предложено поблагодарить {html.quote(response["donate"]["profile"]["first_name"])}. '
+                f'Дождитесь запроса контактов или отмените симпатию.'
+            )
+        else:
+            text += (
+                    f'Поздравляем! Взаимная симпатия! '
+                    f'{html.quote(profile_to["first_name"])} предложено задонатить'
+            )
         callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
         callback_dict.update(keyboard_type=KeyboardType.SYMPA_REVOKE)
         button_cancel_sympa = InlineKeyboardButton(
@@ -349,14 +358,14 @@ async def cbq_sympa_set(callback: CallbackQuery, state: FSMContext):
                         text_from, reply_markup_from = await Common.make1_donate(
                             profile_from, profile_to, journal_id, message_pre=''
                         )
-                        text_to, reply_markup_to = Common.inform_her_about_reciprocal(
+                        text_to, reply_markup_to = await Common.inform_her_about_reciprocal(
                             profile_to, profile_from, journal_id, message_pre=''
                         )
                     else:
                         # Ж (from) поставила симпатию, которая стала взаимной.
                         # Ж (from) уведомление с кнопкой отмены симпатии.
                         # М(to) донатить с кнопкой отмены симпатии.
-                        text_from, reply_markup_from = Common.inform_her_about_reciprocal(
+                        text_from, reply_markup_from = await Common.inform_her_about_reciprocal(
                             profile_from, profile_to, journal_id, message_pre=''
                         )
                         text_to, reply_markup_to = await Common.make1_donate(
