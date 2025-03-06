@@ -2664,7 +2664,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     '<input type="checkbox" class="sympa" id="table-sympa-%(user_id)s" %(sympa_checked)s %(sympa_disabled)s>'
                 )
                 legend_hide = (
-                    '<label for="table-hide-%(user_id)s">''<span style="color: system-color">%(str_hidden)s:<span></label><br />'
+                    '<label for="table-hide-%(user_id)s">''<span style="color: system-color">Скрыть:<span></label><br />'
                     '<input type="checkbox" class="hide_him_her" id="table-hide-%(user_id)s" %(hide_checked)s>'
                 )
 
@@ -2680,7 +2680,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                             hide_checked='checked' if list_m[i]['user_id'] in my_hidden else ''
                             sympa_checked='checked' if list_m[i]['user_id'] in my_sympas else ''
                             d_sympa = dict(
-                                str_hidden='Скрыт',
                                 color_sympa=color_sympa if sympa_checked else 'system-color',
                                 user_id=list_m[i]['user_id'],
                                 sympa_checked=sympa_checked,
@@ -2696,7 +2695,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                             hide_checked='checked' if list_f[i]['user_id'] in my_hidden else ''
                             sympa_checked='checked' if list_f[i]['user_id'] in my_sympas else ''
                             d_sympa = dict(
-                                str_hidden='Скрыта',
                                 color_sympa=color_sympa if sympa_checked else 'system-color',
                                 user_id=list_f[i]['user_id'],
                                 sympa_checked=sympa_checked,
