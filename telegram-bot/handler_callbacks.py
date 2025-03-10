@@ -385,6 +385,10 @@ async def cbq_meet_do_or_revoke(callback: CallbackQuery, state: FSMContext):
     code = callback.data.split(KeyboardType.SEP)
     what = int(code[0])
     status_from, profile_from = await Misc.post_tg_user(callback.from_user)
+    if not profile_from['is_active']:
+        await callback.message.reply(Misc.MSG_NOT_SENDER_NOT_ACTIVE)
+        await callback.answer()
+        return
     if status_from != 200 or profile_from['username'] != username_from:
         return
     text_scram = ''

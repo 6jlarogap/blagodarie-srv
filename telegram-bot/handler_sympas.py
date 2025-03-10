@@ -38,6 +38,30 @@ class Common(object):
 
 
     @classmethod
+    async def is_any_not_active(cls, callback, profile_from, profile_to):
+        """
+        Проверка, не является ли пользователь или к кому симпатия и т.п. обезличенным или не в игре
+
+        Если является, возвращается True, выдав popup сообщение
+        """
+        message = ''
+        if not profile_from['is_active']:
+            message = Misc.MSG_NOT_SENDER_NOT_ACTIVE
+        elif not profile_from['did_meet']:
+            message = 'Вы не участвуете в игре. Для входа в игру: команда /meet'
+        elif not profile_to['did_meet']:
+            he_she = 'Она' if profile_to['gender'] == 'f' else 'm' 
+            message = f'{he_she} не участвует в игре.'
+        if message:
+            await bot.answer_callback_query(
+                callback.id,
+                text=message,
+                show_alert=True,
+            )
+            await callback.answer()
+        return bool(message)
+
+    @classmethod
     def inline_btn_map(cls):
         return InlineKeyboardButton(
             text='Карта участников игры',
@@ -266,6 +290,8 @@ async def cbq_sympa_set_cancel(callback: CallbackQuery, state: FSMContext):
     profile_from, profile_to, journal_id = await Common.check_common_callback(callback)
     if not profile_to:
         return
+    if await Common.is_any_not_active(callback, profile_from, profile_to):
+        return
     what = int((callback.data.split(KeyboardType.SEP))[0])
     message = f'Вы отказались от установки симпатии к {html.quote(profile_to["first_name"])}'
     await bot.answer_callback_query(
@@ -290,7 +316,8 @@ async def cbq_sympa_set(callback: CallbackQuery, state: FSMContext):
     profile_from, profile_to, journal_id = await Common.check_common_callback(callback)
     if not profile_to:
         return
-
+    if await Common.is_any_not_active(callback, profile_from, profile_to):
+        return
     r_key = (
         Rcache.SET_NEXT_SYMPA_WAIT_PREFIX + \
         profile_from['username'] + Rcache.KEY_SEP + \
@@ -434,6 +461,8 @@ async def cbq_sympa_revoke(callback: CallbackQuery, state: FSMContext):
     profile_from, profile_to, journal_id = await Common.check_common_callback(callback)
     if not profile_to:
         return
+    if await Common.is_any_not_active(callback, profile_from, profile_to):
+        return
     post_op = dict(
         tg_token=settings.TOKEN,
         operation_type_id=str(OperationType.REVOKE_SYMPA_ONLY),
@@ -499,6 +528,8 @@ async def cbq_sympa_revoke(callback: CallbackQuery, state: FSMContext):
 async def cbq_get_sympa_donate(callback: CallbackQuery, state: FSMContext):
     profile_from, profile_to, journal_id = await Common.check_common_callback(callback)
     if not profile_to:
+        return
+    if await Common.is_any_not_active(callback, profile_from, profile_to):
         return
     if not profile_from['r_sympa_username'] or profile_from['r_sympa_username'] != profile_to['username']:
         await bot.answer_callback_query(
@@ -642,6 +673,8 @@ async def cbq_get_sympa_send_profile(callback: CallbackQuery, state: FSMContext)
     profile_from, profile_to, journal_id = await Common.check_common_callback(callback)
     if not profile_to:
         return
+    if await Common.is_any_not_active(callback, profile_from, profile_to):
+        return
     if not profile_from['r_sympa_username'] or profile_from['r_sympa_username'] != profile_to['username']:
         await bot.answer_callback_query(
             callback.id,
@@ -700,6 +733,8 @@ async def cbq_get_sympa_send_profile(callback: CallbackQuery, state: FSMContext)
 async def cbq_sympa_donate_refuse(callback: CallbackQuery, state: FSMContext):
     user_m, user_f, journal_id = await Common.check_common_callback(callback)
     if not user_f or user_f['gender'] != 'f':
+        return
+    if await Common.is_any_not_active(callback, user_m, user_f):
         return
     if not user_m['r_sympa_username'] or user_m['r_sympa_username'] != user_f['username']:
         await bot.answer_callback_query(

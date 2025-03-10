@@ -387,6 +387,9 @@ async def cmd_start(message: Message, state: FSMContext):
                 await message.reply('Ссылка устарела или не найдена. Получите новую.')
 
     elif m := re.search(r'^m\-([0-9a-z]{10})$', arg, flags=re.I):
+        if not response_sender['is_active']:
+            await message.reply(Misc.MSG_NOT_SENDER_NOT_ACTIVE)
+            return
         status_to, profile_to = await Misc.get_user_by_sid(m.group(1))
         if status_to == 200:
             data = dict(profile_from = response_sender, profile_to=profile_to)
