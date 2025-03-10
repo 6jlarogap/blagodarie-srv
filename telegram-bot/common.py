@@ -390,7 +390,7 @@ class Misc(object):
     )
 
     PROMT_MEET_DOING = (
-        '%(vy)s %(already)sучаствуете в игре знакомств!\n'
+        'Вы участвуете в игре знакомств!\n'
         '\n'
         'Приглашенных Вами: %(invited)s\n'
         'Симпатий к Вам: %(sympa_to)s\n'

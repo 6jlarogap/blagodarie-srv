@@ -782,7 +782,6 @@ async def process_meet_from_deeplink_and_command(message, state, data):
 
     if profile_from['did_meet']:
         count_meet_invited_ = await Misc.count_meet_invited(profile_from.get('uuid'))
-        count_meet_invited_.update(already='уже ', vy=Misc.get_html_a(Misc.get_deeplink(profile_from, bot_data), 'Вы'))
         text = Misc.PROMT_MEET_DOING % count_meet_invited_
     else:
         text = \

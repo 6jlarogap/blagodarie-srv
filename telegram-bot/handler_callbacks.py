@@ -393,7 +393,7 @@ async def cbq_meet_do_or_revoke(callback: CallbackQuery, state: FSMContext):
         return
     text_scram = ''
     if profile_from['did_meet'] and what == KeyboardType.MEET_DO:
-        text_scram = 'Вы уже участвуете в игре знакомств. Выход из игры: посредством команды /meet'
+        text_scram = 'Вы участвуете в игре знакомств. Выход из игры: посредством команды /meet'
     elif not profile_from['did_meet'] and what == KeyboardType.MEET_REVOKE:
         text_scram = 'Вы и так не участвуете в игре знакомств. Для участия: команда /meet'
     if text_scram:
@@ -478,7 +478,6 @@ async def meet_do_or_revoke(data):
     if not did_meet or ('tgdesc_first' not in data) or data['tgdesc_first']:
         if did_meet:
             count_meet_invited_ = await Misc.count_meet_invited(data.get('uuid'))
-            count_meet_invited_.update(already='', vy=Misc.get_html_a(Misc.get_deeplink(data), 'Вы'))
             text_to_sender = Misc.PROMT_MEET_DOING % count_meet_invited_
         else:
             text_to_sender = ('Вы вышли из игры знакомств. Нам вас будет не хватать')
