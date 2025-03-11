@@ -510,7 +510,6 @@ async def meet_do_or_revoke(data):
                     keyboard_type=KeyboardType.MEET_INVITE,
                     sep=KeyboardType.SEP,
                 ))
-                bot_data = await bot.get_me()
                 inline_btn_map = InlineKeyboardButton(
                     text='Карта участников игры',
                     login_url=Misc.make_login_url(

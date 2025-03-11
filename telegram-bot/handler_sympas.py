@@ -33,8 +33,34 @@ class Common(object):
         '%(user_to_sid)s%(sep)s'
         '%(journal_id)s%(sep)s'
     )
-    YES = 'Да'
-    NO = 'Нет'
+
+    @classmethod
+    async def prompt_meet_doing(cls, profile_from):
+        """
+        Карточка игрока
+        """
+        text, reply_markup = None, None
+        count_meet_invited_ = await Misc.count_meet_invited(profile_from['uuid'])
+        if count_meet_invited_:
+            text = Misc.PROMT_MEET_DOING % count_meet_invited_
+            callback_data_template = Misc.CALLBACK_DATA_SID_TEMPLATE + '%(sid2)s%(sep)s'
+            inline_btn_quit = InlineKeyboardButton(
+                text='Выйти',
+                callback_data=callback_data_template % dict(
+                keyboard_type=KeyboardType.MEET_REVOKE,
+                sid=profile_from['username'],
+                sid2='',
+                sep=KeyboardType.SEP,
+            ))
+            inline_btn_invite = InlineKeyboardButton(
+                text='Пригласить в игру',
+                callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
+                keyboard_type=KeyboardType.MEET_INVITE,
+                sep=KeyboardType.SEP,
+            ))
+            buttons = [ [inline_btn_invite ], [cls.inline_btn_map()], [inline_btn_quit] ]
+            reply_markup = InlineKeyboardMarkup(inline_keyboard=buttons)
+        return text, reply_markup
 
 
     @classmethod
@@ -96,11 +122,37 @@ class Common(object):
         if text:
             callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
             callback_dict.update(keyboard_type=KeyboardType.SYMPA_REVOKE)
-            button_yes = InlineKeyboardButton(
+            button_revoke = InlineKeyboardButton(
                 text='Отменить',
                 callback_data=cls.CALLBACK_DATA_TEMPLATE % callback_dict
             )
-            reply_markup = InlineKeyboardMarkup(inline_keyboard=[ [button_yes] ])
+            reply_markup = InlineKeyboardMarkup(inline_keyboard=[ [button_revoke] ])
+        return text, reply_markup
+
+
+    @classmethod
+    async def make_sympa_hide(cls, profile_from, profile_to, journal_id, message_pre=''):
+        text = f'{message_pre}\n\n' if message_pre else ''
+        name_to = html.quote(profile_to['first_name'])
+        text += (
+            f'Профиль {name_to} скрыт - вы не увидите друг друга в игре знакомств. '
+            f'Вы можете отменить скрытие или установить недоверие - '
+            f'чтобы предупредить участников сообщества от общения с {name_to}'
+        )
+        callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
+        callback_dict.update(keyboard_type=KeyboardType.SYMPA_SHOW)
+        button_sympa_show = InlineKeyboardButton(
+            text='Отменить',
+            callback_data=cls.CALLBACK_DATA_TEMPLATE % callback_dict
+        )
+        callback_dict.update(keyboard_type=KeyboardType.SYMPA_MISTRUST)
+        button_sympa_mistrust = InlineKeyboardButton(
+            text='Недоверие',
+            callback_data=cls.CALLBACK_DATA_TEMPLATE % callback_dict
+        )
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=[
+            [button_sympa_show, button_sympa_mistrust],
+        ])
         return text, reply_markup
 
 
@@ -225,19 +277,19 @@ class Common(object):
     @classmethod
     def make_sympa_do(cls, profile_from, profile_to, journal_id, message_pre=''):
         text = message_pre + '\n\n' if message_pre else ''
-        text += f'Установить симпатию к {html.quote(profile_to["first_name"])}'
+        text += f'Установить симпатию к {html.quote(profile_to["first_name"])} ?'
         callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
         callback_dict.update(keyboard_type=KeyboardType.SYMPA_SET)
-        button_yes = InlineKeyboardButton(
-            text=cls.YES,
+        button_sympa = InlineKeyboardButton(
+            text='Симпатия',
             callback_data=cls.CALLBACK_DATA_TEMPLATE % callback_dict
         )
-        callback_dict.update(keyboard_type=KeyboardType.SYMPA_SET_CANCEL)
-        button_no = InlineKeyboardButton(
-            text=cls.NO,
+        callback_dict.update(keyboard_type=KeyboardType.SYMPA_HIDE)
+        button_hide = InlineKeyboardButton(
+            text='Скрыть',
             callback_data=cls.CALLBACK_DATA_TEMPLATE % callback_dict
         )
-        reply_markup = InlineKeyboardMarkup(inline_keyboard=[ [button_yes, button_no] ])
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=[ [button_sympa, button_hide] ])
         return text, reply_markup
 
     @classmethod
@@ -277,28 +329,37 @@ class Common(object):
 # --- end of class Common ---
 
 @router.callback_query(F.data.regexp(r'^%s%s' % (
-        KeyboardType.SYMPA_SET_CANCEL,
+        KeyboardType.SYMPA_HIDE,
         KeyboardType.SEP,
     )), StateFilter(None))
-async def cbq_sympa_set_cancel(callback: CallbackQuery, state: FSMContext):
-
-    # Из апи приходит:
-    #   f'{KeyboardType.что-то}{KeyboardType.SEP}'
-    #   f'{user_from.username}{KeyboardType.SEP}'
-    #   f'{user_to.username}{KeyboardType.SEP}'
-
+async def cbq_sympa_hide(callback: CallbackQuery, state: FSMContext):
     profile_from, profile_to, journal_id = await Common.check_common_callback(callback)
     if not profile_to:
         return
     if await Common.is_any_not_active(callback, profile_from, profile_to):
         return
-    what = int((callback.data.split(KeyboardType.SEP))[0])
-    message = f'Вы отказались от установки симпатии к {html.quote(profile_to["first_name"])}'
-    await bot.answer_callback_query(
-        callback.id,
-        text=message,
-        show_alert=True,
+    post_op = dict(
+        tg_token=settings.TOKEN,
+        operation_type_id=str(OperationType.MEET_USER_HIDE),
+        tg_user_id_from=str(callback.from_user.id),
+        user_id_to=profile_to['uuid'],
     )
+    logging.debug('post operation hide from sympa, payload: %s' % Misc.secret(post_op))
+    status, response = await Misc.api_request(
+        path='/api/addoperation',
+        method='post',
+        data=post_op,
+    )
+    logging.debug('post operation hide from sympa, status: %s' % status)
+    logging.debug('post operation hide from sympa: %s' % response)
+    if status == 200:
+        text, reply_markup = await Common.make_sympa_hide(profile_from, profile_to, journal_id)
+        await Misc.remove_n_send_message(
+            chat_id=callback.from_user.id,
+            message_id=callback.message.message_id,
+            text=text,
+            reply_markup=reply_markup,
+        )
     await callback.answer()
 
 
@@ -772,4 +833,92 @@ async def cbq_sympa_donate_refuse(callback: CallbackQuery, state: FSMContext):
         except (TelegramBadRequest, TelegramForbiddenError):
             pass
     await state.clear()
+    await callback.answer()
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.SYMPA_MISTRUST,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_get_sympa_mistrust(callback: CallbackQuery, state: FSMContext):
+    profile_from, profile_to, journal_id = await Common.check_common_callback(callback)
+    if not profile_to:
+        return
+    if await Common.is_any_not_active(callback, profile_from, profile_to):
+        return
+    post_op = dict(
+        tg_token=settings.TOKEN,
+        operation_type_id=str(OperationType.MISTRUST),
+        tg_user_id_from=str(callback.from_user.id),
+        user_id_to=profile_to['uuid'],
+    )
+    logging.debug('post operation mistrust from sympa, payload: %s' % Misc.secret(post_op))
+    status, response = await Misc.api_request(
+        path='/api/addoperation',
+        method='post',
+        data=post_op,
+    )
+    logging.debug('post operation mistrust from sympa, status: %s' % status)
+    logging.debug('post operation mistrust from sympa: %s' % response)
+    if status == 400 and response.get('code', '') == 'already' or \
+       status == 200:
+        text = f'{html.quote(profile_from["first_name"])} не доверяет {html.quote(profile_to["first_name"])}'
+        await Misc.remove_n_send_message(
+            chat_id=callback.from_user.id,
+            message_id=callback.message.message_id,
+            text=text,
+            reply_markup=None,
+        )
+        text_card, reply_markup_card = await Common.prompt_meet_doing(profile_from)
+        if text_card:
+            await bot.send_message(
+                callback.from_user.id,
+                text=text_card,
+                reply_markup=reply_markup_card
+            )
+    if status == 200:
+        for tgd in profile_to['tg_data']:
+            try:
+                await bot.send_message(
+                    tgd['tg_uid'],
+                    text=text,
+                )
+            except (TelegramBadRequest, TelegramForbiddenError):
+                pass
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.SYMPA_SHOW,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_get_sympa_show(callback: CallbackQuery, state: FSMContext):
+    profile_from, profile_to, journal_id = await Common.check_common_callback(callback)
+    if not profile_to:
+        return
+    if await Common.is_any_not_active(callback, profile_from, profile_to):
+        return
+    post_op = dict(
+        tg_token=settings.TOKEN,
+        operation_type_id=str(OperationType.MEET_USER_SHOW),
+        tg_user_id_from=str(callback.from_user.id),
+        user_id_to=profile_to['uuid'],
+    )
+    logging.debug('post operation show from sympa, payload: %s' % Misc.secret(post_op))
+    status, response = await Misc.api_request(
+        path='/api/addoperation',
+        method='post',
+        data=post_op,
+    )
+    logging.debug('post operation show from sympa, status: %s' % status)
+    logging.debug('post operation show from sympa: %s' % response)
+    if status == 200:
+        text, reply_markup = Common.make_sympa_do(
+            profile_from, profile_to, journal_id, message_pre='',
+        )
+        await Misc.remove_n_send_message(
+            chat_id=callback.from_user.id,
+            message_id=callback.message.message_id,
+            text=text,
+            reply_markup=reply_markup,
+        )
     await callback.answer()

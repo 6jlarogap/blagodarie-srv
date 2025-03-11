@@ -128,6 +128,11 @@ class OperationType(object):
     SET_SYMPA = 14
     REVOKE_SYMPA_ONLY = 16
 
+    # Скрыть пользователя в игре знакомств
+    MEET_USER_HIDE = 17
+    # Раскрыть пользователя в игре знакомств
+    MEET_USER_SHOW = 18
+
     CALLBACK_DATA_TEMPLATE = (
         '%(keyboard_type)s%(sep)s'
         '%(operation)s%(sep)s'
@@ -332,9 +337,11 @@ class KeyboardType(object):
     SYMPA_SET = 65
     SYMPA_REVOKE = 66
 
-    # Кнопка "Нет" в вопросу "Установить симпатию"
-    SYMPA_SET_CANCEL = 67
-    # свободный: 68
+    # Кнопка "Скрыть" в вопросе "Установить симпатию"
+    SYMPA_HIDE = 67
+    # Кнопка "Отменить скрытие" в вопросе "Установить симпатию"
+    SYMPA_SHOW = 68
+
     SYMPA_DONATE_REFUSE = 69
 
     SYMPA_SEND_PROFILE = 70
@@ -344,6 +351,9 @@ class KeyboardType(object):
     AGREE_TO_RULES = 72
 
     MEET_INVITE_BANK_PASS = 73
+
+    # Кнопка "Недоверие" в диалоге после скрытия
+    SYMPA_MISTRUST = 74
 
     # Разделитель данных в call back data
     #
@@ -1958,7 +1968,7 @@ class Misc(object):
         )
         logging.debug('get_count_meet_invited in api, status: %s' % status)
         logging.debug('get_count_meet_invited in api, response: %s' % response)
-        return response
+        return response if status == 200 else None
 
     @classmethod
     async def put_attitude(cls, data):

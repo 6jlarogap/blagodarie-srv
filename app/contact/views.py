@@ -466,7 +466,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     options_quest_set_sympa.update(reply_markup=dict(
                         inline_keyboard=[[
                             dict(
-                                text='Да',
+                                text='Симпатия',
                                 callback_data=(
                                     f'{KeyboardType.SYMPA_SET}{KeyboardType.SEP}'
                                     f'{user_from.username}{KeyboardType.SEP}'
@@ -474,9 +474,9 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                                     f'{data["journal_id"]}{KeyboardType.SEP}'
                             )),
                             dict(
-                                text='Нет',
+                                text='Скрыть',
                                 callback_data=(
-                                    f'{KeyboardType.SYMPA_SET_CANCEL}{KeyboardType.SEP}'
+                                    f'{KeyboardType.SYMPA_HIDE}{KeyboardType.SEP}'
                                     f'{user_from.username}{KeyboardType.SEP}'
                                     f'{user_to.username}{KeyboardType.SEP}'
                                     f'{data["journal_id"]}{KeyboardType.SEP}'

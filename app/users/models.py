@@ -959,7 +959,7 @@ class TelegramApiMixin(object):
 
         SYMPA_SET = 65
         SYMPA_REVOKE = 66
-        SYMPA_SET_CANCEL = 67
+        SYMPA_HIDE = 67
 
         # Разделитель данных в call back data
         #

@@ -592,7 +592,6 @@ async def process_message_to_offer(message: Message, state: FSMContext):
             if status == 200:
                 n_delivered = 0
                 if response['users']:
-                    bot_data = await bot.get_me()
                     msg_to = 'Сообщение участникам опроса:\n %(offer_deeplink)s\n от %(sender_deeplink)s' % dict(
                         offer_deeplink=Misc.get_html_a(
                             href=f't.me/{bot_data.username}?start=offer-{data["offer_uuid"]}',
