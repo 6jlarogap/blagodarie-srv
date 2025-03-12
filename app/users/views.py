@@ -2517,14 +2517,13 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             profile_auth = Profile.objects.select_related('user').get(user=user_auth)
             user_auth = profile_auth.user
 
+            if not meet_admin:
+                if show_hidden:
+                    q_meet &= Q(user__pk__in=my_hidden)
+                elif my_hidden:
+                    q_meet &= ~Q(user__pk__in=my_hidden)
+
             for p in Profile.objects.filter(q_meet).order_by('dob').select_related('user').distinct():
-                if not meet_admin:
-                    if show_hidden:
-                        if p.user.pk not in my_hidden:
-                            continue
-                    else:
-                        if p.user.pk in my_hidden:
-                            continue
                 lat_sum += p.latitude
                 lng_sum += p.longitude
 
