@@ -331,6 +331,7 @@ async def process_message_meet_tgdesc(message: Message, state: FSMContext):
     status, response, is_first = await do_get_user_desc(message, state)
     if status == 200:
         data.update(tgdesc_first=is_first)
+        logging.info(f'MEET_LOG: {profile_from["first_name"]} ({profile_from["username"]}) entered description')
     await state.clear()
     await meet_do_or_revoke(data)
 
@@ -360,6 +361,7 @@ async def process_message_meet_dob(message: Message, state: FSMContext):
     if status == 400:
         await meet_quest_dob(state, error_message=response['message'])
     elif status == 200:
+        logging.info(f'MEET_LOG: {profile_from["first_name"]} ({profile_from["username"]}) entered valid dob')
         await state.update_data(dob=dob)
         if not data['has_tgdesc']:
             await state.set_state(FSMmeet.ask_tgdesc)
@@ -409,6 +411,7 @@ async def cbq_meet_do_or_revoke(callback: CallbackQuery, state: FSMContext):
         uuid=profile_from['uuid'],
         username_from=profile_from['username'],
         username=profile_from['username'],
+        first_name=profile_from['first_name'],
         username_inviter=username_inviter,
         gender=profile_from['gender'],
         dob=profile_from['dob'],
@@ -422,6 +425,7 @@ async def cbq_meet_do_or_revoke(callback: CallbackQuery, state: FSMContext):
     )
     await callback.answer()
     if what == KeyboardType.MEET_DO:
+        logging.info(f'MEET_LOG: {profile_from["first_name"]} ({profile_from["username"]}) accepted meet game invitation')
         next_proc = None
         if not profile_from['gender']:
             await state.set_state(FSMmeet.ask_gender)
@@ -456,6 +460,7 @@ async def cbq_meet_ask_gender(callback: CallbackQuery, state: FSMContext):
         gender=gender,
     )
     await state.update_data(gender=gender)
+    logging.info(f'MEET_LOG: {response_sender["first_name"]} ({response_sender["username"]}) entered gender: "{gender}"')
     data = await state.get_data()
     next_proc = None
     if not response_sender['dob']:
@@ -495,6 +500,7 @@ async def meet_do_or_revoke(data):
         if status == 200:
             reply_markup = None
             if did_meet:
+                logging.info(f'MEET_LOG: {data["first_name"]} ({data["username"]}) entered the game')
                 callback_data_template = Misc.CALLBACK_DATA_SID_TEMPLATE + '%(sid2)s%(sep)s'
                 inline_btn_quit = InlineKeyboardButton(
                     text='Выйти',

@@ -824,6 +824,7 @@ async def process_meet_from_deeplink_and_command(message, state, data):
         ))
         buttons = [ [inline_btn_invite ], [inline_btn_map], [inline_btn_do_or_revoke] ]
     else:
+        logging.info(f'MEET_LOG: {profile_from["first_name"]} ({profile_from["username"]}) got meet game invitation')
         buttons = [ [inline_btn_do_or_revoke] ]
     await bot.send_message(
         message.from_user.id,
