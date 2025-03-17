@@ -1368,7 +1368,8 @@ class Misc(object):
                 if edit_buttons_2:
                     buttons.append(edit_buttons_2)
 
-                if False: # is_power and not is_org:
+                if False:
+                # if is_power and not is_org:
                     dict_papa_mama = dict(
                         keyboard_type=KeyboardType.FATHER,
                         uuid=profile['uuid'],
