@@ -20,7 +20,7 @@ from handler_bot import is_it_command
 import settings, me
 from settings import logging
 
-from common import Misc, KeyboardType, TgGroup, TgGroupMember
+from common import Misc, KeyboardType, OperationType, TgGroup, TgGroupMember
 
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
@@ -141,7 +141,7 @@ async def cbq_callback_clear_parent(callback: CallbackQuery, state: FSMContext):
     Действия по обнулению папы, мамы
     """
     if not (uuid := Misc.get_uuid_from_callback(callback)):
-        await state.clear();await callback.answer()
+        await state.clear(); await callback.answer()
         return
     response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback.from_user, uuid=uuid)
     if not response_sender:
@@ -182,4 +182,67 @@ async def cbq_callback_clear_parent(callback: CallbackQuery, state: FSMContext):
         prompt,
         reply_markup=reply_markup,
     )
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.CLEAR_PARENT_CONFIRM,
+        KeyboardType.SEP,
+    )), StateFilter(FSMpapaMama.confirm_clear))
+async def cbq_callback_clear_parent_confirmed(callback: CallbackQuery, state: FSMContext):
+    """
+    Действия по обнулению папы, мамы
+    """
+    if not (uuid := Misc.get_uuid_from_callback(callback)):
+        await state.clear(); await callback.answer()
+        return
+    message = callback.message
+    response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback.from_user, uuid=uuid)
+    if not response_sender:
+        await state.clear(); await callback.answer()
+        return
+    data = await state.get_data()
+    if not data.get('existing_parent_uuid') or \
+       ('is_father' not in data) or \
+       not data.get('existing_parent_name') or \
+       data.get('uuid') != uuid:
+        await state.clear(); await callback.answer()
+        return
+    existing_parent_uuid = data['existing_parent_uuid']
+    is_father = data['is_father']
+    post_op = dict(
+        tg_token=settings.TOKEN,
+        operation_type_id=OperationType.NOT_PARENT,
+        user_id_from=response_sender['response_uuid']['uuid'],
+        user_id_to=existing_parent_uuid,
+    )
+    logging.debug('post operation, payload: %s' % Misc.secret(post_op))
+    status, response = await Misc.api_request(
+        path='/api/addoperation',
+        method='post',
+        data=post_op,
+    )
+    logging.debug('post operation, status: %s' % status)
+    logging.debug('post operation, response: %s' % response)
+    if not (status == 200 or \
+       status == 400 and response.get('code') == 'already'):
+        if status == 400  and response.get('message'):
+            await message.reply(
+                'Ошибка!\n%s\n\nОчищайте родителя по новой' % response['message']
+            )
+        else:
+            await message.reply(Misc.MSG_ERROR_API)
+    else:
+        if response and response.get('profile_from') and response.get('profile_to'):
+            await bot.send_message(
+                callback.from_user.id,
+                Misc.PROMPT_PAPA_MAMA_CLEARED % dict(
+                    iof_from = Misc.get_deeplink_with_name(response['profile_from'], plus_trusts=True),
+                    iof_to = Misc.get_deeplink_with_name(response['profile_to'], plus_trusts=True),
+                    papa_or_mama='папа' if is_father else 'мама',
+            ))
+        else:
+            await message.reply('Связь Ребенок - Родитель очищена')
+    await state.clear()
+    await callback.answer()
 
