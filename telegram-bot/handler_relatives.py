@@ -346,4 +346,43 @@ async def put_papa_mama(message: Message, state: FSMContext):
             await message.reply('Родитель внесен в данные')
     await state.clear()
 
+@router.callback_query(F.data.regexp(r'^(%s|%s)%s' % (
+        KeyboardType.NEW_FATHER, KeyboardType.NEW_MOTHER,
+        KeyboardType.SEP,
+    )), StateFilter(FSMpapaMama.ask))
+async def cbq_new_papa_mama(callback: CallbackQuery, state: FSMContext):
+    """
+    Действия по заданию папы, мамы
+    """
+    tg_user_sender = callback.from_user
+    code = callback.data.split(KeyboardType.SEP)
+    uuid = None
+    try:
+        uuid = code[1]
+    except IndexError:
+        pass
+    if not uuid:
+        await state.clear(); await callback.answer()
+        return
+    response_sender = await Misc.check_owner_by_uuid(owner_tg_user=tg_user_sender, uuid=uuid)
+    if not response_sender:
+        await state.clear(); await callback.answer()
+        return
+    is_father = code[0] == str(KeyboardType.NEW_FATHER)
+    response_uuid = response_sender['response_uuid']
+    prompt_new_papa_mama = (
+        'Укажите Имя Фамилию и Отчество для %(papy_or_mamy)s, '
+        'пример %(fio_pama_mama)s'
+    ) % dict(
+        papy_or_mamy='папы' if is_father else 'мамы',
+        name=Misc.get_deeplink_with_name(response_uuid, plus_trusts=True),
+        fio_pama_mama='Иван Иванович Иванов'if is_father else 'Марья Ивановна Иванова',
+    )
+    await state.set_state(FSMpapaMama.new)
+    await state.update_data(uuid=uuid, is_father=is_father)
+    await callback.message.reply(
+        prompt_new_papa_mama,
+        reply_markup=Misc.reply_markup_cancel_row(),
+    )
+    await callback.answer()
 
