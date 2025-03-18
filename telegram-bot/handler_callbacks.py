@@ -797,12 +797,6 @@ async def process_existing_iof(message: Message, state: FSMContext):
         return
     first_name = Misc.strip_text(message.text)
     data = await state.get_data()
-    if not first_name or re.search(Misc.RE_UUID, first_name) or len(first_name) < 5:
-        await message.reply(
-            Misc.PROMPT_ORG_INCORRECT if data.get('is_org') else Misc.PROMPT_IOF_INCORRECT,
-            reply_markup=Misc.reply_markup_cancel_row(),
-        )
-        return
     if uuid := data.get('uuid'):
         response_sender = await Misc.check_owner_by_uuid(
             owner_tg_user=message.from_user,

@@ -456,3 +456,25 @@ async def put_new_papa_mama(message: Message, state: FSMContext):
             await message.reply('Родитель внесен в данные')
     await state.clear()
 
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.CHILD,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_callback_child(callback: CallbackQuery, state: FSMContext):
+    await bot.answer_callback_query(
+            callback.id,
+            text='Пока не реализовано',
+            show_alert=True,
+    )
+
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.BRO_SIS,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_callback_child(callback: CallbackQuery, state: FSMContext):
+    await bot.answer_callback_query(
+            callback.id,
+            text='Пока не реализовано',
+            show_alert=True,
+    )
