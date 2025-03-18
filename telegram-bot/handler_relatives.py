@@ -874,6 +874,35 @@ async def put_child_by_sid(message: Message, state: FSMContext):
     await state.clear()
 
 
+@router.callback_query(F.data.regexp(r'^(%s|%s)%s' % (
+         KeyboardType.NEW_SON, KeyboardType.NEW_DAUGHTER,
+        KeyboardType.SEP,
+    )), StateFilter(FSMchild.ask))
+async def cbq_new_child_ask_fio(callback: CallbackQuery, state: FSMContext):
+    if not (uuid := Misc.get_uuid_from_callback(callback)):
+        await state.clear(); await callback.answer()
+        return
+    data = await state.get_data()
+    for key in ('name', 'uuid', 'parent_gender',):
+        if not data.get(key) or key == 'uuid' and data[key] != uuid:
+            await state.clear()
+            return
+    new_child_gender = 'm' \
+        if callback.data.split(KeyboardType.SEP)[0] == str(KeyboardType.NEW_SON) \
+        else 'f'
+    fio_new_child = 'Иван Иванович Иванов' if new_child_gender == 'm' else 'Марья Ивановна Иванова'
+    await state.update_data(new_child_gender=new_child_gender)
+    await state.set_state(FSMchild.new)
+    await callback.message.reply(
+        (
+            f'Укажите ФИО {"СЫНА" if new_child_gender == "m" else "ДОЧЕРИ"} для:\n'
+            f'{data["name"]}\nНапример, {fio_new_child}'
+        ),
+        reply_markup=Misc.reply_markup_cancel_row(),
+    )
+    await callback.answer()
+
+
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.BRO_SIS,
         KeyboardType.SEP,
