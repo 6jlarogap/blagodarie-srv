@@ -1027,3 +1027,128 @@ async def cbq_callback_bro_sis(callback: CallbackQuery, state: FSMContext):
         reply_markup=reply_markup,
     )
     await callback.answer()
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMbroSis.ask))
+async def put_bro_sys_by_sid(message: Message, state: FSMContext):
+    if message.content_type != ContentType.TEXT:
+        await message.reply(
+            Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + Misc.MSG_REPEATE_PLEASE,
+            reply_markup=Misc.reply_markup_cancel_row()
+        )
+        return
+    sid_bro_sis = Misc.sid_from_link(message.text)
+    if not sid_bro_sis:
+        if await is_it_command(message, state, excepts=('start',)):
+            return
+        await message.reply(
+            Misc.MSG_INVALID_LINK + '\nПовторите, пожалуйста' ,
+            reply_markup=Misc.reply_markup_cancel_row()
+        )
+        return
+    data = await state.get_data()
+    if uuid_whose := data.get('uuid'):
+        response_whose = await Misc.check_owner_by_uuid(owner_tg_user=message.from_user, uuid=uuid_whose)
+        response_bro_sis = await Misc.check_owner_by_sid(owner_tg_user=message.from_user, sid=sid_bro_sis)
+        if response_whose and response_bro_sis:
+            data_whose = response_whose['response_uuid']
+            data_bro_sis = response_bro_sis['response_uuid']
+            dl_whose = Misc.get_deeplink_with_name(data_whose)
+            dl_bro_sis = Misc.get_deeplink_with_name(data_bro_sis)
+            if data_whose['uuid'] == data_bro_sis['uuid']:
+                await message.reply((
+                    'Нельзя назначать брата или сестру между '
+                    'одним и тем человеком.\n\n'
+                    'Назначайте брата или сестру по новой'
+                ))
+            elif not data_whose.get('father') and not data_whose.get('mother'):
+                await message.reply((
+                    f'Назначить брата/сестру для {dl_whose} - это задать для {dl_bro_sis} родителей {dl_whose}. '
+                    f'Но у {dl_whose} не заданы родители!\n\n'
+                    f'Назначайте брата или сестру по новой'
+                ))
+            elif data_bro_sis.get('father') or data_bro_sis.get('mother'):
+                await message.reply((
+                    f'Назначить брата/сестру для {dl_whose} - это задать для {dl_bro_sis} родителей {dl_whose}. '
+                    f'Но у {dl_bro_sis} уже задан папа и/или мама!\n\n'
+                    f'Не исключено, что Вы ошиблись.\n'
+                    f'Назначайте брата или сестру по новой или задавайте папу/маму для {dl_bro_sis}'
+                ))
+            else:
+                is_father_set = is_mother_set = False
+                if data_whose.get('father'):
+                    post_op = dict(
+                        tg_token=settings.TOKEN,
+                        operation_type_id=OperationType.SET_FATHER,
+                        user_id_from=data_bro_sis['uuid'],
+                        user_id_to=data_whose['father']['uuid'],
+                    )
+                    logging.debug('post operation, payload: %s' % Misc.secret(post_op))
+                    status, response = await Misc.api_request(
+                        path='/api/addoperation',
+                        method='post',
+                        data=post_op,
+                    )
+                    logging.debug('post operation, status: %s' % status)
+                    logging.debug('post operation, response: %s' % response)
+                    if not (status == 200 or \
+                       status == 400 and response.get('code') == 'already'):
+                        if status == 400  and response.get('message'):
+                            await message.reply((
+                                f'Ошибка назначения папы для {dl_bro_sis}!\n'
+                                f'{response["message"]}\n\n'
+                                f'Назначайте брата/сестру по новой'
+                            ))
+                        else:
+                            await message.reply(Misc.MSG_ERROR_API + '\nНазначайте брата/сестру по новой')
+                    else:
+                        is_father_set = True
+                if (data_whose.get('father') and is_father_set or not data_whose.get('father')) and \
+                   data_whose.get('mother'):
+                    post_op = dict(
+                        tg_token=settings.TOKEN,
+                        operation_type_id=OperationType.SET_MOTHER,
+                        user_id_from=data_bro_sis['uuid'],
+                        user_id_to=data_whose['mother']['uuid'],
+                    )
+                    logging.debug('post operation, payload: %s' % Misc.secret(post_op))
+                    status, response = await Misc.api_request(
+                        path='/api/addoperation',
+                        method='post',
+                        data=post_op,
+                    )
+                    logging.debug('post operation, status: %s' % status)
+                    logging.debug('post operation, response: %s' % response)
+                    if not (status == 200 or \
+                       status == 400 and response.get('code') == 'already'):
+                        if status == 400  and response.get('message'):
+                            await message.reply(
+                                f'Ошибка назначения мамы для {dl_bro_sis}!\n' + \
+                                f'{response["message"]}\n\n' + \
+                                '' if is_father_set else 'Назначайте брата/сестру по новой' 
+                            )
+                        else:
+                            await message.reply(
+                                Misc.MSG_ERROR_API + \
+                                '\nпри назначении мамы для ' + dl_bro_sis + \
+                                '' if is_father_set else '\nНазначайте брата/сестру по новой'
+                            )
+                    else:
+                        is_mother_set = True
+                if is_father_set or data_whose.get('mother') and is_mother_set:
+                    status, response = await Misc.get_user_by_uuid(uuid=data_bro_sis['uuid'])
+                    if status == 200:
+                        await message.reply(f'{dl_bro_sis} имеет тех же родителей, что и {dl_whose}')
+                        await Misc.show_card(
+                            profile=response,
+                            profile_sender=response_whose,
+                            tg_user_sender=message.from_user,
+                        )
+        else:
+            await message.reply((
+                'Можно назначать брата или сестру только между Вами '
+                'или профилями, которыми Вы владеете.\n\n'
+                'Назначайте брата или сестру по новой'
+            ))
+    await state.clear()
+
