@@ -963,9 +963,67 @@ async def put_new_child(message: Message, state: FSMContext):
         KeyboardType.BRO_SIS,
         KeyboardType.SEP,
     )), StateFilter(None))
-async def cbq_callback_child(callback: CallbackQuery, state: FSMContext):
-    await bot.answer_callback_query(
-            callback.id,
-            text='Пока не реализовано',
-            show_alert=True,
+async def cbq_callback_bro_sis(callback: CallbackQuery, state: FSMContext):
+    """
+    Действия по заданию брата или сестры
+    """
+    if True:
+        await bot.answer_callback_query(
+                callback.id,
+                text='Пока не реализовано',
+                show_alert=True,
+        )
+        return
+    if not (uuid := Misc.get_uuid_from_callback(callback)):
+        await callback.answer()
+        return
+    response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback.from_user, uuid=uuid)
+    if not response_sender:
+        await callback.answer()
+        return
+    response_uuid = response_sender['response_uuid']
+    if not (response_uuid.get('father') or response_uuid.get('mother')):
+        await callback.answer()
+        return
+    await state.update_data(uuid = uuid)
+    prompt_bro_sis = (
+        '<b>%(name)s</b>.\n'
+        'Отправьте мне <u><b>ссылку на профиль %(his_her)s брата или сестры</b></u> '
+        'вида t.me/%(bot_data_username)s?start=...\n'
+        '\n'
+        'Или нажмите <b><u>Новый брат</u></b> или <b><u>Новая сестра</u></b> для ввода нового родственника, '
+        'который станет %(his_her)s братом или сестрой; родители брата (сестры):\n'
     )
+    prompt_bro_sis = prompt_bro_sis % dict(
+        bot_data_username=bot_data.username,
+        name=response_uuid['first_name'],
+        his_her=Misc.his_her(response_uuid),
+    )
+    if response_uuid.get('father'):
+        prompt_bro_sis += f'папа: {response_uuid["father"]["first_name"]}\n'
+    if response_uuid.get('mother'):
+        prompt_bro_sis += f'мама: {response_uuid["mother"]["first_name"]}\n'
+
+    new_bro_sis_dict = dict(
+        keyboard_type=KeyboardType.NEW_BRO,
+        uuid=uuid,
+        sep=KeyboardType.SEP,
+    )
+    inline_btn_new_bro = InlineKeyboardButton(
+        text='Новый брат',
+        callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % new_bro_sis_dict,
+    )
+    new_bro_sis_dict.update(keyboard_type=KeyboardType.NEW_SIS)
+    inline_btn_new_sis = InlineKeyboardButton(
+        text='Новая сестра',
+        callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % new_bro_sis_dict,
+    )
+    reply_markup = InlineKeyboardMarkup(inline_keyboard=[[
+        inline_btn_new_bro, inline_btn_new_sis, Misc.inline_button_cancel()
+    ]])
+    await state.set_state(FSMbroSis.ask)
+    await callback.message.reply(
+        prompt_bro_sis,
+        reply_markup=reply_markup,
+    )
+    await callback.answer()
