@@ -386,3 +386,73 @@ async def cbq_new_papa_mama(callback: CallbackQuery, state: FSMContext):
     )
     await callback.answer()
 
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMpapaMama.new))
+async def put_new_papa_mama(message: Message, state: FSMContext):
+    if message.content_type != ContentType.TEXT:
+        await message.reply(
+            Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + Misc.MSG_REPEATE_PLEASE,
+            reply_markup=Misc.reply_markup_cancel_row()
+        )
+        return
+    if await is_it_command(message, state):
+        return
+    first_name_to = Misc.strip_text(message.text)
+    user_uuid_from = is_father = ''
+    data = await state.get_data()
+    if data.get('uuid'):
+        user_uuid_from = data['uuid']
+        is_father = data.get('is_father')
+    if not user_uuid_from or not isinstance(is_father, bool):
+        await state.clear()
+        return
+    owner = await Misc.check_owner_by_uuid(owner_tg_user=message.from_user, uuid=user_uuid_from)
+    if not owner or not owner.get('user_id'):
+        await state.clear()
+        return
+
+    post_data = dict(
+        tg_token=settings.TOKEN,
+        first_name = first_name_to,
+        link_relation='new_is_father' if is_father else 'new_is_mother',
+        link_id=user_uuid_from,
+        owner_id=owner['user_id'],
+    )
+    logging.debug('post new owned user with link_id, payload: %s' % Misc.secret(post_data))
+    status, response = await Misc.api_request(
+        path='/api/profile',
+        method='post',
+        data=post_data,
+    )
+    logging.debug('post new owned user with link_id, status: %s' % status)
+    logging.debug('post new owned user with link_id, response: %s' % response)
+    if status != 200:
+        if status == 400  and response.get('message'):
+            await message.reply(
+                'Ошибка!\n%s\n\nНазначайте родителя по новой' % response['message']
+            )
+        else:
+            await message.reply(Misc.MSG_ERROR_API)
+    else:
+        if response and response.get('profile_from'):
+            await Misc.put_user_properties(
+                uuid=response['uuid'],
+                gender='m' if is_father else 'f',
+            )
+            await bot.send_message(
+                message.from_user.id,
+                Misc.PROMPT_PAPA_MAMA_SET % dict(
+                iof_from = Misc.get_deeplink_with_name(response['profile_from'], plus_trusts=True),
+                iof_to = Misc.get_deeplink_with_name(response, plus_trusts=True),
+                papa_or_mama='папа' if is_father else 'мама',
+                _a_='' if is_father else 'а',
+                ))
+            await Misc.show_card(
+                profile=response,
+                profile_sender=owner,
+                tg_user_sender=message.from_user,
+            )
+        else:
+            await message.reply('Родитель внесен в данные')
+    await state.clear()
+
