@@ -772,7 +772,7 @@ async def process_meet_from_deeplink_and_command(message, state, data):
     profile_from, profile_to = data['profile_from'], data['profile_to']
     if profile_to and profile_to['uuid'] == profile_from['uuid']:
         profile_to = None
-    if not profile_to and not profile_from['did_meet']:
+    if not profile_from.get('is_power') and not profile_to and not profile_from['did_meet']:
         # Вызов из команды или с qr на себя. Отменяется
         await bot.send_message(
             message.from_user.id,
