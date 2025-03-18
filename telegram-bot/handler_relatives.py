@@ -1152,3 +1152,50 @@ async def put_bro_sys_by_sid(message: Message, state: FSMContext):
             ))
     await state.clear()
 
+
+@router.callback_query(F.data.regexp(r'^(%s|%s)%s' % (
+        KeyboardType.NEW_BRO, KeyboardType.NEW_SIS,
+        KeyboardType.SEP,
+    )), StateFilter(FSMbroSis.ask))
+async def cbq_new_bro_sis_gender(callback: CallbackQuery, state: FSMContext):
+    if not (uuid := Misc.get_uuid_from_callback(callback)):
+        await state.clear(); await callback.answer()
+        return
+    data = await state.get_data()
+    if not data.get('uuid') or data['uuid'] != uuid:
+        await state.clear(); await callback.answer()
+        return
+    gender = 'm' \
+        if callback.data.split(KeyboardType.SEP)[0] == str(KeyboardType.NEW_BRO) \
+        else 'f'
+    await state.update_data(gender=gender)
+    brata_sestru = "брата" if gender == "m" else "сестру"
+    response = await Misc.check_owner_by_uuid(owner_tg_user=callback.from_user, uuid=uuid)
+    if not response:
+        await callback.message.reply((
+            f'Можно назначить {brata_sestru} только Вам '
+            f'или профилю, которым Вы владеете.\n\n'
+            f'Назначайте {brata_sestru} по новой'
+        ))
+        await state.clear(); await callback.answer()
+        return
+    data_whose = response['response_uuid']
+    if not data_whose.get('father') and not data_whose.get('mother'):
+        await callback.message.reply((
+            f'Назначить {brata_sestru} для <b>{data_whose["first_name"]}</b> - '
+            f'это внести профиль с теми же родителям. '
+            f'Но у <b>{data_whose["first_name"]}</b> не заданы родители!\n\n'
+            f'Назначайте {brata_sestru} по новой'
+        ))
+        await state.clear(); await callback.answer()
+        return
+    await state.set_state(FSMbroSis.new)
+    await callback.message.reply((
+            f'Укажите ФИО {"БРАТА" if gender == "m" else "СЕСТРЫ"} для:\n'
+            f'{data_whose["first_name"]}\n'
+            f'Например, {"Иван Иванович Иванов" if gender == "m" else "Мария Ивановна Иванова"}'
+        ),
+        reply_markup=Misc.reply_markup_cancel_row()
+    )
+    await callback.answer()
+
