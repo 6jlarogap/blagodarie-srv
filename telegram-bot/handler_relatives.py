@@ -462,16 +462,8 @@ async def put_new_papa_mama(message: Message, state: FSMContext):
     )), StateFilter(None))
 async def cbq_callback_child(callback: CallbackQuery, state: FSMContext):
     """
-    Действия по заданию папы, мамы для ребенка
+    Действия по заданию сына, дочери
     """
-    if True:
-        await bot.answer_callback_query(
-                callback.id,
-                text='Пока не реализовано',
-                show_alert=True,
-        )
-        await callback.answer()
-        return
     if not (uuid := Misc.get_uuid_from_callback(callback)):
         return
     response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback.from_user, uuid=uuid)
@@ -901,6 +893,70 @@ async def cbq_new_child_ask_fio(callback: CallbackQuery, state: FSMContext):
         reply_markup=Misc.reply_markup_cancel_row(),
     )
     await callback.answer()
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMchild.new))
+async def put_new_child(message: Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    data = await state.get_data()
+    if data.get('uuid') and data.get('parent_gender') and data.get('new_child_gender'):
+        if message.content_type != ContentType.TEXT:
+            await message.reply(
+                Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + Misc.MSG_REPEATE_PLEASE,
+                reply_markup=Misc.reply_markup_cancel_row()
+            )
+            return
+        first_name = Misc.strip_text(message.text)
+        response_sender = await Misc.check_owner_by_uuid(owner_tg_user=message.from_user, uuid=data['uuid'])
+        if response_sender:
+            response_parent = response_sender['response_uuid']
+            if not response_parent['gender']:
+                await Misc.put_user_properties(
+                    uuid=data['uuid'],
+                    gender=data['parent_gender'],
+                )
+            post_new_link = dict(
+                tg_token=settings.TOKEN,
+                first_name=first_name,
+                link_id=data['uuid'],
+                link_relation='link_is_father' if data['parent_gender'] == 'm' else 'link_is_mother',
+                owner_id=response_sender['user_id'],
+                gender=data['new_child_gender']
+            )
+            logging.debug('post new child, payload: %s' % Misc.secret(post_new_link))
+            status_child, response_child = await Misc.api_request(
+                path='/api/profile',
+                method='post',
+                data=post_new_link,
+            )
+            logging.debug('post new child, status: %s' % status_child)
+            logging.debug('post new child, response: %s' % response_child)
+            if status_child != 200:
+                if status_child == 400  and response_child.get('message'):
+                    await message.reply(
+                        'Ошибка!\n%s\n\nНазначайте ребёнка по новой' % response_child['message']
+                    )
+                else:
+                    await message.reply(Misc.MSG_ERROR_API)
+            else:
+                if response_child:
+                    is_father = data['parent_gender'] == 'm'
+                    await message.reply(Misc.PROMPT_PAPA_MAMA_SET % dict(
+                            iof_from = Misc.get_deeplink_with_name(response_child, plus_trusts=True),
+                            iof_to = Misc.get_deeplink_with_name(response_parent, plus_trusts=True),
+                            papa_or_mama='папа' if is_father else 'мама',
+                            _a_='' if is_father else 'а',
+                            disable_web_page_preview=True,
+                    ))
+                    await Misc.show_card(
+                        profile=response_child,
+                        profile_sender=response_sender,
+                        tg_user_sender=message.from_user,
+                    )
+                else:
+                    await message.reply('Ребёнок внесен в данные')
+    await state.clear()
 
 
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
