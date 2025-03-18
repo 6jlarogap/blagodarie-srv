@@ -778,6 +778,101 @@ async def cbq_clear_child_confirmed(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMchild.ask))
+async def put_child_by_sid(message: Message, state: FSMContext):
+    if message.content_type != ContentType.TEXT:
+        await message.reply(
+            Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + Misc.MSG_REPEATE_PLEASE,
+            reply_markup=Misc.reply_markup_cancel_row()
+        )
+        return
+    user_sid_from = Misc.sid_from_link(message.text)
+    if not user_sid_from:
+        if await is_it_command(message, state, excepts=('start',)):
+            return
+        data = await state.get_data()
+        if uuid := data.get('uuid'):
+            data_new_child = dict(
+                keyboard_type=KeyboardType.NEW_SON,
+                uuid=uuid,
+                sep=KeyboardType.SEP,
+            )
+            inline_btn_new_son = InlineKeyboardButton(
+                'Новый сын',
+                callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % data_new_child,
+            )
+            data_new_child.update(keyboard_type=KeyboardType.NEW_DAUGHTER)
+            inline_btn_new_daughter = InlineKeyboardButton(
+                'Новая дочь',
+                callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % data_new_child,
+            )
+            reply_markup = InlineKeyboardMarkup(inline_keyboard=[[
+                inline_btn_new_son, inline_btn_new_daughter, Misc.inline_button_cancel()
+            ]])
+            await message.reply(
+                'Профиль не найден - попробуйте скопировать и отправить ссылку '
+                'на существующий профиль ещё раз или создайте <u>Новый сын</u> или <u>Новая дочь</u>',
+                reply_markup=reply_markup
+            )
+        else:
+            await message.reply(
+                Misc.MSG_INVALID_LINK + '\nПовторите, пожалуйста' ,
+                reply_markup=Misc.reply_markup_cancel_row()
+            )
+        return
+
+    data = await state.get_data()
+    if data.get('uuid') and data.get('parent_gender'):
+        response_sender = await Misc.check_owner_by_sid(owner_tg_user=message.from_user, sid=user_sid_from)
+        if response_sender:
+            user_uuid_from = response_sender['response_uuid']['uuid']
+            is_father = data['parent_gender'] == 'm'
+            post_op = dict(
+                tg_token=settings.TOKEN,
+                operation_type_id=OperationType.SET_FATHER if is_father else OperationType.SET_MOTHER,
+                user_id_from=user_uuid_from,
+                user_id_to=data['uuid'],
+            )
+            logging.debug('post operation, payload: %s' % Misc.secret(post_op))
+            status, response = await Misc.api_request(
+                path='/api/addoperation',
+                method='post',
+                data=post_op,
+            )
+            logging.debug('post operation, status: %s' % status)
+            logging.debug('post operation, response: %s' % response)
+            if not (status == 200 or \
+               status == 400 and response.get('code') == 'already'):
+                if status == 400  and response.get('message'):
+                    await message.reply(
+                        'Ошибка!\n%s\n\nНазначайте ребёнка по новой' % response['message']
+                    )
+                else:
+                    await message.reply(Misc.MSG_ERROR_API)
+            else:
+                if response and response.get('profile_from') and response.get('profile_to'):
+                    if not response['profile_to'].get('gender'):
+                        await Misc.put_user_properties(
+                            uuid=response['profile_to']['uuid'],
+                            gender='m' if is_father else 'f',
+                        )
+                    await message.reply(Misc.PROMPT_PAPA_MAMA_SET % dict(
+                            iof_from = Misc.get_deeplink_with_name(response['profile_from'], plus_trusts=True),
+                            iof_to = Misc.get_deeplink_with_name(response['profile_to'], plus_trusts=True),
+                            papa_or_mama='папа' if is_father else 'мама',
+                            _a_='' if is_father else 'а',
+                    ))
+                else:
+                    await message.reply('Родитель внесен в данные')
+        else:
+            # Не имеет права
+            await message.reply((
+                'Нельзя назначать ребенка, если это активный пользователь или профиль, '
+                'которым владеете не Вы.\n\n'
+                'Назначайте ребёнка по новой'
+            ))
+    await state.clear()
+
 
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.BRO_SIS,
