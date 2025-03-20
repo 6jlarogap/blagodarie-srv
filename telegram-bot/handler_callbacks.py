@@ -19,7 +19,7 @@ from handler_bot import is_it_command
 import settings, me
 from settings import logging
 
-from common import Misc, OperationType, KeyboardType, Rcache
+from common import Misc, OperationType, KeyboardType, Rcache, MeetId
 from common import FSMnewPerson, FSMdelete
 
 router = Router()
@@ -537,15 +537,17 @@ async def meet_do_or_revoke(data):
 
 
 async def send_qr(profile, tg_user):
-    url = f'https://t.me/{bot_data.username}?start=m-{profile["username"]}'
-    link = Misc.get_html_a(url, 'Вход...')
-    caption = f'Перешлите одиноким — приглашение в игру знакомств! {link}'
-    bytes_io = await Misc.get_qrcode(profile, url)
-    await bot.send_photo(
-        chat_id=tg_user.id,
-        photo=BufferedInputFile(bytes_io.getvalue(), filename=bytes_io.name),
-        caption=caption,
-    )
+    meet_id = await MeetId.meetId_by_profile(profile)
+    if meet_id:
+        url = f'https://t.me/{bot_data.username}?start=m-{meet_id}'
+        link = Misc.get_html_a(url, 'Вход...')
+        caption = f'Перешлите одиноким — приглашение в игру знакомств! {link}'
+        bytes_io = await Misc.get_qrcode(profile, url)
+        await bot.send_photo(
+            chat_id=tg_user.id,
+            photo=BufferedInputFile(bytes_io.getvalue(), filename=bytes_io.name),
+            caption=caption,
+        )
 
 
 async def put_banking(message, state):

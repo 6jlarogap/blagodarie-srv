@@ -2473,6 +2473,40 @@ class Misc(object):
         ).rstrip()
 
 
+class MeetId(object):
+    """
+    Получить meet_id пользователя. Получить профиль по meet_id
+    """
+
+    REQ_ARGS = dict(
+        path='/api/meet_id',
+        method='post',
+        json=dict(
+            tg_token=settings.TOKEN,
+    ))
+
+    @classmethod
+    async def meetId_by_profile(cls, profile):
+        result = None
+        req_args = copy.deepcopy(cls.REQ_ARGS)
+        req_args['json'].update(username=profile['username'])
+        print(req_args)
+        status, response = await Misc.api_request(**req_args)
+        if status == 200:
+            result = response.get('meet_id')
+        return result
+
+    @classmethod
+    async def profile_by_meetId(cls, meet_id):
+        result = None
+        req_args = copy.deepcopy(cls.REQ_ARGS)
+        req_args['json'].update(meet_id=meet_id)
+        status, response = await Misc.api_request(**req_args)
+        if status == 200:
+            result = response.get('profile')
+        return result
+
+
 class TgGroup(object):
     """
     Список групп, где бот: внесение, удаление

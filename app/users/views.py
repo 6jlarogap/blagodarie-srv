@@ -1,4 +1,4 @@
-import os, re, hmac, hashlib, json, time, datetime, copy
+import os, re, hmac, hashlib, json, time, datetime, copy, string, random
 import uuid, redis, html
 import urllib.request, urllib.error, urllib.parse
 from urllib.parse import urlparse
@@ -4426,3 +4426,69 @@ class ApiGetBotData(TelegramApiMixin, APIView):
         return Response(data=data, status=status_code)
 
 api_get_bot_data = ApiGetBotData.as_view()
+
+class ApiMeetId(APIView):
+    """
+    Действия с meet_id
+
+    Meet_id - это секрет. Запрос только из бота. И только post.
+    Функции (в зависимости от наличия параметра в post запросе):
+        username:   по username получить meet_id, если он есть,
+                    иначе создать и отдать meet_id:
+                        dict(meet_id=<meet_id>)
+        meet_id:    по meet_id получить профиль пользователя:
+                        dict(profile=<profile>)
+    """
+
+    @transaction.atomic
+    def post(self, request):
+        try:
+            if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                raise ServiceException('Неверный токен телеграм бота')
+            data = dict()
+            if request.data.get('username'):
+                try:
+                    profile = Profile.objects.select_for_update(
+                        ).get(
+                        user__username=request.data['username']
+                    )
+                    done = False
+                    if profile.meet_id:
+                        done = True
+                    else:
+                        chars = string.ascii_lowercase + string.digits + string.ascii_uppercase
+                        meet_id_len = Profile._meta.get_field('meet_id').max_length
+                        random.seed()
+                        for i in range(1000):
+                            with transaction.atomic():
+                                try:
+                                    profile.meet_id = ''.join(random.choice(chars) for x in range(meet_id_len))
+                                    profile.save(update_fields=('meet_id',))
+                                    done = True
+                                    break
+                                except IntegrityError:
+                                    continue
+                    if done:
+                        data.update(meet_id=profile.meet_id)
+                    else:
+                        raise ServiceException('Не удалось создать уникальный meet_id')
+                except Profile.DoesNotExist:
+                    raise NotFound
+
+            elif request.data.get('meet_id'):
+                try:
+                    profile = Profile.objects.get(meet_id=request.data['meet_id'])
+                    data.update(profile=profile.data_dict(request))
+                    data['profile'].update(tg_data=profile.tg_data())
+                except Profile.DoesNotExist:
+                    raise NotFound
+            status_code = status.HTTP_200_OK
+
+        except ServiceException as excpt:
+            transaction.set_rollback(True)
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_meet_id = ApiMeetId.as_view()
+

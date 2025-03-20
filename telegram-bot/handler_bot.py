@@ -22,7 +22,7 @@ import settings, me
 from settings import logging
 
 from common import FSMnewPerson, FSMgeo, FSMdelete
-from common import Misc, KeyboardType, OperationType, Rcache
+from common import Misc, KeyboardType, OperationType, Rcache, MeetId
 
 import pymorphy3
 MorphAnalyzer = pymorphy3.MorphAnalyzer()
@@ -386,6 +386,18 @@ async def cmd_start(message: Message, state: FSMContext):
             else:
                 await message.reply('Ссылка устарела или не найдена. Получите новую.')
 
+    elif m := re.search(r'^m\-([0-9a-z]{11})$', arg, flags=re.I):
+        if not response_sender['is_active']:
+            await message.reply(Misc.MSG_NOT_SENDER_NOT_ACTIVE)
+            return
+        profile_to = await MeetId.profile_by_meetId(m.group(1))
+        if profile_to:
+            data = dict(profile_from = response_sender, profile_to=profile_to)
+            await process_meet_from_deeplink_and_command(message, state, data)
+
+    #TODO
+    # Временно, чтоб работали прежние ссылки
+    #
     elif m := re.search(r'^m\-([0-9a-z]{10})$', arg, flags=re.I):
         if not response_sender['is_active']:
             await message.reply(Misc.MSG_NOT_SENDER_NOT_ACTIVE)

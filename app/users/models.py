@@ -387,9 +387,9 @@ class Profile(PhotoModel, GeoPointAddressModel):
     tgdesc = models.ManyToManyField('users.TgDesc', verbose_name=_("Сообщения с описаниями"))
 
     did_meet = models.BigIntegerField(_("Принял участие в игре знакомств"), null=True)
+    meet_id = models.CharField(_("Ид приглашения в игру знакомств"), max_length=11, unique=True, null=True)
     r_sympa = models.ForeignKey('auth.User', verbose_name=_("Взаимная симпатия к"),
                                 on_delete=models.CASCADE, null=True, related_name='profile_r_sympa_set')
-
 
     class Meta:
         ordering = ('user__first_name', )
