@@ -87,10 +87,7 @@ async def cmd_ya(message: Message, state: FSMContext):
     Command(re.compile('^help$', flags=re.I)),
 )
 async def cmd_help(message: Message, state: FSMContext):
-    status_sender, response_sender = await Misc.post_tg_user(message.from_user)
-    status, response = await Misc.get_template('help')
-    if status == 200 and response:
-        await message.reply(response)
+    await show_start(message, state)
 
 
 @router.message(

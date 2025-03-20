@@ -2490,7 +2490,6 @@ class MeetId(object):
         result = None
         req_args = copy.deepcopy(cls.REQ_ARGS)
         req_args['json'].update(username=profile['username'])
-        print(req_args)
         status, response = await Misc.api_request(**req_args)
         if status == 200:
             result = response.get('meet_id')
