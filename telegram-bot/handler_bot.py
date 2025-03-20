@@ -392,18 +392,6 @@ async def cmd_start(message: Message, state: FSMContext):
             data = dict(profile_from = response_sender, profile_to=profile_to)
             await process_meet_from_deeplink_and_command(message, state, data)
 
-    #TODO
-    # Временно, чтоб работали прежние ссылки
-    #
-    elif m := re.search(r'^m\-([0-9a-z]{10})$', arg, flags=re.I):
-        if not response_sender['is_active']:
-            await message.reply(Misc.MSG_NOT_SENDER_NOT_ACTIVE)
-            return
-        status_to, profile_to = await Misc.get_user_by_sid(m.group(1))
-        if status_to == 200:
-            data = dict(profile_from = response_sender, profile_to=profile_to)
-            await process_meet_from_deeplink_and_command(message, state, data)
-
     elif arg == 'setplace':
         await Misc.prompt_location(message, state)
 
