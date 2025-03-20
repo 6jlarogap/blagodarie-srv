@@ -746,7 +746,6 @@ async def cbq_get_sympa_send_profile(callback: CallbackQuery, state: FSMContext)
         return
     success = False
     text_to = (
-        f'{Misc.get_deeplink_with_name(profile_from)}\n'
         f'Контакты переданы. Вы покидаете игру знакомств - для личного общения! Удачи!'
     )
     inline_btn_invite = InlineKeyboardButton(
@@ -755,26 +754,49 @@ async def cbq_get_sympa_send_profile(callback: CallbackQuery, state: FSMContext)
         keyboard_type=KeyboardType.MEET_INVITE,
         sep=KeyboardType.SEP,
     ))
-    reply_markup = InlineKeyboardMarkup(inline_keyboard=[ [ inline_btn_invite ] ])
+
+    write_message = 'Написать'
+    dict_message = dict(
+        keyboard_type=KeyboardType.SEND_MESSAGE,
+        uuid=profile_from['uuid'],
+        sep=KeyboardType.SEP,
+    )
+    inline_btn_send_message_to = InlineKeyboardButton(
+        text=write_message,
+        callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % dict_message
+    )
+    reply_markup_to = InlineKeyboardMarkup(inline_keyboard=[ 
+        [ inline_btn_send_message_to ],
+        [ inline_btn_invite ],
+    ])
+
+    dict_message.update(uuid=profile_to['uuid'])
+    inline_btn_send_message_from = InlineKeyboardButton(
+        text=write_message,
+        callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % dict_message
+    )
+    reply_markup_from = InlineKeyboardMarkup(inline_keyboard=[ 
+        [ inline_btn_send_message_from ],
+        [ inline_btn_invite ],
+    ])
+
     for tgd in profile_to['tg_data']:
         try:
             await bot.send_message(
                 tgd['tg_uid'],
                 text=text_to,
-                reply_markup=reply_markup
+                reply_markup=reply_markup_to
             )
             success = True
         except (TelegramBadRequest, TelegramForbiddenError):
             pass
     if success:
-        text_from = (
-            f'Контакты переданы. Вы покидаете игру знакомств - для личного общения! Удачи!'
-        )
+        text_from = text_to
         await Misc.remove_n_send_message(
             chat_id=callback.from_user.id,
             message_id=callback.message.message_id,
             text=text_from,
-            reply_markup=reply_markup,
+            reply_markup=reply_markup_from,
         )
     else:
         await bot.answer_callback_query(
