@@ -1077,7 +1077,7 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
             # Сколько пригласил юзеров пользователь c uuid = request.GET.get('uuid'),
             # сколько у него, к нему симпатий
 
-            invited=sympa_to=sympa_from=0
+            invited = was_invited = sympa_to = sympa_from = 0
             try:
                 uuid = request.GET.get('uuid')
                 q_rel = Q(is_invite_meet=True, is_invite_meet_reverse=False) | \
@@ -1090,6 +1090,8 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
                           ).distinct():
                     if str(cs.user_from.profile.uuid) == uuid and cs.is_invite_meet and not cs.is_invite_meet_reverse:
                         invited += 1
+                    if str(cs.user_to.profile.uuid) == uuid and cs.is_invite_meet and not cs.is_invite_meet_reverse:
+                        was_invited += 1
                     if cs.is_sympa_confirmed and not cs.is_sympa_reverse:
                         if str(cs.user_from.profile.uuid) == uuid:
                             sympa_from += 1
@@ -1097,7 +1099,7 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
                             sympa_to += 1
             except ValidationError:
                 pass
-            return dict(invited=invited, sympa_to=sympa_to, sympa_from=sympa_from)
+            return dict(invited=invited, sympa_to=sympa_to, sympa_from=sympa_from, was_invited=was_invited)
 
         if kwargs.get('only') == 'user_connections_graph':
 

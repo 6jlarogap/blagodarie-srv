@@ -769,13 +769,20 @@ async def process_meet_from_deeplink_and_command(message, state, data):
     profile_from, profile_to = data['profile_from'], data['profile_to']
     if profile_to and profile_to['uuid'] == profile_from['uuid']:
         profile_to = None
-    if not profile_from.get('is_power') and not profile_to and not profile_from['did_meet']:
-        # Вызов из команды или с qr на себя. Отменяется
-        await bot.send_message(
-            message.from_user.id,
-            text='Присоединиться к игре можно только по ссылке-приглашению участника',
-        )
-        return
+    if not profile_to and not profile_from['did_meet']:
+        # Зашел по команде /meet или по meet deeplink на самого себя
+        if profile_from.get('is_power'):
+            pass
+        else:
+            count_meet_invited = await Misc.count_meet_invited(profile_from['uuid'])
+            if count_meet_invited and count_meet_invited.get('was_invited'):
+                pass
+            else:
+                await bot.send_message(
+                    message.from_user.id,
+                    text='Присоединиться к игре можно только по ссылке-приглашению участника',
+                )
+                return
 
     if profile_from['did_meet']:
         count_meet_invited_ = await Misc.count_meet_invited(profile_from.get('uuid'))
