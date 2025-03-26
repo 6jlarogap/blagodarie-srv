@@ -2299,6 +2299,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         meet = False
         offer_on = False
         num_all = 0
+        user_by_id = dict()
         first_name = ''
         gender = ''
         address = None
@@ -2421,29 +2422,23 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 meet_admin = False
             graph = None
             color_sympa = 'darkorange'
-            list_m = []
-            list_f = []
-            legend = (
-                '<br />'
-                '<table style="border-spacing: 0;border-top: 2px solid;width:100%;">'
-                '<col width="40%" />'
-                '<col width="10%" />'
-                '<col width="10%" />'
-                '<col width="40%" />'
-                '<tr>'
-                    '<td style="text-align:center;border-bottom: 2px solid";">М</td>'
-                    '<td style="text-align:center;border-bottom: 2px solid;border-right: 1px solid;"></td>'
-                    '<td style="text-align:center;border-bottom: 2px solid";"></td>'
-                    '<td style="text-align:center;border-bottom: 2px solid;">Ж</td>'
-                '</tr>'
-            ) if meet_admin else (
-                '<br />'
-                '<table style="border-spacing: 0;border-top: 2px solid;width:100%;">'
-                '<col width="70%" />'
-                '<col width="10%" />'
-                '<col width="10%" />'
-                '<col width="10%" />'
-            )
+            if meet_admin:
+                list_m = []
+                list_f = []
+                legend = (
+                    '<br />'
+                    '<table style="border-spacing: 0;border-top: 2px solid;width:100%;">'
+                    '<col width="40%" />'
+                    '<col width="10%" />'
+                    '<col width="10%" />'
+                    '<col width="40%" />'
+                    '<tr>'
+                        '<td style="text-align:center;border-bottom: 2px solid";">М</td>'
+                        '<td style="text-align:center;border-bottom: 2px solid;border-right: 1px solid;"></td>'
+                        '<td style="text-align:center;border-bottom: 2px solid";"></td>'
+                        '<td style="text-align:center;border-bottom: 2px solid;">Ж</td>'
+                    '</tr>'
+                )
 
             # Участники игры должны указывать пол, д.р. и место,
             # однако не исключаем, что место и д.р. затёрли
@@ -2486,21 +2481,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 q_meet &= Q(dob__gte=d_younger)
             except (TypeError, ValueError,):
                 pass
-            if meet_admin:
-                my_sympas = my_hidden = []
-            else:
-                my_sympas = [
-                    cs.user_to.pk for cs in CurrentState.objects.filter(
-                        user_from=user_auth, user_to__isnull=False,
-                        is_sympa=True, is_sympa_reverse=False,
-                )]
-                my_hidden = [
-                    cs.user_to.pk for cs in CurrentState.objects.filter(
-                        user_from=user_auth, user_to__isnull=False, is_hide_meet=True,
-                )]
-            nodes = []
-            user_pks = []
-            popup_meet = (
+            popup_meet_simple = (
                 '<table style="width:100%%">'
                 '<col width="15%%" />'
                 '<col width="25%%" />'
@@ -2513,6 +2494,37 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 '</tr>'
                 '</table>'
             )
+            if meet_admin:
+                popup_meet = popup_meet_simple
+                my_sympas = my_hidden = []
+                nodes = []
+                user_pks = []
+            else:
+                my_sympas = [
+                    cs.user_to.pk for cs in CurrentState.objects.filter(
+                        user_from=user_auth, user_to__isnull=False,
+                        is_sympa=True, is_sympa_reverse=False,
+                )]
+                my_hidden = [
+                    cs.user_to.pk for cs in CurrentState.objects.filter(
+                        user_from=user_auth, user_to__isnull=False, is_hide_meet=True,
+                )]
+                popup_meet = (
+                    '<table style="width:100%%">'
+                    '<tr>'
+                        '<td valign=center>'
+                            '<img '
+                                'src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s '
+                                'class="meet_click_img" id="meet_click_img-%(user_id)s" role="button" '
+                            '>'
+                        '</td>'
+                        '<td valign=center>'
+                            ' <a href="#" class="meet_click_a" role="button" id="meet_click_a-%(user_id)s">'
+                            '%(full_name)s</a>'
+                            '<br />'
+                    '</tr>'
+                    '</table>'
+                )
 
             profile_auth = Profile.objects.select_related('user').get(user=user_auth)
             user_auth = profile_auth.user
@@ -2545,15 +2557,14 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     is_of_found_user=False,
                     size_icon=dict_user['thumb_size_icon'],
                 ))
-                if p.gender == GenderMixin.GENDER_MALE:
-                    list_m.append(dict_user)
-                elif p.gender == GenderMixin.GENDER_FEMALE:
-                    list_f.append(dict_user)
-                else:
-                    # fool proof
-                    continue
-                num_all += 1
                 if meet_admin:
+                    if p.gender == GenderMixin.GENDER_MALE:
+                        list_m.append(dict_user)
+                    elif p.gender == GenderMixin.GENDER_FEMALE:
+                        list_f.append(dict_user)
+                    else:
+                        # fool proof
+                        continue
                     nodes.append(dict(
                         id=p.user.pk,
                         uuid=p.uuid,
@@ -2563,6 +2574,17 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         gender=p.gender,
                     ))
                     user_pks.append(p.user.pk)
+                else:
+                    user_by_id[p.user.pk] = dict(
+                        username=p.user.username,
+                        uuid=p.uuid,
+                        first_name=p.user.first_name,
+                        dob = dict_user['dob'],
+                        photo=p.choose_photo(request),
+                        hidden=p.user.pk in my_hidden,
+                        sympa=p.user.pk in my_sympas,
+                    )
+                num_all += 1
 
             if not meet_admin and profile_auth.latitude and profile_auth.longitude:
                 dict_auth = self.popup_data(
@@ -2575,7 +2597,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     latitude=profile_auth.latitude,
                     longitude=profile_auth.longitude,
                     title=title_template % dict_auth,
-                    popup=popup_meet % dict_auth,
+                    popup=popup_meet_simple % dict_auth,
                     icon=dict_auth['url_photo_icon'],
                     is_of_found_user=False,
                     size_icon=dict_auth['thumb_size_icon'],
@@ -2618,133 +2640,87 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         links.append(link)
                 graph = dict(nodes=nodes, links=links)
 
-            len_m = len(list_m)
-            len_f = len(list_f)
-            popup_m = popup_meet
-            popup_f = (
-                '<table style="width:100%%">'
-                '<col width="25%%" />'
-                '<col width="15%%" />'
-                '<tr>'
-                    '<td valign=center align=center>'
-                        ' %(full_name)s'
-                    '</td>'
-                    '<td valign=center align=right>'
-                        '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
-                    '</td>'
-                '</tr>'
-                '</table>'
-            ) if meet_admin else popup_m
-            if len_f or len_m:
-                legend_user = (
-                    '<tr style="border-bottom: 2px solid">'
-                        '<td align="left" style="border-bottom: 2px solid;">%(m)s</td>'
-                        '<td style="text-align:center;border-bottom: 2px solid;border-right: 1px solid;">%(m_dob)s</td>'
-                        '<td style="text-align:center;border-bottom: 2px solid;">%(f_dob)s</td>'
-                        '<td align="right" style="border-bottom: 2px solid;"">%(f)s</td>'
+                len_m = len(list_m)
+                len_f = len(list_f)
+                popup_m = popup_meet
+                popup_f = (
+                    '<table style="width:100%%">'
+                    '<col width="25%%" />'
+                    '<col width="15%%" />'
+                    '<tr>'
+                        '<td valign=center align=center>'
+                            ' %(full_name)s'
+                        '</td>'
+                        '<td valign=center align=right>'
+                            '<img src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s>'
+                        '</td>'
                     '</tr>'
-                ) if meet_admin else (
-                    '<tr style="border-bottom: 2px solid">'
-                        '<td align="left" style="border-bottom: 2px solid;">%(m)s</td>'
-                        '<td style="text-align:center;border-bottom: 2px solid;">%(m_dob)s</td>'
-                        '<td style="text-align:center;border-bottom: 2px solid;">%(m_hide)s</td>'
-                        '<td style="text-align:center;border-bottom: 2px solid;">%(m_sympa)s</td>'
-                    '</tr>'
-                ) if user_auth.profile.gender == 'f' else (
-                    '<tr style="border-bottom: 2px solid">'
-                        '<td align="left" style="border-bottom: 2px solid;">%(f)s</td>'
-                        '<td style="text-align:center;border-bottom: 2px solid;">%(f_dob)s</td>'
-                        '<td style="text-align:center;border-bottom: 2px solid;">%(f_hide)s</td>'
-                        '<td style="text-align:center;border-bottom: 2px solid;">%(f_sympa)s</td>'
-                    '</tr>'
+                    '</table>'
                 )
-                legend_sympa = (
-                    '<label for="table-sympa-%(user_id)s"><span style="color: %(color_sympa)s">Интерес:<span></label><br />'
-                    '<input type="checkbox" class="sympa" id="table-sympa-%(user_id)s" %(sympa_checked)s %(sympa_disabled)s>'
-                )
-                legend_hide = (
-                    '<label for="table-hide-%(user_id)s">''<span style="color: system-color">Скрыть:<span></label><br />'
-                    '<input type="checkbox" class="hide_him_her" id="table-hide-%(user_id)s" %(hide_checked)s>'
-                )
-
-                for i in range(max(len_m, len_f)):
-                    d = dict(
-                        m='', m_dob='', m_sympa='', m_hide='',
-                        f='', f_dob='', f_sympa='', f_hide='',
-                    )
-                    if i < len_m:
-                        d['m'] = popup_m % list_m[i]
-                        d['m_dob'] = list_m[i]['dob']
-                        if list_m[i]['user_id'] != user_auth.pk and not meet_admin:
-                            hide_checked='checked' if list_m[i]['user_id'] in my_hidden else ''
-                            sympa_checked='checked' if list_m[i]['user_id'] in my_sympas else ''
-                            d_sympa = dict(
-                                color_sympa=color_sympa if sympa_checked else 'system-color',
-                                user_id=list_m[i]['user_id'],
-                                sympa_checked=sympa_checked,
-                                sympa_disabled='disabled' if sympa_checked else '',
-                                hide_checked=hide_checked,
-                            )
-                            d['m_sympa'] = legend_sympa % d_sympa
-                            d['m_hide'] = legend_hide % d_sympa
-                    if i < len_f:
-                        d['f'] = popup_f % list_f[i]
-                        d['f_dob'] = list_f[i]['dob']
-                        if list_f[i]['user_id'] != user_auth.pk and not meet_admin:
-                            hide_checked='checked' if list_f[i]['user_id'] in my_hidden else ''
-                            sympa_checked='checked' if list_f[i]['user_id'] in my_sympas else ''
-                            d_sympa = dict(
-                                color_sympa=color_sympa if sympa_checked else 'system-color',
-                                user_id=list_f[i]['user_id'],
-                                sympa_checked=sympa_checked,
-                                sympa_disabled='disabled="disabled"' if sympa_checked else '',
-                                hide_checked=hide_checked,
-                            )
-                            d['f_sympa'] = legend_sympa % d_sympa
-                            d['f_hide'] = legend_hide % d_sympa
-                    legend += legend_user % d
-            legend += '</table><br /><br />'
-
-            if meet_admin and request.GET.get('with_offers'):
-                q_offer_geo = Q(closed_timestamp__isnull=True)
-                if in_rectangle:
-                    q_offer_geo &= q_rectangle
-                else:
-                    q_offer_geo &= Q(latitude__isnull=False, longitude__isnull=False)
-                for offer in Offer.objects.filter(q_offer_geo
-                    ).select_related('owner', 'owner__profile',
-                    ).distinct():
-                    offerer = self.popup_data(offer.owner.profile, thumb_size_icon=24, color='plum', frame=2)
-                    title = title_template % offerer
-                    title_deeplink = f'<a href="{offerer["url_deeplink"]}" target="_blank">{title}</a>'
-                    offer_popup = popup % offerer
-                    offer_popup = offer_popup[:-len('</table>')]
-                    point = dict(
-                        latitude=offer.latitude,
-                        longitude=offer.longitude,
-                        title=f'Опрос/предложение: {offer.question}',
-                        icon=offerer['url_photo_icon'],
-                        is_of_found_user=False,
-                        size_icon=offerer['thumb_size_icon'],
-                        is_offer=True,
-                    )
-                    question_deeplink = (
-                        f'<a href="https://t.me/{self.bot_username}?start=offer-{offer.uuid}">'
-                        f'{offer.question}</a>'
-                    )
-                    offer_popup += (
-                        '<tr>'
-                            '<td valign=middle>'
-                                'Опрос/<br>предложение:'
-                            '</td>'
-                            '<td valign=middle>'
-                                f'{question_deeplink}'
-                            '</td>'
+                if len_f or len_m:
+                    legend_user = (
+                        '<tr style="border-bottom: 2px solid">'
+                            '<td align="left" style="border-bottom: 2px solid;">%(m)s</td>'
+                            '<td style="text-align:center;border-bottom: 2px solid;border-right: 1px solid;">%(m_dob)s</td>'
+                            '<td style="text-align:center;border-bottom: 2px solid;">%(f_dob)s</td>'
+                            '<td align="right" style="border-bottom: 2px solid;"">%(f)s</td>'
                         '</tr>'
                     )
-                    offer_popup += '</table>'
-                    point.update(popup=offer_popup % offerer)
-                    points.append(point)
+
+                    for i in range(max(len_m, len_f)):
+                        d = dict(
+                            m='', m_dob='', m_sympa='', m_hide='',
+                            f='', f_dob='', f_sympa='', f_hide='',
+                        )
+                        if i < len_m:
+                            d['m'] = popup_m % list_m[i]
+                            d['m_dob'] = list_m[i]['dob']
+                        if i < len_f:
+                            d['f'] = popup_f % list_f[i]
+                            d['f_dob'] = list_f[i]['dob']
+                        legend += legend_user % d
+                legend += '</table><br /><br />'
+
+                if request.GET.get('with_offers'):
+                    q_offer_geo = Q(closed_timestamp__isnull=True)
+                    if in_rectangle:
+                        q_offer_geo &= q_rectangle
+                    else:
+                        q_offer_geo &= Q(latitude__isnull=False, longitude__isnull=False)
+                    for offer in Offer.objects.filter(q_offer_geo
+                        ).select_related('owner', 'owner__profile',
+                        ).distinct():
+                        offerer = self.popup_data(offer.owner.profile, thumb_size_icon=24, color='plum', frame=2)
+                        title = title_template % offerer
+                        title_deeplink = f'<a href="{offerer["url_deeplink"]}" target="_blank">{title}</a>'
+                        offer_popup = popup % offerer
+                        offer_popup = offer_popup[:-len('</table>')]
+                        point = dict(
+                            latitude=offer.latitude,
+                            longitude=offer.longitude,
+                            title=f'Опрос/предложение: {offer.question}',
+                            icon=offerer['url_photo_icon'],
+                            is_of_found_user=False,
+                            size_icon=offerer['thumb_size_icon'],
+                            is_offer=True,
+                        )
+                        question_deeplink = (
+                            f'<a href="https://t.me/{self.bot_username}?start=offer-{offer.uuid}">'
+                            f'{offer.question}</a>'
+                        )
+                        offer_popup += (
+                            '<tr>'
+                                '<td valign=middle>'
+                                    'Опрос/<br>предложение:'
+                                '</td>'
+                                '<td valign=middle>'
+                                    f'{question_deeplink}'
+                                '</td>'
+                            '</tr>'
+                        )
+                        offer_popup += '</table>'
+                        point.update(popup=offer_popup % offerer)
+                        points.append(point)
 
         elif offer_id:
             try:
@@ -3373,6 +3349,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             video_title=video_title,
             num_all=num_all,
             graph=graph,
+            user_by_id=user_by_id,
         )
         if uuid_trustees:
             data.update(
