@@ -2299,7 +2299,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
         meet = False
         offer_on = False
         num_all = 0
-        user_by_id = dict()
         first_name = ''
         gender = ''
         address = None
@@ -2469,7 +2468,8 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 q_meet &= Q(latitude__isnull=False, longitude__isnull=False)
             if request.GET.get('gender'):
                 q_meet &= Q(gender=request.GET['gender'])
-            show_hidden = request.GET.get('show_hidden')
+            parm_status = request.GET.get('status')
+            show_hidden = request.GET.get('show_hidden') or parm_status == 'hidden'
             today = datetime.date.today()
             try:
                 d_older = datetime.date(today.year - int(request.GET.get('older')), 12, 31)
@@ -2494,21 +2494,21 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 '</tr>'
                 '</table>'
             )
+            my_interests = []; my_hidden = []; my_sympas = []
             if meet_admin:
                 popup_meet = popup_meet_simple
-                my_sympas = my_hidden = []
                 nodes = []
                 user_pks = []
             else:
-                my_sympas = [
-                    cs.user_to.pk for cs in CurrentState.objects.filter(
-                        user_from=user_auth, user_to__isnull=False,
-                        is_sympa=True, is_sympa_reverse=False,
-                )]
-                my_hidden = [
-                    cs.user_to.pk for cs in CurrentState.objects.filter(
-                        user_from=user_auth, user_to__isnull=False, is_hide_meet=True,
-                )]
+                for cs in CurrentState.objects.filter(
+                    user_from=user_auth, user_to__isnull=False,
+                ):
+                    if cs.is_sympa == True and cs.is_sympa_reverse == False:
+                        my_interests.append(cs.user_to_id)
+                        if cs.is_sympa_confirmed:
+                            my_sympas.append(cs.user_to_id)
+                    if cs.is_hide_meet:
+                        my_hidden.append(cs.user_to_id)
                 popup_meet = (
                     '<table style="width:100%%;font-size:24px">'
                     '<tr>'
@@ -2553,6 +2553,10 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     q_meet &= Q(user__pk__in=my_hidden)
                 elif my_hidden:
                     q_meet &= ~Q(user__pk__in=my_hidden)
+                if parm_status == 'interests':
+                    q_meet &= Q(user__pk__in=my_interests)
+                elif parm_status == 'sympas':
+                    q_meet &= Q(user__pk__in=my_sympas)
 
             for p in Profile.objects.filter(q_meet).order_by('dob').select_related('user').distinct():
                 lat_sum += p.latitude
@@ -2563,15 +2567,15 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 if meet_admin:
                     thumb_size_popup = self.THUMB_SIZE_POPUP
                 else:
-                    thumb_size_popup = 320
+                    thumb_size_popup = 240
                 if meet_admin and user_auth.pk == p.user.pk:
                     color = self.SELF_FRAME_COLOR; frame=5
                     thumb_size_icon *= 5/4
                 dict_user = self.popup_data(p, color, frame, int(thumb_size_popup), int(thumb_size_icon))
                 dict_user['full_name'] = html.escape(dict_user['full_name'])
                 dict_user.update(
-                    sympa_checked='checked' if dict_user['user_id'] in my_sympas else '',
-                    sympa_disabled='disabled' if dict_user['user_id'] in my_sympas else '',
+                    sympa_checked='checked' if dict_user['user_id'] in my_interests else '',
+                    sympa_disabled='disabled' if dict_user['user_id'] in my_interests else '',
                     hide_checked='checked' if dict_user['user_id'] in my_hidden else '',
                 )
                 points.append(dict(
@@ -2600,16 +2604,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         gender=p.gender,
                     ))
                     user_pks.append(p.user.pk)
-                else:
-                    user_by_id[p.user.pk] = dict(
-                        username=p.user.username,
-                        uuid=p.uuid,
-                        first_name=p.user.first_name,
-                        dob = dict_user['dob'],
-                        photo=p.choose_photo(request),
-                        hidden=p.user.pk in my_hidden,
-                        sympa=p.user.pk in my_sympas,
-                    )
                 num_all += 1
 
             if not meet_admin and profile_auth.latitude and profile_auth.longitude:
@@ -3375,7 +3369,6 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
             video_title=video_title,
             num_all=num_all,
             graph=graph,
-            user_by_id=user_by_id,
         )
         if uuid_trustees:
             data.update(

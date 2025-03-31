@@ -211,8 +211,12 @@ class CurrentState(BaseModelInsertUpdateTimestamp):
     is_reverse = models.BooleanField(_("Обратное отношение"), default=False, db_index=True)
 
     # Аналогично для симпатий: "прямая" симпатия и фейковая обратная
+    #
+    # is_sympa: это интерес
     is_sympa = models.BooleanField(_("Интерес"), default=False, db_index=True)
     is_sympa_reverse = models.BooleanField(_("Интерес: обратное отношение"), default=False, db_index=True)
+
+    # is_sympa && is_sympa_confirmed: это симпатия
     is_sympa_confirmed = models.BooleanField(_("Подтверждение интереса"), default=False, db_index=True)
 
     # Аналогично для приглашений в игру знакомств: прямое приглашение и фейковое обратное
