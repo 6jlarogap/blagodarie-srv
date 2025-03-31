@@ -2563,7 +2563,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 if meet_admin:
                     thumb_size_popup = self.THUMB_SIZE_POPUP
                 else:
-                    thumb_size_popup = 400
+                    thumb_size_popup = 320
                 if meet_admin and user_auth.pk == p.user.pk:
                     color = self.SELF_FRAME_COLOR; frame=5
                     thumb_size_icon *= 5/4
