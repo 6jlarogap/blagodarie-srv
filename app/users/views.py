@@ -2510,18 +2510,37 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         user_from=user_auth, user_to__isnull=False, is_hide_meet=True,
                 )]
                 popup_meet = (
-                    '<table style="width:100%%">'
+                    '<table style="width:100%%;font-size:24px">'
                     '<tr>'
-                        '<td valign=center>'
+                        '<td colspan=2 valign=center align=center>'
                             '<img '
                                 'src="%(url_photo_popup)s" width=%(thumb_size_popup)s height=%(thumb_size_popup)s '
-                                'class="meet_click_img" id="meet_click_img-%(user_id)s" role="button" '
                             '>'
                         '</td>'
-                        '<td valign=center>'
-                            ' <a href="#" class="meet_click_a" role="button" id="meet_click_a-%(user_id)s">'
-                            '%(full_name)s</a>'
+                    '</tr>'
+                    '<tr>'
+                        '<td colspan=2 valign=center align=center>'
+                            '<b>%(full_name)s</b> (%(dob)s)'
                             '<br />'
+                        '</td>'
+                    '</tr>'
+                    '<tr colspan=2>'
+                        '<br />'
+                    '</tr>'
+                    '<tr>'
+                        '<td valign=center align=center>'
+                            '<label for="id_handle_user_hide">Скрыть: </lable>'
+                            '<input type="checkbox" class="hide_him_her" '
+                            'name="handle_user_hide" id="id_handle_user_hide-%(user_id)s" '
+                            '%(hide_checked)s>'
+                            '<br />'
+                        '</td>'
+                        '<td valign=center align="center">'
+                            '<label for="id_handle_user_sympa">Интерес: </lable>'
+                            '<input type="checkbox" class="sympa" '
+                            'name="handle_user_sympa" id="id_handle_user_sympa-%(user_id)s" '
+                            '%(sympa_checked)s %(sympa_disabled)s>'
+                        '</td>'
                     '</tr>'
                     '</table>'
                 )
@@ -2540,14 +2559,21 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 lng_sum += p.longitude
 
                 color = None; frame = 0
-                thumb_size_popup = self.THUMB_SIZE_POPUP; thumb_size_icon = self.THUMB_SIZE_ICON
-                if not meet_admin and p.user.pk in my_sympas:
-                    color = color_sympa; frame=5;
+                thumb_size_icon = self.THUMB_SIZE_ICON
+                if meet_admin:
+                    thumb_size_popup = self.THUMB_SIZE_POPUP
+                else:
+                    thumb_size_popup = 400
                 if meet_admin and user_auth.pk == p.user.pk:
                     color = self.SELF_FRAME_COLOR; frame=5
                     thumb_size_icon *= 5/4
                 dict_user = self.popup_data(p, color, frame, int(thumb_size_popup), int(thumb_size_icon))
                 dict_user['full_name'] = html.escape(dict_user['full_name'])
+                dict_user.update(
+                    sympa_checked='checked' if dict_user['user_id'] in my_sympas else '',
+                    sympa_disabled='disabled' if dict_user['user_id'] in my_sympas else '',
+                    hide_checked='checked' if dict_user['user_id'] in my_hidden else '',
+                )
                 points.append(dict(
                     latitude=p.latitude,
                     longitude=p.longitude,
