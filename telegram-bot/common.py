@@ -1484,12 +1484,15 @@ class Misc(object):
             try:
                 photo = URLInputFile(url=profile['photo'], filename='1.png')
                 if card_message:
-                    await bot.edit_message_caption(
-                        chat_id=tg_user_sender.id,
-                        message_id=card_message.message_id,
-                        caption=reply,
-                        reply_markup=reply_markup,
-                    )
+                    if card_message.caption:
+                        await bot.edit_message_caption(
+                            chat_id=tg_user_sender.id,
+                            message_id=card_message.message_id,
+                            caption=reply,
+                            reply_markup=reply_markup,
+                        )
+                    # else:
+                        # В имеющейся карточке нет фото. Оно появилось позже
                 else:
                     await bot.send_photo(
                         chat_id=tg_user_sender.id,
@@ -1514,12 +1517,21 @@ class Misc(object):
         if send_text_message:
             if card_message:
                 try:
-                    await bot.edit_message_text(
-                        chat_id=tg_user_sender.id,
-                        message_id=card_message.message_id,
-                        text=reply,
-                        reply_markup=reply_markup,
-                    )
+                    if card_message.caption:
+                        # В имеющейся карточке есть фото
+                        await bot.edit_message_caption(
+                            chat_id=tg_user_sender.id,
+                            message_id=card_message.message_id,
+                            caption=reply,
+                            reply_markup=reply_markup,
+                        )
+                    else:
+                        await bot.edit_message_text(
+                            chat_id=tg_user_sender.id,
+                            message_id=card_message.message_id,
+                            text=reply,
+                            reply_markup=reply_markup,
+                        )
                 except:
                     pass
             else:

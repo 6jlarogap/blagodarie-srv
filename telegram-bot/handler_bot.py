@@ -470,7 +470,6 @@ async def message_to_bot(message: Message, state: FSMContext):
     if message.content_type == ContentType.TEXT and  Misc.arg_deeplink(message.text):
         await cmd_start(message, state)
         return
-
     show_response = True
     if message.media_group_id:
         if r := redis.Redis(**settings.REDIS_CONNECT):
