@@ -2508,6 +2508,50 @@ class Misc(object):
         return settings.API_HOST.rstrip('/') + '/media/images/' + ph
 
 
+    @classmethod
+    async def show_edit_meet(cls, tg_user_sender_id, profile, edit=False, message_id=None):
+        """
+        Показ или редактирование карточки участника игры знакомств
+
+        Если edit, то в режиме редактирования.
+        Если задан message_id, то не новая карточка, а править имеющуюся
+        """
+        count_meet_invited_ = await cls.count_meet_invited(profile['uuid'])
+        caption = cls.PROMT_MEET_DOING % count_meet_invited_
+        photo = profile['photo'] or cls.photo_no_photo(profile)
+        reply_markup = None
+        if edit:
+            pass
+        else:
+            inline_btn_invite = InlineKeyboardButton(
+                text='Пригласить в игру',
+                callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
+                keyboard_type=KeyboardType.MEET_INVITE,
+                sep=KeyboardType.SEP,
+            ))
+            inline_btn_map = InlineKeyboardButton(
+                text='Карта участников игры',
+                login_url=Misc.make_login_url(
+                    redirect_path=settings.MEET_HOST,
+                    keep_user_data='on'
+            ))
+            inline_btn_revoke = InlineKeyboardButton(
+                text='Выйти',
+                callback_data=cls.CALLBACK_DATA_SID_TEMPLATE % dict(
+                keyboard_type=KeyboardType.MEET_REVOKE,
+                sid=profile['username'],
+                sep=KeyboardType.SEP,
+            ))
+            buttons = [ [inline_btn_invite ], [inline_btn_map], [inline_btn_revoke] ]
+            reply_markup = InlineKeyboardMarkup(inline_keyboard=buttons)
+            await bot.send_photo(
+                chat_id=tg_user_sender_id,
+                photo=photo,
+                caption=caption,
+                reply_markup=reply_markup,
+            )
+
+
 class MeetId(object):
     """
     Получить meet_id пользователя. Получить профиль по meet_id

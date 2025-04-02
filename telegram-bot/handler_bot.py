@@ -785,8 +785,7 @@ async def process_meet_from_deeplink_and_command(message, state, data):
                 return
 
     if profile_from['did_meet']:
-        count_meet_invited_ = await Misc.count_meet_invited(profile_from.get('uuid'))
-        text = Misc.PROMT_MEET_DOING % count_meet_invited_
+        await Misc.show_edit_meet(message.from_user.id, profile_from)
     else:
         text = \
 '''Добро пожаловать в игру знакомств! Цель игры - соединить одиноких людей!
@@ -804,37 +803,22 @@ async def process_meet_from_deeplink_and_command(message, state, data):
 Нажимая "Участвовать", Вы соглашаетесь с публикацией Ваших анкетных данных и принятием ответственности за их достоверность!
 Удачи!'''
 
-    callback_data_template = Misc.CALLBACK_DATA_SID_TEMPLATE + '%(sid2)s%(sep)s'
-    inline_btn_do_or_revoke = InlineKeyboardButton(
-        text='Выйти' if profile_from['did_meet'] else 'Участвовать',
-        callback_data=callback_data_template % dict(
-        keyboard_type=KeyboardType.MEET_REVOKE if profile_from['did_meet'] else KeyboardType.MEET_DO,
-        sid=profile_from['username'],
-        sid2=profile_to['username'] if profile_to else '',
-        sep=KeyboardType.SEP,
-    ))
-    inline_btn_invite = InlineKeyboardButton(
-        text='Пригласить в игру' if profile_from['did_meet'] else 'Пригласить',
-        callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
-        keyboard_type=KeyboardType.MEET_INVITE,
-        sep=KeyboardType.SEP,
-    ))
-    if profile_from['did_meet']:
-        inline_btn_map = InlineKeyboardButton(
-            text='Карта участников игры',
-            login_url=Misc.make_login_url(
-                redirect_path=settings.MEET_HOST,
-                keep_user_data='on'
+        callback_data_template = Misc.CALLBACK_DATA_SID_TEMPLATE + '%(sid2)s%(sep)s'
+        inline_btn_do = InlineKeyboardButton(
+            text='Участвовать',
+            callback_data=callback_data_template % dict(
+            keyboard_type=KeyboardType.MEET_DO,
+            sid=profile_from['username'],
+            sid2=profile_to['username'] if profile_to else '',
+            sep=KeyboardType.SEP,
         ))
-        buttons = [ [inline_btn_invite ], [inline_btn_map], [inline_btn_do_or_revoke] ]
-    else:
         logging.info(f'MEET_LOG: {profile_from["first_name"]} ({profile_from["username"]}) got meet game invitation')
-        buttons = [ [inline_btn_do_or_revoke] ]
-    await bot.send_message(
-        message.from_user.id,
-        text=text,
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-    )
+        buttons = [ [inline_btn_do] ]
+        await bot.send_message(
+            message.from_user.id,
+            text=text,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        )
 
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMnewOrg.ask))
 async def process_new_org_ask(message: Message, state: FSMContext):

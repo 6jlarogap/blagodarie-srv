@@ -331,7 +331,8 @@ async def process_message_meet_tgdesc(message: Message, state: FSMContext):
     status, response, is_first = await do_get_user_desc(message, state)
     if status == 200:
         data.update(tgdesc_first=is_first)
-        logging.info(f'MEET_LOG: {profile_from["first_name"]} ({profile_from["username"]}) entered description')
+        if is_first:
+            logging.info(f'MEET_LOG: {profile_from["first_name"]} ({profile_from["username"]}) entered description')
     await state.clear()
     await meet_do_or_revoke(data)
 
@@ -481,11 +482,6 @@ async def cbq_meet_ask_gender(callback: CallbackQuery, state: FSMContext):
 async def meet_do_or_revoke(data):
     did_meet = '1' if data['what'] == KeyboardType.MEET_DO else ''
     if not did_meet or ('tgdesc_first' not in data) or data['tgdesc_first']:
-        if did_meet:
-            count_meet_invited_ = await Misc.count_meet_invited(data.get('uuid'))
-            text_to_sender = Misc.PROMT_MEET_DOING % count_meet_invited_
-        else:
-            text_to_sender = ('Вы вышли из игры знакомств. Нам вас будет не хватать')
         parms = dict(did_meet=did_meet)
         if data['what'] == KeyboardType.MEET_DO:
             fields = ['uuid', 'username_inviter', 'gender', 'dob',]
@@ -501,34 +497,13 @@ async def meet_do_or_revoke(data):
             reply_markup = None
             if did_meet:
                 logging.info(f'MEET_LOG: {data["first_name"]} ({data["username"]}) entered the game')
-                callback_data_template = Misc.CALLBACK_DATA_SID_TEMPLATE + '%(sid2)s%(sep)s'
-                inline_btn_quit = InlineKeyboardButton(
-                    text='Выйти',
-                    callback_data=callback_data_template % dict(
-                    keyboard_type=KeyboardType.MEET_REVOKE,
-                    sid=data['username_from'],
-                    sid2=data['username_inviter'],
-                    sep=KeyboardType.SEP,
-                ))
-                inline_btn_invite = InlineKeyboardButton(
-                    text='Пригласить в игру',
-                    callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
-                    keyboard_type=KeyboardType.MEET_INVITE,
-                    sep=KeyboardType.SEP,
-                ))
-                inline_btn_map = InlineKeyboardButton(
-                    text='Карта участников игры',
-                    login_url=Misc.make_login_url(
-                        redirect_path=settings.MEET_HOST,
-                        keep_user_data='on'
-                ))
-                buttons = [ [inline_btn_invite ], [inline_btn_map], [inline_btn_quit] ]
-                reply_markup = InlineKeyboardMarkup(inline_keyboard=buttons)
-            await bot.send_message(
-                data['tg_user_sender_id'],
-                text=text_to_sender,
-                reply_markup=reply_markup,
-            )
+                await Misc.show_edit_meet(data['tg_user_sender_id'], response)
+            else:
+                await bot.send_message(
+                    data['tg_user_sender_id'],
+                    text='Вы вышли из игры знакомств. Нам вас будет не хватать',
+                    reply_markup=reply_markup,
+                )
         elif status == 400 and response.get('message'):
             await bot.send_message(
                 data['tg_user_sender_id'],
