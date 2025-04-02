@@ -2557,6 +2557,8 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     q_meet &= Q(user__pk__in=my_interests)
                 elif parm_status == 'sympas':
                     q_meet &= Q(user__pk__in=my_sympas)
+                elif parm_status == 'new':
+                    q_meet &= ~Q(user__pk__in=my_interests)
 
             for p in Profile.objects.filter(q_meet).order_by('dob').select_related('user').distinct():
                 lat_sum += p.latitude
