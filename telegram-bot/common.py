@@ -2486,6 +2486,28 @@ class Misc(object):
         ).rstrip()
 
 
+    @classmethod
+    def photo_no_photo(cls, profile):
+        """
+        Фото профиля, если у него нет фото
+        """
+        if profile['is_dead']:
+            if profile['gender'] == 'm':
+                ph = 'no-photo-gender-male-dead.jpg'
+            elif profile['gender'] == 'f':
+                ph = 'no-photo-gender-female-dead.jpg'
+            else:
+                ph = 'no-photo-gender-none-dead.jpg'
+        else:
+            if profile['gender'] == 'm':
+                ph = 'no-photo-gender-male.jpg'
+            elif profile['gender'] == 'f':
+                ph = 'no-photo-gender-female.jpg'
+            else:
+                ph = 'no-photo-gender-none.jpg'
+        return settings.API_HOST.rstrip('/') + '/media/images/' + ph
+
+
 class MeetId(object):
     """
     Получить meet_id пользователя. Получить профиль по meet_id
