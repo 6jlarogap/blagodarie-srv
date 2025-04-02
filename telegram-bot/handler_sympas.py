@@ -35,35 +35,6 @@ class Common(object):
     )
 
     @classmethod
-    async def prompt_meet_doing(cls, profile_from):
-        """
-        Карточка игрока
-        """
-        text, reply_markup = None, None
-        count_meet_invited_ = await Misc.count_meet_invited(profile_from['uuid'])
-        if count_meet_invited_:
-            text = Misc.PROMT_MEET_DOING % count_meet_invited_
-            callback_data_template = Misc.CALLBACK_DATA_SID_TEMPLATE + '%(sid2)s%(sep)s'
-            inline_btn_quit = InlineKeyboardButton(
-                text='Выйти',
-                callback_data=callback_data_template % dict(
-                keyboard_type=KeyboardType.MEET_REVOKE,
-                sid=profile_from['username'],
-                sid2='',
-                sep=KeyboardType.SEP,
-            ))
-            inline_btn_invite = InlineKeyboardButton(
-                text='Пригласить в игру',
-                callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
-                keyboard_type=KeyboardType.MEET_INVITE,
-                sep=KeyboardType.SEP,
-            ))
-            buttons = [ [inline_btn_invite ], [cls.inline_btn_map()], [inline_btn_quit] ]
-            reply_markup = InlineKeyboardMarkup(inline_keyboard=buttons)
-        return text, reply_markup
-
-
-    @classmethod
     async def is_any_not_active(cls, callback, profile_from, profile_to):
         """
         Проверка, не является ли пользователь или к кому симпатия и т.п. обезличенным или не в игре
@@ -890,13 +861,7 @@ async def cbq_get_sympa_mistrust(callback: CallbackQuery, state: FSMContext):
             text=text,
             reply_markup=None,
         )
-        text_card, reply_markup_card = await Common.prompt_meet_doing(profile_from)
-        if text_card:
-            await bot.send_message(
-                callback.from_user.id,
-                text=text_card,
-                reply_markup=reply_markup_card
-            )
+        await Misc.show_edit_meet(callback.from_user.id, profile_from)
     if status == 200:
         for tgd in profile_to['tg_data']:
             try:
