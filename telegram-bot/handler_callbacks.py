@@ -748,13 +748,16 @@ async def cbq_existing_iof(callback: CallbackQuery, state: FSMContext):
     """
     Заменить имя, фамилию, отчество или название организации
     """
-    if not (uuid := Misc.get_uuid_from_callback(callback)):
-        return
+    uuid, card_message_id, card_type = Misc.parse_uid_message_calback(callback)
     if not (response_sender := await Misc.check_owner_by_uuid(owner_tg_user=callback.from_user, uuid=uuid)):
         return
     response_uuid = response_sender['response_uuid']
     await state.set_state(FSMexistingIOF.ask)
-    await state.update_data(uuid=uuid, is_org=response_uuid['is_org'])
+    await state.update_data(
+        uuid=uuid,
+        is_org=response_uuid['is_org'],
+        card_message_id=card_message_id,
+    )
     await bot.send_message(
         callback.from_user.id,
         (Misc.PROMPT_EXISTING_ORG if response_uuid['is_org'] else Misc.PROMPT_EXISTING_IOF) % dict(
@@ -786,11 +789,19 @@ async def process_existing_iof(message: Message, state: FSMContext):
             )
             if status == 200:
                 await message.reply('Изменено')
-                await Misc.show_card(
-                    profile=response,
-                    profile_sender=response_sender,
-                    tg_user_sender=message.from_user,
-                )
+                if data.get('card_message_id'):
+                    await Misc.show_edit_meet(
+                        message.from_user.id,
+                        response,
+                        edit=True,
+                        card_message_id=data['card_message_id'],
+                    )
+                else:
+                    await Misc.show_card(
+                        profile=response,
+                        profile_sender=response_sender,
+                        tg_user_sender=message.from_user,
+                    )
     await state.clear()
 
 
@@ -801,11 +812,12 @@ async def process_existing_iof(message: Message, state: FSMContext):
         # KeyboardType.SEP,
     )), StateFilter(None))
 async def cbq_photo(callback: CallbackQuery, state: FSMContext):
-    if (uuid := Misc.get_uuid_from_callback(callback)) and \
+    uuid, card_message_id, card_type = Misc.parse_uid_message_calback(callback)
+    if uuid and \
        (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
         inline_button_cancel = Misc.inline_button_cancel()
         await state.set_state(FSMphoto.ask)
-        await state.update_data(uuid=uuid)
+        await state.update_data(uuid=uuid, card_message_id=card_message_id)
         prompt_photo = Misc.PROMPT_PHOTO
         status, response = await Misc.get_user_by_uuid(uuid)
         if status == 200 and Misc.is_photo_downloaded(response):
@@ -845,8 +857,18 @@ async def process_photo(message: Message, state: FSMContext):
         )
         msg_error = '<b>Ошибка</b>. Фото не внесено.\n'
         if status_put == 200:
-            await message.reply(f'{Misc.get_deeplink_with_name(response_put)} : фото внесено')
-            await Misc.show_card(response_put, response_check, message.from_user)
+            card_message_id = data.get('card_message_id')
+            if card_message_id:
+                await message.reply(f'Фото внесено')
+                await Misc.show_edit_meet(
+                    message.from_user.id,
+                    response_put,
+                    edit=True,
+                    card_message_id=card_message_id,
+                )
+            else:
+                await message.reply(f'{Misc.get_deeplink_with_name(response_put)} : фото внесено')
+                await Misc.show_card(response_put, response_check, message.from_user)
         elif status_put == 400:
             if response_put.get('message'):
                 await message.reply(msg_error + response_put['message'])
@@ -904,8 +926,18 @@ async def cbq_photo_remove_confirmed(callback: CallbackQuery, state: FSMContext)
             uuid=uuid,
         )
         if status_put == 200:
-            await callback.message.reply(f'{Misc.get_deeplink_with_name(response_put)} : фото удалено')
-            await Misc.show_card(response_put, response_check, callback.from_user)
+            data = await state.get_data()
+            if data.get('card_message_id'):
+                await callback.message.reply(f'{html.quote(response_check["first_name"])} : фото удалено')
+                await Misc.show_edit_meet(
+                    callback.from_user.id,
+                    response_put,
+                    edit=True,
+                    card_message_id=data['card_message_id'],
+                )
+            else:
+                await callback.message.reply(f'{Misc.get_deeplink_with_name(response_put)} : фото удалено')
+                await Misc.show_card(response_put, response_check, callback.from_user)
         elif status_put == 400:
             if response_put.get('message'):
                 await message.reply(msg_error + response_put['message'])
@@ -924,31 +956,35 @@ async def cbq_photo_remove_confirmed(callback: CallbackQuery, state: FSMContext)
         # KeyboardType.SEP,
     )), StateFilter(None))
 async def cbq_dates(callback: CallbackQuery, state: FSMContext):
-    if (uuid := Misc.get_uuid_from_callback(callback)) and \
+    uuid, card_message_id, card_type = Misc.parse_uid_message_calback(callback)
+    if uuid and \
        (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
         response_uuid = response_check['response_uuid']
         his_her = Misc.his_her(response_uuid) if response_uuid['owner'] else 'Ваш'
         title_dob_unknown = 'Не знаю'
+        buttons = []
         prompt_dob = (
             f'<b>{response_uuid["first_name"]}</b>\n\n'
             f'Укажите {his_her} день рождения '
         ) + Misc.PROMPT_DATE_FORMAT
-        if not response_uuid['owner']:
-            prompt_dob += (
-                f'\n\nЕсли хотите скрыть дату своего рождения '
-                f'или в самом деле не знаете, когда Ваш день рождения, нажмите <u>{title_dob_unknown}</u>'
-            )
-        inline_button_dob_unknown = InlineKeyboardButton(
-            text=title_dob_unknown, callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
-            keyboard_type=KeyboardType.DATES_DOB_UNKNOWN,
-            sep=KeyboardType.SEP,
-            uuid=uuid,
-        ))
+        if not card_message_id:
+            if not response_uuid['owner']:
+                prompt_dob += (
+                    f'\n\nЕсли хотите скрыть дату своего рождения '
+                    f'или в самом деле не знаете, когда Ваш день рождения, нажмите <u>{title_dob_unknown}</u>'
+                )
+            inline_button_dob_unknown = InlineKeyboardButton(
+                text=title_dob_unknown, callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % dict(
+                keyboard_type=KeyboardType.DATES_DOB_UNKNOWN,
+                sep=KeyboardType.SEP,
+                uuid=uuid,
+            ))
+            buttons = [inline_button_dob_unknown]
         reply_markup = InlineKeyboardMarkup(
-            inline_keyboard=[[inline_button_dob_unknown, Misc.inline_button_cancel()]]
+            inline_keyboard=[ buttons + [Misc.inline_button_cancel()]]
         )
         await state.set_state(FSMdates.dob)
-        await state.update_data(uuid=uuid)
+        await state.update_data(uuid=uuid, card_message_id=card_message_id)
         await callback.message.reply(
             prompt_dob,
             reply_markup=reply_markup,
@@ -1036,7 +1072,16 @@ async def put_dates(message, state, tg_user_sender):
             is_dead = '1' if is_dead else '',
         )
         if status_put == 200:
-            await Misc.show_card(response_put, response_check, tg_user_sender)
+            if data.get('card_message_id'):
+                await message.reply(f'Дата рождения изменена')
+                await Misc.show_edit_meet(
+                    message.from_user.id,
+                    response_put,
+                    edit=True,
+                    card_message_id=data['card_message_id'],
+                )
+            else:
+                await Misc.show_card(response_put, response_check, tg_user_sender)
         elif status_put == 400 and response_put.get('message'):
             dates = 'даты' if response_check['response_uuid']['owner'] else 'дату рождения'
             await message.reply(f'Ошибка!\n{response_put["message"]}\n\nНазначайте {dates} по новой')
@@ -1667,4 +1712,47 @@ async def cbq_donate_thank(callback: CallbackQuery, state: FSMContext):
             pass
     else:
         await callback.message.reply(f'{profile_to["first_name"]} не имеет банковских реквизитов')
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.MEET_EDIT,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_meet_edit(callback: CallbackQuery, state: FSMContext):
+    if not (username_from := Misc.get_sid_from_callback(callback)):
+        await callback.answer(); return
+    status_from, profile_from = await Misc.post_tg_user(callback.from_user)
+    if not profile_from['is_active']:
+        await callback.message.reply(Misc.MSG_NOT_SENDER_NOT_ACTIVE)
+        await callback.answer(); return
+    if status_from != 200 or profile_from['username'] != username_from:
+        await callback.answer(); return
+    await Misc.show_edit_meet(
+        callback.from_user.id,
+        profile_from,
+        edit=True,
+        card_message_id=callback.message.message_id,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.MEET_EDIT_BACK,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_meet_edit_back(callback: CallbackQuery, state: FSMContext):
+    uuid, card_message_id, card_type = Misc.parse_uid_message_calback(callback)
+    status_from, profile_from = await Misc.post_tg_user(callback.from_user)
+    if not profile_from['is_active']:
+        await callback.message.reply(Misc.MSG_NOT_SENDER_NOT_ACTIVE)
+        await callback.answer(); return
+    if status_from != 200 or profile_from['uuid'] != uuid:
+        await callback.answer(); return
+    await Misc.show_edit_meet(
+        callback.from_user.id,
+        profile_from,
+        edit=False,
+        card_message_id=card_message_id,
+    )
     await callback.answer()

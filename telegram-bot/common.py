@@ -13,6 +13,7 @@ from aiogram import types, html
 from aiogram.types.login_url import LoginUrl
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.types.input_file import URLInputFile
+from aiogram.types.input_media_photo import InputMediaPhoto
 from aiogram.enums import ChatType
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.fsm.state import StatesGroup, State
@@ -355,6 +356,14 @@ class KeyboardType(object):
     # Кнопка "Недоверие" в диалоге после скрытия
     SYMPA_MISTRUST = 74
 
+    # Кнопка Редактировать на карточке игрока в знакомства
+    #
+    MEET_EDIT = 75
+
+    # Кнопка Назад (из редактирования) на карточке игрока в знакомства
+    #
+    MEET_EDIT_BACK = 76
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -397,16 +406,6 @@ class Misc(object):
         '\n'
         '- точное местоположение не требуется - '
         'можно выбрать ближнюю/дальнюю остановку транспорта, рынок или парк.'
-    )
-
-    PROMT_MEET_DOING = (
-        'Вы участвуете в игре знакомств!\n'
-        '\n'
-        'Приглашенных Вами: %(invited)s\n'
-        'Симпатий к Вам: %(sympa_to)s\n'
-        'Симпатий от Вас: %(sympa_from)s\n'
-        '\n'
-        'Выберите одно из действий:\n'
     )
 
     PROMPT_USER_DESC = (
@@ -2509,19 +2508,84 @@ class Misc(object):
 
 
     @classmethod
-    async def show_edit_meet(cls, tg_user_sender_id, profile, edit=False, message_id=None):
+    def parse_uid_message_calback(cls, callback):
+        uid, card_message_id, card_type = None, None, 0
+        code = callback.data.split(KeyboardType.SEP)
+        try:
+            # uuid or sid
+            uid = code[1]
+            card_message_id = int(code[2])
+            card_type = int(code[3] or 0)
+        except (TypeError, ValueError, IndexError):
+            pass
+        return uid, card_message_id, card_type
+
+
+    @classmethod
+    async def show_edit_meet(cls, tg_user_sender_id, profile, edit=False, card_message_id=None):
         """
         Показ или редактирование карточки участника игры знакомств
 
         Если edit, то в режиме редактирования.
-        Если задан message_id, то не новая карточка, а править имеющуюся
+        Если задан card_message_id, то не новая карточка, а править имеющуюся c id == card_message_id
         """
         count_meet_invited_ = await cls.count_meet_invited(profile['uuid'])
-        caption = cls.PROMT_MEET_DOING % count_meet_invited_
-        photo = profile['photo'] or cls.photo_no_photo(profile)
+        caption = (
+            f'<b>{profile["first_name"]}</b>\n'
+            f'{"(" + profile["dob"] +")\n" if profile["dob"] else ""}'
+            '\n'
+            'Вы участвуете в игре знакомств!\n'
+            '\n'
+            'Приглашенных Вами: %(invited)s\n'
+            'Симпатий к Вам: %(sympa_to)s\n'
+            'Симпатий от Вас: %(sympa_from)s\n'
+            '\n'
+            'Выберите одно из действий:\n'
+        ) % count_meet_invited_
+        photo_url = profile['photo'] or cls.photo_no_photo(profile)
+        photo = URLInputFile(url=photo_url, filename='1.png')
         reply_markup = None
+        buttons = []
+        if not card_message_id:
+            card_message_id = ''
         if edit:
-            pass
+            callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE + '%(card_message_id)s%(sep)s'
+            callback_data_dict = dict(
+                uuid=profile['uuid'],
+                sep=KeyboardType.SEP,
+                card_message_id=card_message_id,
+            )
+
+            callback_data_dict.update(keyboard_type=KeyboardType.IOF)
+            inline_btn_iof = InlineKeyboardButton(
+                text='ФИО',
+                callback_data=callback_data_template % callback_data_dict,
+            )
+            callback_data_dict.update(keyboard_type=KeyboardType.PHOTO)
+            inline_btn_photo = InlineKeyboardButton(
+                text='Фото',
+                callback_data=callback_data_template % callback_data_dict,
+            )
+            callback_data_dict.update(keyboard_type=KeyboardType.DATES)
+            inline_btn_dates = InlineKeyboardButton(
+                text='Д.р.',
+                callback_data=callback_data_template % callback_data_dict,
+            )
+            callback_data_dict.update(keyboard_type=KeyboardType.USER_DESC)
+            inline_btn_desc = InlineKeyboardButton(
+                text='Описание',
+                callback_data=callback_data_template % callback_data_dict,
+            )
+            callback_data_dict.update(keyboard_type=KeyboardType.MEET_EDIT_BACK)
+            inline_btn_back = InlineKeyboardButton(
+                text='Назад',
+                callback_data=callback_data_template % callback_data_dict,
+            )
+            buttons = [
+                [inline_btn_iof, inline_btn_photo ],
+                [inline_btn_dates, inline_btn_desc],
+                [inline_btn_back],
+            ]
         else:
             inline_btn_invite = InlineKeyboardButton(
                 text='Пригласить в игру',
@@ -2535,6 +2599,13 @@ class Misc(object):
                     redirect_path=settings.MEET_HOST,
                     keep_user_data='on'
             ))
+            inline_btn_edit = InlineKeyboardButton(
+                text='Редактировать',
+                callback_data=cls.CALLBACK_DATA_SID_TEMPLATE % dict(
+                keyboard_type=KeyboardType.MEET_EDIT,
+                sid=profile['username'],
+                sep=KeyboardType.SEP,
+            ))
             inline_btn_revoke = InlineKeyboardButton(
                 text='Выйти',
                 callback_data=cls.CALLBACK_DATA_SID_TEMPLATE % dict(
@@ -2542,8 +2613,22 @@ class Misc(object):
                 sid=profile['username'],
                 sep=KeyboardType.SEP,
             ))
-            buttons = [ [inline_btn_invite ], [inline_btn_map], [inline_btn_revoke] ]
+            buttons = [ [inline_btn_invite ], [inline_btn_map], [inline_btn_edit], [inline_btn_revoke] ]
+        if buttons:
             reply_markup = InlineKeyboardMarkup(inline_keyboard=buttons)
+        if card_message_id:
+            await bot.edit_message_media(
+                chat_id=tg_user_sender_id,
+                message_id=card_message_id,
+                media=InputMediaPhoto(media=photo),
+            )
+            await bot.edit_message_caption(
+                chat_id=tg_user_sender_id,
+                message_id=card_message_id,
+                caption=caption,
+                reply_markup=reply_markup,
+            )
+        else:
             await bot.send_photo(
                 chat_id=tg_user_sender_id,
                 photo=photo,
