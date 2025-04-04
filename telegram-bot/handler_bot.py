@@ -484,7 +484,7 @@ async def message_to_bot(message: Message, state: FSMContext):
                 r.set(
                     name=check_str,
                     value='1',
-                    ex=settings.REDIS_MEDIA_GROUP_TTL,
+                    ex=Rcache.MEDIA_GROUP_TTL,
                 )
             r.close()
     if not show_response:
