@@ -2536,10 +2536,9 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                             '<br />'
                         '</td>'
                         '<td valign=center align="center">'
-                            '<label for="id_handle_user_sympa">Интерес: </lable>'
-                            '<input type="checkbox" class="sympa" '
+                            '<input type="button" class="sympa" value="%(sympa_button_value)s" '
+                            'style="font-size:22px;%(sympa_color)s" '
                             'name="handle_user_sympa" id="id_handle_user_sympa-%(user_id)s" '
-                            '%(sympa_checked)s %(sympa_disabled)s>'
                         '</td>'
                     '</tr>'
                     '</table>'
@@ -2576,8 +2575,8 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 dict_user = self.popup_data(p, color, frame, int(thumb_size_popup), int(thumb_size_icon))
                 dict_user['full_name'] = html.escape(dict_user['full_name'])
                 dict_user.update(
-                    sympa_checked='checked' if dict_user['user_id'] in my_interests else '',
-                    sympa_disabled='disabled' if dict_user['user_id'] in my_interests else '',
+                    sympa_button_value = 'Интерес \u2713' if dict_user['user_id'] in my_interests else 'Интерес',
+                    sympa_color=f'color:{color_sympa};' if dict_user['user_id'] in my_interests else '',
                     hide_checked='checked' if dict_user['user_id'] in my_hidden else '',
                 )
                 points.append(dict(

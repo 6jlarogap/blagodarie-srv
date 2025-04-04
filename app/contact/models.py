@@ -888,10 +888,16 @@ class ApiAddOperationMixin(object):
                         currentstate.is_sympa_confirmed = False
                     currentstate.save()
 
-            data.update(previousstate=dict(
-                is_sympa=is_sympa_previous,
-                is_sympa_confirmed=is_sympa_confirmed_previous,
-            ))
+            data.update(
+                previousstate=dict(
+                    is_sympa=is_sympa_previous,
+                    is_sympa_confirmed=is_sympa_confirmed_previous,
+                ),
+                currentstate=dict(
+                    is_sympa=currentstate.is_sympa,
+                    is_sympa_confirmed=currentstate.is_sympa_confirmed,
+                ),
+            )
             reverse_cs, reverse_created = CurrentState.objects.select_for_update().get_or_create(
                 user_to=user_from,
                 user_from=user_to,

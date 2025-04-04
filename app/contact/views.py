@@ -367,7 +367,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     profile_to=profile_to_data,
                 )
 
-            data.update(desc_sent=False, desc_sent_error=False)
+            data.update(desc_sent=False,)
             options = dict(
                 disable_web_page_preview=True,
                 disable_notification=True,
@@ -416,10 +416,9 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
 
             KeyboardType = TelegramApiMixin.KeyboardType
             if operationtype_id == OperationType.SET_SYMPA and not got_tg_token:
+                bot_username = self.get_bot_username()
                 data.update(profile_to=profile_to.data_dict(short=True))
-                if 'is_sympa' in data.get('previousstate', {}) and \
-                   not data['previousstate']['is_sympa']:
-                    bot_username = self.get_bot_username()
+                if not data['previousstate']['is_sympa']:
                     parms = dict(
                         redirect_path=settings.MEET_URL,
                         keep_user_data='on'
@@ -444,26 +443,38 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     ]]))
                     self.send_to_telegram(message_to, user=user_to, options=options_congrat)
 
-                    success = self.send_to_telegram(
-                        f'Описание {html.escape(user_to.first_name)}',
-                        user=user_from, options=options
-                    )
-                    if success:
-                        data['desc_sent'] = True
-                    else:
-                        data['desc_sent_error'] = True
-                    if profile_to.tgdesc.exists():
-                        qs_tgdesc = profile_to.tgdesc.all().order_by('message_id')
-                        for tgdesc in qs_tgdesc:
-                            self.copy_to_telegram(
-                                    tgdesc.message_id,
-                                    tgdesc.chat_id,
-                                    user_from,
-                                    options=options,
-                            )
+                success = self.send_to_telegram(
+                    f'Описание {html.escape(user_to.first_name)}',
+                    user=user_from, options=options
+                )
+                if success:
+                    data['desc_sent'] = True
+                if profile_to.tgdesc.exists():
+                    qs_tgdesc = profile_to.tgdesc.all().order_by('message_id')
+                    for tgdesc in qs_tgdesc:
+                        self.copy_to_telegram(
+                                tgdesc.message_id,
+                                tgdesc.chat_id,
+                                user_from,
+                                options=options,
+                        )
+                options_quest_set_revoke_sympa = options.copy()
+                if data['currentstate']['is_sympa_confirmed']:
+                    message_from = f'Отменить симпатию к {html.escape(user_to.first_name)} ?'
+                    options_quest_set_revoke_sympa.update(reply_markup=dict(
+                        inline_keyboard=[[
+                            dict(
+                                text='Отменить',
+                                callback_data=(
+                                    f'{KeyboardType.SYMPA_REVOKE}{KeyboardType.SEP}'
+                                    f'{user_from.username}{KeyboardType.SEP}'
+                                    f'{user_to.username}{KeyboardType.SEP}'
+                                    f'{data["journal_id"]}{KeyboardType.SEP}'
+                            )),
+                    ]]))
+                else:
                     message_from = f'Установить симпатию к {html.escape(user_to.first_name)} ?'
-                    options_quest_set_sympa = options.copy()
-                    options_quest_set_sympa.update(reply_markup=dict(
+                    options_quest_set_revoke_sympa.update(reply_markup=dict(
                         inline_keyboard=[[
                             dict(
                                 text='Симпатия',
@@ -482,7 +493,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                                     f'{data["journal_id"]}{KeyboardType.SEP}'
                             )),
                     ]]))
-                    self.send_to_telegram(message_from, user=user_from, options=options_quest_set_sympa)
+                self.send_to_telegram(message_from, user=user_from, options=options_quest_set_revoke_sympa)
 
             if operationtype_id == OperationType.SET_SYMPA and got_tg_token:
                 is_reciprocal = is_confirmed and CurrentState.objects.filter(
