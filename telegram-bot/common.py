@@ -2534,7 +2534,7 @@ class Misc(object):
             f'<b>{profile["first_name"]}</b>\n'
             f'{"(" + profile["dob"] +")\n" if profile["dob"] else ""}'
             '\n'
-            'Вы участвуете в игре знакомств!\n'
+            'Для возврата к игре выберите в меню бота или напишите команду /meet\n'
             '\n'
             'Приглашенных Вами: %(invited)s\n'
             'Симпатий к Вам: %(sympa_to)s\n'

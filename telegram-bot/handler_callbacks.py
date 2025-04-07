@@ -501,7 +501,10 @@ async def meet_do_or_revoke(data):
             else:
                 await bot.send_message(
                     data['tg_user_sender_id'],
-                    text='Вы вышли из игры знакомств. Нам вас будет не хватать',
+                    text=(
+                        'Вы вышли из игры знакомств. Нам вас будет не хватать\n\n'
+                        'Для возврата к игре выберите в меню бота или напишите команду /meet\n'
+                    ),
                     reply_markup=reply_markup,
                 )
         elif status == 400 and response.get('message'):
@@ -1554,7 +1557,12 @@ async def do_get_user_desc(message: Message, state: FSMContext):
         )
         is_first = Misc.redis_is_key_first_up(key, ex=300)
     is_first = '1' if is_first else ''
-    tgdesc  = '~'.join((str(message.message_id), str(message.chat.id), is_first, media_group_id,))
+    tgdesc  = '~'.join((
+        str(message.message_id),
+        str(message.chat.id),
+        is_first,
+        media_group_id,
+    ))
     status, response = await Misc.put_user_properties(uuid=data['uuid'], tgdesc=tgdesc)
     return status, response, is_first
 
