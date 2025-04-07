@@ -1001,7 +1001,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
             # обязательно
     """
 
-    parser_classes = (MultiPartParser, FormParser, )
+    parser_classes = (MultiPartParser, FormParser, JSONParser)
 
     def check_dates(self, request):
         dob = request.data.get('dob')
@@ -1547,24 +1547,12 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 if not created_:
                     raise ServiceException(f'Банковские реквизиты "{value}" есть уже у другого человека')
             if 'tgdesc' in request.data:
-                # Строка типа '<message_id>~<chat_id>~<is_first>~<media_group_id>'
-                tgdesc_got = request.data['tgdesc'].split('~', 3)
-                try:
-                    message_id = int(tgdesc_got[0])
-                    chat_id = int(tgdesc_got[1])
-                    # '' или '1':
-                    is_first = tgdesc_got[2]
-                    media_group_id = tgdesc_got[3]
-                except (IndexError, ValueError, TypeError):
-                    raise ServiceException('Неверный tgdesc')
-                if is_first:
+                tgdesc_dict = request.data['tgdesc']
+                if request.data.get('is_first'):
                     profile.tgdesc.filter(
-                        (~Q(media_group_id=media_group_id)) | Q(media_group_id='')
+                        (~Q(media_group_id=tgdesc_dict['media_group_id'])) | Q(media_group_id='')
                     ).delete()
-                tgdesc = TgDesc.objects.create(
-                    message_id=message_id, chat_id=chat_id,
-                    media_group_id=media_group_id,
-                )
+                tgdesc = TgDesc.objects.create(**tgdesc_dict)
                 profile.tgdesc.add(tgdesc)
             if 'did_meet' in request.data:
                 did_meet = request.data.get('did_meet')

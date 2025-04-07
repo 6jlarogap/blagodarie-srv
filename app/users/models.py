@@ -1213,3 +1213,15 @@ class TgDesc(BaseModelInsertTimestamp):
     message_id = models.BigIntegerField(_("Message Id"))
     chat_id = models.BigIntegerField(_("Chat Id"))
     media_group_id = models.CharField(_("media_group_id"), max_length=255, blank=True, default='')
+    caption = models.CharField(_("caption"), max_length=255, blank=True, default='')
+    file_id = models.CharField(_("file_id"), max_length=255, blank=True, default='')
+
+    def data_dict(self):
+        return dict(
+            insert_timestamp=self.insert_timestamp,
+            message_id=self.message_id,
+            chat_id=self.chat_id,
+            media_group_id=self.media_group_id,
+            caption=self.caption,
+            file_id=self.file_id,
+        )

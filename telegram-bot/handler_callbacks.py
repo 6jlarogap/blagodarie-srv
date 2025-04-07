@@ -19,7 +19,7 @@ from handler_bot import is_it_command
 import settings, me
 from settings import logging
 
-from common import Misc, OperationType, KeyboardType, Rcache, MeetId
+from common import Misc, OperationType, KeyboardType, Rcache, MeetId, TgDesc
 from common import FSMnewPerson, FSMdelete
 
 router = Router()
@@ -1549,21 +1549,18 @@ async def do_get_user_desc(message: Message, state: FSMContext):
         return
     # первое сообщение в коллаже или единственное
     is_first = True
-    media_group_id = str(message.media_group_id or '')
-    if media_group_id:
+    if message.media_group_id:
         key = (
             f'{Rcache.USER_DESC_PREFIX}{Rcache.KEY_SEP}'
-            f'{message.from_user.id}{Rcache.KEY_SEP}{media_group_id}'
+            f'{message.from_user.id}{Rcache.KEY_SEP}{message.media_group_id}'
         )
         is_first = Misc.redis_is_key_first_up(key, ex=300)
-    is_first = '1' if is_first else ''
-    tgdesc  = '~'.join((
-        str(message.message_id),
-        str(message.chat.id),
-        is_first,
-        media_group_id,
-    ))
-    status, response = await Misc.put_user_properties(uuid=data['uuid'], tgdesc=tgdesc)
+    status, response = await Misc.put_user_properties(
+        form_data=False,
+        uuid=data['uuid'],
+        is_first=is_first,
+        tgdesc=TgDesc.from_message(message)
+    )
     return status, response, is_first
 
 

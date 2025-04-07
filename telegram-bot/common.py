@@ -1673,8 +1673,17 @@ class Misc(object):
         reply_markup = InlineKeyboardMarkup(inline_keyboard=[[inline_btn_cancel]])
         return reply_markup
 
+
     @classmethod
-    async def put_user_properties(cls, **kwargs):
+    async def put_user_properties(cls, form_data=True, **kwargs):
+        """
+        Изменить свойства пользователя
+
+        kwargs: свойства пользователя, с обязательным uuid
+        В большинстве случаев отсылка в виде multipart/form-data или form-data,
+        ибо возможно фото пользователя. Но иногда проще править юзера
+        посредством json, тогда form_data задать False
+        """
         status, response = None, None
         logging.debug('put tg_user_data...')
         payload = dict(tg_token=settings.TOKEN,)
@@ -1683,13 +1692,15 @@ class Misc(object):
         status, response = await cls.api_request(
             path='/api/profile',
             method='put',
-            data=payload,
+            data=payload if form_data else None,
+            json=payload if not form_data else None,
         )
         logging.debug('put user_data, status: %s' % status)
         logging.debug('put user_data, response: %s' % response)
         return status, response
 
     @classmethod
+
     def text_search_phrase(
             cls,
             phrase,
@@ -2636,7 +2647,6 @@ class Misc(object):
                 reply_markup=reply_markup,
             )
 
-
 class MeetId(object):
     """
     Получить meet_id пользователя. Получить профиль по meet_id
@@ -2807,3 +2817,33 @@ class Schedule(object):
                 except ValueError:
                     r.expire(key, 10)
             r.close()
+
+class TgDesc(object):
+    """
+    Действия с мульти сообщениями
+    """
+
+    @classmethod
+    def from_message(cls, message):
+        """
+        Сформировать данные из -- возможно -- media group сообщения
+        """
+        file_id = ''
+        for type_ in ('photo', 'audio', 'video', 'document'):
+            # Типы, для которых возможна группировка
+            content = getattr(message, type_, None)
+            if content:
+                try:
+                    if type_ == 'photo':
+                        file_id = content[-1].file_id
+                    else:
+                        file_id = content.file_id
+                except (TypeError, AttributeError,):
+                    pass
+        return dict(
+            message_id=message.message_id,
+            chat_id=message.chat.id,
+            media_group_id=message.media_group_id or '',
+            caption=message.caption or '',
+            file_id=file_id,
+        )
