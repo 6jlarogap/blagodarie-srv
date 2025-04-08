@@ -228,10 +228,11 @@ class Common(object):
         status, response = await cls.get_donate_to(journal_id)
         if status == 200 and response.get('donate', {}).get('profile'):
             text += (
-                f'Поздравляем! У Вас взаимная симпатия - ваши профили скрыты от других участников игры.\n'
-                f'Перед запросом Ваших контактов {html.quote(profile_to["first_name"])} '
-                f'предложено поблагодарить {html.quote(response["donate"]["profile"]["first_name"])}. '
-                f'Дождитесь запроса контактов или отмените симпатию.'
+                f'Поздравляем! У Вас взаимная симпатия с {html.quote(profile_to["first_name"])} - '
+                f'ваши профили скрыты от других участников игры!\n'
+                f'Перед запросом Вашего контакта {html.quote(profile_to["first_name"])} предложено '
+                f'отправить добровольную благодарность {html.quote(response["donate"]["profile"]["first_name"])} '
+                f'за участие в Вашем приглашении в игру!'
             )
         else:
             text += (
