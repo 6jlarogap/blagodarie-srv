@@ -2,7 +2,7 @@ import datetime, string, random, os, binascii, time
 import urllib.request, urllib.error, urllib.parse
 from urllib.parse import urlencode
 import json, re, hashlib
-from uuid import uuid4
+from uuid import uuid4, UUID
 
 from django.conf import settings
 from django.db import models, transaction, IntegrityError
@@ -944,7 +944,7 @@ class UuidMixin(object):
         Это uuid передано?
         """
         try:
-            uuid.UUID(str(val))
+            UUID(str(val))
             return True
         except ValueError:
             return False
