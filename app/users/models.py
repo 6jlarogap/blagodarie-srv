@@ -530,6 +530,11 @@ class Profile(PhotoModel, GeoPointAddressModel):
         ]
         return dict(wishes=wishes, abilities=abilities, keys=keys)
 
+    def desc(self):
+        return [
+            m.message_dict() for m in self.tgdesc.all().order_by('message_id')
+        ]
+
     @transaction.atomic
     def merge(self, profile_from):
         # Проверку на один и тот же профиль производить
@@ -980,7 +985,7 @@ class TelegramApiMixin(object):
             uids = [telegram_uid]
         return uids
 
-    def __get_url_parms(self, func, options):
+    def __get_url_parms(self, func):
         url = '%s/bot%s/%s' % (self.API_TELEGRAM, settings.TELEGRAM_BOT_TOKEN, func)
         return url
 
@@ -1004,13 +1009,14 @@ class TelegramApiMixin(object):
         success = False
         uids = self.__get_tg_ids(user, telegram_uid)
         if uids:
-            url = self.__get_url_parms('sendMessage', options)
-            if not options.get('parse_mode'):
-                options.update(parse_mode='html')
-            options.update(text=message)
+            url = self.__get_url_parms('sendMessage')
+            options_ = options.copy()
+            if not options_.get('parse_mode'):
+                options_.update(parse_mode='html')
+            options_.update(text=message)
             for uid in uids:
-                options.update(chat_id=uid)
-                sent = self.__make_request(url, options)
+                options_.update(chat_id=uid)
+                sent = self.__make_request(url, options_)
                 if sent:
                     success = True
         return success
@@ -1019,14 +1025,83 @@ class TelegramApiMixin(object):
         success = False
         uids = self.__get_tg_ids(user)
         if uids:
-            url = self.__get_url_parms('copyMessage', options)
-            options.update(message_id=message_id, from_chat_id=from_chat_id)
+            options_ = options.copy()
+            url = self.__get_url_parms('copyMessage')
+            options_.update(message_id=message_id, from_chat_id=from_chat_id)
             for uid in uids:
-                options.update(chat_id=uid)
-                sent = self.__make_request(url, options)
+                options_.update(chat_id=uid)
+                sent = self.__make_request(url, options_)
                 if sent:
                     success = True
         return success
+
+    def send_pack_to_telegram(self, messages, user, options={}):
+        success = False
+        if not messages:
+            return messages
+        uids = self.__get_tg_ids(user)
+        if uids:
+            from_chat_id = messages[0]['chat_id']
+            parsed_pack = self.parse_tgmsg_pack(messages)
+            for p in parsed_pack:
+                if not p:
+                    continue
+                if len(p) == 1:
+                    sent = self.copy_to_telegram(
+                        message_id = p[0]['message_id'],
+                        from_chat_id = from_chat_id,
+                        user=user, options=options,
+                    )
+                    if sent:
+                        success = True
+                else:
+                    url = self.__get_url_parms('sendMediaGroup')
+                    media=[
+                            {
+                                'type': m['file_type'],
+                                'media': m['file_id'],
+                                'caption': m['caption'],
+                            }
+                       for m in p
+                    ]
+                    options_ = options.copy()
+                    options_.update(media=media)
+                    for uid in uids:
+                        options_.update(chat_id=uid)
+                        self.__make_request(url, parms=options_)
+        return success
+
+    def parse_tgmsg_pack(self, messages):
+        """
+        Раскидать сообщения по пачкам.
+
+        В пачке может быть либо одно сообщение, или несколько, если они в одной
+        media_group_id
+        """
+
+        n = 0; j = -1
+        skip_it = []
+        result = []
+        l_messages = len(messages)
+
+        while n < l_messages:
+            if n not in skip_it:
+                item = messages[n]
+                j += 1
+                result.append([item])
+                media_group_id = item['media_group_id']
+                if media_group_id and item['file_id'] and item['file_type']:
+                    k = n + 1
+                    while k < l_messages:
+                        checking = messages[k]
+                        if checking['media_group_id'] == media_group_id and \
+                        checking['file_id'] and checking['file_type']:
+                            result[j].append(checking)
+                            skip_it.append(k)
+                        k += 1
+            n += 1
+
+        return result
 
     def get_bot_data(self):
         """
@@ -1222,7 +1297,7 @@ class TgDesc(BaseModelInsertTimestamp):
 
     def message_dict(self):
         return dict(
-            chat_id=self.from_chat_id,
+            chat_id=self.chat_id,
             message_id=self.message_id,
             media_group_id = self.media_group_id,
             caption = self.caption,

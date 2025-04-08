@@ -444,21 +444,22 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     ]]))
                     self.send_to_telegram(message_to, user=user_to, options=options_congrat)
 
-                success = self.send_to_telegram(
-                    f'Описание {html.escape(user_to.first_name)}',
-                    user=user_from, options=options
-                )
+                success = False
+                desc_messages = profile_to.desc()
+                if desc_messages:
+                    success = self.send_to_telegram(
+                        f'\u2193\u2193\u2193 Описание {html.escape(user_to.first_name)} \u2193\u2193\u2193',
+                        user=user_from, options=options
+                    )
+                    self.send_pack_to_telegram(desc_messages, user_from, options=options)
+                else:
+                    success = self.send_to_telegram(
+                        f'{html.escape(user_to.first_name)} НЕ ИМЕЕТ ОПИСАНИЯ',
+                        user=user_from, options=options
+                    )
                 if success:
                     data['desc_sent'] = True
-                if profile_to.tgdesc.exists():
-                    qs_tgdesc = profile_to.tgdesc.all().order_by('message_id')
-                    for tgdesc in qs_tgdesc:
-                        self.copy_to_telegram(
-                                tgdesc.message_id,
-                                tgdesc.chat_id,
-                                user_from,
-                                options=options,
-                        )
+
                 options_quest_set_revoke_sympa = options.copy()
                 if data['currentstate']['is_sympa_confirmed']:
                     message_from = f'Отменить симпатию к {html.escape(user_to.first_name)} ?'
