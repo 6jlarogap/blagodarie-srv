@@ -1,5 +1,5 @@
 import time, datetime, json, hashlib, re
-import os, uuid
+from uuid import uuid4
 from collections import OrderedDict
 
 from app.utils import get_moon_day, ServiceException
@@ -68,7 +68,7 @@ class OperationType(models.Model):
 
 class AnyText(BaseModelInsertTimestamp):
 
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
+    uuid = models.UUIDField(default=uuid4, editable=False, db_index=True)
     text = models.CharField(_("Значение"), max_length=2048, unique=True, db_index=True)
     fame = models.PositiveIntegerField(_("Известность"), default=0)
     sum_thanks_count = models.PositiveIntegerField(_("Число благодарностей"), default=0)
@@ -140,10 +140,22 @@ class TgMessageJournal(UserDictMixin, BaseModelInsertTimestamp):
     user_to_delivered = models.ForeignKey('auth.User',
                     verbose_name=_("Кому доставлено"), on_delete=models.CASCADE, null=True,
                     related_name='tg_message_journal_user_to_delivered_set')
+
     from_chat_id = models.BigIntegerField(_("Chat Id"),)
     message_id = models.BigIntegerField(_("Message Id"),)
+    media_group_id = models.CharField(_("media_group_id"), max_length=255, blank=True, default='')
+    caption = models.TextField(verbose_name=_("Заголовок"), default='')
+    file_id = models.CharField(_("file_id"), max_length=255, blank=True, default='')
+    file_type = models.CharField(_("Тип медиа"), max_length=30, blank=True, default='')
+    # Сообщения из одной пачки будут иметь один uuid
+    uuid_pack = models.UUIDField(default=uuid4, editable=False, db_index=True)
+
     operationtype = models.ForeignKey(OperationType, null=True,
                     verbose_name=_("Тип операции"), on_delete=models.CASCADE)
+
+    def _chat_id(self):
+        return self.from_chat_id
+    chat_id = property(_chat_id)
 
     def data_dict(self):
         return dict(
@@ -154,6 +166,16 @@ class TgMessageJournal(UserDictMixin, BaseModelInsertTimestamp):
             from_chat_id=self.from_chat_id,
             message_id=self.message_id,
             operation_type_id=self.operationtype and self.operationtype.pk or None,
+        )
+
+    def message_dict(self):
+        return dict(
+            chat_id=self.from_chat_id,
+            message_id=self.message_id,
+            media_group_id = self.media_group_id,
+            caption = self.caption,
+            file_id = self.file_id,
+            file_type = self.file_type,
         )
 
 class CurrentState(BaseModelInsertUpdateTimestamp):
@@ -431,7 +453,7 @@ class UserSymptom(BaseModelInsertTimestamp, GeoPointModel):
 
 class Wish(BaseModelInsertUpdateTimestamp):
 
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True)
+    uuid = models.UUIDField(default=uuid4, editable=False, primary_key=True)
     owner = models.ForeignKey('auth.User', verbose_name=_("Владелец"), on_delete=models.CASCADE)
     text = models.TextField(verbose_name=_("Текст"), db_index=True)
 
@@ -444,7 +466,7 @@ class Wish(BaseModelInsertUpdateTimestamp):
 
 class Ability(BaseModelInsertUpdateTimestamp):
 
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True)
+    uuid = models.UUIDField(default=uuid4, editable=False, primary_key=True)
     owner = models.ForeignKey('auth.User', verbose_name=_("Владелец"), on_delete=models.CASCADE)
     text = models.TextField(verbose_name=_("Текст"), db_index=True)
 

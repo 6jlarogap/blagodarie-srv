@@ -3,6 +3,9 @@
 # Сallback реакции
 
 import re, base64, time, redis
+from uuid import uuid4
+
+import asyncio
 
 from aiogram import Router, F, html
 from aiogram.filters import Command, StateFilter
@@ -17,7 +20,7 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 import settings, me
 from settings import logging
 
-from common import Misc, OperationType, KeyboardType, Rcache
+from common import Misc, OperationType, KeyboardType, Rcache, TgDesc
 
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
@@ -589,6 +592,7 @@ async def cbq_get_sympa_donate(callback: CallbackQuery, state: FSMContext):
             callback=callback,
             # Это для отравки доната
             message=message,
+            uuid_pack=str(uuid4())
         )
     await callback.answer()
 
@@ -600,26 +604,20 @@ async def process_message_donate_after_sympa(message: Message, state: FSMContext
        profile_from['uuid'] != data.get('response_get_donate', {}).get('user_m', {}).get('uuid') or \
        not data.get('journal_id'):
         await state.clear(); return
-    is_first = True
     user_m = profile_from
     user_f = data['response_get_donate']['user_f']
     media_group_id = str(message.media_group_id or '')
-    if media_group_id:
-        key = (
-            f'{Rcache.ASK_MONEY_PREFIX}{Rcache.KEY_SEP}'
-            f'{message.from_user.id}{Rcache.KEY_SEP}'
-            f'{media_group_id}{Rcache.KEY_SEP}'
-            f'{data["journal_id"]}'
-        )
-        is_first = Misc.redis_is_key_first_up(key, ex=300)
+    key = (
+        f'{Rcache.ASK_MONEY_PREFIX}{Rcache.KEY_SEP}'
+        f'{data["uuid_pack"]}'
+    )
+    is_first = Misc.redis_is_key_first_up(key, ex=300)
     tgdesc_payload  = dict(
         tg_token=settings.TOKEN,
         journal_id=data['journal_id'],
-        message_id=message.message_id,
-        chat_id=message.chat.id,
-        media_group_id=media_group_id,
         is_first=is_first,
     )
+    tgdesc_payload.update(tgdesc=TgDesc.from_message(message, data['uuid_pack']))
     logging.debug('post donate_reciprocal_sympathy, payload: %s' % Misc.secret(tgdesc_payload))
     status, response = await Misc.api_request(
         '/api/thank_bank',
@@ -693,7 +691,7 @@ async def process_message_donate_after_sympa(message: Message, state: FSMContext
                     )
                 except (TelegramBadRequest, TelegramForbiddenError):
                     pass
-
+        await asyncio.sleep(settings.MULTI_MESSAGE_TIMEOUT)
     await state.clear()
 
 

@@ -2824,26 +2824,31 @@ class TgDesc(object):
     """
 
     @classmethod
-    def from_message(cls, message):
+    def from_message(cls, message, uuid_pack):
         """
         Сформировать данные из -- возможно -- media group сообщения
         """
-        file_id = ''
-        for type_ in ('photo', 'audio', 'video', 'document'):
+        file_id = ''; file_type = ''
+        for file_type in ('photo', 'audio', 'video', 'document'):
             # Типы, для которых возможна группировка
-            content = getattr(message, type_, None)
+            content = getattr(message, file_type, None)
             if content:
                 try:
-                    if type_ == 'photo':
-                        file_id = content[-1].file_id
+                    if file_type == 'photo':
+                        file_id = content[-1].file_id or ''
                     else:
-                        file_id = content.file_id
+                        file_id = content.file_id or ''
                 except (TypeError, AttributeError,):
                     pass
+                break
+        if not file_id:
+            file_type = ''
         return dict(
             message_id=message.message_id,
             chat_id=message.chat.id,
             media_group_id=message.media_group_id or '',
             caption=message.caption or '',
             file_id=file_id,
+            file_type=file_type,
+            uuid_pack=uuid_pack,
         )

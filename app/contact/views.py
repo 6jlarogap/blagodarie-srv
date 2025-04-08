@@ -1,5 +1,6 @@
-import os, datetime, time, json, re, html
+import os, datetime, time, json, re, html, uuid
 from urllib.parse import urlencode
+from uuid import uuid4
 
 from django.shortcuts import redirect
 from django.db import transaction, IntegrityError, connection
@@ -4182,7 +4183,7 @@ class ApiTgMessage(UuidMixin, APIView):
             else:
                 user_to_delivered = None
             try:
-                from_chat_id = int(data.get('from_chat_id'))
+                from_chat_id = int(data.get('chat_id'))
             except (TypeError, ValueError,):
                 raise ServiceException('Не задан или не число: from_chat_id')
             try:
@@ -4202,6 +4203,11 @@ class ApiTgMessage(UuidMixin, APIView):
                 user_to=user_to,
                 user_to_delivered=user_to_delivered,
                 operationtype=operationtype,
+                media_group_id=request.data.get('media_group_id') or '',
+                uuid_pack=request.data.get('uuid_pack') or uuid4(),
+                caption=request.data.get('caption') or '',
+                file_id=request.data.get('file_id') or '',
+                file_type=request.data.get('file_type') or '',
             )
             status_code = status.HTTP_200_OK
             data = {}
@@ -4294,21 +4300,12 @@ class ApiThankBank(APIView):
                 profile_to = Profile.objects.get(user_id=journal.user_to_id)
             except Profile.DoesNotExist:
                 raise ServiceException(msg_not_found)
-            media_group_id = data['media_group_id']
-            is_first = True
-            if 'is_first' in data:
-                is_first = data['is_first']
-            if is_first:
+            tgdesc_dict = request.data['tgdesc']
+            if request.data.get('is_first'):
                 journal.tgdesc.filter(
-                    (~Q(media_group_id=media_group_id)) | Q(media_group_id='')
+                    ~Q(uuid_pack=tgdesc_dict['uuid_pack'])
                 ).delete()
-            try:
-                tgdesc = TgDesc.objects.create(
-                    message_id=data['message_id'], chat_id=data['chat_id'],
-                    media_group_id=media_group_id,
-                )
-            except KeyError:
-                raise ServiceException('Не верные данные, отсутствуют message_id, chat_id или media_group_id')
+            tgdesc = TgDesc.objects.create(**tgdesc_dict)
             journal.tgdesc.add(tgdesc)
             data = {}
             status_code = status.HTTP_200_OK

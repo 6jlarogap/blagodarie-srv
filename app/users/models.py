@@ -1,7 +1,8 @@
 import datetime, string, random, os, binascii, time
 import urllib.request, urllib.error, urllib.parse
 from urllib.parse import urlencode
-import json, uuid, re, hashlib
+import json, re, hashlib
+from uuid import uuid4
 
 from django.conf import settings
 from django.db import models, transaction, IntegrityError
@@ -361,7 +362,7 @@ class Oauth(BaseModelInsertUpdateTimestamp):
 class Profile(PhotoModel, GeoPointAddressModel):
 
     user = models.OneToOneField('auth.User', on_delete=models.CASCADE)
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
+    uuid = models.UUIDField(default=uuid4, editable=False, db_index=True)
     middle_name = models.CharField(_("Отчество"), max_length=255, blank=True, default='')
     is_notified = models.BooleanField(_("Принимает уведомления"), default=True)
     fame = models.PositiveIntegerField(_("Известность"), default=0)
@@ -1139,7 +1140,7 @@ class Offer(BaseModelInsertTimestamp, GeoPointAddressModel):
     MAX_NUM_ANSWERS = 9
 
     owner = models.ForeignKey('auth.User', verbose_name=_("Владелец"), on_delete=models.CASCADE)
-    uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
+    uuid = models.UUIDField(default=uuid4, editable=False, db_index=True)
     question = models.CharField(_("Вопрос"), max_length=2048)
     closed_timestamp = models.PositiveIntegerField(_("Приостановлен"), null=True, default=None)
     is_multi = models.BooleanField(_("Множественный выбор"), default=False)
@@ -1213,15 +1214,18 @@ class TgDesc(BaseModelInsertTimestamp):
     message_id = models.BigIntegerField(_("Message Id"))
     chat_id = models.BigIntegerField(_("Chat Id"))
     media_group_id = models.CharField(_("media_group_id"), max_length=255, blank=True, default='')
-    caption = models.CharField(_("caption"), max_length=255, blank=True, default='')
+    caption = models.TextField(verbose_name=_("Заголовок"), default='')
     file_id = models.CharField(_("file_id"), max_length=255, blank=True, default='')
+    file_type = models.CharField(_("Тип медиа"), max_length=30, blank=True, default='')
+    # Сообщения из одной пачки будут иметь один uuid
+    uuid_pack = models.UUIDField(default=uuid4, editable=False, db_index=True)
 
-    def data_dict(self):
+    def message_dict(self):
         return dict(
-            insert_timestamp=self.insert_timestamp,
+            chat_id=self.from_chat_id,
             message_id=self.message_id,
-            chat_id=self.chat_id,
-            media_group_id=self.media_group_id,
-            caption=self.caption,
-            file_id=self.file_id,
+            media_group_id = self.media_group_id,
+            caption = self.caption,
+            file_id = self.file_id,
+            file_type = self.file_type,
         )

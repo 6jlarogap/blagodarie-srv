@@ -3,6 +3,9 @@
 # Сallback реакции
 
 import re, base64
+from uuid import uuid4
+
+import asyncio
 
 from aiogram import Router, F, html
 from aiogram.filters import Command, StateFilter
@@ -312,6 +315,7 @@ async def meet_quest_bank(state):
 
 async def meet_quest_tgdesc(state):
     data = await state.get_data()
+    await state.update_data(uuid_pack=str(uuid4()))
     await bot.send_message(
         chat_id=data['tg_user_sender_id'],
         text=Misc.PROMPT_USER_DESC,
@@ -325,7 +329,7 @@ async def process_message_meet_tgdesc(message: Message, state: FSMContext):
         return
     data = await state.get_data()
     status_from, profile_from = await Misc.post_tg_user(message.from_user)
-    if status_from != 200 or profile_from['uuid'] != data['uuid']:
+    if status_from != 200 or profile_from['uuid'] != data['uuid'] or not data.get('uuid_pack'):
         await state.clear()
         return
     status, response, is_first = await do_get_user_desc(message, state)
@@ -333,6 +337,7 @@ async def process_message_meet_tgdesc(message: Message, state: FSMContext):
         data.update(tgdesc_first=is_first)
         if is_first:
             logging.info(f'MEET_LOG: {profile_from["first_name"]} ({profile_from["username"]}) entered description')
+    await asyncio.sleep(settings.MULTI_MESSAGE_TIMEOUT)
     await state.clear()
     await meet_do_or_revoke(data)
 
@@ -1339,7 +1344,7 @@ async def cbq_send_message(callback: CallbackQuery, state: FSMContext):
         status_to, profile_to = await Misc.get_user_by_uuid(uuid)
         if status_to == 200:
             await state.set_state(FSMsendMessage.ask)
-            await state.update_data(uuid=uuid)
+            await state.update_data(uuid=uuid, uuid_pack=str(uuid4()))
             iof_link = Misc.get_deeplink_with_name(profile_to)
             await callback.message.reply(
                 f'Напишите или перешлите мне сообщение для отправки <b>{iof_link}</b>',
@@ -1353,19 +1358,17 @@ async def process_message_to_send(message: Message, state: FSMContext):
         return
     msg_saved = 'Сообщение сохранено'
     data = await state.get_data()
-    if data.get('uuid'):
+    if data.get('uuid') and data.get('uuid_pack'):
         status_to, profile_to = await Misc.get_user_by_uuid(data['uuid'], with_owner_tg_data=True)
         if status_to == 200:
             status_from, profile_from = await Misc.post_tg_user(message.from_user)
             if status_from == 200:
                 # первое сообщение в коллаже или единственное
-                is_first = True
-                if message.media_group_id:
-                    key = (
-                        f'{Rcache.SEND_MESSAGE_PREFIX}{Rcache.KEY_SEP}'
-                        f'{message.from_user.id}{Rcache.KEY_SEP}{message.media_group_id}'
-                    )
-                    is_first = Misc.redis_is_key_first_up(key, ex=300)
+                key = (
+                    f'{Rcache.SEND_MESSAGE_PREFIX}{Rcache.KEY_SEP}'
+                    f'{data["uuid_pack"]}'
+                )
+                is_first = Misc.redis_is_key_first_up(key, ex=300)
 
                 # Возможны варианты с получателем:
                 #   - самому себе                               нет смысла отправлять
@@ -1420,22 +1423,22 @@ async def process_message_to_send(message: Message, state: FSMContext):
                 else:
                     if is_first:
                         await message.reply(msg_saved)
-            payload_log_message = dict(
+            payload_send_message = dict(
                 tg_token=settings.TOKEN,
-                from_chat_id=message.chat.id,
-                message_id=message.message_id,
                 user_from_uuid=profile_from['uuid'],
                 user_to_uuid=profile_to['uuid'],
                 user_to_delivered_uuid=user_to_delivered_uuid,
             )
+            payload_send_message.update(TgDesc.from_message(message, data['uuid_pack']))
             try:
                 status_log, response_log = await Misc.api_request(
                     path='/api/tg_message',
                     method='post',
-                    json=payload_log_message,
+                    json=payload_send_message,
                 )
             except:
                 pass
+            await asyncio.sleep(settings.MULTI_MESSAGE_TIMEOUT)
     await state.clear()
 
 
@@ -1504,11 +1507,14 @@ async def cbq_show_messages(callback: CallbackQuery, state: FSMContext):
                             user_to_delivered=user_to_delivered,
                         )
                         await bot.send_message(tg_user_sender.id, text=msg)
-                        await bot.forward_message(
-                            tg_user_sender.id,
-                            from_chat_id=m['from_chat_id'],
-                            message_id=m['message_id'],
-                        )
+                        try:
+                            await bot.forward_message(
+                                tg_user_sender.id,
+                                from_chat_id=m['from_chat_id'],
+                                message_id=m['message_id'],
+                            )
+                        except TelegramBadRequest:
+                            await bot.send_message(tg_user_sender.id, text='СООБЩЕНИЕ НЕ НАЙДЕНО')
                 else:
                     status_to, profile_to = await Misc.get_user_by_uuid(user_to_uuid)
                     if status_to == 200:
@@ -1530,7 +1536,7 @@ async def cbq_get_user_desc(callback: CallbackQuery, state: FSMContext):
         status, profile = await Misc.get_user_by_uuid(uuid)
         if status == 200:
             await state.set_state(FSMpersonDesc.ask)
-            await state.update_data(uuid=uuid)
+            await state.update_data(uuid=uuid, uuid_pack=str(uuid4()))
             await callback.message.reply(
                 Misc.PROMPT_USER_DESC,
                 reply_markup=Misc.reply_markup_cancel_row(),
@@ -1542,24 +1548,23 @@ async def do_get_user_desc(message: Message, state: FSMContext):
     if await is_it_command(message, state):
         return
     data = await state.get_data()
-    if not data.get('uuid'):
+    if not (data.get('uuid') and data.get('uuid_pack')):
         return
     status, profile = await Misc.post_tg_user(message.from_user)
     if status != 200 or profile['uuid'] != data['uuid']:
         return
     # первое сообщение в коллаже или единственное
     is_first = True
-    if message.media_group_id:
-        key = (
-            f'{Rcache.USER_DESC_PREFIX}{Rcache.KEY_SEP}'
-            f'{message.from_user.id}{Rcache.KEY_SEP}{message.media_group_id}'
-        )
-        is_first = Misc.redis_is_key_first_up(key, ex=300)
+    key = (
+        f'{Rcache.USER_DESC_PREFIX}{Rcache.KEY_SEP}'
+        f'{data["uuid_pack"]}'
+    )
+    is_first = Misc.redis_is_key_first_up(key, ex=300)
     status, response = await Misc.put_user_properties(
         form_data=False,
         uuid=data['uuid'],
         is_first=is_first,
-        tgdesc=TgDesc.from_message(message)
+        tgdesc=TgDesc.from_message(message, data['uuid_pack'])
     )
     return status, response, is_first
 
@@ -1567,6 +1572,7 @@ async def do_get_user_desc(message: Message, state: FSMContext):
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMpersonDesc.ask))
 async def process_get_user_desc(message: Message, state: FSMContext):
     status, response, is_first = await do_get_user_desc(message, state)
+    await asyncio.sleep(settings.MULTI_MESSAGE_TIMEOUT)
     if status == 200 and is_first:
         await message.reply('Описание сохранено')
     await state.clear()
@@ -1628,22 +1634,17 @@ async def process_message_thank_ask_money(message: Message, state: FSMContext):
 
     is_first = True
     media_group_id = str(message.media_group_id or '')
-    if media_group_id:
-        key = (
-            f'{Rcache.ASK_MONEY_PREFIX}{Rcache.KEY_SEP}'
-            f'{message.from_user.id}{Rcache.KEY_SEP}'
-            f'{media_group_id}{Rcache.KEY_SEP}'
-            f'{journal_id}'
-        )
-        is_first = Misc.redis_is_key_first_up(key, ex=300)
+    key = (
+        f'{Rcache.ASK_MONEY_PREFIX}{Rcache.KEY_SEP}'
+        f'{data["uuid_pack"]}'
+    )
+    is_first = Misc.redis_is_key_first_up(key, ex=300)
     tgdesc_payload  = dict(
         tg_token=settings.TOKEN,
         journal_id=journal_id,
-        message_id=message.message_id,
-        chat_id=message.chat.id,
-        media_group_id=media_group_id,
         is_first=is_first,
     )
+    tgdesc_payload.update(tgdesc=TgDesc.from_message(message, data['uuid_pack']))
     logging.debug('post thank_bank, payload: %s' % Misc.secret(tgdesc_payload))
     status, response = await Misc.api_request(
         '/api/thank_bank',
@@ -1653,8 +1654,7 @@ async def process_message_thank_ask_money(message: Message, state: FSMContext):
     logging.debug('post thank_bank, status: %s' % status)
     logging.debug('post thank_bank, response: %s' % response)
     if status == 200:
-        if is_first:
-            await message.reply('Сообщение передано получателю благодарности')
+        is_sent = False
         for tgd in profile_to['tg_data']:
             try:
                 await bot.forward_message(
@@ -1662,17 +1662,24 @@ async def process_message_thank_ask_money(message: Message, state: FSMContext):
                     from_chat_id=message.chat.id,
                     message_id=message.message_id,
                 )
+                is_sent = True
             except (TelegramBadRequest, TelegramForbiddenError):
                 pass
-            if is_first and not profile_to.get('has_bank'):
-                try:
-                    await bot.send_message(
-                        tgd['tg_uid'], (
-                        'Укажите Ваши Реквизиты для пожертвований в профиле - и '
-                        'они будут предложены всем кто Вас будет благодарить!'
-                    ))
-                except (TelegramBadRequest, TelegramForbiddenError):
-                    pass
+        if is_first and not profile_to.get('has_bank'):
+            try:
+                await bot.send_message(
+                    tgd['tg_uid'], (
+                    'Укажите Ваши Реквизиты для пожертвований в профиле - и '
+                    'они будут предложены всем кто Вас будет благодарить!'
+                ))
+            except (TelegramBadRequest, TelegramForbiddenError):
+                pass
+        await asyncio.sleep(settings.MULTI_MESSAGE_TIMEOUT)
+        if is_first:
+            await message.reply(
+                'Сообщение передано получателю благодарности' if is_sent else \
+                'Получатель не принял сообщение'
+            )
     await state.clear()
 
 
@@ -1707,6 +1714,7 @@ async def cbq_donate_thank(callback: CallbackQuery, state: FSMContext):
                 profile_to=profile_to,
                 profile_from=profile_from,
                 journal_id=journal_id,
+                uuid_pack=str(uuid4()),
             )
             await bot.send_message(
                 callback.from_user.id,
@@ -1728,17 +1736,18 @@ async def cbq_meet_edit(callback: CallbackQuery, state: FSMContext):
     if not (username_from := Misc.get_sid_from_callback(callback)):
         await callback.answer(); return
     status_from, profile_from = await Misc.post_tg_user(callback.from_user)
-    if not profile_from['is_active']:
-        await callback.message.reply(Misc.MSG_NOT_SENDER_NOT_ACTIVE)
-        await callback.answer(); return
-    if status_from != 200 or profile_from['username'] != username_from:
-        await callback.answer(); return
-    await Misc.show_edit_meet(
-        callback.from_user.id,
-        profile_from,
-        edit=True,
-        card_message_id=callback.message.message_id,
-    )
+    if status_from == 200:
+        if not profile_from['is_active']:
+            await callback.message.reply(Misc.MSG_NOT_SENDER_NOT_ACTIVE)
+            await callback.answer(); return
+        if status_from != 200 or profile_from['username'] != username_from:
+            await callback.answer(); return
+        await Misc.show_edit_meet(
+            callback.from_user.id,
+            profile_from,
+            edit=True,
+            card_message_id=callback.message.message_id,
+        )
     await callback.answer()
 
 

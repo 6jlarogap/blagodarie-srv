@@ -1,5 +1,6 @@
 import os, re, hmac, hashlib, json, time, datetime, copy, string, random
-import uuid, redis, html
+import redis, html
+from uuid import uuid4
 import urllib.request, urllib.error, urllib.parse
 from urllib.parse import urlparse
 
@@ -49,7 +50,7 @@ class ApiTokenAuthDataMixin(object):
         """
         token = None
         if r := redis.Redis(**settings.REDIS_TOKEN_CONNECT):
-            token = str(uuid.uuid4())
+            token = str(uuid4())
             r.set(
                 name=self.TOKEN_AUTHDATA_PREFIX + self.TOKEN_AUTHDATA_SEP + token,
                 value=json.dumps(auth_data),
@@ -1550,7 +1551,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                 tgdesc_dict = request.data['tgdesc']
                 if request.data.get('is_first'):
                     profile.tgdesc.filter(
-                        (~Q(media_group_id=tgdesc_dict['media_group_id'])) | Q(media_group_id='')
+                        ~Q(uuid_pack=tgdesc_dict['uuid_pack'])
                     ).delete()
                 tgdesc = TgDesc.objects.create(**tgdesc_dict)
                 profile.tgdesc.add(tgdesc)
@@ -4071,7 +4072,7 @@ class ApiTokenUrl(TelegramApiMixin, APIView):
                 validate(url)
             except ValidationError:
                 raise ServiceException('Неверный URL')
-            token = str(uuid.uuid4())
+            token = str(uuid4())
             data = dict(
                 url=request.data['url'],
                 token=token,
@@ -4275,7 +4276,7 @@ class ApiTokenInvite(UuidMixin, APIView):
                     raise ServiceException('Нет прав на операцию')
                 if profile_to_merge.is_dead:
                     raise ServiceException(f'{user_to_merge.first_name} умер. Нельзя приглашать умершего')
-                token = str(uuid.uuid4())
+                token = str(uuid4())
                 data = dict(token=token,)
                 if r := redis.Redis(**settings.REDIS_TOKEN_CONNECT):
                     r.set(

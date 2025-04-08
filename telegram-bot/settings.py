@@ -44,6 +44,11 @@ LOG_CONFIG = dict(
 #
 HTTP_TIMEOUT = 60
 
+# Сообщение из многих валит одно за другим.
+# Чтоб все успели отработать, пока не погаснет состояние:
+#
+MULTI_MESSAGE_TIMEOUT = 3
+
 # URL апи, без завершающей/, :
 #
 API_HOST = 'https://api.meetgame.us.to'
