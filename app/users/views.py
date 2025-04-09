@@ -2553,15 +2553,13 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 lng_sum += p.longitude
 
                 color = None; frame = 0
-                thumb_size_icon = self.THUMB_SIZE_ICON
                 if meet_admin:
                     thumb_size_popup = self.THUMB_SIZE_POPUP
                 else:
                     thumb_size_popup = 240
                 if meet_admin and user_auth.pk == p.user.pk:
                     color = self.SELF_FRAME_COLOR; frame=5
-                    thumb_size_icon *= 5/4
-                dict_user = self.popup_data(p, color, frame, int(thumb_size_popup), int(thumb_size_icon))
+                dict_user = self.popup_data(p, color, frame, thumb_size_popup, thumb_size_icon=50)
                 dict_user['full_name'] = html.escape(dict_user['full_name'])
                 dict_user.update(
                     sympa_button_value = 'Интерес \u2713' if dict_user['user_id'] in my_interests else 'Интерес',
@@ -2601,7 +2599,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     profile_auth,
                     color=self.SELF_FRAME_COLOR,
                     frame=5,
-                    thumb_size_icon=int(self.THUMB_SIZE_ICON * 5/4)
+                    thumb_size_icon=40
                 )
                 points.append(dict(
                     latitude=profile_auth.latitude,
