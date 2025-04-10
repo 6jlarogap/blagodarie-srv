@@ -810,12 +810,6 @@ async def process_existing_iof(message: Message, state: FSMContext):
                         message.from_user.id,
                         response,
                         edit=True,
-                        card_message_id=data['card_message_id'],
-                    )
-                    await Misc.show_edit_meet(
-                        message.from_user.id,
-                        response,
-                        edit=True,
                         card_message_id=None,
                     )
                 else:
@@ -886,13 +880,6 @@ async def process_photo(message: Message, state: FSMContext):
                     message.from_user.id,
                     response_put,
                     edit=True,
-                    card_message_id=card_message_id,
-                    edit_media=True,
-                )
-                await Misc.show_edit_meet(
-                    message.from_user.id,
-                    response_put,
-                    edit=True,
                     card_message_id=None,
                 )
             else:
@@ -958,13 +945,6 @@ async def cbq_photo_remove_confirmed(callback: CallbackQuery, state: FSMContext)
             data = await state.get_data()
             if data.get('card_message_id'):
                 await callback.message.reply(f'{html.quote(response_check["first_name"])} : фото удалено')
-                await Misc.show_edit_meet(
-                    callback.from_user.id,
-                    response_put,
-                    edit=True,
-                    card_message_id=data['card_message_id'],
-                    edit_media=True,
-                )
                 await Misc.show_edit_meet(
                     callback.from_user.id,
                     response_put,
@@ -1110,12 +1090,6 @@ async def put_dates(message, state, tg_user_sender):
         if status_put == 200:
             if data.get('card_message_id'):
                 await message.reply(f'Дата рождения изменена')
-                await Misc.show_edit_meet(
-                    message.from_user.id,
-                    response_put,
-                    edit=True,
-                    card_message_id=data['card_message_id'],
-                )
                 await Misc.show_edit_meet(
                     message.from_user.id,
                     response_put,
