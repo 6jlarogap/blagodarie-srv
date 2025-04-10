@@ -1548,6 +1548,7 @@ class Misc(object):
         """
         if not height:
             height = width
+        result = photo
         if width and photo:
             result = result.replace('/media/', '/thumb/', 1)
             result += f'/{width}x{height}~crop-{fill_color}-frame-{frame_width}~12.jpg'
