@@ -809,8 +809,6 @@ async def process_existing_iof(message: Message, state: FSMContext):
                     await Misc.show_edit_meet(
                         message.from_user.id,
                         response,
-                        edit=True,
-                        card_message_id=None,
                     )
                 else:
                     await Misc.show_card(
@@ -879,8 +877,6 @@ async def process_photo(message: Message, state: FSMContext):
                 await Misc.show_edit_meet(
                     message.from_user.id,
                     response_put,
-                    edit=True,
-                    card_message_id=None,
                 )
             else:
                 await message.reply(f'{Misc.get_deeplink_with_name(response_put)} : фото внесено')
@@ -948,8 +944,6 @@ async def cbq_photo_remove_confirmed(callback: CallbackQuery, state: FSMContext)
                 await Misc.show_edit_meet(
                     callback.from_user.id,
                     response_put,
-                    edit=True,
-                    card_message_id=None,
                 )
             else:
                 await callback.message.reply(f'{Misc.get_deeplink_with_name(response_put)} : фото удалено')
@@ -1093,8 +1087,6 @@ async def put_dates(message, state, tg_user_sender):
                 await Misc.show_edit_meet(
                     message.from_user.id,
                     response_put,
-                    edit=True,
-                    card_message_id=None,
                 )
             else:
                 await Misc.show_card(response_put, response_check, tg_user_sender)
@@ -1589,8 +1581,6 @@ async def process_get_user_desc(message: Message, state: FSMContext):
             await Misc.show_edit_meet(
                 message.from_user.id,
                 response,
-                edit=True,
-                card_message_id=None,
             )
 
     await state.clear()
