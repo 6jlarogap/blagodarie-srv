@@ -887,6 +887,7 @@ async def process_photo(message: Message, state: FSMContext):
                     response_put,
                     edit=True,
                     card_message_id=card_message_id,
+                    edit_media=True,
                 )
                 await Misc.show_edit_meet(
                     message.from_user.id,
@@ -962,6 +963,7 @@ async def cbq_photo_remove_confirmed(callback: CallbackQuery, state: FSMContext)
                     response_put,
                     edit=True,
                     card_message_id=data['card_message_id'],
+                    edit_media=True,
                 )
                 await Misc.show_edit_meet(
                     callback.from_user.id,

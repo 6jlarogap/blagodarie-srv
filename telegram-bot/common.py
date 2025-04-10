@@ -2531,7 +2531,13 @@ class Misc(object):
 
 
     @classmethod
-    async def show_edit_meet(cls, tg_user_sender_id, profile, edit=False, card_message_id=None):
+    async def show_edit_meet(cls,
+        tg_user_sender_id,
+        profile,
+        edit=False,
+        card_message_id=None,
+        edit_media=False,
+    ):
         """
         Показ или редактирование карточки участника игры знакомств
 
@@ -2551,8 +2557,6 @@ class Misc(object):
             '\n'
             'Выберите одно из действий:\n'
         ) % count_meet_invited_
-        photo_url = profile['photo'] or cls.photo_no_photo(profile)
-        photo = URLInputFile(url=photo_url, filename='1.png')
         reply_markup = None
         buttons = []
         if not card_message_id:
@@ -2626,11 +2630,14 @@ class Misc(object):
         if buttons:
             reply_markup = InlineKeyboardMarkup(inline_keyboard=buttons)
         if card_message_id:
-            await bot.edit_message_media(
-                chat_id=tg_user_sender_id,
-                message_id=card_message_id,
-                media=InputMediaPhoto(media=photo),
-            )
+            if edit_media:
+                photo_url = profile['photo'] or cls.photo_no_photo(profile)
+                photo = URLInputFile(url=photo_url, filename='1.png')
+                await bot.edit_message_media(
+                    chat_id=tg_user_sender_id,
+                    message_id=card_message_id,
+                    media=InputMediaPhoto(media=photo),
+                )
             await bot.edit_message_caption(
                 chat_id=tg_user_sender_id,
                 message_id=card_message_id,
