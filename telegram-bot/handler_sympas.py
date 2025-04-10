@@ -810,11 +810,19 @@ async def cbq_sympa_donate_refuse(callback: CallbackQuery, state: FSMContext):
         text=text,
         reply_markup=reply_markup,
     )
+
+    status_donate, response_donate = await Common.get_donate_to(journal_id)
+    message_pre = f'Получен запрос от {html.quote(user_m["first_name"])} на Ваши контакты.'
+    if status_donate == 200 and response_donate.get('donate', {}).get('profile'):
+        message_pre += (
+            f'\n\nБез благодарности '
+            f'{html.quote(response_donate["donate"]["profile"]["first_name"])} '
+            f'за участие в Вашем приглашении.'
+        )
+
     text, reply_markup = Common.after_donate_or_not_donate(
-        user_f, user_m, journal_id,
-        message_pre=(
-            f'Получен запрос от {html.quote(user_m["first_name"])} на Ваши контакты'
-    ))
+        user_f, user_m, journal_id, message_pre
+    )
     for tgd in user_f['tg_data']:
         try:
             await bot.send_message(
