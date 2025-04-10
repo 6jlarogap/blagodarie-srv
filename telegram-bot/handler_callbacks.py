@@ -766,11 +766,19 @@ async def cbq_existing_iof(callback: CallbackQuery, state: FSMContext):
         is_org=response_uuid['is_org'],
         card_message_id=card_message_id,
     )
+    if response_uuid['is_org']:
+        text = 'Укажите для\n\n%(name)s\n\nдругое название'
+    elif card_message_id:
+        text = 'Укажите имя для %(name)s'
+    else:
+        text = (
+            "Укажите для\n\n%(name)s\n\nдругие имя отчество и фамилию - "
+            "в одной строке, например: 'Иван Иванович Иванов'"
+        )
+    text = text % dict(name=response_uuid['first_name'])
     await bot.send_message(
         callback.from_user.id,
-        (Misc.PROMPT_EXISTING_ORG if response_uuid['is_org'] else Misc.PROMPT_EXISTING_IOF) % dict(
-            name=response_uuid['first_name'],
-        ),
+        text,
         reply_markup=Misc.reply_markup_cancel_row(),
     )
     await callback.answer()
@@ -803,6 +811,12 @@ async def process_existing_iof(message: Message, state: FSMContext):
                         response,
                         edit=True,
                         card_message_id=data['card_message_id'],
+                    )
+                    await Misc.show_edit_meet(
+                        message.from_user.id,
+                        response,
+                        edit=True,
+                        card_message_id=None,
                     )
                 else:
                     await Misc.show_card(
@@ -874,6 +888,12 @@ async def process_photo(message: Message, state: FSMContext):
                     edit=True,
                     card_message_id=card_message_id,
                 )
+                await Misc.show_edit_meet(
+                    message.from_user.id,
+                    response_put,
+                    edit=True,
+                    card_message_id=None,
+                )
             else:
                 await message.reply(f'{Misc.get_deeplink_with_name(response_put)} : фото внесено')
                 await Misc.show_card(response_put, response_check, message.from_user)
@@ -942,6 +962,12 @@ async def cbq_photo_remove_confirmed(callback: CallbackQuery, state: FSMContext)
                     response_put,
                     edit=True,
                     card_message_id=data['card_message_id'],
+                )
+                await Misc.show_edit_meet(
+                    callback.from_user.id,
+                    response_put,
+                    edit=True,
+                    card_message_id=None,
                 )
             else:
                 await callback.message.reply(f'{Misc.get_deeplink_with_name(response_put)} : фото удалено')
@@ -1087,6 +1113,12 @@ async def put_dates(message, state, tg_user_sender):
                     response_put,
                     edit=True,
                     card_message_id=data['card_message_id'],
+                )
+                await Misc.show_edit_meet(
+                    message.from_user.id,
+                    response_put,
+                    edit=True,
+                    card_message_id=None,
                 )
             else:
                 await Misc.show_card(response_put, response_check, tg_user_sender)
@@ -1532,11 +1564,12 @@ async def cbq_show_messages(callback: CallbackQuery, state: FSMContext):
         KeyboardType.SEP,
     )), StateFilter(None))
 async def cbq_get_user_desc(callback: CallbackQuery, state: FSMContext):
-    if uuid := Misc.get_uuid_from_callback(callback):
+    uuid, card_message_id, card_type = Misc.parse_uid_message_calback(callback)
+    if uuid:
         status, profile = await Misc.get_user_by_uuid(uuid)
         if status == 200:
             await state.set_state(FSMpersonDesc.ask)
-            await state.update_data(uuid=uuid, uuid_pack=str(uuid4()))
+            await state.update_data(uuid=uuid, uuid_pack=str(uuid4()), card_message_id=card_message_id)
             await callback.message.reply(
                 Misc.PROMPT_USER_DESC,
                 reply_markup=Misc.reply_markup_cancel_row(),
@@ -1575,6 +1608,15 @@ async def process_get_user_desc(message: Message, state: FSMContext):
     await asyncio.sleep(settings.MULTI_MESSAGE_TIMEOUT)
     if status == 200 and is_first:
         await message.reply('Описание сохранено')
+        data = await state.get_data()
+        if data.get('card_message_id'):
+            await Misc.show_edit_meet(
+                message.from_user.id,
+                response,
+                edit=True,
+                card_message_id=None,
+            )
+
     await state.clear()
 
 

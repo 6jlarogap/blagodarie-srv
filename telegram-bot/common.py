@@ -434,8 +434,6 @@ class Misc(object):
 
     PROMPT_NEW_IOF = "Укажите имя отчество и фамилию - в одной строке, например: 'Иван Иванович Иванов'"
     PROMPT_NEW_ORG = 'Введите название новой организации'
-    PROMPT_EXISTING_IOF = "Укажите для\n\n%(name)s\n\nдругие имя отчество и фамилию - в одной строке, например: 'Иван Иванович Иванов'"
-    PROMPT_EXISTING_ORG = 'Укажите для\n\n%(name)s\n\nдругое название'
 
     PROMPT_DATE_FORMAT = 'в формате ДД.ММ.ГГГГ или ММ.ГГГГ или ГГГГ'
 
@@ -2569,7 +2567,7 @@ class Misc(object):
 
             callback_data_dict.update(keyboard_type=KeyboardType.IOF)
             inline_btn_iof = InlineKeyboardButton(
-                text='ФИО',
+                text='Имя',
                 callback_data=callback_data_template % callback_data_dict,
             )
             callback_data_dict.update(keyboard_type=KeyboardType.PHOTO)
