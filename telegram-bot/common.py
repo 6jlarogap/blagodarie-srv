@@ -2536,7 +2536,6 @@ class Misc(object):
         profile,
         edit=False,
         card_message_id=None,
-        edit_media=False,
     ):
         """
         Показ или редактирование карточки участника игры знакомств
@@ -2632,12 +2631,6 @@ class Misc(object):
         photo_url = profile['photo'] or cls.photo_no_photo(profile)
         photo = URLInputFile(url=photo_url, filename='1.png')
         if card_message_id:
-            if edit_media:
-                await bot.edit_message_media(
-                    chat_id=tg_user_sender_id,
-                    message_id=card_message_id,
-                    media=InputMediaPhoto(media=photo),
-                )
             await bot.edit_message_caption(
                 chat_id=tg_user_sender_id,
                 message_id=card_message_id,
