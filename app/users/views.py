@@ -2562,7 +2562,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 dict_user = self.popup_data(p, color, frame, thumb_size_popup, thumb_size_icon=50)
                 dict_user['full_name'] = html.escape(dict_user['full_name'])
                 dict_user.update(
-                    sympa_button_value = 'Интерес \u2713' if dict_user['user_id'] in my_interests else 'Интерес',
+                    sympa_button_value='Смотреть',
                     sympa_color=f'color:{color_sympa};' if dict_user['user_id'] in my_interests else '',
                     hide_checked='checked' if dict_user['user_id'] in my_hidden else '',
                 )
