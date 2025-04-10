@@ -2629,10 +2629,10 @@ class Misc(object):
             buttons = [ [inline_btn_invite ], [inline_btn_map], [inline_btn_edit], [inline_btn_revoke] ]
         if buttons:
             reply_markup = InlineKeyboardMarkup(inline_keyboard=buttons)
+        photo_url = profile['photo'] or cls.photo_no_photo(profile)
+        photo = URLInputFile(url=photo_url, filename='1.png')
         if card_message_id:
             if edit_media:
-                photo_url = profile['photo'] or cls.photo_no_photo(profile)
-                photo = URLInputFile(url=photo_url, filename='1.png')
                 await bot.edit_message_media(
                     chat_id=tg_user_sender_id,
                     message_id=card_message_id,
