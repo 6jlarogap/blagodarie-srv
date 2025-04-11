@@ -2595,6 +2595,11 @@ class Misc(object):
                 text='Фото',
                 callback_data=callback_data_template % callback_data_dict,
             )
+            callback_data_dict.update(keyboard_type=KeyboardType.GENDER)
+            inline_btn_gender = InlineKeyboardButton(
+                text='Пол',
+                callback_data=callback_data_template % callback_data_dict,
+            )
             callback_data_dict.update(keyboard_type=KeyboardType.DATES)
             inline_btn_dates = InlineKeyboardButton(
                 text='Д.р.',
@@ -2612,7 +2617,7 @@ class Misc(object):
             )
             buttons = [
                 [inline_btn_iof, inline_btn_photo ],
-                [inline_btn_dates, inline_btn_desc],
+                [inline_btn_gender, inline_btn_dates, inline_btn_desc],
                 [inline_btn_back],
             ]
         else:

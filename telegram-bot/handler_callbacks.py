@@ -161,7 +161,8 @@ async def cbq_gender_new_person(callback: CallbackQuery, state: FSMContext):
         KeyboardType.SEP,
     )), StateFilter(None))
 async def cbq_gender(callback: CallbackQuery, state: FSMContext):
-    if not (uuid := Misc.get_uuid_from_callback(callback)):
+    uuid, card_message_id, card_type = Misc.parse_uid_message_calback(callback)
+    if not uuid:
         return
     response_sender = await Misc.check_owner_by_uuid(owner_tg_user=callback.from_user, uuid=uuid)
     if not response_sender:
@@ -176,7 +177,11 @@ async def cbq_gender(callback: CallbackQuery, state: FSMContext):
     dict_gender.update(keyboard_type=KeyboardType.GENDER_FEMALE)
     inline_button_female = InlineKeyboardButton(text='Жен', callback_data=callback_data_template % dict_gender)
     await state.set_state(FSMgender.ask)
-    await state.update_data(uuid=uuid)
+    await state.update_data(
+        uuid=uuid,
+        card_message_id=card_message_id,
+        card_type=card_type,
+    )
     your = '' if response_uuid['owner'] else 'Ваш '
     prompt_gender = (
         f'<b>{response_uuid["first_name"]}</b>.\n\n'
@@ -227,6 +232,11 @@ async def cbq_gender(callback: CallbackQuery, state: FSMContext):
                     await callback.message.reply(
                         text= f'{deeplink}\nУстановлен пол: {s_gender}',
                     )
+                    if data.get('card_type') == Misc.CARD_TYPE_MEET:
+                        await Misc.show_edit_meet(
+                            callback.from_user.id,
+                            response,
+                        )
     await state.clear()
     await callback.answer()
 
