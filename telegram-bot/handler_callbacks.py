@@ -765,10 +765,11 @@ async def cbq_existing_iof(callback: CallbackQuery, state: FSMContext):
         uuid=uuid,
         is_org=response_uuid['is_org'],
         card_message_id=card_message_id,
+        card_type=card_type,
     )
     if response_uuid['is_org']:
         text = 'Укажите для\n\n%(name)s\n\nдругое название'
-    elif card_message_id:
+    elif card_type == Misc.CARD_TYPE_MEET:
         text = 'Укажите имя для %(name)s'
     else:
         text = (
@@ -805,7 +806,7 @@ async def process_existing_iof(message: Message, state: FSMContext):
             )
             if status == 200:
                 await message.reply('Изменено')
-                if data.get('card_message_id'):
+                if data.get('card_type') == Misc.CARD_TYPE_MEET:
                     await Misc.show_edit_meet(
                         message.from_user.id,
                         response,
@@ -831,7 +832,11 @@ async def cbq_photo(callback: CallbackQuery, state: FSMContext):
        (response_check := await Misc.check_owner_by_uuid(callback.from_user, uuid)):
         inline_button_cancel = Misc.inline_button_cancel()
         await state.set_state(FSMphoto.ask)
-        await state.update_data(uuid=uuid, card_message_id=card_message_id)
+        await state.update_data(
+            uuid=uuid,
+            card_message_id=card_message_id,
+            card_type=card_type,
+        )
         prompt_photo = Misc.PROMPT_PHOTO
         status, response = await Misc.get_user_by_uuid(uuid)
         if status == 200 and Misc.is_photo_downloaded(response):
@@ -872,7 +877,7 @@ async def process_photo(message: Message, state: FSMContext):
         msg_error = '<b>Ошибка</b>. Фото не внесено.\n'
         if status_put == 200:
             card_message_id = data.get('card_message_id')
-            if card_message_id:
+            if data.get('card_type') == Misc.CARD_TYPE_MEET:
                 await message.reply(f'Фото внесено')
                 await Misc.show_edit_meet(
                     message.from_user.id,
@@ -939,7 +944,7 @@ async def cbq_photo_remove_confirmed(callback: CallbackQuery, state: FSMContext)
         )
         if status_put == 200:
             data = await state.get_data()
-            if data.get('card_message_id'):
+            if data.get('card_type') == Misc.CARD_TYPE_MEET:
                 await callback.message.reply(f'{html.quote(response_check["first_name"])} : фото удалено')
                 await Misc.show_edit_meet(
                     callback.from_user.id,
@@ -994,7 +999,11 @@ async def cbq_dates(callback: CallbackQuery, state: FSMContext):
             inline_keyboard=[ buttons + [Misc.inline_button_cancel()]]
         )
         await state.set_state(FSMdates.dob)
-        await state.update_data(uuid=uuid, card_message_id=card_message_id)
+        await state.update_data(
+            uuid=uuid,
+            card_message_id=card_message_id,
+            card_type=card_type,
+        )
         await callback.message.reply(
             prompt_dob,
             reply_markup=reply_markup,
@@ -1082,7 +1091,7 @@ async def put_dates(message, state, tg_user_sender):
             is_dead = '1' if is_dead else '',
         )
         if status_put == 200:
-            if data.get('card_message_id'):
+            if data.get('card_type') == Misc.CARD_TYPE_MEET:
                 await message.reply(f'Дата рождения изменена')
                 await Misc.show_edit_meet(
                     message.from_user.id,
@@ -1537,7 +1546,12 @@ async def cbq_get_user_desc(callback: CallbackQuery, state: FSMContext):
         status, profile = await Misc.get_user_by_uuid(uuid)
         if status == 200:
             await state.set_state(FSMpersonDesc.ask)
-            await state.update_data(uuid=uuid, uuid_pack=str(uuid4()), card_message_id=card_message_id)
+            await state.update_data(
+                uuid=uuid,
+                uuid_pack=str(uuid4()),
+                card_message_id=card_message_id,
+                card_type=card_type,
+            )
             await callback.message.reply(
                 Misc.PROMPT_USER_DESC,
                 reply_markup=Misc.reply_markup_cancel_row(),
@@ -1577,7 +1591,7 @@ async def process_get_user_desc(message: Message, state: FSMContext):
     if status == 200 and is_first:
         await message.reply('Описание сохранено')
         data = await state.get_data()
-        if data.get('card_message_id'):
+        if data.get('card_type') == Misc.CARD_TYPE_MEET:
             await Misc.show_edit_meet(
                 message.from_user.id,
                 response,

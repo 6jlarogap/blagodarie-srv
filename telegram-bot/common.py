@@ -498,8 +498,24 @@ class Misc(object):
     # Никакого re.compile! :
     RE_KEY_SEP = r'^%s%s'
 
+    # Типы карточек пользователя:
+
+    # "Обычная"
+    #
+    CARD_TYPE_CARD = 0
+
+    # Когда того благодарят, но благодаривший с ним не знаком
+    #
+    CARD_TYPE_THANK = 1
+
+    # Карточка участника игры знакомств
+    #
+    CARD_TYPE_MEET = 2
+
     CALLBACK_DATA_SID_TEMPLATE = '%(keyboard_type)s%(sep)s%(sid)s%(sep)s'
     CALLBACK_DATA_UUID_TEMPLATE = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s'
+    CALLBACK_DATA_UUID_MSG_TYPE_TEMPLATE = \
+        CALLBACK_DATA_UUID_TEMPLATE + '%(card_message_id)s%(sep)s%(card_type)s%(sep)s'
     CALLBACK_DATA_ID__TEMPLATE = '%(keyboard_type)s%(sep)s%(id_)s%(sep)s'
     CALLBACK_DATA_KEY_TEMPLATE = '%(keyboard_type)s%(sep)s'
 
@@ -2561,11 +2577,12 @@ class Misc(object):
         if not card_message_id:
             card_message_id = ''
         if edit:
-            callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE + '%(card_message_id)s%(sep)s'
+            callback_data_template = cls.CALLBACK_DATA_UUID_MSG_TYPE_TEMPLATE
             callback_data_dict = dict(
                 uuid=profile['uuid'],
                 sep=KeyboardType.SEP,
                 card_message_id=card_message_id,
+                card_type=cls.CARD_TYPE_MEET
             )
 
             callback_data_dict.update(keyboard_type=KeyboardType.IOF)
@@ -2631,12 +2648,27 @@ class Misc(object):
         photo_url = profile['photo'] or cls.photo_no_photo(profile)
         photo = URLInputFile(url=photo_url, filename='1.png')
         if card_message_id:
-            await bot.edit_message_caption(
-                chat_id=tg_user_sender_id,
-                message_id=card_message_id,
-                caption=caption,
-                reply_markup=reply_markup,
-            )
+            try:
+                await bot.edit_message_media(
+                    chat_id=tg_user_sender_id,
+                    message_id=card_message_id,
+                    media=InputMediaPhoto(media=photo),
+                )
+            except TelegramBadRequest:
+                # Особенно если:
+                #   -   canceled by new editMessageMedia request
+                pass
+            try:
+                await bot.edit_message_caption(
+                    chat_id=tg_user_sender_id,
+                    message_id=card_message_id,
+                    caption=caption,
+                    reply_markup=reply_markup,
+                )
+            except TelegramBadRequest:
+                # Особенно если:
+                #   -   message is not modified
+                pass
         else:
             await bot.send_photo(
                 chat_id=tg_user_sender_id,
