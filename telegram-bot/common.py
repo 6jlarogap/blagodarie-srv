@@ -2426,6 +2426,7 @@ class Misc(object):
                         # Т.е.он снова выйдет на value = x + 1, но x к этому времени будет
                         # уже больше.
                         continue
+            r.close()
         return int(value) <= 1
 
     @classmethod
