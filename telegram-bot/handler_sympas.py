@@ -730,10 +730,12 @@ async def cbq_get_sympa_send_profile(callback: CallbackQuery, state: FSMContext)
         keyboard_type=KeyboardType.SEND_MESSAGE,
         uuid=profile_from['uuid'],
         sep=KeyboardType.SEP,
+        card_message_id=callback.message.message_id,
+        card_type=Misc.CARD_TYPE_MEET
     )
     inline_btn_send_message_to = InlineKeyboardButton(
         text=write_message,
-        callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % dict_message
+        callback_data=Misc.CALLBACK_DATA_UUID_MSG_TYPE_TEMPLATE % dict_message
     )
     reply_markup_to = InlineKeyboardMarkup(inline_keyboard=[ 
         [ inline_btn_send_message_to ],
@@ -743,7 +745,7 @@ async def cbq_get_sympa_send_profile(callback: CallbackQuery, state: FSMContext)
     dict_message.update(uuid=profile_to['uuid'])
     inline_btn_send_message_from = InlineKeyboardButton(
         text=write_message,
-        callback_data=Misc.CALLBACK_DATA_UUID_TEMPLATE % dict_message
+        callback_data=Misc.CALLBACK_DATA_UUID_MSG_TYPE_TEMPLATE % dict_message
     )
     reply_markup_from = InlineKeyboardMarkup(inline_keyboard=[ 
         [ inline_btn_send_message_from ],

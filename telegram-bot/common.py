@@ -377,7 +377,6 @@ class Misc(object):
     #
     BANKING_DETAILS_ID = 4
 
-    MSG_YOU_GOT_MESSAGE = 'Вам сообщение от <b>%s</b>'
     MSG_YOU_CANCELLED_INPUT = 'Вы отказались от ввода данных'
     MSG_USER_NOT_FOUND = 'Пользователь не найден'
 

@@ -1359,14 +1359,23 @@ async def cbq_udelete_user_confirmed(callback: CallbackQuery, state: FSMContext)
         KeyboardType.SEP,
     )), StateFilter(None))
 async def cbq_send_message(callback: CallbackQuery, state: FSMContext):
-    if uuid := Misc.get_uuid_from_callback(callback):
+    uuid, card_message_id, card_type = Misc.parse_uid_message_calback(callback)
+    if uuid:
         status_to, profile_to = await Misc.get_user_by_uuid(uuid)
         if status_to == 200:
             await state.set_state(FSMsendMessage.ask)
-            await state.update_data(uuid=uuid, uuid_pack=str(uuid4()))
-            iof_link = Misc.get_deeplink_with_name(profile_to)
+            await state.update_data(
+                uuid=uuid,
+                uuid_pack=str(uuid4()),
+                card_message_id=card_message_id,
+                card_type=card_type,
+            )
+            if card_type == Misc.CARD_TYPE_MEET:
+                iof_link = html.quote(profile_to['first_name'])
+            else:
+                iof_link = Misc.get_deeplink_with_name(profile_to)
             await callback.message.reply(
-                f'Напишите или перешлите мне сообщение для отправки <b>{iof_link}</b>',
+                f'Напишите мне сообщение для передачи <b>{iof_link}</b>',
                 reply_markup=Misc.reply_markup_cancel_row(),
             )
     await callback.answer()
@@ -1420,9 +1429,13 @@ async def process_message_to_send(message: Message, state: FSMContext):
                     for tgd in tg_user_to_tg_data:
                         try:
                             if is_first:
+                                if data.get('card_type') == Misc.CARD_TYPE_MEET:
+                                    iof_link = html.quote(profile_from['first_name'])
+                                else:
+                                    iof_link = Misc.get_deeplink_with_name(profile_from)
                                 await bot.send_message(
                                     tgd['tg_uid'],
-                                    text=Misc.MSG_YOU_GOT_MESSAGE % Misc.get_deeplink_with_name(profile_from),
+                                    text=f'\u2193\u2193\u2193 Вам сообщение от <b>{iof_link}</b> \u2193\u2193\u2193'
                                 )
                             await bot.copy_message(
                                 tgd['tg_uid'],
