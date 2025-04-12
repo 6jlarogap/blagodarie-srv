@@ -607,12 +607,12 @@ async def process_message_donate_after_sympa(message: Message, state: FSMContext
         await state.clear(); return
     user_m = profile_from
     user_f = data['response_get_donate']['user_f']
-    media_group_id = str(message.media_group_id or '')
     key = (
         f'{Rcache.ASK_MONEY_PREFIX}{Rcache.KEY_SEP}'
         f'{data["uuid_pack"]}'
     )
-    is_first = Misc.redis_is_key_first_up(key, ex=300)
+    if not await Misc.check_none_n_clear(is_first := Misc.redis_is_key_first_up(key), state):
+        return
     tgdesc_payload  = dict(
         tg_token=settings.TOKEN,
         journal_id=data['journal_id'],
@@ -628,42 +628,43 @@ async def process_message_donate_after_sympa(message: Message, state: FSMContext
     logging.debug('post donate_reciprocal_sympathy, status: %s' % status)
     logging.debug('post donate_reciprocal_sympathy, response: %s' % response)
     if status == 200:
+        if not is_first:
+            return
+        if not await Misc.check_none_n_clear(await Misc.redis_wait_last_in_pack(key), state):
+            return
         success = False
-        if is_first:
-            for tgd in data['response_get_donate']['donate']['tg_data']:
-                try:
-                    await bot.send_message(
-                        tgd['tg_uid'],
-                        text=(
-                            f'Получена благодарность за приглашение '
-                            f'{Misc.get_deeplink_with_name(user_f)} '
-                            f'в игру знакомств'
-                    ))
-                    success = True
-                except (TelegramBadRequest, TelegramForbiddenError):
-                    pass
-
         for tgd in data['response_get_donate']['donate']['tg_data']:
             try:
-                await bot.forward_message(
+                await bot.send_message(
                     tgd['tg_uid'],
-                    from_chat_id=message.chat.id,
-                    message_id=message.message_id,
-                )
+                    text=(
+                        f'Получена благодарность за приглашение '
+                        f'{html.quote(user_f["first_name"])} '
+                        f'в игру знакомств'
+                ))
                 success = True
             except (TelegramBadRequest, TelegramForbiddenError):
                 pass
-        for tgd in user_f['tg_data']:
-            try:
-                await bot.forward_message(
-                    tgd['tg_uid'],
-                    from_chat_id=message.chat.id,
-                    message_id=message.message_id,
-                )
-            except (TelegramBadRequest, TelegramForbiddenError):
-                pass
 
-        if is_first and success:
+        payload_send_pack = dict(
+            tg_token=settings.TOKEN,
+            uuid_pack=data['uuid_pack'],
+            username=data['response_get_donate']['donate']['profile']['username'],
+            what='tgdesc',
+        )
+        # Api пошлёт всем
+        status_send_pack, response_send_pack = await Misc.api_request(
+            path='/api/show_tgmsg_pack',
+            method='post',
+            json=payload_send_pack,
+        )
+        payload_send_pack.update(username=user_f['username'])
+        status_send_pack, response_send_pack = await Misc.api_request(
+            path='/api/show_tgmsg_pack',
+            method='post',
+            json=payload_send_pack,
+        )
+        if success:
             if data.get('message'):
                 text, reply_markup = Common.after_donate_or_not_donate(
                     user_m, user_f, data['journal_id'],
