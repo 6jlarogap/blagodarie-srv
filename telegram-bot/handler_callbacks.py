@@ -338,18 +338,21 @@ async def process_message_meet_tgdesc(message: Message, state: FSMContext):
     if await is_it_command(message, state):
         return
     data = await state.get_data()
-    status_from, profile_from = await Misc.post_tg_user(message.from_user)
-    if status_from != 200 or profile_from['uuid'] != data['uuid'] or not data.get('uuid_pack'):
-        await state.clear()
-        return
     status, response, is_first = await do_get_user_desc(message, state)
     if status == 200:
+        if not is_first:
+            return
+        key = (
+            f'{Rcache.USER_DESC_PREFIX}{Rcache.KEY_SEP}'
+            f'{data["uuid_pack"]}'
+        )
+        if not await Misc.check_none_n_clear(await Misc.redis_wait_last_in_pack(key), state):
+            return
         data.update(tgdesc_first=is_first)
-        if is_first:
-            logging.info(f'MEET_LOG: {profile_from["first_name"]} ({profile_from["username"]}) entered description')
-    await asyncio.sleep(settings.MULTI_MESSAGE_TIMEOUT)
+        logging.info(f'MEET_LOG: {data["first_name"]} ({data["username"]}) entered description')
     await state.clear()
-    await meet_do_or_revoke(data)
+    if status == 200:
+        await meet_do_or_revoke(data)
 
 
 @router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMmeet.ask_dob))
@@ -1393,7 +1396,7 @@ async def process_message_to_send(message: Message, state: FSMContext):
             f'{Rcache.SEND_MESSAGE_PREFIX}{Rcache.KEY_SEP}'
             f'{data["uuid_pack"]}'
         )
-        if not await Misc.check_redis(is_first := Misc.redis_is_key_first_up(key), state):
+        if not await Misc.check_none_n_clear(is_first := Misc.redis_is_key_first_up(key), state):
             return
 
         status_to, profile_to = await Misc.get_user_by_uuid(data['uuid'], with_owner_tg_data=True)
@@ -1446,11 +1449,11 @@ async def process_message_to_send(message: Message, state: FSMContext):
                 await state.clear()
                 return
 
-            if not await Misc.check_redis(Misc.redis_save_time(key), state):
+            if not await Misc.check_none_n_clear(Misc.redis_save_time(key), state):
                 return
             if not is_first:
                 return
-            if not await Misc.check_redis(await Misc.redis_wait_last_in_pack(key), state):
+            if not await Misc.check_none_n_clear(await Misc.redis_wait_last_in_pack(key), state):
                 return
 
             if tg_user_to_tg_data:
@@ -1597,43 +1600,52 @@ async def cbq_get_user_desc(callback: CallbackQuery, state: FSMContext):
 
 
 async def do_get_user_desc(message: Message, state: FSMContext):
+    failed = (None, None, None)
     if await is_it_command(message, state):
-        return
+        return failed
     data = await state.get_data()
     if not (data.get('uuid') and data.get('uuid_pack')):
-        return
+        return failed
     status, profile = await Misc.post_tg_user(message.from_user)
     if status != 200 or profile['uuid'] != data['uuid']:
-        return
-    # первое сообщение в коллаже или единственное
-    is_first = True
+        return failed
     key = (
         f'{Rcache.USER_DESC_PREFIX}{Rcache.KEY_SEP}'
         f'{data["uuid_pack"]}'
     )
-    is_first = Misc.redis_is_key_first_up(key, ex=300)
+    if not await Misc.check_none_n_clear(is_first := Misc.redis_is_key_first_up(key), state):
+        return failed
     status, response = await Misc.put_user_properties(
         form_data=False,
         uuid=data['uuid'],
         is_first=is_first,
         tgdesc=TgDesc.from_message(message, data['uuid_pack'])
     )
+    if status != 200 or not await Misc.check_none_n_clear(Misc.redis_save_time(key), state):
+        return failed
     return status, response, is_first
 
 
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMpersonDesc.ask))
 async def process_get_user_desc(message: Message, state: FSMContext):
     status, response, is_first = await do_get_user_desc(message, state)
-    await asyncio.sleep(settings.MULTI_MESSAGE_TIMEOUT)
-    if status == 200 and is_first:
-        await message.reply('Описание сохранено')
+    if status == 200:
+        if not is_first:
+            return
         data = await state.get_data()
-        if data.get('card_type') == Misc.CARD_TYPE_MEET:
-            await Misc.show_edit_meet(
-                message.from_user.id,
-                response,
+        if data.get('uuid_pack'):
+            key = (
+                f'{Rcache.USER_DESC_PREFIX}{Rcache.KEY_SEP}'
+                f'{data["uuid_pack"]}'
             )
-
+            if not await Misc.check_none_n_clear(await Misc.redis_wait_last_in_pack(key), state):
+                return
+            await message.reply('Описание сохранено')
+            if data.get('card_type') == Misc.CARD_TYPE_MEET:
+                await Misc.show_edit_meet(
+                    message.from_user.id,
+                    response,
+                )
     await state.clear()
 
 

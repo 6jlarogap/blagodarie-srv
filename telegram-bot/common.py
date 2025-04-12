@@ -2401,7 +2401,7 @@ class Misc(object):
 
 
     @classmethod
-    async def check_redis(cls, not_none, state):
+    async def check_none_n_clear(cls, not_none, state):
         result = True
         if not_none is None:
             await state.clear()
