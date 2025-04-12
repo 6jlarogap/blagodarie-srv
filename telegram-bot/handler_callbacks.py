@@ -1366,21 +1366,24 @@ async def cbq_send_message(callback: CallbackQuery, state: FSMContext):
     if uuid:
         status_to, profile_to = await Misc.get_user_by_uuid(uuid)
         if status_to == 200:
-            await state.set_state(FSMsendMessage.ask)
-            await state.update_data(
-                uuid=uuid,
-                uuid_pack=str(uuid4()),
-                card_message_id=card_message_id,
-                card_type=card_type,
-            )
-            if card_type == Misc.CARD_TYPE_MEET:
-                iof_link = html.quote(profile_to['first_name'])
-            else:
-                iof_link = Misc.get_deeplink_with_name(profile_to)
-            await callback.message.reply(
-                f'Напишите мне сообщение для передачи <b>{iof_link}</b>',
-                reply_markup=Misc.reply_markup_cancel_row(),
-            )
+            status_from, profile_from = await Misc.post_tg_user(callback.from_user)
+            if status_from == 200:
+                await state.set_state(FSMsendMessage.ask)
+                await state.update_data(
+                    uuid_pack=str(uuid4()),
+                    card_message_id=card_message_id,
+                    card_type=card_type,
+                    profile_from=profile_from,
+                    profile_to=profile_to,
+                )
+                if card_type == Misc.CARD_TYPE_MEET:
+                    iof_link = html.quote(profile_to['first_name'])
+                else:
+                    iof_link = Misc.get_deeplink_with_name(profile_to)
+                await callback.message.reply(
+                    f'Напишите мне сообщение для передачи <b>{iof_link}</b>',
+                    reply_markup=Misc.reply_markup_cancel_row(),
+                )
     await callback.answer()
 
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMsendMessage.ask))
@@ -1391,103 +1394,97 @@ async def process_message_to_send(message: Message, state: FSMContext):
     msg_delivered = msg_saved
     success = False
     data = await state.get_data()
-    if data.get('uuid') and data.get('uuid_pack'):
-        key = (
-            f'{Rcache.SEND_MESSAGE_PREFIX}{Rcache.KEY_SEP}'
-            f'{data["uuid_pack"]}'
+    key = (
+        f'{Rcache.SEND_MESSAGE_PREFIX}{Rcache.KEY_SEP}'
+        f'{data["uuid_pack"]}'
+    )
+    if not await Misc.check_none_n_clear(is_first := Misc.redis_is_key_first_up(key), state):
+        return
+    profile_to = data['profile_to']; profile_from = data['profile_from']
+
+    # Возможны варианты с получателем:
+    #   - самому себе                               нет смысла отправлять
+    #   - своему овнеду                             нет смысла отправлять
+    #   - чужому овнеду с владельцем с телеграмом
+    #   - чужому овнеду с владельцем без телеграма  нет смысла отправлять
+    #   - юзеру с телеграмом
+    #   - юзеру без телеграма                       нет смысла отправлять
+
+    # Есть ли смысл отправлять и если есть то кому?
+    #
+    tg_user_to_tg_data = []
+    user_to_delivered_uuid = None
+    if profile_from['uuid'] == profile_to['uuid']:
+        # самому себе
+        user_to_delivered_uuid = profile_to['uuid']
+    elif profile_to['owner'] and profile_to['owner']['uuid'] == profile_from['uuid']:
+        # своему овнеду
+        pass
+    elif profile_to['owner'] and profile_to['owner']['uuid'] != profile_from['uuid']:
+        # чужому овнеду: телеграм у него есть?
+        if profile_to['owner'].get('tg_data'):
+            tg_user_to_tg_data = profile_to['owner']['tg_data']
+            user_to_delivered_uuid = profile_to['owner']['uuid']
+    elif profile_to.get('tg_data'):
+        tg_user_to_tg_data = profile_to['tg_data']
+        user_to_delivered_uuid = profile_to['uuid']
+    else:
+        if is_first:
+            await message.reply(msg_saved)
+    payload_send_message = dict(
+        tg_token=settings.TOKEN,
+        user_from_uuid=profile_from['uuid'],
+        user_to_uuid=profile_to['uuid'],
+        user_to_delivered_uuid=user_to_delivered_uuid,
+    )
+    payload_send_message.update(TgDesc.from_message(message, data['uuid_pack']))
+    try:
+        status_log, response_log = await Misc.api_request(
+            path='/api/tg_message',
+            method='post',
+            json=payload_send_message,
         )
-        if not await Misc.check_none_n_clear(is_first := Misc.redis_is_key_first_up(key), state):
-            return
+    except:
+        await state.clear()
+        return
 
-        status_to, profile_to = await Misc.get_user_by_uuid(data['uuid'], with_owner_tg_data=True)
-        if status_to == 200:
-            status_from, profile_from = await Misc.post_tg_user(message.from_user)
-            if status_from == 200:
-                # Возможны варианты с получателем:
-                #   - самому себе                               нет смысла отправлять
-                #   - своему овнеду                             нет смысла отправлять
-                #   - чужому овнеду с владельцем с телеграмом
-                #   - чужому овнеду с владельцем без телеграма  нет смысла отправлять
-                #   - юзеру с телеграмом
-                #   - юзеру без телеграма                       нет смысла отправлять
+    if not await Misc.check_none_n_clear(Misc.redis_save_time(key), state):
+        return
+    if not is_first:
+        return
+    if not await Misc.check_none_n_clear(await Misc.redis_wait_last_in_pack(key), state):
+        return
 
-                # Есть ли смысл отправлять и если есть то кому?
-                #
-                tg_user_to_tg_data = []
-                user_to_delivered_uuid = None
-                if profile_from['uuid'] == profile_to['uuid']:
-                    # самому себе
-                    user_to_delivered_uuid = profile_to['uuid']
-                elif profile_to['owner'] and profile_to['owner']['uuid'] == profile_from['uuid']:
-                    # своему овнеду
-                    pass
-                elif profile_to['owner'] and profile_to['owner']['uuid'] != profile_from['uuid']:
-                    # чужому овнеду: телеграм у него есть?
-                    if profile_to['owner'].get('tg_data'):
-                        tg_user_to_tg_data = profile_to['owner']['tg_data']
-                        user_to_delivered_uuid = profile_to['owner']['uuid']
-                elif profile_to.get('tg_data'):
-                    tg_user_to_tg_data = profile_to['tg_data']
-                    user_to_delivered_uuid = profile_to['uuid']
-                else:
-                    if is_first:
-                        await message.reply(msg_saved)
-            payload_send_message = dict(
-                tg_token=settings.TOKEN,
-                user_from_uuid=profile_from['uuid'],
-                user_to_uuid=profile_to['uuid'],
-                user_to_delivered_uuid=user_to_delivered_uuid,
-            )
-            payload_send_message.update(TgDesc.from_message(message, data['uuid_pack']))
+    if tg_user_to_tg_data:
+        if data.get('card_type') == Misc.CARD_TYPE_MEET:
+            iof_link = html.quote(profile_from['first_name'])
+        else:
+            iof_link = Misc.get_deeplink_with_name(profile_from)
+        for tgd in tg_user_to_tg_data:
             try:
-                status_log, response_log = await Misc.api_request(
-                    path='/api/tg_message',
-                    method='post',
-                    json=payload_send_message,
+                await bot.send_message(
+                    tgd['tg_uid'],
+                    text=f'\u2193\u2193\u2193 Вам сообщение от <b>{iof_link}</b> \u2193\u2193\u2193'
                 )
-            except:
-                await state.clear()
-                return
-
-            if not await Misc.check_none_n_clear(Misc.redis_save_time(key), state):
-                return
-            if not is_first:
-                return
-            if not await Misc.check_none_n_clear(await Misc.redis_wait_last_in_pack(key), state):
-                return
-
-            if tg_user_to_tg_data:
-                if data.get('card_type') == Misc.CARD_TYPE_MEET:
-                    iof_link = html.quote(profile_from['first_name'])
-                else:
-                    iof_link = Misc.get_deeplink_with_name(profile_from)
-                for tgd in tg_user_to_tg_data:
-                    try:
-                        await bot.send_message(
-                            tgd['tg_uid'],
-                            text=f'\u2193\u2193\u2193 Вам сообщение от <b>{iof_link}</b> \u2193\u2193\u2193'
-                        )
-                        success = True
-                    except (TelegramBadRequest, TelegramForbiddenError):
-                        msg_delivered = 'Получатель не смог принять сообщение'
-                if success:
-                    msg_delivered = 'Сообщение доставлено'
-                else:
-                    user_to_delivered_uuid = None
-            await message.reply(msg_delivered)
-            if success:
-                payload_send_pack = dict(
-                    tg_token=settings.TOKEN,
-                    uuid_pack=data['uuid_pack'],
-                    username=profile_to['username'],
-                    what='messages',
-                )
-                # Api пошлёт всем
-                status_send_pack, response_send_pack = await Misc.api_request(
-                    path='/api/show_tgmsg_pack',
-                    method='post',
-                    json=payload_send_pack,
-                )
+                success = True
+            except (TelegramBadRequest, TelegramForbiddenError):
+                msg_delivered = 'Получатель не смог принять сообщение'
+        if success:
+            msg_delivered = 'Сообщение доставлено'
+    await message.reply(msg_delivered)
+    if success:
+        payload_send_pack = dict(
+            tg_token=settings.TOKEN,
+            uuid_pack=data['uuid_pack'],
+            username=profile_to['username'],
+            what='messages',
+        )
+        # Api пошлёт всем
+        status_send_pack, response_send_pack = await Misc.api_request(
+            path='/api/show_tgmsg_pack',
+            method='post',
+            json=payload_send_pack,
+        )
     await state.clear()
 
 

@@ -4373,3 +4373,35 @@ class ApiGetDonateTo(ApiAddOperationMixin, APIView):
         return Response(data=data, status=status_code)
 
 api_get_donate_to = ApiGetDonateTo.as_view()
+
+class ApiTgMessageLast(UuidMixin, APIView):
+
+    MESSAGE_COUNT = 10
+
+    def post(self, request):
+        """
+        Получить self.MESSAGE_COUNT последних сообщений от user_from_uuid к user_to_uuid
+        """
+        # На замену api_tg_message_list
+        try:
+            data = request.data
+            if data.get('tg_token'):
+                if data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                    raise ServiceException('Неверный токен телеграм бота')
+            else:
+                raise NotAuthenticated
+            user_from, profile_from = self.check_user_uuid(
+                data.get('user_from_uuid'), related=[], comment='user_from_uuid: '
+            )
+            user_to, profile_to = self.check_user_uuid(
+                data.get('user_to_uuid'), related=[], comment='user_to_uuid: '
+            )
+            data = []
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_tg_message_last = ApiTgMessageLast.as_view()
+
