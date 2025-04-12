@@ -1068,7 +1068,9 @@ class TelegramApiMixin(object):
                     options_.update(media=media)
                     for uid in uids:
                         options_.update(chat_id=uid)
-                        self.__make_request(url, parms=options_)
+                        sent = self.__make_request(url, parms=options_)
+                        if sent:
+                            success = True
         return success
 
     def parse_tgmsg_pack(self, messages):

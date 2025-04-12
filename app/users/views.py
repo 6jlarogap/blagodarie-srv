@@ -34,7 +34,7 @@ from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TgGroup
     TempToken, UuidMixin, TelegramApiMixin, \
     TgPoll, TgPollAnswer, Offer, OfferAnswer, TgDesc
 from contact.models import Key, KeyType, CurrentState, OperationType, Wish, Ability, \
-                           ApiAddOperationMixin, Journal
+                           ApiAddOperationMixin, Journal, TgMessageJournal
 from wote.models import Video, Vote
 
 class ApiTokenAuthDataMixin(object):
@@ -4476,3 +4476,48 @@ class ApiMeetId(APIView):
 
 api_meet_id = ApiMeetId.as_view()
 
+class ApiShowTgmsgPack(TelegramApiMixin, APIView):
+
+    def post(self, request):
+        """
+        Вывод пачки сообщений
+
+        Параметры:
+            uuid_pack:  в соответствующей таблице это идентифицирует пачку
+            username:   кому выводим в телеграме
+            what:       messages, если пачку берем из TgMessageJournal,
+                        иначе из TgDesc
+        """
+        try:
+            if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                raise ServiceException('Неверный токен телеграм бота')
+            d_parms = dict(what='tgdesc')
+            for parm in ('uuid_pack', 'username', 'what'):
+                if parm in request.data:
+                    d_parms[parm] = request.data[parm]
+                if not d_parms.get(parm):
+                    raise ServiceException(f"Не указан параметр '{parm}'")
+            try:
+                user = User.objects.get(username=d_parms['username'])
+            except User.DoesNotExist:
+                raise ServiceException(f"Не найден user '{d_parms['username']}'")
+            model = TgMessageJournal if d_parms['what'] == 'messages' else TgDesc
+            messages = [
+                m.message_dict() for m in model.objects.filter(
+                        uuid_pack=d_parms['uuid_pack']
+                    ).order_by('message_id')
+            ]
+            options = dict(
+                disable_web_page_preview=True,
+                disable_notification=True,
+            )
+            if not self.send_pack_to_telegram(messages, user, options=options):
+                raise ServiceException('Ошибка передачи сообщения')
+            data = dict()
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_show_tgmsg_pack = ApiShowTgmsgPack.as_view()

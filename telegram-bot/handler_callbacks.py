@@ -2,7 +2,7 @@
 #
 # Сallback реакции
 
-import re, base64
+import re, base64, time
 from uuid import uuid4
 
 import asyncio
@@ -1385,19 +1385,21 @@ async def process_message_to_send(message: Message, state: FSMContext):
     if await is_it_command(message, state):
         return
     msg_saved = 'Сообщение сохранено'
+    msg_delivered = msg_saved
+    success = False
     data = await state.get_data()
     if data.get('uuid') and data.get('uuid_pack'):
+        key = (
+            f'{Rcache.SEND_MESSAGE_PREFIX}{Rcache.KEY_SEP}'
+            f'{data["uuid_pack"]}'
+        )
+        if not await Misc.check_redis(is_first := Misc.redis_is_key_first_up(key), state):
+            return
+
         status_to, profile_to = await Misc.get_user_by_uuid(data['uuid'], with_owner_tg_data=True)
         if status_to == 200:
             status_from, profile_from = await Misc.post_tg_user(message.from_user)
             if status_from == 200:
-                # первое сообщение в коллаже или единственное
-                key = (
-                    f'{Rcache.SEND_MESSAGE_PREFIX}{Rcache.KEY_SEP}'
-                    f'{data["uuid_pack"]}'
-                )
-                is_first = Misc.redis_is_key_first_up(key, ex=300)
-
                 # Возможны варианты с получателем:
                 #   - самому себе                               нет смысла отправлять
                 #   - своему овнеду                             нет смысла отправлять
@@ -1424,34 +1426,6 @@ async def process_message_to_send(message: Message, state: FSMContext):
                 elif profile_to.get('tg_data'):
                     tg_user_to_tg_data = profile_to['tg_data']
                     user_to_delivered_uuid = profile_to['uuid']
-                if tg_user_to_tg_data:
-                    success = False
-                    for tgd in tg_user_to_tg_data:
-                        try:
-                            if is_first:
-                                if data.get('card_type') == Misc.CARD_TYPE_MEET:
-                                    iof_link = html.quote(profile_from['first_name'])
-                                else:
-                                    iof_link = Misc.get_deeplink_with_name(profile_from)
-                                await bot.send_message(
-                                    tgd['tg_uid'],
-                                    text=f'\u2193\u2193\u2193 Вам сообщение от <b>{iof_link}</b> \u2193\u2193\u2193'
-                                )
-                            await bot.copy_message(
-                                tgd['tg_uid'],
-                                from_chat_id=message.chat.id,
-                                message_id=message.message_id,
-                            )
-                            success = True
-                        except (TelegramBadRequest, TelegramForbiddenError):
-                            pass
-                    if success:
-                        msg_delivered = 'Сообщение доставлено'
-                    else:
-                        msg_delivered = msg_saved
-                        user_to_delivered_uuid = None
-                    if is_first:
-                        await message.reply(msg_delivered)
                 else:
                     if is_first:
                         await message.reply(msg_saved)
@@ -1469,8 +1443,48 @@ async def process_message_to_send(message: Message, state: FSMContext):
                     json=payload_send_message,
                 )
             except:
-                pass
-            await asyncio.sleep(settings.MULTI_MESSAGE_TIMEOUT)
+                await state.clear()
+                return
+
+            if not await Misc.check_redis(Misc.redis_save_time(key), state):
+                return
+            if not is_first:
+                return
+            if not await Misc.check_redis(await Misc.redis_wait_last_in_pack(key), state):
+                return
+
+            if tg_user_to_tg_data:
+                if data.get('card_type') == Misc.CARD_TYPE_MEET:
+                    iof_link = html.quote(profile_from['first_name'])
+                else:
+                    iof_link = Misc.get_deeplink_with_name(profile_from)
+                for tgd in tg_user_to_tg_data:
+                    try:
+                        await bot.send_message(
+                            tgd['tg_uid'],
+                            text=f'\u2193\u2193\u2193 Вам сообщение от <b>{iof_link}</b> \u2193\u2193\u2193'
+                        )
+                        success = True
+                    except (TelegramBadRequest, TelegramForbiddenError):
+                        msg_delivered = 'Получатель не смог принять сообщение'
+                if success:
+                    msg_delivered = 'Сообщение доставлено'
+                else:
+                    user_to_delivered_uuid = None
+            await message.reply(msg_delivered)
+            if success:
+                payload_send_pack = dict(
+                    tg_token=settings.TOKEN,
+                    uuid_pack=data['uuid_pack'],
+                    username=profile_to['username'],
+                    what='messages',
+                )
+                # Api пошлёт всем
+                status_send_pack, response_send_pack = await Misc.api_request(
+                    path='/api/show_tgmsg_pack',
+                    method='post',
+                    json=payload_send_pack,
+                )
     await state.clear()
 
 

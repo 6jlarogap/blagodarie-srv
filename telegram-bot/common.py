@@ -9,6 +9,8 @@ import qrcode
 from PIL import Image
 from io import BytesIO
 
+import asyncio
+
 from aiogram import types, html
 from aiogram.types.login_url import LoginUrl
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -112,6 +114,10 @@ class Rcache(object):
     SET_NEXT_SYMPA_WAIT = settings.REDIS_SET_NEXT_SYMPA_WAIT
 
     KEY_SEP = '~'
+
+    SEND_MULTI_MESSAGE_TIME_SUFFIX = f'{KEY_SEP}time'
+    SEND_MULTI_MESSAGE_EXPIRE = 300
+    SEND_MULTI_MESSAGE_WAIT_RETRIES = 60
 
 
 class OperationType(object):
@@ -2395,7 +2401,38 @@ class Misc(object):
 
 
     @classmethod
-    def redis_is_key_first_up(cls, key, ex=300):
+    async def check_redis(cls, not_none, state):
+        result = True
+        if not_none is None:
+            await state.clear()
+            result = False
+        return result
+
+
+    @classmethod
+    async def redis_wait_last_in_pack(cls, key):
+        result = None
+        for i in range(Rcache.SEND_MULTI_MESSAGE_WAIT_RETRIES):
+            key_time = f'{key}{Rcache.SEND_MULTI_MESSAGE_TIME_SUFFIX}'
+            if r := redis.Redis(**settings.REDIS_CONNECT):
+                try:
+                    saved_time = float(r.get(key_time) or time.time())
+                    r.close()
+                    if time.time() - saved_time > settings.MULTI_MESSAGE_TIMEOUT:
+                        result = True
+                        break
+                    await asyncio.sleep(1)
+                except:
+                    break
+            else:
+                break
+        else:
+            result = True
+        return result
+
+
+    @classmethod
+    def redis_is_key_first_up(cls, key, ex=Rcache.SEND_MULTI_MESSAGE_EXPIRE):
         """
         Вызывающий эту функцию первым установил ключ key?
 
@@ -2405,29 +2442,41 @@ class Misc(object):
         в случае коллажа сообщений с одним media_group_id
         уникальность ключа, относящегося к коллажу,
         будет достигнута: messsage.chat.id . media_group_id
+
+        Заодно в redis ставится время, когда произошло событие
         """
+        result = None
         value = 0
+        is_first = None
         if r := redis.Redis(**settings.REDIS_CONNECT):
-            with r.pipeline() as pipe:
-                while True:
-                    try:
-                        pipe.watch(key)
-                        x = int(pipe.get(key) or 0)
-                        pipe.multi()
-                        value = x + 1
-                        pipe.set(key, value, ex=ex)
-                        pipe.execute()
-                        break
-                    except redis.WatchError as e:
-                        # https://learn.codesignal.com/preview/lessons/2765
-                        # if another client changes the key before the transaction is executed,
-                        # a redis.WatchError exception is raised,
-                        # and the transaction is retried - hence the continue statement.
-                        # Т.е.он снова выйдет на value = x + 1, но x к этому времени будет
-                        # уже больше.
-                        continue
-            r.close()
-        return int(value) <= 1
+            key_time = f'{key}{Rcache.SEND_MULTI_MESSAGE_TIME_SUFFIX}'
+            try:
+                with r.pipeline() as pipe:
+                    while True:
+                        try:
+                            pipe.watch(key)
+                            x = int(pipe.get(key) or 0)
+                            pipe.multi()
+                            value = x + 1
+                            pipe.set(key_time, str(time.time()), ex=ex)
+                            pipe.set(key, value, ex=ex)
+                            pipe.execute()
+                            break
+                        except redis.WatchError as e:
+                            # https://learn.codesignal.com/preview/lessons/2765
+                            # if another client changes the key before the transaction is executed,
+                            # a redis.WatchError exception is raised,
+                            # and the transaction is retried - hence the continue statement.
+                            # Т.е.он снова выйдет на value = x + 1, но x к этому времени будет
+                            # уже больше.
+                            continue
+                r.close()
+                result = int(value) <= 1
+            except:
+                result = None
+        return result
+
+    redis_save_time = redis_is_key_first_up
 
     @classmethod
     async def get_bank_details(cls, uuid):
