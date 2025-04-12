@@ -1702,14 +1702,12 @@ async def process_message_thank_ask_money(message: Message, state: FSMContext):
     status_from, profile_from = await Misc.post_tg_user(message.from_user)
     if status_from != 200 or profile_from['uuid'] != data.get('profile_from', {}).get('uuid', ''):
         await state.clear(); return
-
-    is_first = True
-    media_group_id = str(message.media_group_id or '')
     key = (
         f'{Rcache.ASK_MONEY_PREFIX}{Rcache.KEY_SEP}'
         f'{data["uuid_pack"]}'
     )
-    is_first = Misc.redis_is_key_first_up(key, ex=300)
+    if not await Misc.check_none_n_clear(is_first := Misc.redis_is_key_first_up(key), state):
+        return
     tgdesc_payload  = dict(
         tg_token=settings.TOKEN,
         journal_id=journal_id,
@@ -1725,32 +1723,26 @@ async def process_message_thank_ask_money(message: Message, state: FSMContext):
     logging.debug('post thank_bank, status: %s' % status)
     logging.debug('post thank_bank, response: %s' % response)
     if status == 200:
-        is_sent = False
-        for tgd in profile_to['tg_data']:
-            try:
-                await bot.forward_message(
-                    tgd['tg_uid'],
-                    from_chat_id=message.chat.id,
-                    message_id=message.message_id,
-                )
-                is_sent = True
-            except (TelegramBadRequest, TelegramForbiddenError):
-                pass
-        if is_first and not profile_to.get('has_bank'):
-            try:
-                await bot.send_message(
-                    tgd['tg_uid'], (
-                    'Укажите Ваши Реквизиты для пожертвований в профиле - и '
-                    'они будут предложены всем кто Вас будет благодарить!'
-                ))
-            except (TelegramBadRequest, TelegramForbiddenError):
-                pass
-        await asyncio.sleep(settings.MULTI_MESSAGE_TIMEOUT)
-        if is_first:
-            await message.reply(
-                'Сообщение передано получателю благодарности' if is_sent else \
-                'Получатель не принял сообщение'
-            )
+        if not is_first:
+            return
+        if not await Misc.check_none_n_clear(await Misc.redis_wait_last_in_pack(key), state):
+            return
+        payload_send_pack = dict(
+            tg_token=settings.TOKEN,
+            uuid_pack=data['uuid_pack'],
+            username=profile_to['username'],
+            what='tgdesc',
+        )
+        # Api пошлёт всем
+        status_send_pack, response_send_pack = await Misc.api_request(
+            path='/api/show_tgmsg_pack',
+            method='post',
+            json=payload_send_pack,
+        )
+        await message.reply(
+            'Сообщение передано получателю благодарности' if status_send_pack == 200 else \
+            'Получатель не принял сообщение'
+        )
     await state.clear()
 
 
