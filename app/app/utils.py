@@ -60,31 +60,6 @@ class SQL_Mixin(object):
         """
         return s.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
 
-def get_moon_day(utc_time=None):
-    """
-    Из unix timestamp получить номер дня по лунному календарю, 0 - 27
-    """
-
-    if not utc_time:
-        utc_time = int(time.time())
-
-    ts = load.timescale()
-    d = datetime.datetime.utcfromtimestamp(utc_time)
-    t = ts.utc(d.year, d.month, d.day, d.hour, d.minute, d.second)
-
-    eph = load('de421.bsp')
-    sun, moon, earth = eph['sun'], eph['moon'], eph['earth']
-
-    e = earth.at(t)
-    _, slon, _ = e.observe(sun).apparent().frame_latlon(ecliptic_frame)
-    _, mlon, _ = e.observe(moon).apparent().frame_latlon(ecliptic_frame)
-    phase = (mlon.degrees - slon.degrees) % 360.0
-    if phase >= 360:
-        phase = phase % 360.
-    elif phase < 0:
-        phase = 0
-    return int(phase * 30 / 360)
-
 class FrontendMixin(object):
 
     def get_frontend_url(self, request, path='', ending_slash='/'):
@@ -170,3 +145,51 @@ class FromToCountMixin(object):
         except (TypeError, ValueError,):
             to_ = None
         return from_, to_
+
+class Misc(object):
+
+    FORMAT_DATE = '%d.%m.%Y'
+    FORMAT_TIME = '%H:%M:%S'
+
+    @classmethod
+    def datetime_string(cls, timestamp, with_timezone=True):
+        """
+        Строка времени
+
+        Например, 13.04.2025 00:33:15 +03
+        """
+        dt = datetime.datetime.fromtimestamp(timestamp)
+        result = dt.strftime(cls.FORMAT_DATE + ' ' + cls.FORMAT_TIME)
+        if with_timezone:
+            str_tz = dt.strftime('%Z')
+            if not str_tz:
+                str_tz = dt.astimezone().tzname()
+            result += ' ' + str_tz
+        return result
+
+    @classmethod
+    def get_moon_day(cls, utc_time=None):
+        """
+        Из unix timestamp получить номер дня по лунному календарю, 0 - 27
+        """
+
+        if not utc_time:
+            utc_time = int(time.time())
+
+        ts = load.timescale()
+        d = datetime.datetime.utcfromtimestamp(utc_time)
+        t = ts.utc(d.year, d.month, d.day, d.hour, d.minute, d.second)
+
+        eph = load('de421.bsp')
+        sun, moon, earth = eph['sun'], eph['moon'], eph['earth']
+
+        e = earth.at(t)
+        _, slon, _ = e.observe(sun).apparent().frame_latlon(ecliptic_frame)
+        _, mlon, _ = e.observe(moon).apparent().frame_latlon(ecliptic_frame)
+        phase = (mlon.degrees - slon.degrees) % 360.0
+        if phase >= 360:
+            phase = phase % 360.
+        elif phase < 0:
+            phase = 0
+        return int(phase * 30 / 360)
+

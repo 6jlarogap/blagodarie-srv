@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from django.shortcuts import redirect
 from django.db import transaction, IntegrityError, connection
-from django.db.models import F, Sum
+from django.db.models import F, Sum, Max, Min
 from django.db.models.query_utils import Q
 from django.views.generic.base import View
 from django.views.decorators.cache import cache_page
@@ -22,9 +22,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from rest_framework.exceptions import NotAuthenticated
 
-from app.utils import ServiceException, FrontendMixin, SQL_Mixin, get_moon_day
+from app.utils import ServiceException, FrontendMixin, SQL_Mixin, Misc
 
-from app.models import UnclearDate, PhotoModel
+from app.models import UnclearDate, PhotoModel, GenderMixin
 
 from contact.models import KeyType, Key, \
                            Symptom, UserSymptom, SymptomChecksumManage, \
@@ -1614,7 +1614,7 @@ class ApiGetStats(SQL_Mixin, TelegramApiMixin, ApiTgGroupConnectionsMixin, APIVi
                     moon_hour.append(items)
 
             return dict(
-                current_moon_day = get_moon_day(time_current),
+                current_moon_day = Misc.get_moon_day(time_current),
                 moon_bars=moon_bars,
                 moon_hour=moon_hour,
                 symptom_names=symptom_names,
@@ -4112,58 +4112,6 @@ class ApiProfileTrust(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiMix
 
 api_profile_trust = ApiProfileTrust.as_view()
 
-class ApiTgMessageList(UuidMixin, APIView):
-
-    MESSAGE_COUNT = 10
-
-    def post(self, request):
-        """
-        Получить self.MESSAGE_COUNT последних сообщений от user_from_uuid к user_to_uuid
-        """
-        try:
-            data = request.data
-            if data.get('tg_token'):
-                if data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
-                    raise ServiceException('Неверный токен телеграм бота')
-            else:
-                raise NotAuthenticated
-            user_from, p = self.check_user_uuid(data.get('user_from_uuid'), related=[], comment='user_from_uuid: ')
-            user_to, p = self.check_user_uuid(data.get('user_to_uuid'), related=[], comment='user_to_uuid: ')
-            data = [
-                tm.data_dict() for tm in TgMessageJournal.objects.filter(
-                    user_from__pk=user_from.pk, user_to__pk=user_to.pk,
-                    ).select_related(
-                        'user_from', 'user_to', 'user_to_delivered',
-                        'user_from__profile', 'user_to__profile', 'user_to_delivered__profile',
-                        'operationtype',
-                    ).order_by('-insert_timestamp')[:self.MESSAGE_COUNT]
-            ]
-
-            data += [
-                tm.data_dict() for tm in TgJournal.objects.filter(
-                    journal__user_from__pk=user_from.pk, journal__user_to__pk=user_to.pk,
-                    ).select_related(
-                        'journal__user_from', 'journal__user_to',
-                        'journal__user_from__profile', 'journal__user_to__profile',
-                        'journal__operationtype',
-                    ).distinct(
-                        'journal__insert_timestamp',
-                        'message_id', 'from_chat_id',
-                    ).order_by(
-                        '-journal__insert_timestamp',
-                        'message_id', 'from_chat_id',
-                    )[:self.MESSAGE_COUNT]
-            ]
-
-            data = sorted(data, key=lambda item: item['timestamp'], reverse=True)[:self.MESSAGE_COUNT]
-            status_code = status.HTTP_200_OK
-        except ServiceException as excpt:
-            data = dict(message=excpt.args[0])
-            status_code = status.HTTP_400_BAD_REQUEST
-        return Response(data=data, status=status_code)
-
-api_tg_message_list = ApiTgMessageList.as_view()
-
 class ApiTgMessage(UuidMixin, APIView):
 
     def post(self, request):
@@ -4374,7 +4322,7 @@ class ApiGetDonateTo(ApiAddOperationMixin, APIView):
 
 api_get_donate_to = ApiGetDonateTo.as_view()
 
-class ApiTgMessageLast(UuidMixin, APIView):
+class ApiTgMessageList(UuidMixin, TelegramApiMixin, GenderMixin, APIView):
 
     MESSAGE_COUNT = 10
 
@@ -4391,17 +4339,85 @@ class ApiTgMessageLast(UuidMixin, APIView):
             else:
                 raise NotAuthenticated
             user_from, profile_from = self.check_user_uuid(
-                data.get('user_from_uuid'), related=[], comment='user_from_uuid: '
+                data.get('user_from_uuid'), related=['user'], comment='user_from_uuid: '
             )
             user_to, profile_to = self.check_user_uuid(
-                data.get('user_to_uuid'), related=[], comment='user_to_uuid: '
+                data.get('user_to_uuid'), related=['user'], comment='user_to_uuid: '
             )
-            data = []
+            # select uuid_pack, max(insert_timestamp) as timestamp, min(user_to_delivered_id) as udl from contact_tgmessagejournal group by uuid_pack order by timestamp desc limit 10;
+            l = [ m for m in TgMessageJournal.objects.filter(
+                    user_from=user_from, user_to=user_to,
+                    ).values(
+                    'uuid_pack').annotate(
+                        timestamp=Max('insert_timestamp'),
+                        pk=Min('id'),
+                    ).order_by(
+                        '-timestamp'
+                    )[:self.MESSAGE_COUNT]
+            ]
+            n = 0
+            bot_username = None
+            if l:
+                options = dict(
+                    disable_web_page_preview=True,
+                    disable_notification=True,
+                )
+                for m in TgMessageJournal.objects.select_related(
+                            'user_to_delivered',
+                        ).filter(
+                            pk__in=[ m_['pk'] for m_ in l]
+                        ).order_by(
+                            'insert_timestamp'
+                        ):
+                    n += 1
+                    msg = (
+                        '(%(n)s) %(datetime_string)s\n'
+                        'От %(user_from)s к %(user_to)s\n'
+                    )
+                    user_to_delivered = None
+                    if m.user_to_delivered:
+                        msg += 'Доставлено'
+                        if m.user_to_delivered.pk != user_to.pk:
+                            if not bot_username:
+                                bot_username = self.get_bot_username()
+                            msg += ' к %(user_to_delivered)s !!!'
+                            user_to_delivered = self.get_deeplink_name(m.user_to_delivered, bot_username)
+                    else:
+                        msg += 'Не доставлено, лишь сохранено'
+                    msg += '\nНиже само сообщение:'
+                    msg %= dict(
+                        n=n,
+                        datetime_string=Misc.datetime_string(m.insert_timestamp),
+                        user_from=html.escape(user_from.first_name),
+                        user_to=html.escape(user_to.first_name),
+                        user_to_delivered=user_to_delivered,
+                    )
+                    self.send_to_telegram(msg, user_from, options)
+                    success = self.send_pack_to_telegram(
+                        [
+                            tgm.message_dict() for tgm in TgMessageJournal.objects.filter(
+                                uuid_pack=m.uuid_pack,
+                            ).order_by('message_id')
+                        ],
+                        user_from,
+                        options=options,
+                    )
+                    if not success:
+                        self.send_to_telegram('СООБЩЕНИЕ НЕ НАЙДЕНО', user_from, options)
+ 
+            else:
+                msg = '%(first_name)s не получал%(a)s от Вас сообщений' % dict(
+                    first_name=html.escape(user_to.first_name),
+                    a='а' if profile_to.gender == self.GENDER_FEMALE \
+                        else '' if profile_to.gender == self.GENDER_MALE else '(а)',
+                )
+                self.send_to_telegram(msg, user_from)
+            data = {}
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
-api_tg_message_last = ApiTgMessageLast.as_view()
+api_tg_message_list = ApiTgMessageList.as_view()
 

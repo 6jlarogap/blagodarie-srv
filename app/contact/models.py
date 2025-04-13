@@ -2,7 +2,7 @@ import time, datetime, json, hashlib, re
 from uuid import uuid4
 from collections import OrderedDict
 
-from app.utils import get_moon_day, ServiceException
+from app.utils import Misc, ServiceException
 
 from django.conf import settings
 from django.db import models, connection
@@ -97,16 +97,8 @@ class Journal(BaseModelInsertTimestamp):
     comment = models.TextField(verbose_name=_("Комментарий"), null=True)
     tgdesc = models.ManyToManyField('users.TgDesc', verbose_name=_("Описание: (составное) сообщение из телеграма"))
 
-class UserDictMixin(object):
-    def user_dict(self, user):
-        return {
-            'id': user.id,
-            'username': user.username,
-            'uuid': str(user.profile.uuid),
-            'first_name': user.first_name,
-        }
 
-class TgJournal(UserDictMixin, models.Model):
+class TgJournal(models.Model):
     """
     Ссылки на сообщения телеграма при благодарностях и др. действиях
     """
@@ -114,18 +106,7 @@ class TgJournal(UserDictMixin, models.Model):
     from_chat_id = models.BigIntegerField(_("Chat Id"),)
     message_id = models.BigIntegerField(_("Message Id"),)
 
-    def data_dict(self):
-        return dict(
-            timestamp=self.journal.insert_timestamp,
-            user_from=self.user_dict(self.journal.user_from),
-            user_to=self.user_dict(self.journal.user_to),
-            user_to_delivered=self.user_dict(self.journal.user_to),
-            from_chat_id=self.from_chat_id,
-            message_id=self.message_id,
-            operation_type_id=self.journal.operationtype.pk,
-        )
-
-class TgMessageJournal(UserDictMixin, BaseModelInsertTimestamp):
+class TgMessageJournal(BaseModelInsertTimestamp):
     """
     Ссылки на сообщения телеграма при обмене пользователями сообщений
     """
@@ -156,17 +137,6 @@ class TgMessageJournal(UserDictMixin, BaseModelInsertTimestamp):
     def _chat_id(self):
         return self.from_chat_id
     chat_id = property(_chat_id)
-
-    def data_dict(self):
-        return dict(
-            timestamp=self.insert_timestamp,
-            user_from=self.user_dict(self.user_from),
-            user_to=self.user_dict(self.user_to),
-            user_to_delivered=self.user_dict(self.user_to_delivered) if self.user_to_delivered else None,
-            from_chat_id=self.from_chat_id,
-            message_id=self.message_id,
-            operation_type_id=self.operationtype and self.operationtype.pk or None,
-        )
 
     def message_dict(self):
         return dict(
@@ -448,7 +418,7 @@ class UserSymptom(BaseModelInsertTimestamp, GeoPointModel):
     def save(self, *args, **kwargs):
         self.fill_insert_timestamp()
         if self.moon_day is None:
-            self.moon_day = get_moon_day(self.insert_timestamp)
+            self.moon_day = Misc.get_moon_day(self.insert_timestamp)
         return super(UserSymptom, self).save(*args, **kwargs)
 
 class Wish(BaseModelInsertUpdateTimestamp):

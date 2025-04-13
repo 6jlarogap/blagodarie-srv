@@ -1364,7 +1364,7 @@ async def cbq_udelete_user_confirmed(callback: CallbackQuery, state: FSMContext)
 async def cbq_send_message(callback: CallbackQuery, state: FSMContext):
     uuid, card_message_id, card_type = Misc.parse_uid_message_calback(callback)
     if uuid:
-        status_to, profile_to = await Misc.get_user_by_uuid(uuid)
+        status_to, profile_to = await Misc.get_user_by_uuid(uuid, with_owner_tg_data=True)
         if status_to == 200:
             status_from, profile_from = await Misc.post_tg_user(callback.from_user)
             if status_from == 200:
@@ -1414,6 +1414,7 @@ async def process_message_to_send(message: Message, state: FSMContext):
     #
     tg_user_to_tg_data = []
     user_to_delivered_uuid = None
+    user_to_delivered_username = None
     if profile_from['uuid'] == profile_to['uuid']:
         # самому себе
         user_to_delivered_uuid = profile_to['uuid']
@@ -1425,9 +1426,11 @@ async def process_message_to_send(message: Message, state: FSMContext):
         if profile_to['owner'].get('tg_data'):
             tg_user_to_tg_data = profile_to['owner']['tg_data']
             user_to_delivered_uuid = profile_to['owner']['uuid']
+            user_to_delivered_username = profile_to['owner']['username']
     elif profile_to.get('tg_data'):
         tg_user_to_tg_data = profile_to['tg_data']
         user_to_delivered_uuid = profile_to['uuid']
+        user_to_delivered_username = profile_to['username']
     else:
         if is_first:
             await message.reply(msg_saved)
@@ -1464,8 +1467,11 @@ async def process_message_to_send(message: Message, state: FSMContext):
             try:
                 await bot.send_message(
                     tgd['tg_uid'],
-                    text=f'\u2193\u2193\u2193 Вам сообщение от <b>{iof_link}</b> \u2193\u2193\u2193'
-                )
+                    text=f'\u2193\u2193\u2193 Вам сообщение от <b>{iof_link}</b> \u2193\u2193\u2193' + (
+                            f'\n\nдля {Misc.get_deeplink_with_name(profile_to)}' \
+                            if user_to_delivered_username != profile_to['username'] \
+                            else ''
+                ))
                 success = True
             except (TelegramBadRequest, TelegramForbiddenError):
                 msg_delivered = 'Получатель не смог принять сообщение'
@@ -1476,7 +1482,7 @@ async def process_message_to_send(message: Message, state: FSMContext):
         payload_send_pack = dict(
             tg_token=settings.TOKEN,
             uuid_pack=data['uuid_pack'],
-            username=profile_to['username'],
+            username=user_to_delivered_username,
             what='messages',
         )
         # Api пошлёт всем
@@ -1494,83 +1500,26 @@ async def process_message_to_send(message: Message, state: FSMContext):
     )), StateFilter(None))
 async def cbq_show_messages(callback: CallbackQuery, state: FSMContext):
     if user_to_uuid := Misc.get_uuid_from_callback(callback):
-        tg_user_sender = callback.from_user
         status_from, profile_from = await Misc.post_tg_user(callback.from_user)
         if status_from == 200:
-            payload = dict(
-                tg_token=settings.TOKEN,
-                user_from_uuid=profile_from['uuid'],
-                user_to_uuid=user_to_uuid,
-            )
-            logging.debug('get_user_messages, payload: %s' % Misc.secret(payload))
-            status, response = await Misc.api_request(
-                path='/api/tg_message/list',
-                method='post',
-                json=payload,
-            )
-            logging.debug('get_user_messages, status: %s' % status)
-            logging.debug('get_user_messages, response: %s' % response)
-            if status == 200:
-                if response:
-                    await bot.send_message(
-                        tg_user_sender.id,
-                        text='Ниже последние сообщения к %s ...' % \
-                            Misc.get_deeplink_with_name(response[0]['user_to']),
-                    )
-                    n = 0
-                    for i in range(len(response)-1, -1, -1):
-                        m = response[i]
-                        n += 1
-                        msg = (
-                            '(%(n)s) %(datetime_string)s\n'
-                            'От %(user_from)s к %(user_to)s\n'
-                        )
-                        if m['operation_type_id']:
-                            if m['operation_type_id'] == OperationType.NULLIFY_ATTITUDE:
-                                msg += 'в связи с тем что не знаком(а)\n'
-                            elif m['operation_type_id'] == OperationType.ACQ:
-                                msg += 'в связи с установкой знакомства\n'
-                            elif m['operation_type_id'] == OperationType.MISTRUST:
-                                msg += 'в связи с утратой доверия\n'
-                            elif m['operation_type_id'] == OperationType.TRUST:
-                                msg += 'в связи с тем что доверяет\n'
-                            elif m['operation_type_id'] == OperationType.THANK:
-                                msg += 'с благодарностью\n'
-                        user_to_delivered = None
-                        if m['user_to_delivered']:
-                            msg += 'Доставлено'
-                            if m['user_to_delivered']['id'] != m['user_to']['id']:
-                                msg += ' к %(user_to_delivered)s !!!'
-                                user_to_delivered = Misc.get_deeplink_with_name(m['user_to_delivered'])
-                        else:
-                            msg += 'Не доставлено, лишь сохранено'
-                        msg += '\nНиже само сообщение:'
-                        msg %= dict(
-                            n=n,
-                            datetime_string=Misc.datetime_string(m['timestamp']),
-                            user_from=Misc.get_deeplink_with_name(m['user_from']),
-                            user_to=Misc.get_deeplink_with_name(m['user_to']),
-                            user_to_delivered=user_to_delivered,
-                        )
-                        await bot.send_message(tg_user_sender.id, text=msg)
-                        try:
-                            await bot.forward_message(
-                                tg_user_sender.id,
-                                from_chat_id=m['from_chat_id'],
-                                message_id=m['message_id'],
-                            )
-                        except TelegramBadRequest:
-                            await bot.send_message(tg_user_sender.id, text='СООБЩЕНИЕ НЕ НАЙДЕНО')
-                else:
-                    status_to, profile_to = await Misc.get_user_by_uuid(user_to_uuid)
-                    if status_to == 200:
-                        msg = '%(full_name)s не получал%(a)s от Вас сообщений' % dict(
-                            full_name=Misc.get_deeplink_with_name(profile_to),
-                            a='а' if profile_to.get('gender') == 'f' else '' if profile_to.get('gender') == 'm' else '(а)',
-                        )
-                    else:
-                        msg = 'Сообщения не найдены'
-                    await bot.send_message(tg_user_sender.id, text=msg)
+            status_to, profile_to = await Misc.get_user_by_uuid(user_to_uuid)
+            if status_to == 200:
+                tg_user_sender = callback.from_user
+                payload = dict(
+                    tg_token=settings.TOKEN,
+                    user_from_uuid=profile_from['uuid'],
+                    user_to_uuid=user_to_uuid,
+                )
+                logging.debug('get_user_messages, payload: %s' % Misc.secret(payload))
+                status, response = await Misc.api_request(
+                    path='/api/tg_message/list',
+                    method='post',
+                    json=payload,
+                )
+                logging.debug('get_user_messages, status: %s' % status)
+                logging.debug('get_user_messages, response: %s' % response)
+                if status != 200:
+                    await bot.send_message(tg_user_sender.id, text='Проблема с получением архива сообщений')
     await callback.answer()
 
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (

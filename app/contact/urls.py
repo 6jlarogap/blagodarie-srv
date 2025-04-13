@@ -63,7 +63,6 @@ urlpatterns = [
 
     re_path(r'^api/tg_message/?$', views.api_tg_message),
     re_path(r'^api/tg_message/list/?$', views.api_tg_message_list),
-    re_path(r'^api/tg_message/last/?$', views.api_tg_message_last),
 
     re_path(r'^admin/merge_symptoms/?$', views.merge_symptoms),
 ]

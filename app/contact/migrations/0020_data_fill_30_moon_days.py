@@ -2,7 +2,7 @@
 
 from django.db import migrations
 
-from app.utils import get_moon_day
+from app.utils import Misc
 
 def reverse_it(apps, schema_editor):
     pass
@@ -12,7 +12,7 @@ def operation(apps, schema_editor):
     n = 0
     UserSymptom = apps.get_model('contact', 'UserSymptom')
     for usersymptom in UserSymptom.objects.all():
-        usersymptom.moon_day = get_moon_day(usersymptom.insert_timestamp)
+        usersymptom.moon_day = Misc.get_moon_day(usersymptom.insert_timestamp)
         usersymptom.save(update_fields=('moon_day',))
         n += 1
     print('%s user symptoms updated' % n)
