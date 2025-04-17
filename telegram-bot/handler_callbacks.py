@@ -1794,7 +1794,6 @@ async def cbq_message_delete(callback: CallbackQuery, state: FSMContext):
             user_from_uuid=profile_from['uuid'],
         )
         logging.debug('delete message in archive, payload: %s' % Misc.secret(payload))
-        print(payload)
         status, response = await Misc.api_request(
             path='/api/tg_message',
             method='delete',
