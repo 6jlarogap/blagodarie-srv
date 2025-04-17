@@ -4125,10 +4125,10 @@ class ApiTgMessage(UuidMixin, APIView):
                     raise ServiceException('Неверный токен телеграм бота')
             else:
                 raise NotAuthenticated
-            user_from, p = self.check_user_uuid(data.get('user_from_uuid'), related=[], comment='user_from_uuid: ')
-            user_to, p = self.check_user_uuid(data.get('user_to_uuid'), related=[], comment='user_to_uuid: ')
+            user_from, p = self.check_user_uuid(data.get('user_from_uuid'), comment='user_from_uuid: ')
+            user_to, p = self.check_user_uuid(data.get('user_to_uuid'), comment='user_to_uuid: ')
             if data.get('user_to_delivered_uuid'):
-                user_to_delivered, p = self.check_user_uuid(data.get('user_to_delivered_uuid'), related=[], comment='user_to_delivered_uuid: ')
+                user_to_delivered, p = self.check_user_uuid(data.get('user_to_delivered_uuid'), comment='user_to_delivered_uuid: ')
             else:
                 user_to_delivered = None
             try:
@@ -4160,6 +4160,36 @@ class ApiTgMessage(UuidMixin, APIView):
             )
             status_code = status.HTTP_200_OK
             data = {}
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+    def delete(self, request):
+        """
+        Удалить из журнала данные об отправленном пользователем телеграма сообщения другому пользователю
+        """
+        try:
+            data = request.data
+            if data.get('tg_token'):
+                if data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                    raise ServiceException('Неверный токен телеграм бота')
+            else:
+                raise NotAuthenticated
+            user_from, p = self.check_user_uuid(data.get('user_from_uuid'), comment='user_from_uuid: ')
+            if not self.is_uuid(request.data.get('uuid_pack')):
+                raise ServiceException('Неверный или отсутствует uuid_pack')
+            result = TgMessageJournal.objects.filter(
+                user_from=user_from,
+                uuid_pack=request.data['uuid_pack']
+            ).delete()
+            data = {}
+            status_code = status.HTTP_200_OK
+            try:
+                if not result[0]:
+                    raise ValueError
+            except (KeyError, TypeError, ValueError,):
+                status_code = status.HTTP_404_NOT_FOUND
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])
             status_code = status.HTTP_400_BAD_REQUEST
