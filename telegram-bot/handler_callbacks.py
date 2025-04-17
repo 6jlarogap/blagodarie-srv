@@ -1779,3 +1779,34 @@ async def cbq_meet_edit_back(callback: CallbackQuery, state: FSMContext):
         card_message_id=card_message_id,
     )
     await callback.answer()
+
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.MESSAGE_DELETE,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_message_delete(callback: CallbackQuery, state: FSMContext):
+    if uuid_pack := Misc.get_uuid_from_callback(callback):
+        status_from, profile_from = await Misc.post_tg_user(callback.from_user)
+        payload = dict(
+            tg_token=settings.TOKEN,
+            uuid_pack=uuid_pack,
+            user_from_uuid=profile_from['uuid'],
+        )
+        logging.debug('delete message in archive, payload: %s' % Misc.secret(payload))
+        print(payload)
+        status, response = await Misc.api_request(
+            path='/api/tg_message',
+            method='delete',
+            json=payload,
+        )
+        logging.debug('delete message in archive, status: %s' % status)
+        logging.debug('delete message in archive, response: %s' % response)
+        if status in (200, 404):
+            await bot.edit_message_text(
+                chat_id=callback.from_user.id,
+                message_id=callback.message.message_id,
+                text=callback.message.text + '\n\n(удалено из архива)',
+                reply_markup=None,
+            )
+    await callback.answer()

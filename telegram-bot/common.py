@@ -370,6 +370,10 @@ class KeyboardType(object):
     #
     MEET_EDIT_BACK = 76
 
+    # Удалить сообщение из архива
+    #
+    MESSAGE_DELETE = 77
+
     # Разделитель данных в call back data
     #
     SEP = '~'
@@ -2546,7 +2550,7 @@ class Misc(object):
                         reply_markup=reply_markup,
                     )
             except (TelegramBadRequest, TelegramForbiddenError):
-                pass
+                result = None
         return result
 
     @classmethod

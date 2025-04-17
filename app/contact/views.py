@@ -4374,7 +4374,8 @@ class ApiTgMessageList(UuidMixin, TelegramApiMixin, GenderMixin, APIView):
             user_to, profile_to = self.check_user_uuid(
                 data.get('user_to_uuid'), related=['user'], comment='user_to_uuid: '
             )
-            # select uuid_pack, max(insert_timestamp) as timestamp, min(user_to_delivered_id) as udl from contact_tgmessagejournal group by uuid_pack order by timestamp desc limit 10;
+            # select uuid_pack, max(insert_timestamp) as timestamp, min(user_to_delivered_id) as udl
+            # from contact_tgmessagejournal group by uuid_pack order by timestamp desc limit 10;
             l = [ m for m in TgMessageJournal.objects.filter(
                     user_from=user_from, user_to=user_to,
                     ).values(
@@ -4388,6 +4389,7 @@ class ApiTgMessageList(UuidMixin, TelegramApiMixin, GenderMixin, APIView):
             n = 0
             bot_username = None
             if l:
+                KeyboardType = TelegramApiMixin.KeyboardType
                 options = dict(
                     disable_web_page_preview=True,
                     disable_notification=True,
@@ -4422,7 +4424,19 @@ class ApiTgMessageList(UuidMixin, TelegramApiMixin, GenderMixin, APIView):
                         user_to=html.escape(user_to.first_name),
                         user_to_delivered=user_to_delivered,
                     )
-                    self.send_to_telegram(msg, user_from, options)
+
+                    options_header = options.copy()
+                    options_header.update(reply_markup=dict(
+                        inline_keyboard=[[
+                            dict(
+                                text='Удалить из архива',
+                                callback_data=(
+                                    f'{KeyboardType.MESSAGE_DELETE}{KeyboardType.SEP}'
+                                    f'{str(m.uuid_pack)}{KeyboardType.SEP}'
+                            )),
+                    ]]))
+                    self.send_to_telegram(msg, user_from, options=options_header)
+
                     success = self.send_pack_to_telegram(
                         [
                             tgm.message_dict() for tgm in TgMessageJournal.objects.filter(

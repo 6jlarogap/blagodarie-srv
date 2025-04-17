@@ -967,6 +967,10 @@ class TelegramApiMixin(object):
         SYMPA_REVOKE = 66
         SYMPA_HIDE = 67
 
+        # Удалить сообщение из архива
+        #
+        MESSAGE_DELETE = 77
+
         # Разделитель данных в call back data
         #
         SEP = '~'
