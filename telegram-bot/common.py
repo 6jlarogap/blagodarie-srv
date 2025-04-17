@@ -1500,7 +1500,7 @@ class Misc(object):
         send_text_message = True
         if profile.get('photo') and (profile['is_active'] or profile['owner']):
             try:
-                photo = URLInputFile(url=profile['photo'], filename='1.png')
+                photo = URLInputFile(url=profile['photo'], filename='1.jpg')
                 if card_message:
                     if card_message.caption:
                         await bot.edit_message_caption(
@@ -2525,17 +2525,28 @@ class Misc(object):
     @classmethod
     async def remove_n_send_message(cls,
             chat_id, message_id,
-            text=None, reply_markup=None, **kwargs):
+            text=None, reply_markup=None,
+            photo=None
+    ):
         result = None
-        try:
-            await bot.delete_message(chat_id=chat_id, message_id=message_id)
-        except (TelegramBadRequest, TelegramForbiddenError):
-            pass
         if text:
             try:
-                result = await bot.send_message(chat_id, text, reply_markup=reply_markup)
+                await bot.delete_message(chat_id=chat_id, message_id=message_id)
             except (TelegramBadRequest, TelegramForbiddenError):
-                result = None
+                pass
+            try:
+                if not photo:
+                    result = await bot.send_message(chat_id, text, reply_markup=reply_markup)
+                else:
+                    photo = URLInputFile(url=photo, filename='1.jpg')
+                    await bot.send_photo(
+                        chat_id=chat_id,
+                        photo=photo,
+                        caption=text,
+                        reply_markup=reply_markup,
+                    )
+            except (TelegramBadRequest, TelegramForbiddenError):
+                pass
         return result
 
     @classmethod
@@ -2700,7 +2711,7 @@ class Misc(object):
         if buttons:
             reply_markup = InlineKeyboardMarkup(inline_keyboard=buttons)
         photo_url = profile['photo'] or cls.photo_no_photo(profile)
-        photo = URLInputFile(url=photo_url, filename='1.png')
+        photo = URLInputFile(url=photo_url, filename='1.jpg')
         if card_message_id:
             try:
                 await bot.edit_message_media(

@@ -12,6 +12,7 @@ from aiogram.filters import Command, StateFilter
 from aiogram.filters.logic import or_f
 from aiogram.types import Message, CallbackQuery, ContentType, \
                           InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
+from aiogram.types.input_file import URLInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.enums import ChatType
@@ -81,7 +82,7 @@ class Common(object):
 
 
     @classmethod
-    def _callback_dict(cls, profile_from, profile_to, journal_id):
+    def callback_dict(cls, profile_from, profile_to, journal_id):
         return dict(
             user_from_sid=profile_from['username'],
             user_to_sid=profile_to['username'],
@@ -94,7 +95,7 @@ class Common(object):
         text = message_pre
         reply_markup = None
         if text:
-            callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
+            callback_dict = cls.callback_dict(profile_from, profile_to, journal_id)
             callback_dict.update(keyboard_type=KeyboardType.SYMPA_REVOKE)
             button_revoke = InlineKeyboardButton(
                 text='Отменить',
@@ -113,7 +114,7 @@ class Common(object):
             f'Вы можете отменить скрытие или установить недоверие - '
             f'чтобы предупредить участников сообщества от общения с {name_to}'
         )
-        callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
+        callback_dict = cls.callback_dict(profile_from, profile_to, journal_id)
         callback_dict.update(keyboard_type=KeyboardType.SYMPA_SHOW)
         button_sympa_show = InlineKeyboardButton(
             text='Отменить',
@@ -149,7 +150,7 @@ class Common(object):
                 f'Нажмите "Донатить" для отправки доната'
             )
 
-        callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
+        callback_dict = cls.callback_dict(profile_from, profile_to, journal_id)
         callback_dict.update(keyboard_type=KeyboardType.SYMPA_DONATE)
         button_donate = InlineKeyboardButton(
             text='Добровольный дар',
@@ -205,7 +206,7 @@ class Common(object):
             return None, None, None
         text += f'{response["donate"]["bank"]}\n'
 
-        callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
+        callback_dict = cls.callback_dict(profile_from, profile_to, journal_id)
         callback_dict.update(keyboard_type=KeyboardType.SYMPA_DONATE_REFUSE)
         button_refuse_donate = InlineKeyboardButton(
             text='Продолжить без благодарности',
@@ -239,7 +240,7 @@ class Common(object):
                     f'Поздравляем! Взаимная симпатия! '
                     f'{html.quote(profile_to["first_name"])} предложено задонатить'
             )
-        callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
+        callback_dict = cls.callback_dict(profile_from, profile_to, journal_id)
         callback_dict.update(keyboard_type=KeyboardType.SYMPA_REVOKE)
         button_cancel_sympa = InlineKeyboardButton(
             text='Отменить симпатию',
@@ -253,7 +254,7 @@ class Common(object):
     def make_sympa_do(cls, profile_from, profile_to, journal_id, message_pre=''):
         text = message_pre + '\n\n' if message_pre else ''
         text += f'Установить симпатию к {html.quote(profile_to["first_name"])} ?'
-        callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
+        callback_dict = cls.callback_dict(profile_from, profile_to, journal_id)
         callback_dict.update(keyboard_type=KeyboardType.SYMPA_SET)
         button_sympa = InlineKeyboardButton(
             text='Симпатия',
@@ -272,7 +273,7 @@ class Common(object):
         text = message_pre
         if text:
             buttons = []
-            callback_dict = cls._callback_dict(profile_from, profile_to, journal_id)
+            callback_dict = cls.callback_dict(profile_from, profile_to, journal_id)
             if profile_from['gender'] == 'f':
                 callback_dict.update(keyboard_type=KeyboardType.SYMPA_SEND_PROFILE)
                 button_send_profile = InlineKeyboardButton(
@@ -716,8 +717,13 @@ async def cbq_get_sympa_send_profile(callback: CallbackQuery, state: FSMContext)
         await callback.answer()
         return
     success = False
-    text_to = (
+    # from: ж, to: м
+    text_from = (
         f'Контакты переданы. Вы покидаете игру знакомств - для личного общения! Удачи!'
+    )
+    text_to = (
+        f'Поздравляем! {html.quote(profile_from["first_name"])} '
+        f'ждёт Вашего сообщения! Вы покидаете игру знакомств для личного общения. Удачи!'
     )
     inline_btn_invite = InlineKeyboardButton(
         text='Пригласить в игру',
@@ -738,9 +744,17 @@ async def cbq_get_sympa_send_profile(callback: CallbackQuery, state: FSMContext)
         text=write_message,
         callback_data=Misc.CALLBACK_DATA_UUID_MSG_TYPE_TEMPLATE % dict_message
     )
+
+    callback_dict = Common.callback_dict(profile_to, profile_from, journal_id)
+    callback_dict.update(keyboard_type=KeyboardType.SYMPA_REVOKE)
+    button_cancel_sympa_to_from = InlineKeyboardButton(
+        text='Отменить симпатию',
+        callback_data=Common.CALLBACK_DATA_TEMPLATE % callback_dict
+    )
+
     reply_markup_to = InlineKeyboardMarkup(inline_keyboard=[ 
         [ inline_btn_send_message_to ],
-        [ inline_btn_invite ],
+        [ button_cancel_sympa_to_from ],
     ])
 
     dict_message.update(uuid=profile_to['uuid'])
@@ -755,16 +769,20 @@ async def cbq_get_sympa_send_profile(callback: CallbackQuery, state: FSMContext)
 
     for tgd in profile_to['tg_data']:
         try:
-            await bot.send_message(
+            photo = URLInputFile(
+                url=profile_from['photo'] or Misc.photo_no_photo(profile_from),
+                filename='1.jpg'
+            )
+            await bot.send_photo(
                 tgd['tg_uid'],
-                text=text_to,
-                reply_markup=reply_markup_to
+                caption=text_to,
+                reply_markup=reply_markup_to,
+                photo=photo,
             )
             success = True
         except (TelegramBadRequest, TelegramForbiddenError):
             pass
     if success:
-        text_from = text_to
         await Misc.remove_n_send_message(
             chat_id=callback.from_user.id,
             message_id=callback.message.message_id,
