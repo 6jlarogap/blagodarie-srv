@@ -3138,7 +3138,8 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
     """
     Отдать все профили и все связи
 
-    Возможен только форматы выдачи fmt = 3d-force-graph:
+    Форматы выдачи fmt = 3d-force-graph:
+        - d3js (по умолчанию)
         - 3d-force-graph
     Возможные выборки (get параметры):
         - dover :   показать доверия
@@ -3155,7 +3156,7 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
     # permission_classes = (IsAuthenticated,)
 
     def get(self, request):
-        fmt = '3d-force-graph'
+        fmt = request.GET.get('fmt', 'd3js')
         withalone = request.GET.get('withalone')
         dover = request.GET.get('dover')
         rod = request.GET.get('rod')
@@ -3247,8 +3248,11 @@ class ApiProfileGenesisAll(TelegramApiMixin, APIView):
                         user_pks.add(cs.user_to.pk)
                         users.append(cs.user_to.profile.data_dict(request=request, fmt=fmt))
 
-        bot_username = self.get_bot_username()
-        data = dict(bot_username=bot_username, nodes=users, links=connections)
+        if fmt == '3d-force-graph':
+            bot_username = self.get_bot_username()
+            data = dict(bot_username=bot_username, nodes=users, links=connections)
+        else:
+            data = dict(users=users, connections=connections, trust_connections=[])
         return Response(data=data, status=status.HTTP_200_OK)
 
 api_profile_genesis_all = cache_page(30)(ApiProfileGenesisAll.as_view())
