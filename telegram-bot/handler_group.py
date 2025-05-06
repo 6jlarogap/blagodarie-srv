@@ -357,7 +357,8 @@ async def process_group_message(message: Message, state: FSMContext):
                                 await message.answer((
                                     f'Видео {Misc.get_html_a(href, message.caption)} загружено.\n'
                                     f'Автор: {Misc.get_deeplink_with_name(response_from, plus_trusts=True)}'
-                                ))
+                                ),
+                                disable_web_page_preview=False)
                             except:
                                 pass
                             try:
