@@ -947,7 +947,6 @@ async def put_new_child(message: Message, state: FSMContext):
                             iof_to = Misc.get_deeplink_with_name(response_parent, plus_trusts=True),
                             papa_or_mama='папа' if is_father else 'мама',
                             _a_='' if is_father else 'а',
-                            disable_web_page_preview=True,
                     ))
                     await Misc.show_card(
                         profile=response_child,

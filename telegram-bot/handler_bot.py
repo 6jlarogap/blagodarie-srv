@@ -12,7 +12,7 @@ from aiogram import Router, F, html
 from aiogram.types import Message, CallbackQuery, ContentType,  \
                             MessageOriginUser, MessageOriginHiddenUser, \
                             InlineKeyboardMarkup, InlineKeyboardButton, \
-                            BufferedInputFile
+                            BufferedInputFile, LinkPreviewOptions
 from aiogram.enums import ChatType
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command, StateFilter, CommandStart, CommandObject
@@ -891,7 +891,7 @@ async def answer_youtube_message(message, youtube_id, youtube_link):
     await message.reply(
         reply,
         reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-        disable_web_page_preview=False,
+        link_preview_options=LinkPreviewOptions(is_disabled=False),
     )
 
 

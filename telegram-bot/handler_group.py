@@ -2,12 +2,12 @@
 #
 # Команды и сообщения в группы и каналы
 
-import base64, re, hashlib, redis, time, tempfile
+import base64, re, hashlib, redis, time, tempfile, os
 
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, ContentType, InlineKeyboardMarkup, InlineKeyboardButton, \
-                          ChatJoinRequest, CallbackQuery, ChatMemberUpdated
+                          ChatJoinRequest, CallbackQuery, ChatMemberUpdated, LinkPreviewOptions
 from aiogram.enums import ChatType
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command, StateFilter
@@ -357,8 +357,9 @@ async def process_group_message(message: Message, state: FSMContext):
                                 await message.answer((
                                     f'Видео {Misc.get_html_a(href, message.caption)} загружено.\n'
                                     f'Автор: {Misc.get_deeplink_with_name(response_from, plus_trusts=True)}'
-                                ),
-                                disable_web_page_preview=False)
+                                    ),
+                                    link_preview_options=LinkPreviewOptions(is_disabled=False),
+                                )
                             except:
                                 pass
                             try:
@@ -442,7 +443,6 @@ async def echo_join_chat_request(message: ChatJoinRequest):
             await bot.send_message(
                 chat_id=tg_subscriber.id,
                 text=msg,
-                disable_web_page_preview=True
             )
             return
         except (TelegramBadRequest, TelegramForbiddenError,):
