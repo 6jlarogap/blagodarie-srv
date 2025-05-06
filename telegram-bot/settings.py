@@ -72,7 +72,7 @@ MAP_HOST = 'https://map.meetgame.us.to'
 # Ссылка на пространство доверия
 # И там находятся ресурсы: <GRAPH_HOST>/res/telegram-bot/*.txt
 #
-GRAPH_HOST = 'https://g.meetgame.us.to'
+GRAPH_HOST = 'https://d3.meetgame.us.to'
 
 # Ссылка на фронте, которая будет открываться там под авторизованным
 # пользователем:
