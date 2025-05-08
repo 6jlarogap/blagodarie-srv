@@ -3567,6 +3567,7 @@ class ApiProfileGenesis(GetTrustGenesisMixin, UuidMixin, SQL_Mixin, TelegramApiM
             uuid=profile_q.uuid,
             first_name=user_q.first_name,
             gender=profile_q.gender,
+            username=user_q.username,
             is_my=auth_user_pk in (user_q.pk, profile_q.owner and profile_q.owner.pk or None),
             photo=Profile.image_thumb(
                 request, profile_q.photo,
