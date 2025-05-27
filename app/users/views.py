@@ -2499,7 +2499,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     if cs.is_hide_meet:
                         my_hidden.append(cs.user_to_id)
                 popup_meet = (
-                    '<table style="width:100%%;font-size:24px">'
+                    '<table style="width:100%%;">'
                     '<tr>'
                         '<td colspan=2 valign=center align=center>'
                             '<img '
@@ -2508,8 +2508,8 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         '</td>'
                     '</tr>'
                     '<tr>'
-                        '<td colspan=2 valign=center align=center>'
-                            '<b>%(full_name)s</b> (%(dob)s)'
+                        '<td colspan=2 valign=middle align=center>'
+                            '<b><big>%(full_name)s</big></b> (%(dob)s)'
                             '<br />'
                         '</td>'
                     '</tr>'
@@ -2517,16 +2517,16 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         '<br />'
                     '</tr>'
                     '<tr>'
-                        '<td valign=center align=center>'
+                        '<td valign=middle align=center>'
                             '<label for="id_handle_user_hide">Скрыть: </lable>'
                             '<input type="checkbox" class="hide_him_her" '
                             'name="handle_user_hide" id="id_handle_user_hide-%(user_id)s" '
                             '%(hide_checked)s>'
                             '<br />'
                         '</td>'
-                        '<td valign=center align="center">'
+                        '<td valign=middle align="center">'
                             '<input type="button" class="sympa" value="%(sympa_button_value)s" '
-                            'style="font-size:22px;%(sympa_color)s" '
+                            'style="color:%(sympa_color)s;" '
                             'name="handle_user_sympa" id="id_handle_user_sympa-%(user_id)s" '
                         '</td>'
                     '</tr>'
@@ -2563,7 +2563,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 dict_user['full_name'] = html.escape(dict_user['full_name'])
                 dict_user.update(
                     sympa_button_value='Смотреть',
-                    sympa_color=f'color:{color_sympa};' if dict_user['user_id'] in my_interests else '',
+                    sympa_color=color_sympa if dict_user['user_id'] in my_interests else 'currentcolor',
                     hide_checked='checked' if dict_user['user_id'] in my_hidden else '',
                 )
                 points.append(dict(
