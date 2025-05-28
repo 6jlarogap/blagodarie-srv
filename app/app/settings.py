@@ -320,7 +320,7 @@ REDIRECT_FROM_CALLBACK = 'oauth-landing'
 
 # Рисуем графики в формате '3d-force-graph' здесь
 #
-GRAPH_URL = 'https://g.meetgame.us.to'
+GRAPH_URL = 'https://d3.meetgame.us.to'
 
 # Рисуем карту в формате здесь
 #
