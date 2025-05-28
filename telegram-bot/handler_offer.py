@@ -236,7 +236,7 @@ class Offer(object):
         Хорошо - 2
         Плохо - 0
 
-        Схема <graph.meetgame.us.to/?offer_uuid=offerUUID>
+        Схема <d3.meetgame.us.to/?offer_uuid=offerUUID>
         Карта map.meetgame.us.to/?offer_id=offerUUID
         Ссылка на опрос <t.me/bot_username?start=offer-offerUUID>
 
