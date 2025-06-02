@@ -17,7 +17,7 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.enums import ChatType
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
-from handler_bot import is_it_command
+from handler_bot import is_it_command, MorphAnalyzer
 
 import settings, me
 from settings import logging
@@ -81,6 +81,9 @@ async def cbq_cancel_any(callback: CallbackQuery, state: FSMContext):
 
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMnewPerson.ask))
 async def enter_new_person_name(message: Message, state: FSMContext):
+
+    MAX_NUM_CONCIDES = 5
+
     if message.content_type != ContentType.TEXT:
         await message.reply(
             Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + \
@@ -90,14 +93,75 @@ async def enter_new_person_name(message: Message, state: FSMContext):
         return
     if await is_it_command(message, state):
         return
+    data = await state.get_data()
+    if data.get('wait_confirm'):
+        await message.reply(
+            'Жду ответ на воставленный выше вопрос',
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+        return
+    first_name = message.text.strip()
+    if (re.search(r'^\S*$', first_name)):
+        await message.reply(
+            'Одной фамилии (или одного имени ?) недостаточно. Пожалуйста, дайте хотя бы имя и фамилию.',
+            reply_markup=Misc.reply_markup_cancel_row(),
+        )
+        return
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
-        await state.update_data(first_name=message.text.strip())
+        search_phrase = Misc.text_search_phrase(
+            first_name,
+            MorphAnalyzer,
+        )
+        if not search_phrase:
+            await message.reply(
+                'Странное имя отчество фамилия. Практически пустое.\n\nПовторите, пожалуйста!',
+                reply_markup=Misc.reply_markup_cancel_row(),
+            )
+            return
+        status, a_found = await Misc.search_users('query_person', search_phrase)
+        await state.update_data(first_name=first_name)
+        if status != 200:
+            a_found = []
+        if a_found:
+            len_a_found = len(a_found)
+            text = 'Найден человек' if len_a_found == 1 else 'Найдены люди'
+            text += f' с ИОФ таким же или похожим на <i>{html.quote(first_name)}</i>:\n\n'
+            for f in a_found[:MAX_NUM_CONCIDES]:
+                text += f'{html.quote(f["first_name"])}'
+                lifetime_years_str = Misc.get_lifetime_years_str(f)
+                if lifetime_years_str:
+                    text += ', ' + lifetime_years_str
+                text += '\n'
+            if len_a_found > MAX_NUM_CONCIDES:
+                text += f'...\nВсего {len_a_found} человек. Полный список можете получить командой /findperson\n'
+            text += f'\nВы уверены, что хотите добавить <i>{html.quote(first_name)}</i> как своего нового собственного?'
+            callback_data = Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
+                keyboard_type=KeyboardType.NEW_PERSON_CONFIRM,
+                sep=KeyboardType.SEP,
+            )
+            inline_btn = InlineKeyboardButton(text='Да', callback_data=callback_data)
+            reply_markup = InlineKeyboardMarkup(inline_keyboard=[[
+                inline_btn, Misc.inline_button_cancel(caption='Нет')
+            ]])
+            await state.update_data(wait_confirm=True)
+            await message.reply(text, reply_markup=reply_markup)
+            return
         await state.set_state(FSMnewPerson.ask_gender)
         await new_iof_ask_gender(message, state)
     else:
         await state.clear()
         await message.reply(Misc.MSG_ERROR_API)
+
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.NEW_PERSON_CONFIRM,
+        KeyboardType.SEP,
+    )), StateFilter(FSMnewPerson.ask))
+async def cbq_new_person_confirm(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(FSMnewPerson.ask_gender)
+    await callback.answer()
+    await new_iof_ask_gender(callback.message, state)
 
 
 async def new_iof_ask_gender(message: Message, state: FSMContext):

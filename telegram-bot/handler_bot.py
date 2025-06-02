@@ -628,6 +628,7 @@ commands_dict = {
     'new': cmd_new_person,
     'new_person': cmd_new_person,
     'new_org': cmd_new_org,
+    'findperson': cmd_find,
     'setplace': cmd_setplace,
     'meet': cmd_meet,
     'start': cmd_start,

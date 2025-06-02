@@ -374,6 +374,11 @@ class KeyboardType(object):
     #
     MESSAGE_DELETE = 77
 
+    # Подтвердить добавление по /new нового собственного, даже если найдены
+    # с таким же или похожими ФИО
+    #
+    NEW_PERSON_CONFIRM = 78
+
     # Разделитель данных в call back data
     #
     SEP = '~'
