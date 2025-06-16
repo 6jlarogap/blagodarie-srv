@@ -256,7 +256,7 @@ class Common(object):
         text += (
             f'Установить симпатию к {html.quote(profile_to["first_name"])} ?\n'
             f'\n'
-            f'Перед установкой симпатии - посмотрите <u>Доверие</u>\n'
+            f'Перед установкой симпатии - посмотрите доверие\n'
         )
         callback_dict = cls.callback_dict(profile_from, profile_to, journal_id)
         callback_dict.update(keyboard_type=KeyboardType.SYMPA_SET)
@@ -270,7 +270,7 @@ class Common(object):
             callback_data=cls.CALLBACK_DATA_TEMPLATE % callback_dict
         )
         button_trusts = InlineKeyboardButton(
-            text='Доверие',
+            text='Смотреть доверие',
             login_url=Misc.make_login_url(
                 redirect_path=settings.GRAPH_HOST + f'/?user_trusts={profile_to["username"]}',
                 keep_user_data='on'

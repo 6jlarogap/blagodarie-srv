@@ -478,7 +478,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                     message_from = (
                         f'Установить симпатию к {html.escape(user_to.first_name)} ?\n'
                         f'\n'
-                        f'Перед установкой симпатии - посмотрите <u>Доверие</u>\n'
+                        f'Перед установкой симпатии - посмотрите доверие\n'
                     )
                     parms = dict(
                         redirect_path=settings.GRAPH_URL + f'/?user_trusts={user_to.username}',
@@ -489,7 +489,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                         inline_keyboard=[
                             [
                                 dict(
-                                    text='Доверие',
+                                    text='Смотреть доверие',
                                     login_url=dict(
                                         url=url,
                                         bot_username=bot_username
