@@ -49,6 +49,7 @@ urlpatterns = [
     re_path(r'^api/token/invite/?$', views.api_token_invite),
 
     re_path(r'^api/meet_id/?$', views.api_meet_id),
+    re_path(r'^api/meetgamers/?$', views.api_meetgamers),
 
     re_path(r'^api/get_bot_data/?$', views.api_get_bot_data),
     re_path(r'^api/show_tgmsg_pack/?$', views.api_show_tgmsg_pack),

@@ -4521,3 +4521,102 @@ class ApiShowTgmsgPack(TelegramApiMixin, APIView):
         return Response(data=data, status=status_code)
 
 api_show_tgmsg_pack = ApiShowTgmsgPack.as_view()
+
+
+class Apimeetgamers(TelegramApiMixin, APIView):
+    permission_classes = (IsAuthenticated, )
+
+    def make_cs(self, cs, links):
+        link_pattern = dict(
+            source=cs.user_from.pk,
+            target=cs.user_to.pk,
+        )
+        if cs.attitude is not None and not cs.is_reverse:
+            link = link_pattern.copy()
+            link.update(attitude=cs.attitude)
+            links.append(link)
+        if cs.is_invite_meet and not cs.is_invite_meet_reverse:
+            link = link_pattern.copy()
+            link.update(is_invite_meet=True)
+            links.append(link)
+        if cs.is_sympa and not cs.is_sympa_reverse and cs.is_sympa_confirmed:
+            link = link_pattern.copy()
+            link.update(is_sympa=True)
+            links.append(link)
+        if cs.is_hide_meet:
+            link = link_pattern.copy()
+            link.update(is_hide_meet=True)
+            links.append(link)
+
+
+    def get(self, request):
+        fmt = '3d-force-graph'
+
+        username = request.GET.get('id')
+        links = []
+        users = []
+        user_pks = set()
+
+        if request.user.profile.did_meet is None:
+            raise PermissionDenied()
+        if username:
+            try:
+                user = User.objects.get(username=username)
+                qs_cs = Q(user_to__isnull=False,) & \
+                        (Q(user_from=user) | Q(user_to=user)) & \
+                        Q(user_to__profile__did_meet__isnull=False)  & \
+                        Q(user_from__profile__did_meet__isnull=False)
+                for cs in CurrentState.objects.filter(qs_cs
+                        ).distinct():
+                    user_pks.add(cs.user_from.pk)
+                    user_pks.add(cs.user_to.pk)
+            except User.DoesNotExist:
+                pass
+            for profile in Profile.objects.select_related('user').filter(
+                    user__pk__in=user_pks
+                ):
+                users.append(profile.data_dict(request=request, fmt=fmt))
+                user_pks.add(profile.user.pk)
+        else:
+            from_ = number_ = None
+            try:
+                from_ = int(request.GET.get('from'))
+                if from_ < 0:
+                    from_ = 0
+            except (ValueError, TypeError,):
+                pass
+            try:
+                number_ = int(request.GET.get('number'))
+            except (ValueError, TypeError,):
+                pass
+            if number_ and from_ is None:
+                from_ = 0
+            if from_ is not None and not number_:
+                number_ = settings.PAGINATE_USERS_COUNT
+
+            qs_profile = Profile.objects.select_related('user').filter(
+                    did_meet__isnull=False,
+                ).order_by(
+                    '-user__date_joined'
+                ).distinct()
+            if from_ is not None and number_ is not None:
+                qs_profile = qs_profile[from_: from_ + number_]
+
+            for profile in qs_profile:
+                users.append(profile.data_dict(request=request, fmt=fmt))
+                user_pks.add(profile.user.pk)
+
+        if request.user.is_authenticated and request.user.pk not in user_pks:
+            user_pks.add(request.user.pk)
+            users.append(request.user.profile.data_dict(request=request, fmt=fmt))
+
+        for cs in CurrentState.objects.filter(
+                user_from__in=user_pks, user_to__in=user_pks,
+                ).distinct():
+            self.make_cs(cs, links)
+
+        bot_username = self.get_bot_username()
+        data = dict(bot_username=bot_username, nodes=users, links=links)
+        return Response(data=data, status=status.HTTP_200_OK)
+
+api_meetgamers = Apimeetgamers.as_view()
