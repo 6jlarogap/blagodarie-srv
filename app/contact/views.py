@@ -475,26 +475,45 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                             )),
                     ]]))
                 else:
-                    message_from = f'Установить симпатию к {html.escape(user_to.first_name)} ?'
+                    message_from = (
+                        f'Установить симпатию к {html.escape(user_to.first_name)} ?\n'
+                        f'\n'
+                        f'Перед установкой симпатии - посмотрите <u>Доверие</u>\n'
+                    )
+                    parms = dict(
+                        redirect_path=settings.GRAPH_URL + f'/?user_trusts={user_to.username}',
+                        keep_user_data='on'
+                    )
+                    url = f'{settings.TG_LOGIN_URL}?{urlencode(parms)}'
                     options_quest_set_revoke_sympa.update(reply_markup=dict(
-                        inline_keyboard=[[
-                            dict(
-                                text='Симпатия',
-                                callback_data=(
-                                    f'{KeyboardType.SYMPA_SET}{KeyboardType.SEP}'
-                                    f'{user_from.username}{KeyboardType.SEP}'
-                                    f'{user_to.username}{KeyboardType.SEP}'
-                                    f'{data["journal_id"]}{KeyboardType.SEP}'
-                            )),
-                            dict(
-                                text='Скрыть',
-                                callback_data=(
-                                    f'{KeyboardType.SYMPA_HIDE}{KeyboardType.SEP}'
-                                    f'{user_from.username}{KeyboardType.SEP}'
-                                    f'{user_to.username}{KeyboardType.SEP}'
-                                    f'{data["journal_id"]}{KeyboardType.SEP}'
-                            )),
-                    ]]))
+                        inline_keyboard=[
+                            [
+                                dict(
+                                    text='Доверие',
+                                    login_url=dict(
+                                        url=url,
+                                        bot_username=bot_username
+                                )),
+                            ],
+                            [
+                                dict(
+                                    text='Симпатия',
+                                    callback_data=(
+                                        f'{KeyboardType.SYMPA_SET}{KeyboardType.SEP}'
+                                        f'{user_from.username}{KeyboardType.SEP}'
+                                        f'{user_to.username}{KeyboardType.SEP}'
+                                        f'{data["journal_id"]}{KeyboardType.SEP}'
+                                )),
+                                dict(
+                                    text='Скрыть',
+                                    callback_data=(
+                                        f'{KeyboardType.SYMPA_HIDE}{KeyboardType.SEP}'
+                                        f'{user_from.username}{KeyboardType.SEP}'
+                                        f'{user_to.username}{KeyboardType.SEP}'
+                                        f'{data["journal_id"]}{KeyboardType.SEP}'
+                                )),
+                            ]
+                    ]))
                 self.send_to_telegram(message_from, user=user_from, options=options_quest_set_revoke_sympa)
 
             if operationtype_id == OperationType.SET_SYMPA and got_tg_token:
