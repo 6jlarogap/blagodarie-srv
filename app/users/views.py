@@ -4523,7 +4523,7 @@ class ApiShowTgmsgPack(TelegramApiMixin, APIView):
 api_show_tgmsg_pack = ApiShowTgmsgPack.as_view()
 
 
-class Apimeetgamers(TelegramApiMixin, APIView):
+class ApiMeetgamers(TelegramApiMixin, APIView):
     permission_classes = (IsAuthenticated, )
 
     def make_cs(self, cs, links):
@@ -4562,6 +4562,7 @@ class Apimeetgamers(TelegramApiMixin, APIView):
         if username:
             try:
                 user = User.objects.get(username=username)
+                root_node = user.profile.data_dict(request=request, fmt=fmt)
                 qs_cs = Q(user_to__isnull=False,) & \
                         (Q(user_from=user) | Q(user_to=user)) & \
                         Q(user_to__profile__did_meet__isnull=False)  & \
@@ -4617,6 +4618,8 @@ class Apimeetgamers(TelegramApiMixin, APIView):
 
         bot_username = self.get_bot_username()
         data = dict(bot_username=bot_username, nodes=users, links=links)
+        if username:
+            data.update(root_node=root_node)
         return Response(data=data, status=status.HTTP_200_OK)
 
-api_meetgamers = Apimeetgamers.as_view()
+api_meetgamers = ApiMeetgamers.as_view()
