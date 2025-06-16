@@ -253,7 +253,11 @@ class Common(object):
     @classmethod
     def make_sympa_do(cls, profile_from, profile_to, journal_id, message_pre=''):
         text = message_pre + '\n\n' if message_pre else ''
-        text += f'Установить симпатию к {html.quote(profile_to["first_name"])} ?'
+        text += (
+            f'Установить симпатию к {html.quote(profile_to["first_name"])} ?\n'
+            f'\n'
+            f'Перед установкой симпатии - посмотрите <u>Доверие</u>\n'
+        )
         callback_dict = cls.callback_dict(profile_from, profile_to, journal_id)
         callback_dict.update(keyboard_type=KeyboardType.SYMPA_SET)
         button_sympa = InlineKeyboardButton(
@@ -265,7 +269,16 @@ class Common(object):
             text='Скрыть',
             callback_data=cls.CALLBACK_DATA_TEMPLATE % callback_dict
         )
-        reply_markup = InlineKeyboardMarkup(inline_keyboard=[ [button_sympa, button_hide] ])
+        button_trusts = InlineKeyboardButton(
+            text='Доверие',
+            login_url=Misc.make_login_url(
+                redirect_path=settings.GRAPH_HOST + f'/?user_trusts={profile_to["username"]}',
+                keep_user_data='on'
+        ))
+        reply_markup = InlineKeyboardMarkup(inline_keyboard=[
+            [button_trusts],
+            [button_sympa, button_hide],
+        ])
         return text, reply_markup
 
     @classmethod
