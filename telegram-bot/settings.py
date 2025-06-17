@@ -74,6 +74,11 @@ MAP_HOST = 'https://map.meetgame.us.to'
 #
 GRAPH_HOST = 'https://d3.meetgame.us.to'
 
+# Рисуем графики в формате '3d-force-graph' здесь
+# для участников игры знакомств
+#
+GRAPH_MEET_HOST = 'https://mgraph.meetgame.us.to'
+
 # Ссылка на фронте, которая будет открываться там под авторизованным
 # пользователем:
 # <FRONTEND_HOST><FRONTEND_AUTH_PATH>?redirect_path=<frontend_path>

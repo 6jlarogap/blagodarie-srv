@@ -4578,7 +4578,19 @@ class ApiMeetgamers(TelegramApiMixin, APIView):
             for profile in Profile.objects.select_related('user').filter(
                     user__pk__in=user_pks
                 ):
-                users.append(profile.data_dict(request=request, fmt=fmt))
+                data_dict = profile.data_dict(request=request, fmt=fmt)
+                if profile.user == user:
+                    color = 'blue'; frame = 5; thumb_size_popup = 72
+                    method = 'crop-%s-frame-%s' % (color, frame)
+                    data_dict['photo'] = Profile.image_thumb(
+                        request, profile.photo,
+                        method=method,
+                        width=thumb_size_popup + frame * 2,
+                        height=thumb_size_popup + frame * 2,
+                        put_default_avatar=True,
+                        default_avatar_in_media=PhotoModel.get_gendered_default_avatar(profile.gender)
+                )
+                users.append(data_dict)
                 user_pks.add(profile.user.pk)
         else:
             from_ = number_ = None

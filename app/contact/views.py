@@ -481,7 +481,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                         f'Перед установкой симпатии - посмотрите доверие\n'
                     )
                     parms = dict(
-                        redirect_path=settings.GRAPH_URL + f'/?user_trusts={user_to.username}',
+                        redirect_path=settings.GRAPH_MEET_URL + f'/?id={user_to.username}',
                         keep_user_data='on'
                     )
                     url = f'{settings.TG_LOGIN_URL}?{urlencode(parms)}'

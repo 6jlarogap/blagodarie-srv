@@ -322,6 +322,11 @@ REDIRECT_FROM_CALLBACK = 'oauth-landing'
 #
 GRAPH_URL = 'https://d3.meetgame.us.to'
 
+# Рисуем графики в формате '3d-force-graph' здесь
+# для участников игры знакомств
+#
+GRAPH_MEET_URL = 'https://mgraph.meetgame.us.to'
+
 # Рисуем карту в формате здесь
 #
 MAP_URL = 'https://map.meetgame.us.to'

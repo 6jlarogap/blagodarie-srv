@@ -272,7 +272,7 @@ class Common(object):
         button_trusts = InlineKeyboardButton(
             text='Смотреть доверие',
             login_url=Misc.make_login_url(
-                redirect_path=settings.GRAPH_HOST + f'/?user_trusts={profile_to["username"]}',
+                redirect_path=settings.GRAPH_MEET_HOST + f'/?id={profile_to["username"]}',
                 keep_user_data='on'
         ))
         reply_markup = InlineKeyboardMarkup(inline_keyboard=[
