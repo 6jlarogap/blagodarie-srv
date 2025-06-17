@@ -2702,6 +2702,12 @@ class Misc(object):
                     redirect_path=settings.MEET_HOST,
                     keep_user_data='on'
             ))
+            inline_btn_mgraph = InlineKeyboardButton(
+                text='Отношения участников',
+                login_url=Misc.make_login_url(
+                    redirect_path=settings.GRAPH_MEET_HOST,
+                    keep_user_data='on'
+            ))
             inline_btn_edit = InlineKeyboardButton(
                 text='Редактировать',
                 callback_data=cls.CALLBACK_DATA_SID_TEMPLATE % dict(
@@ -2716,7 +2722,13 @@ class Misc(object):
                 sid=profile['username'],
                 sep=KeyboardType.SEP,
             ))
-            buttons = [ [inline_btn_invite ], [inline_btn_map], [inline_btn_edit], [inline_btn_revoke] ]
+            buttons = [
+                [inline_btn_invite ],
+                [inline_btn_map],
+                [inline_btn_mgraph],
+                [inline_btn_edit],
+                [inline_btn_revoke]
+            ]
         if buttons:
             reply_markup = InlineKeyboardMarkup(inline_keyboard=buttons)
         photo_url = profile['photo'] or cls.photo_no_photo(profile)
