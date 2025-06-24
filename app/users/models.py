@@ -1229,11 +1229,12 @@ class Offer(BaseModelInsertTimestamp, GeoPointAddressModel):
     def data_dict(self, request=None, user_ids_only=False):
         result = dict(
             uuid=self.uuid,
-            owner={
-                'first_name': self.owner.first_name,
-                'uuid':self.owner.profile.uuid,
-                'id': self.owner.pk,
-            },
+            owner=dict(
+                first_name=self.owner.first_name,
+                uuid=self.owner.profile.uuid,
+                user_id=self.owner.pk,
+                username=self.owner.username,
+            ),
             question=self.question,
             timestamp=self.closed_timestamp if self.closed_timestamp else int(time.time()),
             closed_timestamp=self.closed_timestamp,

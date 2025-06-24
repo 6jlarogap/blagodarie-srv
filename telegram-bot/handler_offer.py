@@ -141,40 +141,68 @@ class Offer(object):
             await message.reply(err_mes)
             return
         await message.reply('Создан опрос:')
-        await cls.show_offer(response_sender, response, message)
+        await cls.show_offer(
+            response_sender, response, message,
+            username_href=response_sender['username'],
+            username_ref=response_sender['username'],
+        )
 
 
     @classmethod
     async def offer_forwarded_in_group_or_channel(cls, message, state):
         result = False
-        if message.forward_origin and message.content_type == ContentType.TEXT:
+        if message.forward_origin:
+            offer_uuid, username_href = cls.get_data_from_offer_message(message)
+            if offer_uuid:
+                status_offer, response_offer = await cls.post_offer_answer(offer_uuid, None, [-1])
+                if status_offer == 200:
+                    await cls.show_offer(
+                        user_from=None,
+                        offer=response_offer,
+                        message=message,
+                        username_href=username_href
+                    )
+                    result = True
+                    try:
+                        await message.delete()
+                    except TelegramBadRequest:
+                        pass
+        return result
+
+
+    @classmethod
+    def get_data_from_offer_message(cls, message):
+        if message.content_type == ContentType.TEXT:
+            username_href = None
             num_links = 0
             for entity in message.entities:
                 m = None
                 if entity.type == MessageEntityType.TEXT_LINK:
-                    m = re.search(
-                        r'(?:start\=offer\-|offer_uuid\=|offer_id\=)([\da-f]{8}-([\da-f]{4}-){3}[\da-f]{12})',
+                    m = re.search((
+                            r'(?:start\=offer\-|offer_uuid\=|offer_id\=)'
+                            r'([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})'
+                            r'(?:-userId-([a-z0-9]{10})){0,1}'
+                        ),
                         entity.url,
                         flags=re.I
                     )
                 if m:
                     num_links += 1
                     offer_uuid = m.group(1)
+                    if m2 := m.group(2):
+                        username_href = m2
                 if num_links >= 2:
-                    status_offer, response_offer = await cls.post_offer_answer(offer_uuid, None, [-1])
-                    if status_offer == 200:
-                        await cls.show_offer(None, response_offer, message)
-                        result = True
-                        try:
-                            await message.delete()
-                        except TelegramBadRequest:
-                            pass
-                        break
-        return result
+                    return offer_uuid, username_href
+        return None, None
 
 
     @classmethod
-    async def show_offer(cls, user_from, offer, message):
+    async def show_offer(
+        cls,
+        user_from, offer, message,
+        username_href=None,
+        username_ref=None
+    ):
         """
         Показать опрос-предложение
 
@@ -193,7 +221,7 @@ class Offer(object):
         Структура offer на входе имееет вид:
         {
             'uuid': '6caf0f7f-d9f4-4c4f-a04b-4a9169f7461c',
-            'owner': {'first_name': 'Евгений Супрун', 'uuid': '8f686101-c5a2-46d0-a5ee-c74386ffffff', 'id': 326},
+            'owner': {'first_name': 'Евгений Супрун', 'uuid': '8f686101-c5a2-46d0-a5ee-c74386ffffff', 'user_id': 326},
             'question': 'How are you',
             'timestamp': 1683197002,
             'closed_timestamp': None,
@@ -203,7 +231,7 @@ class Offer(object):
                     'number': 0,        // ответ с фиктивным номером 0: тот кто видел опрос, возможно голосовал
                     'answer': '',       // и отменил голос
                     'users': [
-                        { 'id': 326, 'uuid': '8f686101-c5a2-46d0-a5ee-c74386ffffff', 'first_name': 'X Y'}
+                        { 'user_id': 326, 'uuid': '8f686101-c5a2-46d0-a5ee-c74386ffffff', 'first_name': 'X Y'}
                     ]
                 },
                 { 'number': 1, 'answer': 'Excellent', 'users': [] },
@@ -212,18 +240,30 @@ class Offer(object):
             ],
             'user_answered': {'326': {'answers': [0]}} // создатель опроса его видел
         }
+        username_href:  имя userId= в ссылке на опрос
+        username_ref:   имя в кнопках опроса
+
         """
         try:
             await bot.send_message(
                 message.chat.id,
-                text=cls.text_offer(user_from, offer, message),
-                reply_markup=cls.markup_offer(user_from, offer, message),
-            )
+                text=cls.text_offer(
+                    user_from, offer, message,
+                    username_href, username_ref
+                ),
+                reply_markup=cls.markup_offer(
+                    user_from, offer, message,
+                    username_href, username_ref,
+            ))
         except (TelegramBadRequest, TelegramForbiddenError,):
             await message.reply('Опрос-предложение предъявить не удалось')
 
     @classmethod
-    def text_offer(cls, user_from, offer, message):
+    def text_offer(
+            cls,
+            user_from, offer, message,
+            username_href=None, username_ref=None
+        ):
         """
         Текст опроса-предложения
 
@@ -247,7 +287,6 @@ class Offer(object):
         Отмена
         Обновить результаты
         """
-
         result = (
             '%(question)s\n'
             '%(multi_text)s%(closed_text)s'
@@ -263,8 +302,13 @@ class Offer(object):
             if answer['number'] > 0:
                 result += '%s - %s\n' % (answer['answer'], len(answer['users']),)
         result += '\n'
+
+        href = f't.me/{bot_data.username}?start=offer-{offer["uuid"]}'
+        userId = username_href or (user_from and user_from['username']) or None
+        if userId:
+            href += f'-userId-{userId}'
         result += Misc.get_html_a(
-            href='t.me/%s?start=offer-%s' % (bot_data.username, offer['uuid'],),
+            href=href,
             text='Ссылка на опрос'
         ) + '\n'
         result += Misc.get_html_a(
@@ -283,13 +327,20 @@ class Offer(object):
 
 
     @classmethod
-    def markup_offer(cls, user_from, offer, message):
+    def markup_offer(
+            cls,
+            user_from, offer, message,
+            username_href=None, username_ref=None
+        ):
         buttons = []
         callback_data_template = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s%(number)s%(sep)s'
+        if username_ref:
+            callback_data_template += '%(username_ref)s%(sep)s'
         callback_data_dict = dict(
             keyboard_type=KeyboardType.OFFER_ANSWER,
             uuid=offer['uuid'],
             sep=KeyboardType.SEP,
+            username_ref=username_ref if username_ref else ''
         )
         if not offer['closed_timestamp']:
             have_i_voted = False
@@ -438,6 +489,9 @@ async def cbq_offer_geo_pass(callback: CallbackQuery, state: FSMContext):
         #     -3:   остановить опрос
         #     -4:   возобновить опрос
         #     -5:   задать координаты
+        # KeyboardType.SEP,
+        # профиль реферера (кому донатить)
+        #
 async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
     tg_user_sender = callback.from_user
     code = callback.data.split(KeyboardType.SEP)
@@ -446,6 +500,10 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
         number = int(code[2])
     except (IndexError, ValueError,):
         return
+    try:
+        username_ref = code[3]
+    except (IndexError, ValueError,):
+        username_ref = None
     status_from, profile_from = await Misc.post_tg_user(
         tg_user_sender,
         did_bot_start=callback.message.chat.type == ChatType.PRIVATE
@@ -484,8 +542,17 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
 
     status_answer, response_answer = await Offer.post_offer_answer(offer_uuid, profile_from, [number])
     if status_answer == 200:
-        text = Offer.text_offer(profile_from, response_answer, callback.message)
-        reply_markup = Offer.markup_offer(profile_from, response_answer, callback.message)
+        offer_uuid, username_href = Offer.get_data_from_offer_message(callback.message)
+        text = Offer.text_offer(
+            profile_from, response_answer, callback.message,
+            username_href=username_href,
+            username_ref=username_ref,
+        )
+        reply_markup = Offer.markup_offer(
+            profile_from, response_answer, callback.message,
+            username_href=username_href,
+            username_ref=username_ref,
+        )
         try:
             await callback.message.edit_text(text, reply_markup=reply_markup)
         except TelegramBadRequest:

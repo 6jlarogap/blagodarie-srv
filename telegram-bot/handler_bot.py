@@ -301,14 +301,27 @@ async def cmd_start(message: Message, state: FSMContext):
                 state=state,
             ))
 
-    elif m := re.search(
-            r'^offer\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})$',
+    elif m := re.search((
+                r'^offer\-([0-9a-f]{8}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{4}\-[0-9a-f]{12})'
+                r'(?:-userId-([a-z0-9]{10})){0,1}$'
+            ),
             arg, flags=re.I
         ):
             from handler_offer import Offer
             status_offer, response_offer = await Offer.post_offer_answer(m.group(1), response_sender, [-1])
             if status_offer == 200:
-                await Offer.show_offer(response_sender, response_offer, message)
+                profile_ref = None
+                if m.group(2):
+                    status_ref, profile_ref = await Misc.get_user_by_sid(m.group(2))
+                    if status_ref != 200 or profile_ref['owner']:
+                        profile_ref = None
+                if not profile_ref:
+                    profile_ref = response_offer['owner']
+                await Offer.show_offer(
+                    response_sender, response_offer, message,
+                    username_href=response_sender['username'],
+                    username_ref=profile_ref['username'],
+                )
             else:
                 await message.reply('Опрос-предложение не найдено')
 

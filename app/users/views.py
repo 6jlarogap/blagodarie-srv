@@ -3254,7 +3254,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                         popup=popup % dict_user,
                     )
                     if (found_coordinates and profile == found_profile) or \
-                    (offer_question and offer_dict['owner']['id'] == profile.user.pk):
+                    (offer_question and offer_dict['owner']['user_id'] == profile.user.pk):
                         point.update(
                             is_of_found_user=True,
                             icon=profile.choose_thumb(
