@@ -43,6 +43,7 @@ urlpatterns = [
     re_path(r'^api/offer/results/?$', views.api_offer_results),
     re_path(r'^api/offer/list/?$', views.api_offer_list),
     re_path(r'^api/offer/voted/tg_users?$', views.api_offer_voted_tg_users),
+    re_path(r'^api/offer/ref/?$', views.api_offer_ref),
 
     re_path(r'^api/token/url/?$', views.api_token_url),
     re_path(r'^api/token/authdata/?$', views.api_token_authdata),

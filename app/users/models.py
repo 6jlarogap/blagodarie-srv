@@ -1225,6 +1225,7 @@ class Offer(BaseModelInsertTimestamp, GeoPointAddressModel):
     question = models.CharField(_("Вопрос"), max_length=2048)
     closed_timestamp = models.PositiveIntegerField(_("Приостановлен"), null=True, default=None)
     is_multi = models.BooleanField(_("Множественный выбор"), default=False)
+    desc = models.TextField(verbose_name=_("Описание"), null=True)
 
     def data_dict(self, request=None, user_ids_only=False):
         result = dict(
@@ -1236,6 +1237,7 @@ class Offer(BaseModelInsertTimestamp, GeoPointAddressModel):
                 username=self.owner.username,
             ),
             question=self.question,
+            desc=self.desc,
             timestamp=self.closed_timestamp if self.closed_timestamp else int(time.time()),
             closed_timestamp=self.closed_timestamp,
             is_multi=self.is_multi,
@@ -1283,6 +1285,35 @@ class OfferAnswer(BaseModelInsertTimestamp):
 
     def __str__(self):
         return '%s: %s' % (self.number, self.answer)
+
+class OfferRefState(BaseModelInsertUpdateTimestamp):
+    """
+    Кто кого пригласил
+    """
+    offer = models.ForeignKey(Offer, on_delete=models.CASCADE)
+    user_from = models.ForeignKey('auth.User',
+                    verbose_name=_("Пригласивший"), on_delete=models.CASCADE,
+                    related_name='offerrefstate_user_from_set')
+    user_to = models.ForeignKey('auth.User',
+                    verbose_name=_("Приглашенный (стал referrer"), on_delete=models.CASCADE,
+                    related_name='offerrefstate_user_to_set')
+
+    class Meta:
+        unique_together = (
+            ('offer', 'user_from', 'user_to', ),
+        )
+
+class OfferRefJournal(BaseModelInsertTimestamp):
+    """
+    Кто кого пригласил когда
+    """
+    offer = models.ForeignKey(Offer, on_delete=models.CASCADE)
+    user_from = models.ForeignKey('auth.User',
+                    verbose_name=_("Пригласивший"), on_delete=models.CASCADE,
+                    related_name='offerrefjournal_user_from_set')
+    user_to = models.ForeignKey('auth.User',
+                    verbose_name=_("Приглашенный (стал referrer"), on_delete=models.CASCADE,
+                    related_name='offerrefjournal_user_to_set')
 
 
 class TgDesc(BaseModelInsertTimestamp):

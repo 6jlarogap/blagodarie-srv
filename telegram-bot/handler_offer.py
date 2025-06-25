@@ -4,7 +4,7 @@
 
 import re
 
-from aiogram import Router, F
+from aiogram import Router, F, types, html
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, ContentType, \
                           InlineKeyboardMarkup, InlineKeyboardButton
@@ -27,6 +27,10 @@ dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
 class FSMofferPlace(StatesGroup):
     # После создания оффера спросить о месте
+    ask = State()
+
+class FSMofferPutDesc(StatesGroup):
+    # изменить описание существующего оффера
     ask = State()
 
 class FSMsendMessageToOffer(StatesGroup):
@@ -401,6 +405,15 @@ class Offer(object):
                 callback_data=callback_data_template % callback_data_dict
             )
             buttons.append([inline_btn_answer])
+
+        if message.chat.type == ChatType.PRIVATE and \
+           (user_from['uuid'] == offer['owner']['uuid'] or offer['desc']):
+            callback_data_dict.update(number=-6)
+            inline_btn_answer = InlineKeyboardButton(
+                text='Задать описание' if user_from['uuid'] == offer['owner']['uuid'] else 'Посмотреть описание',
+                callback_data=callback_data_template % callback_data_dict
+            )
+            buttons.append([inline_btn_answer])
         return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -489,6 +502,7 @@ async def cbq_offer_geo_pass(callback: CallbackQuery, state: FSMContext):
         #     -3:   остановить опрос
         #     -4:   возобновить опрос
         #     -5:   задать координаты
+        #     -6:   ввести/оказать описание
         # KeyboardType.SEP,
         # профиль реферера (кому донатить)
         #
@@ -540,6 +554,38 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
+    if number == -6:
+        status_offer, offer = await Offer.post_offer_answer(offer_uuid, profile_from, [-1])
+        if status_offer == 200:
+            text = ''
+            reply_markup = None
+            if profile_from['username'] == offer['owner']['username']:
+                await state.set_state(FSMofferPutDesc.ask)
+                await state.update_data(
+                    uuid=profile_from['uuid'],
+                    offer_uuid=offer_uuid,
+                )
+                if offer['desc']:
+                    text = (
+                        '<i>Текущеее описание опроса:</i>\n'
+                        '\n'
+                        f'{html.quote(offer["desc"])}\n'
+                        '\n'
+                    )
+                text += '<i>Задайте описание опроса</i>'
+                reply_markup = Misc.reply_markup_cancel_row()
+            else:
+                if offer['desc']:
+                    text += f'<i>Описание опроса:</i>\n\n{html.quote(offer["desc"])}'
+                else:
+                    text += 'Описание опроса не задано'
+            await callback.message.reply(
+                text,
+                reply_markup=reply_markup,
+            )
+        await callback.answer()
+        return
+
     status_answer, response_answer = await Offer.post_offer_answer(offer_uuid, profile_from, [number])
     if status_answer == 200:
         offer_uuid, username_href = Offer.get_data_from_offer_message(callback.message)
@@ -578,8 +624,6 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
             success_message = 'Опрос остановлен'
         elif number == -4 and callback.message.chat.type == ChatType.PRIVATE:
             success_message = 'Опрос возобновлен'
-        elif number == -5 and callback.message.chat.type == ChatType.PRIVATE:
-            success_message = 'Координаты опроса заданы'
         if success_message:
             await callback.answer(success_message, show_alert=True,)
     elif callback.message.chat.type == ChatType.PRIVATE:
@@ -593,8 +637,6 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
             err_mes = 'Не удалось приостановить опрос'
         elif number == -4:
             err_mes = 'Не удалось возобновить опрос'
-        elif number == -5:
-            err_mes = 'Не удалось задать координаты'
         else:
             err_mes = 'Ошибка выполнения запроса'
         await callback.message.reply(err_mes)
@@ -630,6 +672,31 @@ async def process_existing_offer_location(message: Message, state: FSMContext):
         )
     else:
         reply = Misc.MSG_ERROR_API
+    await message.reply(reply, disable_notification=True)
+    await state.clear()
+
+
+@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMofferPutDesc.ask))
+async def process_existing_offer_desc(message: Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    data = await state.get_data()
+    status_from, profile_from = await Misc.post_tg_user(message.from_user)
+    if data.get('uuid') and data.get('offer_uuid') and \
+       profile_from['uuid'] == data['uuid']:
+        desc = message.text.strip()
+        status_answer, response_answer = await Offer.post_offer_answer(
+            data['offer_uuid'],
+            profile_from,
+            [-6],
+            desc=desc,
+        )
+        if status_answer == 200:
+            reply = (
+                f'<i>Описание опроса установлено в:</i>\n\n{desc}'
+            )
+        else:
+            reply = Misc.MSG_ERROR_API
     await message.reply(reply, disable_notification=True)
     await state.clear()
 

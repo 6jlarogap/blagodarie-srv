@@ -32,7 +32,8 @@ from app.models import UnclearDate, PhotoModel, GenderMixin
 from django.contrib.auth.models import User
 from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TgGroup, \
     TempToken, UuidMixin, TelegramApiMixin, \
-    TgPoll, TgPollAnswer, Offer, OfferAnswer, TgDesc
+    TgPoll, TgPollAnswer, Offer, OfferAnswer, TgDesc, \
+    OfferRefJournal, OfferRefState
 from contact.models import Key, KeyType, CurrentState, OperationType, Wish, Ability, \
                            ApiAddOperationMixin, Journal, TgMessageJournal
 from wote.models import Video, Vote
@@ -3870,6 +3871,13 @@ class ApiOfferAnswer(ApiOfferMixin, UuidMixin, APIView):
                         self.put_location(request, offer)
                     else:
                         raise PermissionDenied()
+                elif len(numbers) == 1 and numbers[0] == -6:
+                    # Указать описание существующего опроса
+                    if owner == offer.owner and request.data.get('desc'):
+                        offer.desc = request.data['desc']
+                        offer.save(update_fields=('desc',))
+                    else:
+                        raise PermissionDenied()
                 elif not offer.closed_timestamp:
                     current_numbers = [a.number for a in profile.offer_answers.filter(offer=offer)]
                     if profile and set(current_numbers) != set(numbers):
@@ -3952,6 +3960,60 @@ class ApiOfferResults(TelegramApiMixin, APIView):
         return Response(data=data, status=status_code)
 
 api_offer_results = ApiOfferResults.as_view()
+
+class ApiOfferRef(APIView):
+
+    @transaction.atomic
+    def post(self, request):
+        """
+        Записать пригласившего и приглашенного в журнал и в состояние
+
+        Если и тот, и другой один юзер, то только запись в журнал
+        """
+        try:
+            if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                raise ServiceException('Неверный токен телеграм бота')
+            uu = dict()
+            for f in ('username_from', 'username_to'):
+                if not request.data.get(f):
+                    raise ServiceException(f'Незадан параметр {f}')
+                try:
+                    uu[f] = User.objects.get(username=request.data[f])
+                except User.DoesNotExist:
+                    raise ServiceException(f'Не найден пользователь {request.data[f]}')
+            if not request.data.get('offer_uuid'):
+                raise ServiceException('Незадан параметр offer_uuid')
+            try:
+                offer = Offer.objects.get(uuid=request.data['offer_uuid'])
+            except Offer.DoesNotExist:
+                raise ServiceException('Не найден опрос/предложение')
+
+            OfferRefJournal.objects.create(
+                offer=offer,
+                user_from=uu['username_from'],
+                user_to=uu['username_to'],
+            )
+
+            if uu['username_from'] != uu['username_to']:
+                offerrefstate, created = OfferRefState.objects.select_for_update().get_or_create(
+                    offer=offer,
+                    user_from=uu['username_from'],
+                    user_to=uu['username_to'],
+                )
+                if not created:
+                    offerrefstate.update_timestamp = int(time.time())
+                    offerrefstate.save()
+
+            data = dict()
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            transaction.set_rollback(True)
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response(data=data, status=status_code)
+
+api_offer_ref = ApiOfferRef.as_view()
+
 
 class ApiVotedTgUsers(APIView):
 
