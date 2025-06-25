@@ -3767,6 +3767,7 @@ class ApiOffer(ApiOfferMixin, UuidMixin, APIView):
             data = offer.data_dict()
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
+            transaction.set_rollback(True)
             data = dict(message=excpt.args[0])
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
@@ -3780,6 +3781,30 @@ class ApiOffer(ApiOfferMixin, UuidMixin, APIView):
         except (TypeError, ValueError, ValidationError, Offer.DoesNotExist,):
             data = {}
             status_code = status.HTTP_404_NOT_FOUND
+        return Response(data=data, status=status_code)
+
+    def put(self, request):
+        try:
+            if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
+                raise ServiceException('Неверный токен телеграм бота')
+            try:
+                offer = Offer.objects.get(uuid=request.data.get('offer_uuid'))
+                tgdesc_dict = request.data['tgdesc']
+            except (TypeError, KeyError, ValueError, ValidationError, Offer.DoesNotExist,):
+                raise ServiceException('Опрос не найден или не заданы необходимые параметры')
+            if str(offer.owner.username) != request.data.get('username'):
+                raise PermissionDenied()
+            if request.data.get('is_first'):
+                offer.tgdesc.filter(
+                    ~Q(uuid_pack=tgdesc_dict['uuid_pack'])
+                ).delete()
+            tgdesc = TgDesc.objects.create(**tgdesc_dict)
+            offer.tgdesc.add(tgdesc)
+            data = {}
+            status_code = status.HTTP_200_OK
+        except ServiceException as excpt:
+            data = dict(message=excpt.args[0])
+            status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)
 
 api_offer = ApiOffer.as_view()
@@ -3869,13 +3894,6 @@ class ApiOfferAnswer(ApiOfferMixin, UuidMixin, APIView):
                     # Указать координаты
                     if owner == offer.owner:
                         self.put_location(request, offer)
-                    else:
-                        raise PermissionDenied()
-                elif len(numbers) == 1 and numbers[0] == -6:
-                    # Указать описание существующего опроса
-                    if owner == offer.owner and request.data.get('desc'):
-                        offer.desc = request.data['desc']
-                        offer.save(update_fields=('desc',))
                     else:
                         raise PermissionDenied()
                 elif not offer.closed_timestamp:
@@ -4546,6 +4564,9 @@ class ApiShowTgmsgPack(TelegramApiMixin, APIView):
 
         Параметры:
             uuid_pack:  в соответствующей таблице это идентифицирует пачку
+                или
+            messages:   готовые сообщения для показа
+
             username:   кому выводим в телеграме
             what:       messages, если пачку берем из TgMessageJournal,
                         иначе из TgDesc
@@ -4554,7 +4575,7 @@ class ApiShowTgmsgPack(TelegramApiMixin, APIView):
             if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
                 raise ServiceException('Неверный токен телеграм бота')
             d_parms = dict(what='tgdesc')
-            for parm in ('uuid_pack', 'username', 'what'):
+            for parm in ('username', 'what'):
                 if parm in request.data:
                     d_parms[parm] = request.data[parm]
                 if not d_parms.get(parm):
@@ -4564,11 +4585,18 @@ class ApiShowTgmsgPack(TelegramApiMixin, APIView):
             except User.DoesNotExist:
                 raise ServiceException(f"Не найден user '{d_parms['username']}'")
             model = TgMessageJournal if d_parms['what'] == 'messages' else TgDesc
-            messages = [
-                m.message_dict() for m in model.objects.filter(
-                        uuid_pack=d_parms['uuid_pack']
-                    ).order_by('message_id')
-            ]
+
+            d_parms['uuid_pack'] = request.data['uuid_pack'] if request.data.get('uuid_pack') else None
+            d_parms['messages'] = request.data['messages'] if request.data.get('messages') else None
+            if d_parms['uuid_pack']:
+                messages = [
+                    m.message_dict() for m in model.objects.filter(
+                            uuid_pack=d_parms['uuid_pack']
+                        ).order_by('message_id')
+                ]
+            elif d_parms['messages']:
+                messages = d_parms['messages']
+
             options = dict(
                 disable_web_page_preview=True,
                 disable_notification=True,

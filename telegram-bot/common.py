@@ -109,6 +109,7 @@ class Rcache(object):
     CARD_IN_GROUP_PREFIX = 'card_in_group'
     SEND_MESSAGE_PREFIX = 'send_message'
     USER_DESC_PREFIX = 'user_desc'
+    OFFER_DESC_PREFIX = 'offer_desc'
     ASK_MONEY_PREFIX = 'ask_money'
     SET_NEXT_SYMPA_WAIT_PREFIX = 'set_next_sympa_wait'
     SET_NEXT_SYMPA_WAIT = settings.REDIS_SET_NEXT_SYMPA_WAIT
@@ -1728,7 +1729,6 @@ class Misc(object):
         return status, response
 
     @classmethod
-
     def text_search_phrase(
             cls,
             phrase,

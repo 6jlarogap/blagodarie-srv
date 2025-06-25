@@ -320,13 +320,13 @@ async def cmd_start(message: Message, state: FSMContext):
                 await Offer.show_offer(
                     response_sender, response_offer, message,
                     username_href=response_sender['username'],
-                    username_ref=profile_ref['username'],
+                    profile_ref=profile_ref,
                 )
                 payload_ref = dict(
                     tg_token=settings.TOKEN,
                     offer_uuid=response_offer['uuid'],
                     username_from=response_sender['username'],
-                    username_to=profile_ref['username'],
+                    profile_ref=profile_ref,
                 )
                 logging.debug('post_offer_referrer, payload: %s' % Misc.secret(payload_ref))
                 status_ref, response_ref = await Misc.api_request(

@@ -3,6 +3,7 @@
 # Команды и сообщения для offer: наши опросы/предложения
 
 import re
+from uuid import uuid4
 
 from aiogram import Router, F, types, html
 from aiogram.filters import Command
@@ -20,7 +21,7 @@ from handler_bot import is_it_command
 import settings, me
 from settings import logging
 
-from common import Misc, KeyboardType, TgGroup, TgGroupMember
+from common import Misc, KeyboardType, TgGroup, TgGroupMember, Rcache, TgDesc
 
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
@@ -123,6 +124,25 @@ class Offer(object):
                     inline_keyboard=[[inline_btn_pass, Misc.inline_button_cancel()]]
             ))
 
+    @classmethod
+    async def put_offer_properties(cls, **kwargs):
+        """
+        Изменить свойства офера
+        """
+        status, response = None, None
+        logging.debug('put offfer_data...')
+        payload = dict(tg_token=settings.TOKEN,)
+        payload.update(**kwargs)
+        logging.debug('put offer_data, payload: %s' % Misc.secret(payload))
+        status, response = await Misc.api_request(
+            path='/api/offer',
+            method='put',
+            json=payload,
+        )
+        logging.debug('put offer_data, status: %s' % status)
+        logging.debug('put offer_data, response: %s' % response)
+        return status, response
+
 
     @classmethod
     async def create_offer(cls, data, response_sender, message):
@@ -148,7 +168,7 @@ class Offer(object):
         await cls.show_offer(
             response_sender, response, message,
             username_href=response_sender['username'],
-            username_ref=response_sender['username'],
+            profile_ref=response_sender,
         )
 
 
@@ -205,7 +225,7 @@ class Offer(object):
         cls,
         user_from, offer, message,
         username_href=None,
-        username_ref=None
+        profile_ref=None
     ):
         """
         Показать опрос-предложение
@@ -245,7 +265,7 @@ class Offer(object):
             'user_answered': {'326': {'answers': [0]}} // создатель опроса его видел
         }
         username_href:  имя userId= в ссылке на опрос
-        username_ref:   имя в кнопках опроса
+        profile_ref:    имя его в кнопках опроса
 
         """
         try:
@@ -253,11 +273,11 @@ class Offer(object):
                 message.chat.id,
                 text=cls.text_offer(
                     user_from, offer, message,
-                    username_href, username_ref
+                    username_href, profile_ref,
                 ),
                 reply_markup=cls.markup_offer(
                     user_from, offer, message,
-                    username_href, username_ref,
+                    username_href, profile_ref,
             ))
         except (TelegramBadRequest, TelegramForbiddenError,):
             await message.reply('Опрос-предложение предъявить не удалось')
@@ -266,7 +286,7 @@ class Offer(object):
     def text_offer(
             cls,
             user_from, offer, message,
-            username_href=None, username_ref=None
+            username_href=None, profile_ref=None
         ):
         """
         Текст опроса-предложения
@@ -327,6 +347,11 @@ class Offer(object):
             href=Misc.get_deeplink(offer['owner'], https=True),
             text='Автор опроса: ' + offer['owner']['first_name']
         ) + '\n'
+        if profile_ref:
+            result += Misc.get_html_a(
+                href=Misc.get_deeplink(profile_ref, https=True),
+                text='Реферрер: ' + profile_ref['first_name']
+            ) + '\n'
         return result
 
 
@@ -334,17 +359,17 @@ class Offer(object):
     def markup_offer(
             cls,
             user_from, offer, message,
-            username_href=None, username_ref=None
+            username_href=None, profile_ref=None
         ):
         buttons = []
         callback_data_template = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s%(number)s%(sep)s'
-        if username_ref:
+        if profile_ref:
             callback_data_template += '%(username_ref)s%(sep)s'
         callback_data_dict = dict(
             keyboard_type=KeyboardType.OFFER_ANSWER,
             uuid=offer['uuid'],
             sep=KeyboardType.SEP,
-            username_ref=username_ref if username_ref else ''
+            username_ref=profile_ref['username'] if profile_ref else ''
         )
         if not offer['closed_timestamp']:
             have_i_voted = False
@@ -410,7 +435,7 @@ class Offer(object):
            (user_from['uuid'] == offer['owner']['uuid'] or offer['desc']):
             callback_data_dict.update(number=-6)
             inline_btn_answer = InlineKeyboardButton(
-                text='Задать описание' if user_from['uuid'] == offer['owner']['uuid'] else 'Посмотреть описание',
+                text='Описание',
                 callback_data=callback_data_template % callback_data_dict
             )
             buttons.append([inline_btn_answer])
@@ -557,47 +582,61 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
     if number == -6:
         status_offer, offer = await Offer.post_offer_answer(offer_uuid, profile_from, [-1])
         if status_offer == 200:
-            text = ''
-            reply_markup = None
+            if offer['desc']:
+                if profile_from['username'] == offer['owner']['username']:
+                    await callback.message.reply(
+                        '\u2193\u2193\u2193 Текущее описание \u2193\u2193\u2193',
+                    )
+                payload_send_pack = dict(
+                    tg_token=settings.TOKEN,
+                    messages=offer['desc'],
+                    username=profile_from['username'],
+                    what='tgdesc',
+                )
+                # Api пошлёт всем
+                status_send_pack, response_send_pack = await Misc.api_request(
+                    path='/api/show_tgmsg_pack',
+                    method='post',
+                    json=payload_send_pack,
+                )
+            else:
+                await callback.message.reply(
+                    'Опрос не имеет описания',
+                )
+
             if profile_from['username'] == offer['owner']['username']:
                 await state.set_state(FSMofferPutDesc.ask)
                 await state.update_data(
-                    uuid=profile_from['uuid'],
-                    offer_uuid=offer_uuid,
+                    username=profile_from['username'],
+                    offer=offer,
+                    uuid_pack=str(uuid4()),
                 )
-                if offer['desc']:
-                    text = (
-                        '<i>Текущеее описание опроса:</i>\n'
-                        '\n'
-                        f'{html.quote(offer["desc"])}\n'
-                        '\n'
-                    )
-                text += '<i>Задайте описание опроса</i>'
-                reply_markup = Misc.reply_markup_cancel_row()
-            else:
-                if offer['desc']:
-                    text += f'<i>Описание опроса:</i>\n\n{html.quote(offer["desc"])}'
-                else:
-                    text += 'Описание опроса не задано'
-            await callback.message.reply(
-                text,
-                reply_markup=reply_markup,
-            )
+                await callback.message.reply(
+                    'Отправьте мне в одном сообщении - фото/видео/текстовое описание опроса',
+                    reply_markup=Misc.reply_markup_cancel_row(),
+                )
         await callback.answer()
         return
 
     status_answer, response_answer = await Offer.post_offer_answer(offer_uuid, profile_from, [number])
     if status_answer == 200:
         offer_uuid, username_href = Offer.get_data_from_offer_message(callback.message)
+        profile_ref = None
+        if username_ref == profile_from['username']:
+            profile_ref = profile_from
+        else:
+            status_ref, profile_ref = await Misc.get_user_by_sid(username_ref)
+            if status_ref != 200:
+                profile_ref = None
         text = Offer.text_offer(
             profile_from, response_answer, callback.message,
             username_href=username_href,
-            username_ref=username_ref,
+            profile_ref=profile_ref,
         )
         reply_markup = Offer.markup_offer(
             profile_from, response_answer, callback.message,
             username_href=username_href,
-            username_ref=username_ref,
+            profile_ref=profile_ref,
         )
         try:
             await callback.message.edit_text(text, reply_markup=reply_markup)
@@ -643,6 +682,36 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMofferPutDesc.ask))
+async def process_existing_offer_desc(message: Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    data = await state.get_data()
+    status_from, profile_from = await Misc.post_tg_user(message.from_user)
+    if data.get('username') and data.get('offer') and \
+       profile_from['username'] == data['username'] and \
+       data.get('offer', {}).get('owner', {}).get('username') and \
+       data['offer']['owner']['username'] == data['username'] and \
+       data.get('uuid_pack'):
+        key = (
+            f'{Rcache.OFFER_DESC_PREFIX}{Rcache.KEY_SEP}'
+            f'{data["uuid_pack"]}'
+        )
+        if await Misc.check_none_n_clear(is_first := Misc.redis_is_key_first_up(key), state):
+            status, response = await Offer.put_offer_properties(
+                username=data['username'],
+                offer_uuid=data['offer']['uuid'],
+                is_first=is_first,
+                tgdesc=TgDesc.from_message(message, data['uuid_pack'])
+            )
+            if not is_first:
+                return
+            if not await Misc.check_none_n_clear(await Misc.redis_wait_last_in_pack(key), state):
+                return
+            await message.reply('Описание сохранено')
+    await state.clear()
+
+
 @router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMOfferPutPlace.ask))
 async def process_existing_offer_location(message: Message, state: FSMContext):
     if await is_it_command(message, state):
@@ -672,31 +741,6 @@ async def process_existing_offer_location(message: Message, state: FSMContext):
         )
     else:
         reply = Misc.MSG_ERROR_API
-    await message.reply(reply, disable_notification=True)
-    await state.clear()
-
-
-@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMofferPutDesc.ask))
-async def process_existing_offer_desc(message: Message, state: FSMContext):
-    if await is_it_command(message, state):
-        return
-    data = await state.get_data()
-    status_from, profile_from = await Misc.post_tg_user(message.from_user)
-    if data.get('uuid') and data.get('offer_uuid') and \
-       profile_from['uuid'] == data['uuid']:
-        desc = message.text.strip()
-        status_answer, response_answer = await Offer.post_offer_answer(
-            data['offer_uuid'],
-            profile_from,
-            [-6],
-            desc=desc,
-        )
-        if status_answer == 200:
-            reply = (
-                f'<i>Описание опроса установлено в:</i>\n\n{desc}'
-            )
-        else:
-            reply = Misc.MSG_ERROR_API
     await message.reply(reply, disable_notification=True)
     await state.clear()
 

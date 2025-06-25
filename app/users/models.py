@@ -1225,7 +1225,7 @@ class Offer(BaseModelInsertTimestamp, GeoPointAddressModel):
     question = models.CharField(_("Вопрос"), max_length=2048)
     closed_timestamp = models.PositiveIntegerField(_("Приостановлен"), null=True, default=None)
     is_multi = models.BooleanField(_("Множественный выбор"), default=False)
-    desc = models.TextField(verbose_name=_("Описание"), null=True)
+    tgdesc = models.ManyToManyField('users.TgDesc', verbose_name=_("Сообщения с описаниями"))
 
     def data_dict(self, request=None, user_ids_only=False):
         result = dict(
@@ -1237,10 +1237,10 @@ class Offer(BaseModelInsertTimestamp, GeoPointAddressModel):
                 username=self.owner.username,
             ),
             question=self.question,
-            desc=self.desc,
             timestamp=self.closed_timestamp if self.closed_timestamp else int(time.time()),
             closed_timestamp=self.closed_timestamp,
             is_multi=self.is_multi,
+            desc=self.desc(),
         )
         prefetch = Prefetch('profile_set', queryset=Profile.objects.select_related('user',).all())
         queryset = OfferAnswer.objects.prefetch_related(prefetch).select_related('offer').filter(offer=self)
@@ -1263,6 +1263,12 @@ class Offer(BaseModelInsertTimestamp, GeoPointAddressModel):
             answers.append(answer_dict)
         result.update(answers=answers, user_answered=user_answered)
         return result
+
+    def desc(self):
+        return [
+            m.message_dict() for m in self.tgdesc.all().order_by('message_id')
+        ]
+
 
 class OfferAnswer(BaseModelInsertTimestamp):
     """
