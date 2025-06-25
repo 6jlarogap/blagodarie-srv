@@ -53,8 +53,11 @@ async def process_group_message(message: Message, state: FSMContext):
        ):
         return
 
-    if await Offer.offer_forwarded_in_group_or_channel(message, state):
-        return
+    #
+    # Это отработано.
+    # Пересылается офер в группу, и бот формирует офер с кнопками
+    # if await Offer.offer_forwarded_in_group_or_channel(message, state):
+    #     return
 
     # При преобразовании группы в супергруппу сообщения:
     #   Это если юзер сделал из частной группы публичную:
