@@ -3844,16 +3844,23 @@ class ApiOfferAnswer(ApiOfferMixin, UuidMixin, APIView):
             "tg_token": settings.TELEGRAM_BOT_TOKEN,
             "offer_uuid": "...",
             "user_uuid": "...",
+            "referrer_username"
             "answers": [1]  // Нумерация ответов начинается с 1 !!!
+                            // Есть возможность обрабатывать сразу несколько
+                            // полученных ответов, но из бота всегда приходит
+                            // выбранный голос в массиве из одного голоса
                             // Если [0], то сброс ответов
                             // Если [-1], то только показать текущие результаты
                             // [-2] прийти не может, это сообщение участникам
                             // Если [-3], то остановить опрос
                             // Если [-4], то возобновить опрос
                             // Если [-5], то задать координаты
+                            // Если [-6], то задать описание, обрабатывается без вызова сюда
         }
         В случае успеха на выходе словарь опроса с ответами, кто за что отвечал:
             offer.data_dict(request)
+        Если ответ больше нуля, то это голосование за выбор.
+        Этот факт фиксируется в журнале: от user_uuid к referrer_username пошел голос
         """
         try:
             if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
@@ -3896,6 +3903,8 @@ class ApiOfferAnswer(ApiOfferMixin, UuidMixin, APIView):
                         self.put_location(request, offer)
                     else:
                         raise PermissionDenied()
+                elif len(numbers) == 1 and numbers[0] == -6:
+                    pass
                 elif not offer.closed_timestamp:
                     current_numbers = [a.number for a in profile.offer_answers.filter(offer=offer)]
                     if profile and set(current_numbers) != set(numbers):
@@ -3912,7 +3921,7 @@ class ApiOfferAnswer(ApiOfferMixin, UuidMixin, APIView):
                                 profile.offer_answers.add(offeranswer)
                         except (KeyError, OfferAnswer.DoesNotExist,):
                             raise ServiceException('Получен не существующий ответ')
-            data = offer.data_dict(request, user_ids_only=True)
+            data = dict(offer=offer.data_dict(request, user_ids_only=True))
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             data = dict(message=excpt.args[0])

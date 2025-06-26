@@ -310,21 +310,22 @@ async def cmd_start(message: Message, state: FSMContext):
             from handler_offer import Offer
             status_offer, response_offer = await Offer.post_offer_answer(m.group(1), response_sender, [-1])
             if status_offer == 200:
+                offer = response_offer['offer']
                 profile_ref = None
                 if m.group(2):
                     status_ref, profile_ref = await Misc.get_user_by_sid(m.group(2))
                     if status_ref != 200 or profile_ref['owner']:
                         profile_ref = None
                 if not profile_ref:
-                    profile_ref = response_offer['owner']
+                    profile_ref = offer['owner']
                 await Offer.show_offer(
-                    response_sender, response_offer, message,
+                    response_sender, offer, message,
                     username_href=response_sender['username'],
                     profile_ref=profile_ref,
                 )
                 payload_ref = dict(
                     tg_token=settings.TOKEN,
-                    offer_uuid=response_offer['uuid'],
+                    offer_uuid=offer['uuid'],
                     username_from=response_sender['username'],
                     username_to=profile_ref['username'],
                 )

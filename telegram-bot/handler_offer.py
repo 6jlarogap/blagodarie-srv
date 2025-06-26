@@ -182,7 +182,7 @@ class Offer(object):
                 if status_offer == 200:
                     await cls.show_offer(
                         user_from=None,
-                        offer=response_offer,
+                        offer=response_offer['offer'],
                         message=message,
                         username_href=username_href
                     )
@@ -580,8 +580,9 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
         return
 
     if number == -6:
-        status_offer, offer = await Offer.post_offer_answer(offer_uuid, profile_from, [-1])
+        status_offer, response_offer = await Offer.post_offer_answer(offer_uuid, profile_from, [-1])
         if status_offer == 200:
+            offer = response_offer['offer']
             if offer['desc']:
                 if profile_from['username'] == offer['owner']['username']:
                     await callback.message.reply(
@@ -620,6 +621,7 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
 
     status_answer, response_answer = await Offer.post_offer_answer(offer_uuid, profile_from, [number])
     if status_answer == 200:
+        offer = response_answer['offer']
         offer_uuid, username_href = Offer.get_data_from_offer_message(callback.message)
         profile_ref = None
         if username_ref == profile_from['username']:
@@ -629,12 +631,12 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
             if status_ref != 200:
                 profile_ref = None
         text = Offer.text_offer(
-            profile_from, response_answer, callback.message,
+            profile_from, offer, callback.message,
             username_href=username_href,
             profile_ref=profile_ref,
         )
         reply_markup = Offer.markup_offer(
-            profile_from, response_answer, callback.message,
+            profile_from, offer, callback.message,
             username_href=username_href,
             profile_ref=profile_ref,
         )
@@ -644,18 +646,18 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
             pass
         success_message = ''
         if number > 0:
-            if response_answer['closed_timestamp']:
+            if offer['closed_timestamp']:
                 success_message = 'Владелец остановил голосование'
             else:
-                if response_answer['is_multi']:
-                    num_answers = response_answer['user_answered'][str(profile_from['user_id'])]['answers']
+                if offer['is_multi']:
+                    num_answers = offer['user_answered'][str(profile_from['user_id'])]['answers']
                     success_message = 'Вы выбрали вариант%s:\n' % ('ы' if len(num_answers) > 1 else '')
-                    answers_text = '\n'.join([' ' + response_answer['answers'][n]['answer'] for n in num_answers])
+                    answers_text = '\n'.join([' ' + offer['answers'][n]['answer'] for n in num_answers])
                     success_message += answers_text
                 else:
-                    success_message = 'Вы выбрали вариант: %s' % response_answer['answers'][number]['answer']
+                    success_message = 'Вы выбрали вариант: %s' % offer['answers'][number]['answer']
         elif number == 0:
-            if response_answer['closed_timestamp']:
+            if offer['closed_timestamp']:
                 success_message = 'Владелец остановил голосование'
             else:
                 success_message = 'Вы отозвали свой выбор'

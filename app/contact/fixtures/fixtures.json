@@ -160,5 +160,12 @@
     "fields": {
       "title": "Show User at Meet Game"
     }
+  },
+  {
+    "model": "contact.operationtype",
+    "pk": 19,
+    "fields": {
+      "title": "User voted in an offer"
+    }
   }
 ]

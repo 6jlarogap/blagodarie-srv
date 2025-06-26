@@ -64,6 +64,9 @@ class OperationType(models.Model):
     # Раскрыть пользователя в игре знакомств
     MEET_USER_SHOW = 18
 
+    # Пользователь сделал выбор в офере
+    OFFER_VOTED = 19
+
     title = models.CharField(_("Тип операции"), max_length=255, unique=True)
 
 class AnyText(BaseModelInsertTimestamp):
@@ -96,7 +99,8 @@ class Journal(BaseModelInsertTimestamp):
                     verbose_name=_("Тип операции"), on_delete=models.CASCADE)
     comment = models.TextField(verbose_name=_("Комментарий"), null=True)
     tgdesc = models.ManyToManyField('users.TgDesc', verbose_name=_("Описание: (составное) сообщение из телеграма"))
-
+    # offer_answer = models.ForeignKey('users.OfferAnswer',
+    #                 verbose_name=_("Ответ на опрос/предложение"), on_delete=models.CASCADE, null=True)
 
 class TgJournal(models.Model):
     """

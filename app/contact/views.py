@@ -312,7 +312,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                         except Profile.DoesNotExist:
                             raise ServiceException('Не найден пользователь, user_id_from = "%s"' % user_id_from)
 
-            if user_to == user_from:
+            if user_to == user_from and not (operationtype_id in (OperationType.OFFER_VOTED,)):
                 raise ServiceException('Операция на самого себя не предусмотрена')
 
             if not got_tg_token:
