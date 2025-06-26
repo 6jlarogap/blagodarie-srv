@@ -1230,6 +1230,8 @@ class Offer(BaseModelInsertTimestamp, GeoPointAddressModel):
     def data_dict(self, request=None, user_ids_only=False):
         result = dict(
             uuid=self.uuid,
+            latitude=self.latitude,
+            longitude=self.longitude,
             owner=dict(
                 first_name=self.owner.first_name,
                 uuid=self.owner.profile.uuid,

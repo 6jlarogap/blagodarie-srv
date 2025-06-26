@@ -3863,6 +3863,7 @@ class ApiOfferAnswer(ApiOfferMixin, UuidMixin, APIView):
         Этот факт фиксируется в журнале: от user_uuid к referrer_username пошел голос
         """
         try:
+            data = dict()
             if request.data.get('tg_token') != settings.TELEGRAM_BOT_TOKEN:
                 raise ServiceException('Неверный токен телеграм бота')
             owner, profile = None, None
@@ -3906,8 +3907,8 @@ class ApiOfferAnswer(ApiOfferMixin, UuidMixin, APIView):
                 elif len(numbers) == 1 and numbers[0] == -6:
                     pass
                 elif not offer.closed_timestamp:
-                    current_numbers = [a.number for a in profile.offer_answers.filter(offer=offer)]
-                    if profile and set(current_numbers) != set(numbers):
+                    current_numbers_set = set([a.number for a in profile.offer_answers.filter(offer=offer)])
+                    if profile and current_numbers_set.union(set(numbers)) != current_numbers_set:
                         if len(numbers) == 1 and numbers[0] == 0 or not offer.is_multi:
                             for a in profile.offer_answers.filter(offer=offer):
                                 profile.offer_answers.remove(a)
@@ -3916,14 +3917,32 @@ class ApiOfferAnswer(ApiOfferMixin, UuidMixin, APIView):
                                 offeranswer0 = OfferAnswer.objects.get(offer=offer, number=0)
                                 profile.offer_answers.remove(offeranswer0)
                         try:
+                            offeranswer_n = None
                             for number in numbers:
                                 offeranswer = OfferAnswer.objects.get(offer=offer, number=number)
+                                if not offeranswer_n and number > 0:
+                                   offeranswer_n = offeranswer
                                 profile.offer_answers.add(offeranswer)
+
+                            if offeranswer_n and request.data.get('username_ref') and owner:
+                                try:
+                                    user_ref = User.objects.get(username=request.data['username_ref'])
+                                    journal = Journal.objects.create(
+                                        user_from=owner,
+                                        user_to=user_ref,
+                                        operationtype=OperationType.objects.get(pk=OperationType.OFFER_VOTED),
+                                        offer_answer=offeranswer_n,
+                                    )
+                                    data.update(journal_id=journal.pk)
+                                except (User.DoesNotExist, OperationType.DoesNotExist,):
+                                    pass
+
                         except (KeyError, OfferAnswer.DoesNotExist,):
                             raise ServiceException('Получен не существующий ответ')
-            data = dict(offer=offer.data_dict(request, user_ids_only=True))
+            data.update(offer=offer.data_dict(request, user_ids_only=True))
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
+            transaction.set_rollback(True)
             data = dict(message=excpt.args[0])
             status_code = status.HTTP_400_BAD_REQUEST
         return Response(data=data, status=status_code)

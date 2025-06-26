@@ -619,7 +619,10 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         return
 
-    status_answer, response_answer = await Offer.post_offer_answer(offer_uuid, profile_from, [number])
+    status_answer, response_answer = await Offer.post_offer_answer(
+        offer_uuid, profile_from, [number],
+        username_ref=username_ref,
+    )
     if status_answer == 200:
         offer = response_answer['offer']
         offer_uuid, username_href = Offer.get_data_from_offer_message(callback.message)
