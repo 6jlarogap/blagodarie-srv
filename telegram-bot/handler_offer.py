@@ -34,6 +34,10 @@ class FSMofferPutDesc(StatesGroup):
     # изменить описание существующего оффера
     ask = State()
 
+class FSMofferChoiceDonate(StatesGroup):
+    # отправить донат по поводу выбора из офера
+    ask = State()
+
 class FSMsendMessageToOffer(StatesGroup):
     ask = State()
 
@@ -670,6 +674,26 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
             success_message = 'Опрос возобновлен'
         if success_message:
             await callback.answer(success_message, show_alert=True,)
+
+            #TODO дальше
+            if False and response_answer.get('donate') and response_answer.get('journal_id'):
+                donator = response_answer['donate']
+                if donator['is_author']:
+                    whom = 'автору системы '
+                else:
+                    whom = 'пригласившей Вас ' if donator['profile']['gender'] == 'f' else 'пригласившему Вас '
+                whom += Misc.get_deeplink_with_name(donator['profile'])
+                await state.set_state(FSMofferChoiceDonate.ask)
+                await state.update_data(
+                    journal_id=response_answer['journal_id'],
+                    donate=donator,
+                    uuid_pack=str(uuid4()),
+                )
+                await callback.message.reply(
+                    f'Предлагаем подкрепить Ваш голос - добровольным даром - {whom}',
+                    reply_markup=Misc.reply_markup_cancel_row('Без дара'),
+                )
+
     elif callback.message.chat.type == ChatType.PRIVATE:
         if number > 0:
             err_mes = 'Не далось подать голос'
