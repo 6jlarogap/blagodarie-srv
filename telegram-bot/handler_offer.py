@@ -737,10 +737,7 @@ async def process_existing_offer_location(message: Message, state: FSMContext):
         latitude=latitude, longitude=longitude,
     )
     if status_answer == 200:
-        reply = (
-            f'Координаты <a href="t.me/{bot_data.username}'
-            f'?start=offer-{data["offer_uuid"]}">опроса</a> установлены'
-        )
+        reply = f'Координаты опроса установлены'
     else:
         reply = Misc.MSG_ERROR_API
     await message.reply(reply, disable_notification=True)
