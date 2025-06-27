@@ -385,6 +385,10 @@ class KeyboardType(object):
     #
     DONATE_OFFER_CHOICE = 79
 
+    # Отмена голоса вместо доната в офере
+    #
+    DONATE_OFFER_REVOKE_VOICE = 80
+
     # Разделитель данных в call back data
     #
     SEP = '~'

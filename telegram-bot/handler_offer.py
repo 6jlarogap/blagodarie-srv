@@ -395,6 +395,7 @@ class Offer(object):
             username_href=None, profile_ref=None
         ):
         buttons = []
+        message_chat_type = message.chat.type if message else ChatType.PRIVATE
         callback_data_template = '%(keyboard_type)s%(sep)s%(uuid)s%(sep)s%(number)s%(sep)s'
         if profile_ref:
             callback_data_template += '%(username_ref)s%(sep)s'
@@ -412,7 +413,7 @@ class Offer(object):
                     answer_text = answer['answer']
                     if user_from and user_from['user_id'] in answer['users']:
                         have_i_voted = True
-                        if message.chat.type == ChatType.PRIVATE:
+                        if message_chat_type == ChatType.PRIVATE:
                             answer_text = '(*) ' + answer_text
                     inline_btn_answer = InlineKeyboardButton(
                         text=answer_text,
@@ -420,7 +421,7 @@ class Offer(object):
                     )
                     buttons.append([inline_btn_answer])
 
-            if have_i_voted or message.chat.type != ChatType.PRIVATE:
+            if have_i_voted or message_chat_type != ChatType.PRIVATE:
                 callback_data_dict.update(number=0)
                 inline_btn_answer = InlineKeyboardButton(
                     text='Отозвать мой выбор',
@@ -435,7 +436,7 @@ class Offer(object):
         )
         buttons.append([inline_btn_answer])
 
-        if message.chat.type == ChatType.PRIVATE and user_from['uuid'] == offer['owner']['uuid']:
+        if message_chat_type == ChatType.PRIVATE and user_from['uuid'] == offer['owner']['uuid']:
             callback_data_dict.update(number=-2)
             inline_btn_answer = InlineKeyboardButton(
                 text='Сообщение участникам',
@@ -464,7 +465,7 @@ class Offer(object):
             )
             buttons.append([inline_btn_answer])
 
-        if message.chat.type == ChatType.PRIVATE and \
+        if message_chat_type == ChatType.PRIVATE and \
            (user_from['uuid'] == offer['owner']['uuid'] or offer['desc']):
             callback_data_dict.update(number=-6)
             inline_btn_answer = InlineKeyboardButton(
@@ -662,7 +663,7 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
         profile_ref = None
         if username_ref == profile_from['username']:
             profile_ref = profile_from
-        else:
+        elif username_ref:
             status_ref, profile_ref = await Misc.get_user_by_sid(username_ref)
             if status_ref != 200:
                 profile_ref = None
@@ -711,27 +712,50 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
                 else:
                     whom = 'пригласившей Вас ' if donate_to['profile']['gender'] == 'f' else 'пригласившему Вас '
                 whom += Misc.get_deeplink_with_name(donate_to['profile'])
+
+                callback_data_dict = dict(
+                    keyboard_type=KeyboardType.DONATE_OFFER_CHOICE,
+                    id_=response_answer['journal_id'],
+                    donate_to_username=donate_to['profile']['username'],
+                    offer_id=offer['offer_id'],
+                    username_ref=username_ref or '',
+                    sep=KeyboardType.SEP,
+                )
+                callback_data_template=(
+                    f'{Misc.CALLBACK_DATA_ID__TEMPLATE}'
+                    '%(donate_to_username)s%(sep)s'
+                    '%(username_ref)s%(sep)s'
+                    '%(offer_id)s'
+                )
                 inline_btn_donate = InlineKeyboardButton(
                     text='Сделать дар',
-                    callback_data=(
-                            f'{Misc.CALLBACK_DATA_ID__TEMPLATE}'
-                            '%(donate_to_username)s%(sep)s'
-                            '%(username_ref)s%(sep)s'
-                            '%(offer_id)s'
-                        ) % dict(
-                        keyboard_type=KeyboardType.DONATE_OFFER_CHOICE,
-                        id_=response_answer['journal_id'],
-                        donate_to_username=donate_to['profile']['username'],
-                        offer_id=offer['offer_id'],
-                        username_ref=username_ref,
-                        sep=KeyboardType.SEP,
-                ))
+                    callback_data=callback_data_template % callback_data_dict
+                )
+
+                callback_data_dict.update(
+                    keyboard_type=KeyboardType.DONATE_OFFER_REVOKE_VOICE,
+                    id_=offer['offer_id'],
+                    message_id=callback.message.message_id,
+                    username_href=username_href or ''
+                )
+                callback_data_template =(
+                    f'{Misc.CALLBACK_DATA_ID__TEMPLATE}'
+                    '%(message_id)s%(sep)s'
+                    '%(username_href)s%(sep)s'
+                    '%(username_ref)s%(sep)s'
+                )
+                inline_btn_revoke_voice = InlineKeyboardButton(
+                    text='Отменить голос',
+                    callback_data=callback_data_template % callback_data_dict
+                )
+
                 await callback.message.reply(
                     f'Предлагаем подкрепить Ваш голос - добровольным даром - {whom}',
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                         [
                             inline_btn_donate,
                             Misc.inline_button_cancel('Без дара'),
+                            inline_btn_revoke_voice
                 ]]))
 
     elif callback.message.chat.type == ChatType.PRIVATE:
@@ -891,18 +915,19 @@ async def process_message_to_offer(message: Message, state: FSMContext):
     )), StateFilter(None))
 async def cbq_donate_office_choice(callback: CallbackQuery, state: FSMContext):
     try:
-        journal_id = int(callback.data.split(KeyboardType.SEP)[1])
-        donate_to_username=callback.data.split(KeyboardType.SEP)[2]
-        username_ref=callback.data.split(KeyboardType.SEP)[3]
-        offer_id=callback.data.split(KeyboardType.SEP)[4]
+        split = callback.data.split(KeyboardType.SEP)
+        journal_id = int(split[1])
+        donate_to_username=split[2]
+        username_ref=split[3]
+        offer_id=split[4]
     except (TypeError, ValueError, IndexError,):
-        return
+        await callback.answer(); return
     status_from, profile_from = await Misc.post_tg_user(callback.from_user)
     if status_from != 200:
-        return
+        await callback.answer(); return
     status_to, profile_to = await Misc.get_user_by_sid(donate_to_username)
     if status_to != 200:
-        return
+        await callback.answer(); return
     bank_details = await Misc.get_bank_details(profile_to['uuid'])
     if bank_details:
         status_offer, response_offer = await Offer.get_offer(offer_id=offer_id, user_ids_only='on')
@@ -1008,3 +1033,65 @@ async def process_message_thank_office_choice(message: Message, state: FSMContex
             'Получатель не принял сообщение'
         )
     await state.clear()
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.DONATE_OFFER_REVOKE_VOICE,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_donate_office_choice(callback: CallbackQuery, state: FSMContext):
+    try:
+        split = callback.data.split(KeyboardType.SEP)
+        offer_id = split[1]
+        message_id = split[2]
+        username_href = split[3]
+        username_ref = split[4]
+    except (TypeError, ValueError, IndexError,):
+        await callback.answer(); return
+
+    status_from, profile_from = await Misc.post_tg_user(callback.from_user)
+    if status_from != 200:
+        await callback.answer(); return
+
+    status_offer, response_offer = await Offer.get_offer(offer_id=offer_id, user_ids_only='on')
+    if status_offer != 200:
+        await callback.answer(); return
+    offer_uuid = response_offer['offer']['uuid']
+
+    profile_ref = None
+    if username_ref == profile_from['username']:
+        profile_ref = profile_from
+    elif username_ref:
+        status_ref, profile_ref = await Misc.get_user_by_sid(username_ref)
+        if status_ref != 200:
+            profile_ref = None
+
+    status_answer, response_answer = await Offer.post_offer_answer(
+        offer_uuid, profile_from, [0],
+        username_ref=username_ref,
+    )
+    if status_answer != 200:
+        await callback.answer(); return
+    offer = response_answer['offer']
+
+    text = Offer.text_offer(
+        profile_from, offer,
+        message=None,
+        username_href=username_href,
+        profile_ref=profile_ref,
+    )
+    reply_markup = Offer.markup_offer(
+        profile_from, offer,
+        message=None,
+        username_href=username_href,
+        profile_ref=profile_ref,
+    )
+    try:
+        await bot.edit_message_text(
+            chat_id=callback.message.chat.id,
+            message_id=message_id,
+            text=text,
+            reply_markup=reply_markup,
+        )
+    except:
+        pass
+    await callback.answer('Вы отозвали свой выбор', show_alert=True,)
