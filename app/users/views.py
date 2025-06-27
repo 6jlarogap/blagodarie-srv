@@ -33,7 +33,7 @@ from django.contrib.auth.models import User
 from users.models import Oauth, CreateUserMixin, IncognitoUser, Profile, TgGroup, \
     TempToken, UuidMixin, TelegramApiMixin, \
     TgPoll, TgPollAnswer, Offer, OfferAnswer, TgDesc, \
-    OfferRefJournal, OfferRefState
+    OfferRefJournal, OfferRefState, ApiDonateUser
 from contact.models import Key, KeyType, CurrentState, OperationType, Wish, Ability, \
                            ApiAddOperationMixin, Journal, TgMessageJournal
 from wote.models import Video, Vote
@@ -3831,45 +3831,6 @@ class ApiOfferList(APIView):
 api_offer_list = ApiOfferList.as_view()
 
 
-class ApiDonateUser(object):
-
-    def find_donate_to_user(self, user_from, user_to):
-        """
-        Найти, кому донатить юзеру user_from
-
-        Вообще-то, надо донатить user_to,
-        но у того может не быть банковского счета или user_from == user_to
-        """
-        donate_him = None; result = None; is_author = False
-        if user_from != user_to:
-            try:
-                bank = Key.objects.filter(
-                    owner=user_to, type__pk=KeyType.BANKING_DETAILS_ID
-                )[0]
-                donate_him = user_to
-            except IndexError:
-                pass
-        if not donate_him:
-            try:
-                is_author = User.objects.filter(pk=settings.AUTHOR_USER_ID)[0]
-                bank = Key.objects.filter(
-                    owner=is_author, type__pk=KeyType.BANKING_DETAILS_ID,
-                )[0]
-                donate_him = is_author
-                is_author = True
-            except IndexError:
-                pass
-        if donate_him:
-            result = dict(
-                bank=bank.value,
-                profile=donate_him.profile.data_dict(),
-                tg_data=donate_him.profile.tg_data(),
-                is_author=is_author,
-            )
-        return result
-
-
-
 class ApiOfferAnswer(ApiDonateUser, ApiOfferMixin, UuidMixin, APIView):
 
     @transaction.atomic
@@ -3980,7 +3941,6 @@ class ApiOfferAnswer(ApiDonateUser, ApiOfferMixin, UuidMixin, APIView):
                         except (KeyError, OfferAnswer.DoesNotExist,):
                             raise ServiceException('Получен не существующий ответ')
             data.update(offer=offer.data_dict(request, user_ids_only=True))
-            print(data)
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             transaction.set_rollback(True)

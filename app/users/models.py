@@ -1350,3 +1350,42 @@ class TgDesc(BaseModelInsertTimestamp):
             file_id = self.file_id,
             file_type = self.file_type,
         )
+
+class ApiDonateUser(object):
+
+    def find_donate_to_user(self, user_from, user_to):
+        """
+        Найти, кому донатить юзеру user_from
+
+        Вообще-то, надо донатить user_to,
+        но у того может не быть банковского счета или user_from == user_to
+        """
+        donate_him = None; result = None; is_author = False
+        Key = get_model('contact', 'Key')
+        KeyType = get_model('contact', 'KeyType')
+        if user_from != user_to:
+            try:
+                bank = Key.objects.filter(
+                    owner=user_to, type__pk=KeyType.BANKING_DETAILS_ID
+                )[0]
+                donate_him = user_to
+            except IndexError:
+                pass
+        if not donate_him:
+            try:
+                is_author = User.objects.filter(pk=settings.AUTHOR_USER_ID)[0]
+                bank = Key.objects.filter(
+                    owner=is_author, type__pk=KeyType.BANKING_DETAILS_ID,
+                )[0]
+                donate_him = is_author
+                is_author = True
+            except IndexError:
+                pass
+        if donate_him:
+            result = dict(
+                bank=bank.value,
+                profile=donate_him.profile.data_dict(),
+                tg_data=donate_him.profile.tg_data(),
+                is_author=is_author,
+            )
+        return result
