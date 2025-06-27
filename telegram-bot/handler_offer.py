@@ -123,6 +123,8 @@ class Offer(object):
                     '\n'
                     '/offer: опрос c выбором лишь одного ответа\n'
                     '/offer_multi: опрос с возможным выбором нескольких ответов\n'
+                    '\n'
+                    'Используйте \\n для перевода строки в Вопросе\n'
                 )
                 await message.reply(help_mes % dict(
                     err_mes=err_mes,
@@ -133,7 +135,7 @@ class Offer(object):
             await state.update_data(
                 create_offer_dict=dict(
                     user_uuid=response_sender['uuid'],
-                    question=question,
+                    question=question.replace('\\n', '\n'),
                     answers=answers,
                     is_multi=is_multi,
             ))
@@ -350,7 +352,7 @@ class Offer(object):
             '%(question)s\n'
             '%(multi_text)s%(closed_text)s'
             '\n'
-            'Голоса на %(datetime_string)s\n'
+            '<i>Голоса</i> на %(datetime_string)s\n'
         ) % dict(
             question=offer['question'],
             datetime_string=Misc.datetime_string(offer['timestamp'], with_timezone=True),
@@ -359,7 +361,7 @@ class Offer(object):
         )
         for answer in offer['answers']:
             if answer['number'] > 0:
-                result += '%s - %s\n' % (answer['answer'], len(answer['users']),)
+                result += '<i>%s</i> - %s\n' % (html.quote(answer['answer']), len(answer['users']),)
         result += '\n'
 
         username_href = username_href or (user_from and user_from['username']) or None
