@@ -83,8 +83,6 @@ class Offer(object):
             if not err_mes:
                 if not answers:
                     err_mes = 'Не указаны ответы'
-                elif len(answers) == 1:
-                    err_mes = 'Опрос из одного ответа? Так нельзя'
                 elif len(answers) > settings.OFFER_MAX_NUM_ANSWERS:
                     err_mes = 'Превышен максимум числа ответов (до %s)' % settings.OFFER_MAX_NUM_ANSWERS
             if err_mes:
