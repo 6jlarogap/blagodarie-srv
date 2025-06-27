@@ -3831,16 +3831,22 @@ class ApiOfferList(APIView):
 api_offer_list = ApiOfferList.as_view()
 
 
-class ApiOfferAnswer(ApiOfferMixin, UuidMixin, APIView):
+class ApiDonateUser(object):
 
-    def find_donate_to(self, user_from, user_ref):
+    def find_donate_to_user(self, user_from, user_to):
+        """
+        Найти, кому донатить юзеру user_from
+
+        Вообще-то, надо донатить user_to,
+        но у того может не быть банковского счета или user_from == user_to
+        """
         donate_him = None; result = None; is_author = False
-        if user_from != user_ref:
+        if user_from != user_to:
             try:
                 bank = Key.objects.filter(
-                    owner=user_ref, type__pk=KeyType.BANKING_DETAILS_ID
+                    owner=user_to, type__pk=KeyType.BANKING_DETAILS_ID
                 )[0]
-                donate_him = user_ref
+                donate_him = user_to
             except IndexError:
                 pass
         if not donate_him:
@@ -3861,6 +3867,10 @@ class ApiOfferAnswer(ApiOfferMixin, UuidMixin, APIView):
                 is_author=is_author,
             )
         return result
+
+
+
+class ApiOfferAnswer(ApiDonateUser, ApiOfferMixin, UuidMixin, APIView):
 
     @transaction.atomic
     def post(self, request):
@@ -3962,7 +3972,7 @@ class ApiOfferAnswer(ApiOfferMixin, UuidMixin, APIView):
                                         offer_answer=offeranswer_n,
                                     )
                                     data.update(journal_id=journal.pk)
-                                    if donate := self.find_donate_to(owner, user_ref):
+                                    if donate := self.find_donate_to_user(owner, user_ref):
                                         data.update(donate=donate)
                                 except (User.DoesNotExist, OperationType.DoesNotExist,):
                                     pass
@@ -3970,6 +3980,7 @@ class ApiOfferAnswer(ApiOfferMixin, UuidMixin, APIView):
                         except (KeyError, OfferAnswer.DoesNotExist,):
                             raise ServiceException('Получен не существующий ответ')
             data.update(offer=offer.data_dict(request, user_ids_only=True))
+            print(data)
             status_code = status.HTTP_200_OK
         except ServiceException as excpt:
             transaction.set_rollback(True)
