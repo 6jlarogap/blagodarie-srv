@@ -2385,7 +2385,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                 lng_sum += offer.longitude
                 question_deeplink = (
                     f'<a href="https://t.me/{self.bot_username}?start=offer-{offer.uuid}">'
-                    f'{html.escape(offer.question.replace('%', '%%'))}</a>'
+                    f'{html.escape(offer.question)}</a>'
                 )
                 offer_popup += (
                     '<tr>'
@@ -2398,7 +2398,7 @@ class ApiUserPoints(FromToCountMixin, FrontendMixin, TelegramApiMixin, UuidMixin
                     '</tr>'
                 )
                 offer_popup += '</table>'
-                point.update(popup=offer_popup % offerer)
+                point.update(popup=offer_popup)
                 points.append(point)
             num_all = len(coords)
 
