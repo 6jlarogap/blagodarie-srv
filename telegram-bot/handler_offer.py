@@ -365,7 +365,7 @@ class Offer(object):
         username_href = username_href or (user_from and user_from['username']) or None
         result += Misc.get_html_a(
             href=Offer.get_deeplink(offer["uuid"], username_href),
-            text='Ссылка на опрос'
+            text='Ссылка на предложение'
         ) + '\n'
 
         result += Misc.get_html_a(
