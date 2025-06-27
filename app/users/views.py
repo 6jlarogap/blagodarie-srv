@@ -3748,8 +3748,6 @@ class ApiOffer(ApiOfferMixin, UuidMixin, APIView):
                 raise ServiceException('Не задан вопрос')
             if not request.data.get('answers'):
                 raise ServiceException('Не заданы ответы')
-            elif len(request.data['answers']) == 1:
-                raise ServiceException('Опрос с одним ответом -- не опрос')
             elif len(request.data['answers']) > Offer.MAX_NUM_ANSWERS:
                 raise ServiceException('Число ответов > %s' % Offer.MAX_NUM_ANSWERS)
             offer = Offer.objects.create(
