@@ -376,15 +376,18 @@ class Offer(object):
             href='%s/?offer_id=%s' % (settings.MAP_HOST, offer['uuid']),
             text='Карта'
         ) + '\n'
-        result += Misc.get_html_a(
-            href=Misc.get_deeplink(offer['owner'], https=True),
-            text='Автор опроса: ' + offer['owner']['first_name']
-        ) + '\n'
+
         if profile_ref:
             result += Misc.get_html_a(
                 href=Misc.get_deeplink(profile_ref, https=True),
-                text='Реферрер: ' + profile_ref['first_name']
+                text='Реферер: ' + profile_ref['first_name']
             ) + '\n'
+
+        result += Misc.get_html_a(
+            href=Misc.get_deeplink(offer['owner'], https=True),
+            text='Автор: ' + offer['owner']['first_name']
+        ) + '\n'
+
         return result
 
 
@@ -752,11 +755,9 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
                 await callback.message.reply(
                     f'Предлагаем подкрепить Ваш голос - добровольным даром - {whom}',
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                        [
-                            inline_btn_donate,
-                            Misc.inline_button_cancel('Без дара'),
-                            inline_btn_revoke_voice
-                ]]))
+                        [inline_btn_donate, Misc.inline_button_cancel('Без дара')],
+                        [inline_btn_revoke_voice],
+                ]))
 
     elif callback.message.chat.type == ChatType.PRIVATE:
         if number > 0:
@@ -934,7 +935,7 @@ async def cbq_donate_office_choice(callback: CallbackQuery, state: FSMContext):
         if status_offer == 200:
             offer = response_offer['offer']
             text_after_thank = (
-                'Пришлите мне снимок экрана добровольного пожертвования любой суммы '
+                'Пришлите мне снимок экрана добровольного дара любой суммы '
                 '— в качестве подкрепления Вашего голоса — на реквизиты ниже.\n'
                 'Добавьте в сообщение фото/видео и текстовый комментарий.\n'
                 '\n'
@@ -1005,7 +1006,7 @@ async def process_message_thank_office_choice(message: Message, state: FSMContex
             'опрос',
         )
         text = (
-            f'Вам поступил добровольный Дар от '
+            f'Вам поступил добровольный дар от '
             f'{Misc.get_deeplink_with_name(profile_from)} за {offer_link}'
             '\n'
             '\u2193\u2193\u2193'
