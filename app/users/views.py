@@ -3773,9 +3773,15 @@ class ApiOffer(ApiOfferMixin, UuidMixin, APIView):
 
     def get(self, request):
         try:
-            offer = Offer.objects.select_related('owner', 'owner__profile').get(uuid=request.GET.get('uuid'))
+            if request.GET.get('uuid'):
+                qs = Q(uuid=request.GET['uuid'])
+            elif request.GET.get('offer_id'):
+                qs = Q(pk=request.GET['offer_id'])
+            else:
+                raise ValueError
+            offer = Offer.objects.select_related('owner', 'owner__profile').get(qs)
             user_ids_only=request.GET.get('user_ids_only')
-            data = offer.data_dict(request=request, user_ids_only=user_ids_only)
+            data = dict(offer=offer.data_dict(request=request, user_ids_only=user_ids_only))
             status_code = status.HTTP_200_OK
         except (TypeError, ValueError, ValidationError, Offer.DoesNotExist,):
             data = {}

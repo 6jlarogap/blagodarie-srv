@@ -50,6 +50,30 @@ class Offer(object):
     PROMPT_OFFER_GEO = 'Укажите координаты опроса вида: хх.ххх,уу.ууу - их удобно скопировать из карт яндекса или гугла'
 
     @classmethod
+    async def get_offer(cls, **kwargs):
+        """
+        Получить минимум сведений об офере
+
+        Возможные параметры (**kwargs):
+            Обязательно:
+                offer_id
+                    или
+                offer_uuid
+            Возможно:
+            user_ids_only = 'on'
+        """
+        logging.debug('get_offer_data, params: %s' % kwargs)
+        status, response = await Misc.api_request(
+            path='/api/offer',
+            method='get',
+            params=kwargs,
+        )
+        logging.debug('get_offer_data, status: %s' % status)
+        logging.debug('get_offer_data, response: %s' % response)
+        return status, response
+
+
+    @classmethod
     async def cmd_offer(cls, message: Message, state: FSMContext):
         """
         Создание опроса- предложения из сообщения- команды
@@ -284,6 +308,15 @@ class Offer(object):
         except (TelegramBadRequest, TelegramForbiddenError,):
             await message.reply('Опрос-предложение предъявить не удалось')
 
+
+    @classmethod
+    def get_deeplink(cls, offer_uuid, username_href=None):
+        href = f't.me/{bot_data.username}?start=offer-{offer_uuid}'
+        if username_href:
+            href += f'-userId-{username_href}'
+        return href
+
+
     @classmethod
     def text_offer(
             cls,
@@ -329,14 +362,12 @@ class Offer(object):
                 result += '%s - %s\n' % (answer['answer'], len(answer['users']),)
         result += '\n'
 
-        href = f't.me/{bot_data.username}?start=offer-{offer["uuid"]}'
-        userId = username_href or (user_from and user_from['username']) or None
-        if userId:
-            href += f'-userId-{userId}'
+        username_href = username_href or (user_from and user_from['username']) or None
         result += Misc.get_html_a(
-            href=href,
+            href=Offer.get_deeplink(offer["uuid"], username_href),
             text='Ссылка на опрос'
         ) + '\n'
+
         result += Misc.get_html_a(
             href='%s/?offer_uuid=%s' % (settings.GRAPH_HOST, offer['uuid']),
             text='Схема'
@@ -560,7 +591,7 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
         )
         await callback.message.reply(
             (
-                'Отправьте или перешлите мне сообщение для отправки '
+                'Отправьте или перешлите мне <b>текстовое</b> сообщение для отправки '
                 'всем проголосовавшим участникам, кроме недоверенных. '
                 'Чтобы не получить недоверия - пишите только по делу!'
             ),
@@ -673,24 +704,35 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
         if success_message:
             await callback.answer(success_message, show_alert=True,)
 
-            #TODO дальше
-            if False and response_answer.get('donate') and response_answer.get('journal_id'):
-                donator = response_answer['donate']
-                if donator['is_author']:
+            if response_answer.get('donate') and response_answer.get('journal_id') and username_ref:
+                donate_to = response_answer['donate']
+                if donate_to['is_author']:
                     whom = 'автору системы '
                 else:
-                    whom = 'пригласившей Вас ' if donator['profile']['gender'] == 'f' else 'пригласившему Вас '
-                whom += Misc.get_deeplink_with_name(donator['profile'])
-                await state.set_state(FSMofferChoiceDonate.ask)
-                await state.update_data(
-                    journal_id=response_answer['journal_id'],
-                    donate=donator,
-                    uuid_pack=str(uuid4()),
-                )
+                    whom = 'пригласившей Вас ' if donate_to['profile']['gender'] == 'f' else 'пригласившему Вас '
+                whom += Misc.get_deeplink_with_name(donate_to['profile'])
+                inline_btn_donate = InlineKeyboardButton(
+                    text='Сделать дар',
+                    callback_data=(
+                            f'{Misc.CALLBACK_DATA_ID__TEMPLATE}'
+                            '%(donate_to_username)s%(sep)s'
+                            '%(username_ref)s%(sep)s'
+                            '%(offer_id)s'
+                        ) % dict(
+                        keyboard_type=KeyboardType.DONATE_OFFER_CHOICE,
+                        id_=response_answer['journal_id'],
+                        donate_to_username=donate_to['profile']['username'],
+                        offer_id=offer['offer_id'],
+                        username_ref=username_ref,
+                        sep=KeyboardType.SEP,
+                ))
                 await callback.message.reply(
                     f'Предлагаем подкрепить Ваш голос - добровольным даром - {whom}',
-                    reply_markup=Misc.reply_markup_cancel_row('Без дара'),
-                )
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [
+                            inline_btn_donate,
+                            Misc.inline_button_cancel('Без дара'),
+                ]]))
 
     elif callback.message.chat.type == ChatType.PRIVATE:
         if number > 0:
@@ -769,7 +811,7 @@ async def process_existing_offer_location(message: Message, state: FSMContext):
     await state.clear()
 
 
-@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMsendMessageToOffer.ask))
+@router.message(F.text, F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMsendMessageToOffer.ask))
 async def process_message_to_offer(message: Message, state: FSMContext):
     if await is_it_command(message, state):
         return
@@ -794,9 +836,19 @@ async def process_message_to_offer(message: Message, state: FSMContext):
             if status == 200:
                 n_delivered = 0
                 if response['users']:
-                    msg_to = 'Сообщение участникам опроса:\n %(offer_deeplink)s\n от %(sender_deeplink)s' % dict(
+                    msg_to = (
+                            'Сообщение участникам опроса:\n'
+                            '\n'
+                            '%(offer_deeplink)s\n'
+                            '\n'
+                            'от %(sender_deeplink)s\n'
+                            '\n'
+                            '\u2193\u2193\u2193'
+                        ) % dict(
                         offer_deeplink=Misc.get_html_a(
-                            href=f't.me/{bot_data.username}?start=offer-{data["offer_uuid"]}',
+                            # ниже: username_href=None, при открытии ссылки username_ref будет владелец опроса,
+                            # он же попадет в реферер
+                            href=Offer.get_deeplink(data["offer_uuid"], username_href=None),
                             text=response['question'],
                         ),
                         sender_deeplink=Misc.get_deeplink_with_name(response_sender)
@@ -809,7 +861,7 @@ async def process_message_to_offer(message: Message, state: FSMContext):
                             tg_uid = tg_account['tg_uid']
                             try:
                                 await bot.send_message(tg_uid, text=msg_to)
-                                await bot.forward_message(
+                                await bot.copy_message(
                                     tg_uid,
                                     from_chat_id=message.chat.id,
                                     message_id=message.message_id,
@@ -831,3 +883,128 @@ async def process_message_to_offer(message: Message, state: FSMContext):
                 await message.reply('Опрос не найден или вы не его ваделец')
     if not state_finished:
         await state.clear()
+
+
+@router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
+        KeyboardType.DONATE_OFFER_CHOICE,
+        KeyboardType.SEP,
+    )), StateFilter(None))
+async def cbq_donate_office_choice(callback: CallbackQuery, state: FSMContext):
+    try:
+        journal_id = int(callback.data.split(KeyboardType.SEP)[1])
+        donate_to_username=callback.data.split(KeyboardType.SEP)[2]
+        username_ref=callback.data.split(KeyboardType.SEP)[3]
+        offer_id=callback.data.split(KeyboardType.SEP)[4]
+    except (TypeError, ValueError, IndexError,):
+        return
+    status_from, profile_from = await Misc.post_tg_user(callback.from_user)
+    if status_from != 200:
+        return
+    status_to, profile_to = await Misc.get_user_by_sid(donate_to_username)
+    if status_to != 200:
+        return
+    bank_details = await Misc.get_bank_details(profile_to['uuid'])
+    if bank_details:
+        status_offer, response_offer = await Offer.get_offer(offer_id=offer_id, user_ids_only='on')
+        if status_offer == 200:
+            offer = response_offer['offer']
+            text_after_thank = (
+                'Пришлите мне снимок экрана добровольного пожертвования любой суммы '
+                '— в качестве подкрепления Вашего голоса — на реквизиты ниже.\n'
+                'Добавьте в сообщение фото/видео и текстовый комментарий.\n'
+                '\n'
+                f'{html.quote(bank_details)}\n\n'
+            )
+            try:
+                await state.set_state(FSMofferChoiceDonate.ask)
+                await state.update_data(
+                    profile_to=profile_to,
+                    profile_from=profile_from,
+                    journal_id=journal_id,
+                    uuid_pack=str(uuid4()),
+                    username_ref=username_ref,
+                    offer_uuid=response_offer['offer']['uuid'],
+                )
+                await bot.send_message(
+                    callback.from_user.id,
+                    text=text_after_thank,
+                    reply_markup=Misc.reply_markup_cancel_row(),
+                )
+            except (TelegramBadRequest, TelegramForbiddenError,):
+                pass
+        else:
+            await callback.message.reply('Опрос не найден')
+    else:
+        await callback.message.reply(f'{profile_to["first_name"]} не имеет банковских реквизитов')
+    await callback.answer()
+
+
+@router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMofferChoiceDonate.ask))
+async def process_message_thank_office_choice(message: Message, state: FSMContext):
+    if await is_it_command(message, state):
+        return
+    data = await state.get_data()
+    if not (profile_to := data.get('profile_to')) or not (journal_id := data.get('journal_id')):
+        await state.clear(); return
+    status_from, profile_from = await Misc.post_tg_user(message.from_user)
+    if status_from != 200 or profile_from['uuid'] != data.get('profile_from', {}).get('uuid', ''):
+        await state.clear(); return
+    key = (
+        f'{Rcache.DONATE_OFFER_CHOICE}{Rcache.KEY_SEP}'
+        f'{data["uuid_pack"]}'
+    )
+    if not await Misc.check_none_n_clear(is_first := Misc.redis_is_key_first_up(key), state):
+        return
+    tgdesc_payload  = dict(
+        tg_token=settings.TOKEN,
+        journal_id=journal_id,
+        is_first=is_first,
+    )
+    tgdesc_payload.update(tgdesc=TgDesc.from_message(message, data['uuid_pack']))
+    logging.debug('post donate offer, payload: %s' % Misc.secret(tgdesc_payload))
+    status, response = await Misc.api_request(
+        '/api/thank_bank',
+        method='POST',
+        json = tgdesc_payload
+    )
+    logging.debug('post donate offer, status: %s' % status)
+    logging.debug('post donate offer, response: %s' % response)
+    if status == 200:
+        if not is_first:
+            return
+        if not await Misc.check_none_n_clear(await Misc.redis_wait_last_in_pack(key), state):
+            return
+
+        offer_link = Misc.get_html_a(
+            Offer.get_deeplink(data['offer_uuid'], data['username_ref']),
+            'опрос',
+        )
+        text = (
+            f'Вам поступил добровольный Дар от '
+            f'{Misc.get_deeplink_with_name(profile_from)} за {offer_link}'
+            '\n'
+            '\u2193\u2193\u2193'
+        )
+        for tg_account in data['profile_to']['tg_data']:
+            try:
+                await bot.send_message(tg_account['tg_uid'], text=text)
+            except (TelegramBadRequest, TelegramForbiddenError,):
+                pass
+
+        payload_send_pack = dict(
+            tg_token=settings.TOKEN,
+            uuid_pack=data['uuid_pack'],
+            username=profile_to['username'],
+            what='tgdesc',
+        )
+        # Api пошлёт всем
+        status_send_pack, response_send_pack = await Misc.api_request(
+            path='/api/show_tgmsg_pack',
+            method='post',
+            json=payload_send_pack,
+        )
+        await message.reply(
+            'Сообщение передано получателю' if status_send_pack == 200 else \
+            'Получатель не принял сообщение'
+        )
+    await state.clear()

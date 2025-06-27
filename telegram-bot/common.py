@@ -111,6 +111,7 @@ class Rcache(object):
     USER_DESC_PREFIX = 'user_desc'
     OFFER_DESC_PREFIX = 'offer_desc'
     ASK_MONEY_PREFIX = 'ask_money'
+    DONATE_OFFER_CHOICE = 'donate_offer'
     SET_NEXT_SYMPA_WAIT_PREFIX = 'set_next_sympa_wait'
     SET_NEXT_SYMPA_WAIT = settings.REDIS_SET_NEXT_SYMPA_WAIT
 
@@ -379,6 +380,10 @@ class KeyboardType(object):
     # с таким же или похожими ФИО
     #
     NEW_PERSON_CONFIRM = 78
+
+    # Донатить по случаю выбора голоса в офере
+    #
+    DONATE_OFFER_CHOICE = 79
 
     # Разделитель данных в call back data
     #

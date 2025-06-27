@@ -4296,7 +4296,8 @@ class ApiThankBank(APIView):
             except Journal.DoesNotExist:
                 raise ServiceException(msg_not_found)
             if journal.operationtype_id not in (
-                    OperationType.TRUST_OR_THANK, OperationType.THANK, OperationType.SET_SYMPA
+                    OperationType.TRUST_OR_THANK, OperationType.THANK,
+                    OperationType.SET_SYMPA, OperationType.OFFER_VOTED,
                ):
                 raise ServiceException(msg_not_found)
             try:
