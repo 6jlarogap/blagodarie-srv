@@ -462,11 +462,11 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
 
                 options_quest_set_revoke_sympa = options.copy()
                 if data['currentstate']['is_sympa_confirmed']:
-                    message_from = f'Отменить симпатию к {html.escape(user_to.first_name)} ?'
+                    message_from = f'Ваша симпатия к {html.escape(user_to.first_name)} установлена'
                     options_quest_set_revoke_sympa.update(reply_markup=dict(
                         inline_keyboard=[[
                             dict(
-                                text='Отменить',
+                                text='Отменить симпатию',
                                 callback_data=(
                                     f'{KeyboardType.SYMPA_REVOKE}{KeyboardType.SEP}'
                                     f'{user_from.username}{KeyboardType.SEP}'
