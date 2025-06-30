@@ -73,10 +73,18 @@ class FSMaskMoney(StatesGroup):
         KeyboardType.SEP,
         )))
 async def cbq_cancel_any(callback: CallbackQuery, state: FSMContext):
+    try:
+        reply_code = callback.data.split(KeyboardType.SEP)[1]
+    except IndexError:
+        pass
+    if reply_code and Misc.CANCEL_BTN_REPLIES.get(reply_code):
+        reply = Misc.CANCEL_BTN_REPLIES[reply_code]
+    else:
+        reply = Misc.MSG_YOU_CANCELLED_INPUT
+    await callback.message.answer(reply)
     if state:
-        await callback.message.answer(Misc.MSG_YOU_CANCELLED_INPUT)
         await state.clear()
-        await callback.answer()
+    await callback.answer()
 
 
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMnewPerson.ask))

@@ -757,7 +757,11 @@ async def cbq_offer_answer(callback: CallbackQuery, state: FSMContext):
                 await callback.message.reply(
                     f'Предлагаем подкрепить Ваш голос - добровольным даром - {whom}',
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                        [inline_btn_donate, Misc.inline_button_cancel('Без дара')],
+                        [
+                            inline_btn_donate,
+                            Misc.inline_button_cancel(
+                                'Без дара', reply_code='offer_donate')
+                        ],
                         [inline_btn_revoke_voice],
                 ]))
 
@@ -939,7 +943,7 @@ async def cbq_donate_office_choice(callback: CallbackQuery, state: FSMContext):
             text_after_thank = (
                 'Пришлите мне снимок экрана добровольного дара любой суммы — '
                 'в качестве подкрепления Вашего голоса — на реквизиты ниже.\n'
-                'В со-общение можно добавить фото/видео и текстовый комментарий.\n'
+                'В сообщение можно добавить фото/видео и текстовый комментарий.\n'
                 'При отмене голоса дар не возвращается.\n'
                 '\n'
                 f'{html.quote(bank_details)}\n\n'

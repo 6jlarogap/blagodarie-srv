@@ -398,6 +398,15 @@ class Misc(object):
     Различные функции, сообщения, константы
     """
 
+    # Кнопка отмена. Нажал -> стандартный ответ: Вы отказались от ввода данных
+    # Но возможны отличия:
+    CANCEL_BTN_REPLIES = dict(
+        offer_donate=(
+            'Ваш голос не подкреплён даром. Вы можете подкрепить его позже нажав Сделать Дар, '
+            'либо отозвав свой голос и подав его заново'
+        )
+    )
+
     # Ид ключа с банковскими реквизитами
     #
     BANKING_DETAILS_ID = 4
@@ -1679,13 +1688,17 @@ class Misc(object):
         return his_her
 
     @classmethod
-    def inline_button_cancel(cls, caption='Отмена'):
+    def inline_button_cancel(cls, caption='Отмена', reply_code=None):
         """
         Inline кнопка с 'Отмена'
         """
-        callback_data = '%(keyboard_type)s%(sep)s' % dict(
+        callback_data_template = cls.CALLBACK_DATA_KEY_TEMPLATE
+        if reply_code and cls.CANCEL_BTN_REPLIES.get(reply_code):
+            callback_data_template += '%(reply_code)s%(sep)s'
+        callback_data = callback_data_template % dict(
             keyboard_type=KeyboardType.CANCEL_ANY,
             sep=KeyboardType.SEP,
+            reply_code=reply_code,
         )
         return InlineKeyboardButton(
             text=caption,
@@ -1703,11 +1716,11 @@ class Misc(object):
         return s
 
     @classmethod
-    def reply_markup_cancel_row(cls, caption='Отмена'):
+    def reply_markup_cancel_row(cls, caption='Отмена', reply_code=None):
         """
         Ряд с одна inline кнопкой с 'Отмена'
         """
-        inline_btn_cancel = cls.inline_button_cancel(caption)
+        inline_btn_cancel = cls.inline_button_cancel(caption, reply_code)
         reply_markup = InlineKeyboardMarkup(inline_keyboard=[[inline_btn_cancel]])
         return reply_markup
 
