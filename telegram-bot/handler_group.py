@@ -357,9 +357,10 @@ async def process_group_message(message: Message, state: FSMContext):
                         else:
                             href = f'https://www.youtube.com/watch?v={response["id"]}'
                             try:
-                                await message.answer((
-                                    f'Видео {Misc.get_html_a(href, message.caption)} загружено.\n'
-                                    f'Автор: {Misc.get_deeplink_with_name(response_from, plus_trusts=True)}'
+                                await bot.send_message(
+                                    tg_user_sender.id, (
+                                        f'Видео {Misc.get_html_a(href, message.caption)} загружено.\n'
+                                        f'Автор: {Misc.get_deeplink_with_name(response_from, plus_trusts=True)}'
                                     ),
                                     link_preview_options=LinkPreviewOptions(is_disabled=False),
                                 )
