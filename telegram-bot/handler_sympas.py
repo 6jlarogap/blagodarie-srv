@@ -724,7 +724,7 @@ async def cbq_get_sympa_send_profile(callback: CallbackQuery, state: FSMContext)
     if not profile_from['r_sympa_username'] or profile_from['r_sympa_username'] != profile_to['username']:
         await bot.answer_callback_query(
             callback.id,
-            text=f'Этот уже не актуально. У вас нет взаимной симпатии к {html.quote(profile_to["first_name"])}',
+            text=f'Это уже не актуально. У вас нет взаимной симпатии к {html.quote(profile_to["first_name"])}',
             show_alert=True,
         )
         await callback.answer()
@@ -734,50 +734,53 @@ async def cbq_get_sympa_send_profile(callback: CallbackQuery, state: FSMContext)
     text_from = (
         f'Контакты переданы. Вы покидаете игру знакомств - для личного общения! Удачи!'
     )
+    
+    # Формируем ссылку на профиль женщины
+    profile_link = f't.me/doverabot?start={profile_from["username"]}'
     text_to = (
         f'Поздравляем! {html.quote(profile_from["first_name"])} '
-        f'ждёт Вашего сообщения! Вы покидаете игру знакомств для личного общения. Удачи!'
-    )
-    inline_btn_invite = InlineKeyboardButton(
-        text='Пригласить в игру',
-        callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
-        keyboard_type=KeyboardType.MEET_INVITE,
-        sep=KeyboardType.SEP,
-    ))
-
-    write_message = 'Написать'
-    dict_message = dict(
-        keyboard_type=KeyboardType.SEND_MESSAGE,
-        uuid=profile_from['uuid'],
-        sep=KeyboardType.SEP,
-        card_message_id=callback.message.message_id,
-        card_type=Misc.CARD_TYPE_MEET
-    )
-    inline_btn_send_message_to = InlineKeyboardButton(
-        text=write_message,
-        callback_data=Misc.CALLBACK_DATA_UUID_MSG_TYPE_TEMPLATE % dict_message
+        f'ждёт Вашего сообщения! Вы покидаете игру знакомств для личного общения. Удачи!\n'
+        f'Ссылка на профиль: {profile_link}'
     )
 
-    callback_dict = Common.callback_dict(profile_to, profile_from, journal_id)
-    callback_dict.update(keyboard_type=KeyboardType.SYMPA_REVOKE)
+    # Клавиатура для мужчины (получателя)
+    callback_dict_to = Common.callback_dict(profile_to, profile_from, journal_id)
+    callback_dict_to.update(keyboard_type=KeyboardType.SYMPA_REVOKE)
     button_cancel_sympa_to_from = InlineKeyboardButton(
         text='Отменить симпатию',
-        callback_data=Common.CALLBACK_DATA_TEMPLATE % callback_dict
+        callback_data=Common.CALLBACK_DATA_TEMPLATE % callback_dict_to
     )
-
+    
+    inline_btn_invite_to = InlineKeyboardButton(
+        text='Пригласить в игру',
+        callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
+            keyboard_type=KeyboardType.MEET_INVITE,
+            sep=KeyboardType.SEP,
+        ))
+    
     reply_markup_to = InlineKeyboardMarkup(inline_keyboard=[ 
-        [ inline_btn_send_message_to ],
         [ button_cancel_sympa_to_from ],
+        [ inline_btn_invite_to ],
     ])
 
-    dict_message.update(uuid=profile_to['uuid'])
-    inline_btn_send_message_from = InlineKeyboardButton(
-        text=write_message,
-        callback_data=Misc.CALLBACK_DATA_UUID_MSG_TYPE_TEMPLATE % dict_message
+    # Клавиатура для женщины (инициатора)
+    callback_dict_from = Common.callback_dict(profile_from, profile_to, journal_id)
+    callback_dict_from.update(keyboard_type=KeyboardType.SYMPA_REVOKE)
+    button_cancel_sympa_from_to = InlineKeyboardButton(
+        text='Отменить симпатию',
+        callback_data=Common.CALLBACK_DATA_TEMPLATE % callback_dict_from
     )
+    
+    inline_btn_invite_from = InlineKeyboardButton(
+        text='Пригласить в игру',
+        callback_data=Misc.CALLBACK_DATA_KEY_TEMPLATE % dict(
+            keyboard_type=KeyboardType.MEET_INVITE,
+            sep=KeyboardType.SEP,
+        ))
+    
     reply_markup_from = InlineKeyboardMarkup(inline_keyboard=[ 
-        [ inline_btn_send_message_from ],
-        [ inline_btn_invite ],
+        [ button_cancel_sympa_from_to ],
+        [ inline_btn_invite_from ],
     ])
 
     for tgd in profile_to['tg_data']:
@@ -809,7 +812,6 @@ async def cbq_get_sympa_send_profile(callback: CallbackQuery, state: FSMContext)
             show_alert=True,
         )
     await callback.answer()
-
 
 @router.callback_query(F.data.regexp(Misc.RE_KEY_SEP % (
         KeyboardType.SYMPA_DONATE_REFUSE, KeyboardType.SEP,
