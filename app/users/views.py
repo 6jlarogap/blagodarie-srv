@@ -4693,7 +4693,8 @@ class ApiMeetgamers(TelegramApiMixin, APIView):
                         Q(attitude__isnull=False, is_reverse=False) | \
                         Q(is_invite_meet=True, is_invite_meet_reverse=False) | \
                         Q(is_sympa_confirmed=True, is_sympa_reverse=False) 
-                        // Q(is_hide_meet=True)  //vd temporary exclude hide links
+                        // vd temporary exclude hide links
+                        // Q(is_hide_meet=True)
                 for cs in CurrentState.objects.filter(qs_cs
                         ).distinct():
                     user_pks.add(cs.user_from.pk)
