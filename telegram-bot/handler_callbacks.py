@@ -609,7 +609,7 @@ async def send_qr(profile, tg_user):
     if meet_id:
         url = f'https://t.me/{bot_data.username}?start=m-{meet_id}'
         link = Misc.get_html_a(url, 'Вход...')
-        caption = f'Перешлите одиноким — приглашение в игру знакомств! {link}'
+        caption = f'Приглашение в игру знакомств! Перешлите знакомым без пары! {link}'
         bytes_io = await Misc.get_qrcode(profile, url)
         await bot.send_photo(
             chat_id=tg_user.id,
