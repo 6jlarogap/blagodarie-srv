@@ -297,83 +297,82 @@ async def process_group_message(message: Message, state: FSMContext):
                     r.set(name=s, value='1')
                     r.close()
 
-
         if message.is_topic_message and \
-           message.chat.id in settings.GROUPS_WITH_YOUTUBE_UPLOAD and \
-           message.message_thread_id and \
-           message.message_thread_id == \
-           settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]['message_thread_id']:
+        message.chat.id in settings.GROUPS_WITH_YOUTUBE_UPLOAD and \
+        message.message_thread_id and \
+        message.message_thread_id == \
+        settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]['message_thread_id']:
             if message.content_type == ContentType.VIDEO:
-                if message.caption:
-                    fname = None
-                    if settings.LOCAL_SERVER:
-                        try:
-                            tg_file = await bot.get_file(message.video.file_id)
-                            fname = tg_file.file_path
-                        except:
-                            pass
-                    else:
-                        f = tempfile.NamedTemporaryFile(
-                            dir=settings.DIR_TMP, suffix='.video', delete=False,
+                # Генерируем заголовок на основе даты и времени, если его нет
+                title = message.caption if message.caption else f"Видео от {message.date.strftime('%d.%m.%Y %H:%M UTC')}"
+                
+                fname = None
+                if settings.LOCAL_SERVER:
+                    try:
+                        tg_file = await bot.get_file(message.video.file_id)
+                        fname = tg_file.file_path
+                    except:
+                        pass
+                else:
+                    f = tempfile.NamedTemporaryFile(
+                        dir=settings.DIR_TMP, suffix='.video', delete=False,
+                    )
+                    fname = f.name
+                    f.close()
+                    try:
+                        tg_file = await bot.get_file(message.video.file_id)
+                        await bot.download_file(tg_file.file_path, fname)
+                    except:
+                        os.unlink(fname)
+                        fname = None
+                if not fname:
+                    try:
+                        await bot.send_message(
+                            tg_user_sender.id,
+                            'Ошибка скачивания видео из сообщения. Не слишком ли большой файл?'
                         )
-                        fname = f.name
-                        f.close()
-                        try:
-                            tg_file = await bot.get_file(message.video.file_id)
-                            await bot.download_file(tg_file.file_path, fname)
-                        except:
-                            os.unlink(fname)
-                            fname = None
-                    if not fname:
+                    except (TelegramBadRequest, TelegramForbiddenError,):
+                        pass
+                else:
+                    description = (
+                        f'Профиль автора: {response_from["first_name"]}, '
+                        f'{Misc.get_deeplink(response_from, https=True)}\n'
+                        f'Группа телеграм: '
+                        f'{settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]["url_group"]}'
+                    )
+                    response, error = upload_video(
+                        fname=fname,
+                        auth_data=settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]['auth_data'],
+                        snippet=dict(
+                            title=title,  # Используем сгенерированный заголовок
+                            description=description,
+                    ))
+                    if error:
                         try:
                             await bot.send_message(
                                 tg_user_sender.id,
-                                'Ошибка скачивания видео из сообщения. Не слишком ли большой файл?'
+                                f'Ошибка загрузки видео:\n{error}'
                             )
                         except (TelegramBadRequest, TelegramForbiddenError,):
                             pass
                     else:
-                        description = (
-                            f'Профиль автора: {response_from["first_name"]}, '
-                            f'{Misc.get_deeplink(response_from, https=True)}\n'
-                            f'Группа телеграм: '
-                            f'{settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]["url_group"]}'
-                        )
-                        response, error = upload_video(
-                            fname=fname,
-                            auth_data=settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]['auth_data'],
-                            snippet=dict(
-                                title=message.caption,
-                                description=description,
-                        ))
-                        if error:
-                            try:
-                                await bot.send_message(
-                                    tg_user_sender.id,
-                                    f'Ошибка загрузки видео:\n{error}'
-                                )
-                            except (TelegramBadRequest, TelegramForbiddenError,):
-                                pass
-                        else:
-                            href = f'https://www.youtube.com/watch?v={response["id"]}'
-                            try:
-                                await bot.send_message(
-                                    tg_user_sender.id, (
-                                        f'Видео {Misc.get_html_a(href, message.caption)} загружено.\n'
-                                        f'Автор: {Misc.get_deeplink_with_name(response_from, plus_trusts=True)}'
-                                    ),
-                                    link_preview_options=LinkPreviewOptions(is_disabled=False),
-                                )
-                            except:
-                                pass
-                    if not settings.LOCAL_SERVER and fname:
-                        os.unlink(fname)
-                else:
-                    await message.reply(
-                        'Здесь допускаются <b>видео</b>, <u>обязательно <b>с заголовком</b></u>, '
-                        'для отправки в Youtube'
-                    )
-
+                        href = f'https://www.youtube.com/watch?v={response["id"]}'
+                        try:
+                            await bot.send_message(
+                                tg_user_sender.id, (
+                                    f'Видео {Misc.get_html_a(href, title)} загружено.\n'  # Используем title вместо message.caption
+                                    f'Автор: {Misc.get_deeplink_with_name(response_from, plus_trusts=True)}'
+                                ),
+                                link_preview_options=LinkPreviewOptions(is_disabled=False),
+                            )
+                        except:
+                            pass
+                        try:
+                            await message.delete()
+                        except:
+                            pass
+                if not settings.LOCAL_SERVER and fname:
+                    os.unlink(fname)
 
 @router.my_chat_member(F.chat.type.in_((ChatType.CHANNEL,)))
 async def echo_my_chat_member_for_bot(chat_member: ChatMemberUpdated):
