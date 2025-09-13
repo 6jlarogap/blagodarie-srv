@@ -367,10 +367,6 @@ async def process_group_message(message: Message, state: FSMContext):
                             )
                         except:
                             pass
-                        try:
-                            await message.delete()
-                        except:
-                            pass
                 if not settings.LOCAL_SERVER and fname:
                     os.unlink(fname)
 
