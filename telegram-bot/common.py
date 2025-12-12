@@ -2947,6 +2947,10 @@ class TgGroupMember(object):
         )
         logging.debug('delete group member, status: %s' % status)
         logging.debug('delete group member, response: %s' % response)
+        if status != 200:
+            logging.error(f'Failed to remove user {user_tg_uid} from group {group_chat_id}, status: {status}, response: {response}')
+        else:
+            logging.debug(f'Successfully removed user {user_tg_uid} from group {group_chat_id}')
         return status, response
 
 

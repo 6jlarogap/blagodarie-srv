@@ -149,7 +149,9 @@ async def process_group_message(message: Message, state: FSMContext):
     a_users_in = [ tg_user_sender ]
     try:
         tg_user_left = message.left_chat_member
-    except (TypeError, AttributeError,):
+        logging.debug(f'Accessed left_chat_member: {tg_user_left}')
+    except Exception as e:
+        logging.debug(f'Exception accessing left_chat_member: {type(e).__name__}: {e}')
         tg_user_left = None
     if tg_user_left:
         a_users_in = [ tg_user_left ]
@@ -216,6 +218,7 @@ async def process_group_message(message: Message, state: FSMContext):
         reply_markup = None
         response_from = {}
         if user_in.is_bot:
+            logging.debug(f'Skipping bot user {user_in.id} ({user_in.first_name})')
             a_users_out.append({})
         else:
             logging.debug(f'Processing user {user_in.id} ({user_in.first_name})')
@@ -226,7 +229,7 @@ async def process_group_message(message: Message, state: FSMContext):
                 continue
             a_users_out.append(response_from)
             if tg_user_left:
-                logging.debug(f'Removing user {user_in.id} from group')
+                logging.debug(f'Removing user {user_in.id} from group (left user: {tg_user_left.id} {tg_user_left.first_name})')
                 await TgGroupMember.remove(
                     group_chat_id=message.chat.id,
                     group_title=message.chat.title,
@@ -234,6 +237,7 @@ async def process_group_message(message: Message, state: FSMContext):
                     user_tg_uid=user_in.id
                 )
             else:
+                logging.debug(f'No user left detected, skipping removal logic')
                 logging.debug(f'Adding user {user_in.id} to group')
                 await TgGroupMember.add(
                     group_chat_id=message.chat.id,
