@@ -120,11 +120,6 @@ async def process_group_message(message: Message, state: FSMContext):
                 type_=message.chat.type,
             )
             if status == 200:
-                if message.chat.type == ChatType.SUPERGROUP:
-                    msg_failover = 'Ура! Группа стала супергруппой'
-                else:
-                    # Если что-то случится при понижении статуса, то зачем об этом говорить?
-                    msg_failover = ''
                 if response['pin_message_id']:
                     text, reply_markup = Misc.make_pin_group_message(message.chat)
                     try:
@@ -136,10 +131,6 @@ async def process_group_message(message: Message, state: FSMContext):
                         )
                     except TelegramBadRequest as e:
                         logging.debug(f'TelegramBadRequest while editing pin message: {e}')
-                        if msg_failover:
-                            await bot.send_message(message.chat.id, msg_failover)
-                elif msg_failover:
-                    await bot.send_message(message.chat.id, msg_failover)
             return
     except (TypeError, AttributeError,) as e:
         logging.debug(f'Error accessing migrate_from_chat_id: {e}')
