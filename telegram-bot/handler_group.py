@@ -102,7 +102,8 @@ async def process_group_message(message: Message, state: FSMContext):
             # сообщение с migrate_from_chat_id и еще со старым chat_id,
             # и будет воссоздана старая группа в апи
             return
-    except (TypeError, AttributeError,):
+    except (TypeError, AttributeError,) as e:
+        logging.debug(f'Error accessing migrate_to_chat_id: {e}')
         pass
     try:
         if message.migrate_from_chat_id:
@@ -127,13 +128,15 @@ async def process_group_message(message: Message, state: FSMContext):
                             text=text,
                             reply_markup=reply_markup,
                         )
-                    except TelegramBadRequest:
+                    except TelegramBadRequest as e:
+                        logging.debug(f'TelegramBadRequest while editing pin message: {e}')
                         if msg_failover:
                             await bot.send_message(message.chat.id, msg_failover)
                 elif msg_failover:
                     await bot.send_message(message.chat.id, msg_failover)
             return
-    except (TypeError, AttributeError,):
+    except (TypeError, AttributeError,) as e:
+        logging.debug(f'Error accessing migrate_from_chat_id: {e}')
         pass
 
     # Данные из телеграма пользователя /пользователей/, данные которых надо выводить при поступлении
@@ -311,7 +314,8 @@ async def process_group_message(message: Message, state: FSMContext):
                     try:
                         tg_file = await bot.get_file(message.video.file_id)
                         fname = tg_file.file_path
-                    except:
+                    except Exception as e:
+                        logging.debug(f'Failed to get file from Telegram: {e}')
                         pass
                 else:
                     f = tempfile.NamedTemporaryFile(
@@ -322,7 +326,8 @@ async def process_group_message(message: Message, state: FSMContext):
                     try:
                         tg_file = await bot.get_file(message.video.file_id)
                         await bot.download_file(tg_file.file_path, fname)
-                    except:
+                    except Exception as e:
+                        logging.debug(f'Failed to download file: {e}')
                         os.unlink(fname)
                         fname = None
                 if not fname:
@@ -340,13 +345,18 @@ async def process_group_message(message: Message, state: FSMContext):
                         f'Группа телеграм: '
                         f'{settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]["url_group"]}'
                     )
-                    response, error = upload_video(
-                        fname=fname,
-                        auth_data=settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]['auth_data'],
-                        snippet=dict(
-                            title=title,  # Используем сгенерированный заголовок
-                            description=description,
-                    ))
+                    try:
+                        response, error = upload_video(
+                            fname=fname,
+                            auth_data=settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]['auth_data'],
+                            snippet=dict(
+                                title=title,
+                                description=description,
+                        ))
+                    except Exception as e:
+                        logging.debug(f'Upload video raised exception: {e}')
+                        error = str(e)
+                        response = None
                     if error:
                         try:
                             await bot.send_message(
@@ -365,7 +375,8 @@ async def process_group_message(message: Message, state: FSMContext):
                                 ),
                                 link_preview_options=LinkPreviewOptions(is_disabled=False),
                             )
-                        except:
+                        except Exception as e:
+                            logging.debug(f'Failed to send success message: {e}')
                             pass
                 if not settings.LOCAL_SERVER and fname:
                     os.unlink(fname)
