@@ -161,6 +161,17 @@ async def process_group_message(message: Message, state: FSMContext):
         tg_users_new = []
     if tg_users_new:
         a_users_in += tg_users_new
+    
+    # Deduplicate users to avoid duplicate API calls
+    seen_user_ids = set()
+    unique_users = []
+    for user in a_users_in:
+        if user.id not in seen_user_ids:
+            seen_user_ids.add(user.id)
+            unique_users.append(user)
+    if len(a_users_in) != len(unique_users):
+        logging.debug(f'Deduplicated {len(a_users_in)} users to {len(unique_users)} unique users')
+    a_users_in = unique_users
 
     if not tg_users_new and not tg_user_left and tg_user_sender.is_bot:
         # tg_user_sender.is_bot:
@@ -238,13 +249,28 @@ async def process_group_message(message: Message, state: FSMContext):
                 )
             else:
                 logging.debug(f'No user left detected, skipping removal logic')
-                logging.debug(f'Adding user {user_in.id} to group')
-                await TgGroupMember.add(
-                    group_chat_id=message.chat.id,
-                    group_title=message.chat.title,
-                    group_type=message.chat.type,
-                    user_tg_uid=user_in.id
-                )
+                
+                # Only add user to database if they are actually in the group
+                # This prevents adding users when invite links are expired
+                if tg_users_new and user_in in tg_users_new:
+                    try:
+                        # Check if user is actually a member of the group
+                        chat_member = await bot.get_chat_member(message.chat.id, user_in.id)
+                        if chat_member.status in ('member', 'administrator', 'creator'):
+                            logging.debug(f'User {user_in.id} is confirmed as group member, adding to database')
+                            await TgGroupMember.add(
+                                group_chat_id=message.chat.id,
+                                group_title=message.chat.title,
+                                group_type=message.chat.type,
+                                user_tg_uid=user_in.id
+                            )
+                        else:
+                            logging.debug(f'User {user_in.id} is not a group member (status: {chat_member.status}), skipping database addition')
+                    except (TelegramBadRequest, TelegramForbiddenError) as e:
+                        logging.debug(f'Failed to verify user {user_in.id} membership status: {e}, skipping database addition')
+                else:
+                    # Regular message processing (not a new member)
+                    logging.debug(f'Processing regular message from user {user_in.id}')
             if tg_users_new and \
                tg_user_sender.id != user_in.id:
                 # Сразу доверие c благодарностью добавляемому пользователю
