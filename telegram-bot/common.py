@@ -1397,7 +1397,7 @@ class Misc(object):
 
                 if is_own_account:
                     inline_btn_bank = InlineKeyboardButton(
-                        text='Реквизиты',
+                        text='Реквизиты доната',
                         callback_data=callback_data_template % dict(
                         keyboard_type=KeyboardType.BANKING,
                         uuid=profile['uuid'],
