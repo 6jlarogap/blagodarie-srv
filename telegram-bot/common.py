@@ -626,7 +626,8 @@ class Misc(object):
 
         try:
             photos_output = await user.get_profile_photos()
-        except:
+        except Exception as e:
+            logging.error(f"Error getting profile photos: {e}")
             return result
 
         # Вытащить отсюда фото размером не больше settings.PHOTO_MAX_SIZE
@@ -673,18 +674,27 @@ class Misc(object):
             может быть message.photo[-1] при ContentType.PHOTO или фото тг юзера.
             У него обязан быть атрибут file_id или ключ file_id
         """
-        file_id = getattr(f, 'file_id', None)
-        if not file_id:
-            file_id = f['file_id']
-        tg_file = await bot.get_file(file_id)
-        if settings.LOCAL_SERVER:
-            fd = open(tg_file.file_path, 'rb')
-            image = fd.read()
-        else:
-            fd = await bot.download_file(tg_file.file_path)
-            image = fd.read()
-        fd.close()
-        return image
+        try:
+            file_id = getattr(f, 'file_id', None)
+            if not file_id:
+                file_id = f['file_id']
+            tg_file = await bot.get_file(file_id)
+            if settings.LOCAL_SERVER:
+                with open(tg_file.file_path, 'rb') as fd:
+                    image = fd.read()
+            else:
+                fd = await bot.download_file(tg_file.file_path)
+                image = fd.read()
+            return image
+        except KeyError:
+            logging.error("Missing 'file_id' in file object")
+        except TelegramBadRequest as e:
+            logging.error(f"Telegram API error: {e}")
+        except IOError as e:
+            logging.error(f"File IO error: {e}")
+        except Exception as e:
+            logging.error(f"Unexpected error in get_file_bytes: {e}")
+        return None
 
     @classmethod
     async def put_tg_user_photo(cls, photo, response):
@@ -721,25 +731,30 @@ class Misc(object):
             'json' или 'text'
         """
         status = response = None
-        async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
-            try:
-                async with session.request(
-                    method.upper(),
-                    "%s%s" % (settings.API_HOST, path,),
-                    data=data,
-                    json=json,
-                    params=params,
-                ) as resp:
-                    status = resp.status
-                    if status < 500:
-                        if response_type == 'json':
-                            response = await resp.json()
-                        elif response_type == 'text':
+        try:
+            async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
+                try:
+                    async with session.request(
+                        method.upper(),
+                        "%s%s" % (settings.API_HOST, path,),
+                        data=data,
+                        json=json,
+                        params=params,
+                    ) as resp:
+                        status = resp.status
+                        if status < 500:
+                            if response_type == 'json':
+                                response = await resp.json()
+                            elif response_type == 'text':
+                                response = await resp.text('UTF-8')
+                        else:
                             response = await resp.text('UTF-8')
-                    else:
-                        response = await resp.text('UTF-8')
-            except:
-                pass
+                except aiohttp.ClientError as e:
+                    logging.error(f"API request failed: {e}")
+                except Exception as e:
+                    logging.error(f"Unexpected error during API request: {e}")
+        except Exception as e:
+            logging.error(f"Error creating ClientSession: {e}")
         return status, response
 
     @classmethod
@@ -1549,6 +1564,7 @@ class Misc(object):
                     )
                 send_text_message = False
             except TelegramBadRequest as excpt:
+                logging.error(f"TelegramBadRequest in send_or_edit_card: {excpt.message}")
                 if excpt.message == 'Media_caption_too_long' and not card_message:
                     try:
                         await bot.send_photo(
@@ -1556,10 +1572,10 @@ class Misc(object):
                             photo=photo,
                             disable_notification=True,
                         )
-                    except:
-                        pass
-            except:
-                raise
+                    except Exception as e:
+                        logging.error(f"Error sending photo without caption: {e}")
+            except Exception as e:
+                logging.error(f"Error in send_or_edit_card: {e}")
         if send_text_message:
             if card_message:
                 try:
@@ -1607,20 +1623,20 @@ class Misc(object):
     async def get_qrcode(cls, profile, url):
         """
         Получить qrcode профиля profile (байты картинки), где зашит url.
-
+    
         Возвращает BytesIO qrcod'a, установленный на нулевую позицию
         """
-
+    
         PHOTO_WIDTH = 100
         PHOTO_FRAME_WIDTH = 2
         PHOTO_FILL_COLOR = 'white'
-
+    
         qr_code = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_H)
         qr_code.add_data(url)
         image = qr_code.make_image(fill_color='black', back_color='white').convert('RGB')
         bytes_io = BytesIO()
         bytes_io.name = f'qr-{profile["username"]}.jpg'
-
+    
         if profile.get('photo'):
             thumbnail = cls.url_photo_to_thumbnail(
                 profile['photo'],
@@ -1629,13 +1645,20 @@ class Misc(object):
                 frame_width=PHOTO_FRAME_WIDTH,
             )
             status = photo = None
-            async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
-                try:
-                    async with session.request('GET', thumbnail,) as response:
-                        status = response.status
-                        photo = Image.open(BytesIO(await response.read()))
-                except:
-                    pass
+            try:
+                async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
+                    try:
+                        async with session.request('GET', thumbnail,) as response:
+                            status = response.status
+                            if status == 200:
+                                photo_data = await response.read()
+                                photo = Image.open(BytesIO(photo_data))
+                    except aiohttp.ClientError as e:
+                        logging.error(f"Error downloading profile photo: {e}")
+                    except Exception as e:
+                        logging.error(f"Unexpected error processing photo: {e}")
+            except Exception as e:
+                logging.error(f"Error creating ClientSession: {e")
                 if status == 200 and photo:
                     photo_width = PHOTO_WIDTH + PHOTO_FRAME_WIDTH * 2
                     wpercent = photo_width / float(photo.size[0])
