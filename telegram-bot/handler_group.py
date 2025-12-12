@@ -318,7 +318,7 @@ async def process_group_message(message: Message, state: FSMContext):
             a_users_out.append(response_from)
             if tg_user_left:
                 logging.debug(f'Removing user {user_in.id} from group (left user: {tg_user_left.id} {tg_user_left.first_name})')
-                status_remove, response_remove = await TgGroupMember.remove(
+                await TgGroupMember.remove(
                     group_chat_id=message.chat.id,
                     group_title=message.chat.title,
                     group_type=message.chat.type,
@@ -329,48 +329,14 @@ async def process_group_message(message: Message, state: FSMContext):
                 else:
                     logging.debug(f'SUCCESS: User {user_in.id} removed from group {message.chat.id}')
             else:
-                logging.debug(f'No user left detected, processing new member or regular message')
-                
-                # Only add user to database if they are actually in the group
-                # This prevents adding users when invite links are expired
-                if tg_users_new and user_in in tg_users_new:
-                    logging.debug(f'Verifying new member {user_in.id} ({user_in.first_name}) membership status')
-                    try:
-                        # Check if user is actually a member of the group
-                        chat_member = await bot.get_chat_member(message.chat.id, user_in.id)
-                        logging.debug(f'User {user_in.id} membership status: {chat_member.status}')
-                        if chat_member.status in ('member', 'administrator', 'creator'):
-                            logging.debug(f'User {user_in.id} is confirmed as group member, adding to database')
-                            status_add, response_add = await TgGroupMember.add(
-                                group_chat_id=message.chat.id,
-                                group_title=message.chat.title,
-                                group_type=message.chat.type,
-                                user_tg_uid=user_in.id
-                            )
-                            if status_add != 200:
-                                logging.error(f'CRITICAL: Failed to add user {user_in.id} to group {message.chat.id}, status: {status_add}, response: {response_add}')
-                            else:
-                                logging.debug(f'SUCCESS: User {user_in.id} added to group {message.chat.id}')
-                        elif chat_member.status == 'left':
-                            logging.warning(f'User {user_in.id} has left the group, not adding to database')
-                        elif chat_member.status == 'kicked':
-                            logging.warning(f'User {user_in.id} was kicked from the group, not adding to database')
-                        else:
-                            logging.warning(f'User {user_in.id} has unknown status {chat_member.status}, not adding to database')
-                    except TelegramBadRequest as e:
-                        logging.error(f'TELEGRAM_ERROR: BadRequest when verifying user {user_in.id} membership: {e}')
-                        if 'user not found' in str(e).lower():
-                            logging.error(f'CRITICAL: User {user_in.id} not found in Telegram, cannot verify membership')
-                        elif 'chat not found' in str(e).lower():
-                            logging.error(f'CRITICAL: Group {message.chat.id} not found')
-                    except TelegramForbiddenError as e:
-                        logging.error(f'TELEGRAM_ERROR: Forbidden when verifying user {user_in.id} membership: {e}')
-                        logging.error(f'CRITICAL: Bot may not have permission to get chat members')
-                    except Exception as e:
-                        logging.error(f'UNEXPECTED_ERROR: Unexpected error when verifying user {user_in.id} membership: {type(e).__name__}: {e}')
-                else:
-                    # Regular message processing (not a new member)
-                    logging.debug(f'Processing regular message from user {user_in.id} (not a new member)')
+                logging.debug(f'No user left detected, skipping removal logic')
+                logging.debug(f'Adding user {user_in.id} to group')
+                await TgGroupMember.add(
+                    group_chat_id=message.chat.id,
+                    group_title=message.chat.title,
+                    group_type=message.chat.type,
+                    user_tg_uid=user_in.id
+                )
             if tg_users_new and \
                tg_user_sender.id != user_in.id:
                 # Сразу доверие c благодарностью добавляемому пользователю
