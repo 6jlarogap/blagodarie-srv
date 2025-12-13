@@ -626,8 +626,7 @@ class Misc(object):
 
         try:
             photos_output = await user.get_profile_photos()
-        except Exception as e:
-            logging.error(f"Error getting profile photos: {e}")
+        except:
             return result
 
         # Вытащить отсюда фото размером не больше settings.PHOTO_MAX_SIZE
@@ -674,27 +673,18 @@ class Misc(object):
             может быть message.photo[-1] при ContentType.PHOTO или фото тг юзера.
             У него обязан быть атрибут file_id или ключ file_id
         """
-        try:
-            file_id = getattr(f, 'file_id', None)
-            if not file_id:
-                file_id = f['file_id']
-            tg_file = await bot.get_file(file_id)
-            if settings.LOCAL_SERVER:
-                with open(tg_file.file_path, 'rb') as fd:
-                    image = fd.read()
-            else:
-                fd = await bot.download_file(tg_file.file_path)
-                image = fd.read()
-            return image
-        except KeyError:
-            logging.error("Missing 'file_id' in file object")
-        except TelegramBadRequest as e:
-            logging.error(f"Telegram API error: {e}")
-        except IOError as e:
-            logging.error(f"File IO error: {e}")
-        except Exception as e:
-            logging.error(f"Unexpected error in get_file_bytes: {e}")
-        return None
+        file_id = getattr(f, 'file_id', None)
+        if not file_id:
+            file_id = f['file_id']
+        tg_file = await bot.get_file(file_id)
+        if settings.LOCAL_SERVER:
+            fd = open(tg_file.file_path, 'rb')
+            image = fd.read()
+        else:
+            fd = await bot.download_file(tg_file.file_path)
+            image = fd.read()
+        fd.close()
+        return image
 
     @classmethod
     async def put_tg_user_photo(cls, photo, response):
@@ -731,30 +721,25 @@ class Misc(object):
             'json' или 'text'
         """
         status = response = None
-        try:
-            async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
-                try:
-                    async with session.request(
-                        method.upper(),
-                        "%s%s" % (settings.API_HOST, path,),
-                        data=data,
-                        json=json,
-                        params=params,
-                    ) as resp:
-                        status = resp.status
-                        if status < 500:
-                            if response_type == 'json':
-                                response = await resp.json()
-                            elif response_type == 'text':
-                                response = await resp.text('UTF-8')
-                        else:
+        async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
+            try:
+                async with session.request(
+                    method.upper(),
+                    "%s%s" % (settings.API_HOST, path,),
+                    data=data,
+                    json=json,
+                    params=params,
+                ) as resp:
+                    status = resp.status
+                    if status < 500:
+                        if response_type == 'json':
+                            response = await resp.json()
+                        elif response_type == 'text':
                             response = await resp.text('UTF-8')
-                except aiohttp.ClientError as e:
-                    logging.error(f"API request failed: {e}")
-                except Exception as e:
-                    logging.error(f"Unexpected error during API request: {e}")
-        except Exception as e:
-            logging.error(f"Error creating ClientSession: {e}")
+                    else:
+                        response = await resp.text('UTF-8')
+            except:
+                pass
         return status, response
 
     @classmethod
@@ -1000,6 +985,12 @@ class Misc(object):
             status_photo, response_photo = await cls.update_user_photo(tg_user=tg_user_sender, profile=response_sender)
             if status_photo == 200:
                 response_sender = response_photo
+
+        logging.error(f"DEBUG post_tg_user: status_sender={status_sender}")
+        logging.error(f"DEBUG post_tg_user: response_sender type={type(response_sender)}")
+        logging.error(f"DEBUG post_tg_user: response_sender keys={list(response_sender.keys()) if isinstance(response_sender, dict) else 'Not dict'}")
+        logging.error(f"DEBUG post_tg_user: response_sender full={response_sender}")
+
         return status_sender, response_sender
 
 
@@ -1397,7 +1388,7 @@ class Misc(object):
 
                 if is_own_account:
                     inline_btn_bank = InlineKeyboardButton(
-                        text='Реквизиты доната',
+                        text='Реквизиты',
                         callback_data=callback_data_template % dict(
                         keyboard_type=KeyboardType.BANKING,
                         uuid=profile['uuid'],
@@ -1564,7 +1555,6 @@ class Misc(object):
                     )
                 send_text_message = False
             except TelegramBadRequest as excpt:
-                logging.error(f"TelegramBadRequest in send_or_edit_card: {excpt.message}")
                 if excpt.message == 'Media_caption_too_long' and not card_message:
                     try:
                         await bot.send_photo(
@@ -1572,10 +1562,10 @@ class Misc(object):
                             photo=photo,
                             disable_notification=True,
                         )
-                    except Exception as e:
-                        logging.error(f"Error sending photo without caption: {e}")
-            except Exception as e:
-                logging.error(f"Error in send_or_edit_card: {e}")
+                    except:
+                        pass
+            except:
+                raise
         if send_text_message:
             if card_message:
                 try:
@@ -1623,20 +1613,20 @@ class Misc(object):
     async def get_qrcode(cls, profile, url):
         """
         Получить qrcode профиля profile (байты картинки), где зашит url.
-    
+
         Возвращает BytesIO qrcod'a, установленный на нулевую позицию
         """
-    
+
         PHOTO_WIDTH = 100
         PHOTO_FRAME_WIDTH = 2
         PHOTO_FILL_COLOR = 'white'
-    
+
         qr_code = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_H)
         qr_code.add_data(url)
         image = qr_code.make_image(fill_color='black', back_color='white').convert('RGB')
         bytes_io = BytesIO()
         bytes_io.name = f'qr-{profile["username"]}.jpg'
-    
+
         if profile.get('photo'):
             thumbnail = cls.url_photo_to_thumbnail(
                 profile['photo'],
@@ -1645,20 +1635,13 @@ class Misc(object):
                 frame_width=PHOTO_FRAME_WIDTH,
             )
             status = photo = None
-            try:
-                async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
-                    try:
-                        async with session.request('GET', thumbnail,) as response:
-                            status = response.status
-                            if status == 200:
-                                photo_data = await response.read()
-                                photo = Image.open(BytesIO(photo_data))
-                    except aiohttp.ClientError as e:
-                        logging.error(f"Error downloading profile photo: {e}")
-                    except Exception as e:
-                        logging.error(f"Unexpected error processing photo: {e}")
-            except Exception as e:
-                logging.error(f"Error creating ClientSession: {e")
+            async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
+                try:
+                    async with session.request('GET', thumbnail,) as response:
+                        status = response.status
+                        photo = Image.open(BytesIO(await response.read()))
+                except:
+                    pass
                 if status == 200 and photo:
                     photo_width = PHOTO_WIDTH + PHOTO_FRAME_WIDTH * 2
                     wpercent = photo_width / float(photo.size[0])
@@ -2934,10 +2917,6 @@ class TgGroupMember(object):
         )
         logging.debug('post group member, status: %s' % status)
         logging.debug('post group member, response: %s' % response)
-        if status != 200:
-            logging.error(f'CRITICAL: Failed to add user {user_tg_uid} to group {group_chat_id}, status: {status}, response: {response}')
-        else:
-            logging.info(f'SUCCESS: User {user_tg_uid} added to group {group_chat_id}')
         return status, response
 
     @classmethod
@@ -2951,10 +2930,6 @@ class TgGroupMember(object):
         )
         logging.debug('delete group member, status: %s' % status)
         logging.debug('delete group member, response: %s' % response)
-        if status != 200:
-            logging.error(f'CRITICAL: Failed to remove user {user_tg_uid} from group {group_chat_id}, status: {status}, response: {response}')
-        else:
-            logging.info(f'SUCCESS: User {user_tg_uid} removed from group {group_chat_id}')
         return status, response
 
 
