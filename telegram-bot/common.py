@@ -2934,6 +2934,10 @@ class TgGroupMember(object):
         )
         logging.debug('post group member, status: %s' % status)
         logging.debug('post group member, response: %s' % response)
+        if status != 200:
+            logging.error(f'CRITICAL: Failed to add user {user_tg_uid} to group {group_chat_id}, status: {status}, response: {response}')
+        else:
+            logging.info(f'SUCCESS: User {user_tg_uid} added to group {group_chat_id}')
         return status, response
 
     @classmethod
@@ -2948,9 +2952,9 @@ class TgGroupMember(object):
         logging.debug('delete group member, status: %s' % status)
         logging.debug('delete group member, response: %s' % response)
         if status != 200:
-            logging.error(f'Failed to remove user {user_tg_uid} from group {group_chat_id}, status: {status}, response: {response}')
+            logging.error(f'CRITICAL: Failed to remove user {user_tg_uid} from group {group_chat_id}, status: {status}, response: {response}')
         else:
-            logging.debug(f'Successfully removed user {user_tg_uid} from group {group_chat_id}')
+            logging.info(f'SUCCESS: User {user_tg_uid} removed from group {group_chat_id}')
         return status, response
 
 

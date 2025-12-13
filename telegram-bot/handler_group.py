@@ -33,6 +33,13 @@ async def process_group_message(message: Message, state: FSMContext):
     """
     logging.debug(f'process_group_message called: chat_id={message.chat.id}, chat_title={message.chat.title}')
     
+    # Enhanced logging for join scenarios
+    if message.new_chat_members:
+        for user in message.new_chat_members:
+            logging.info(f'NEW_MEMBER_DETECTED: User {user.id} ({user.first_name} {user.last_name}) joined group {message.chat.id} ({message.chat.title}) via invite link')
+            if user.username:
+                logging.debug(f'User {user.id} username: @{user.username}')
+    
     tg_user_sender = message.from_user
 
     # tg_user_sender.id == 777000:
@@ -155,9 +162,12 @@ async def process_group_message(message: Message, state: FSMContext):
         tg_user_left = None
     if tg_user_left:
         a_users_in = [ tg_user_left ]
+        logging.debug(f'Processing user who left group: {tg_user_left.id} ({tg_user_left.first_name})')
     try:
         tg_users_new = message.new_chat_members
-    except (TypeError, AttributeError,):
+        logging.debug(f'Accessed new_chat_members: {tg_users_new}')
+    except (TypeError, AttributeError,) as e:
+        logging.debug(f'Exception accessing new_chat_members: {type(e).__name__}: {e}')
         tg_users_new = []
     if tg_users_new:
         a_users_in += tg_users_new
@@ -232,45 +242,70 @@ async def process_group_message(message: Message, state: FSMContext):
             logging.debug(f'Skipping bot user {user_in.id} ({user_in.first_name})')
             a_users_out.append({})
         else:
-            logging.debug(f'Processing user {user_in.id} ({user_in.first_name})')
+            logging.debug(f'Processing user {user_in.id} ({user_in.first_name}) - is_new_member: {user_in in tg_users_new}, is_left_user: {tg_user_left and user_in.id == tg_user_left.id}')
             status, response_from = await Misc.post_tg_user(user_in, did_bot_start=False)
             if status != 200:
-                logging.debug(f'Failed to create/update user {user_in.id}, status: {status}')
+                logging.error(f'CRITICAL: Failed to create/update user {user_in.id} ({user_in.first_name}), status: {status}, response: {response_from}')
                 a_users_out.append({})
                 continue
+            else:
+                logging.debug(f'SUCCESS: User {user_in.id} ({user_in.first_name}) created/updated successfully')
             a_users_out.append(response_from)
             if tg_user_left:
                 logging.debug(f'Removing user {user_in.id} from group (left user: {tg_user_left.id} {tg_user_left.first_name})')
-                await TgGroupMember.remove(
+                status_remove, response_remove = await TgGroupMember.remove(
                     group_chat_id=message.chat.id,
                     group_title=message.chat.title,
                     group_type=message.chat.type,
                     user_tg_uid=user_in.id
                 )
+                if status_remove != 200:
+                    logging.error(f'CRITICAL: Failed to remove user {user_in.id} from group {message.chat.id}, status: {status_remove}, response: {response_remove}')
+                else:
+                    logging.debug(f'SUCCESS: User {user_in.id} removed from group {message.chat.id}')
             else:
-                logging.debug(f'No user left detected, skipping removal logic')
+                logging.debug(f'No user left detected, processing new member or regular message')
                 
                 # Only add user to database if they are actually in the group
                 # This prevents adding users when invite links are expired
                 if tg_users_new and user_in in tg_users_new:
+                    logging.debug(f'Verifying new member {user_in.id} ({user_in.first_name}) membership status')
                     try:
                         # Check if user is actually a member of the group
                         chat_member = await bot.get_chat_member(message.chat.id, user_in.id)
+                        logging.debug(f'User {user_in.id} membership status: {chat_member.status}')
                         if chat_member.status in ('member', 'administrator', 'creator'):
                             logging.debug(f'User {user_in.id} is confirmed as group member, adding to database')
-                            await TgGroupMember.add(
+                            status_add, response_add = await TgGroupMember.add(
                                 group_chat_id=message.chat.id,
                                 group_title=message.chat.title,
                                 group_type=message.chat.type,
                                 user_tg_uid=user_in.id
                             )
+                            if status_add != 200:
+                                logging.error(f'CRITICAL: Failed to add user {user_in.id} to group {message.chat.id}, status: {status_add}, response: {response_add}')
+                            else:
+                                logging.debug(f'SUCCESS: User {user_in.id} added to group {message.chat.id}')
+                        elif chat_member.status == 'left':
+                            logging.warning(f'User {user_in.id} has left the group, not adding to database')
+                        elif chat_member.status == 'kicked':
+                            logging.warning(f'User {user_in.id} was kicked from the group, not adding to database')
                         else:
-                            logging.debug(f'User {user_in.id} is not a group member (status: {chat_member.status}), skipping database addition')
-                    except (TelegramBadRequest, TelegramForbiddenError) as e:
-                        logging.debug(f'Failed to verify user {user_in.id} membership status: {e}, skipping database addition')
+                            logging.warning(f'User {user_in.id} has unknown status {chat_member.status}, not adding to database')
+                    except TelegramBadRequest as e:
+                        logging.error(f'TELEGRAM_ERROR: BadRequest when verifying user {user_in.id} membership: {e}')
+                        if 'user not found' in str(e).lower():
+                            logging.error(f'CRITICAL: User {user_in.id} not found in Telegram, cannot verify membership')
+                        elif 'chat not found' in str(e).lower():
+                            logging.error(f'CRITICAL: Group {message.chat.id} not found')
+                    except TelegramForbiddenError as e:
+                        logging.error(f'TELEGRAM_ERROR: Forbidden when verifying user {user_in.id} membership: {e}')
+                        logging.error(f'CRITICAL: Bot may not have permission to get chat members')
+                    except Exception as e:
+                        logging.error(f'UNEXPECTED_ERROR: Unexpected error when verifying user {user_in.id} membership: {type(e).__name__}: {e}')
                 else:
                     # Regular message processing (not a new member)
-                    logging.debug(f'Processing regular message from user {user_in.id}')
+                    logging.debug(f'Processing regular message from user {user_in.id} (not a new member)')
             if tg_users_new and \
                tg_user_sender.id != user_in.id:
                 # Сразу доверие c благодарностью добавляемому пользователю
@@ -476,8 +511,12 @@ async def echo_join_chat_request(message: ChatJoinRequest):
     tg_subscriber = message.from_user
     tg_inviter = message.invite_link.creator if message.invite_link else None
     
+    logging.info(f'JOIN_REQUEST: User {tg_subscriber.id} ({tg_subscriber.first_name} {tg_subscriber.last_name}) requesting to join group {message.chat.id} ({message.chat.title})')
     logging.debug(f'New subscriber: {tg_subscriber.id} ({tg_subscriber.first_name})')
     logging.debug(f'Invite creator: {tg_inviter.id if tg_inviter else None}')
+    if message.invite_link:
+        logging.debug(f'Invite link: {message.invite_link.invite_link}')
+        logging.debug(f'Invite link name: {message.invite_link.name}')
     
     if tg_inviter:
         logging.debug(f'Processing invite creator')
@@ -499,33 +538,38 @@ async def echo_join_chat_request(message: ChatJoinRequest):
     
     status, response_subscriber = await Misc.post_tg_user(tg_subscriber, did_bot_start=False)
     if status != 200:
-        logging.debug(f'Failed to create/update subscriber, status: {status}')
+        logging.error(f'CRITICAL: Failed to create/update subscriber {tg_subscriber.id}, status: {status}, response: {response_subscriber}')
         return
         
-    logging.debug(f'Approving chat join request for user {tg_subscriber.id}')
+    logging.info(f'APPROVING_JOIN: Approving chat join request for user {tg_subscriber.id} ({tg_subscriber.first_name})')
     try:
         await bot.approve_chat_join_request(
                 message.chat.id,
                 tg_subscriber.id
         )
-        logging.debug(f'Chat join request approved successfully')
+        logging.info(f'SUCCESS: Chat join request approved for user {tg_subscriber.id}')
     except TelegramBadRequest as excpt:
-        logging.debug(f'TelegramBadRequest while approving join request: {excpt.message}')
+        logging.error(f'TELEGRAM_ERROR: BadRequest while approving join request for user {tg_subscriber.id}: {excpt.message}')
         in_chat = 'в канале' if is_channel else 'в группе'
         msg = f'Возможно, вы уже {in_chat}'
         if excpt.message == 'User_already_participant':
-            msg = 'Вы уже {in_chat}'
+            msg = f'Вы уже {in_chat}'
+            logging.warning(f'JOIN_REQUEST: User {tg_subscriber.id} already a participant')
         try:
             await bot.send_message(
                 chat_id=tg_subscriber.id,
                 text=msg,
             )
+            logging.debug(f'Sent message to user {tg_subscriber.id} about existing membership')
             return
         except (TelegramBadRequest, TelegramForbiddenError,) as e:
-            logging.debug(f'Failed to send message to subscriber: {e}')
+            logging.error(f'FAILED_TO_NOTIFY: Failed to send message to subscriber {tg_subscriber.id}: {e}')
             pass
+    except Exception as e:
+        logging.error(f'UNEXPECTED_ERROR: Unexpected error while approving join request for user {tg_subscriber.id}: {type(e).__name__}: {e}')
+        return
 
-    logging.debug(f'Adding subscriber to group database')
+    logging.info(f'ADDING_TO_DB: Adding subscriber {tg_subscriber.id} ({tg_subscriber.first_name}) to group database')
     status, response_add_member = await TgGroupMember.add(
         group_chat_id=message.chat.id,
         group_title=message.chat.title,
@@ -533,8 +577,10 @@ async def echo_join_chat_request(message: ChatJoinRequest):
         user_tg_uid=tg_subscriber.id,
     )
     if status != 200:
-        logging.debug(f'Failed to add subscriber to group, status: {status}')
+        logging.error(f'CRITICAL: Failed to add subscriber {tg_subscriber.id} to group {message.chat.id}, status: {status}, response: {response_add_member}')
         return
+    else:
+        logging.info(f'SUCCESS: Subscriber {tg_subscriber.id} added to group {message.chat.id}')
 
     to_chat = 'в канал' if is_channel else 'в группу'
     dl_subscriber = Misc.get_deeplink_with_name(response_subscriber, plus_trusts=True)
