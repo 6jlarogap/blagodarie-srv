@@ -153,6 +153,7 @@ async def process_group_message(message: Message, state: FSMContext):
 
     if bot_data.id == tg_user_sender.id:
         # ЭТОТ бот подключился.
+        logging.debug(f"bot_data.id == tg_user_sender.id {str(bot_data.id)} {str(tg_user_sender.id)}")
         try:
             await Misc.send_pin_group_message(message.chat)
             logging.debug(f"Pin message sent")
@@ -214,15 +215,6 @@ async def process_group_message(message: Message, state: FSMContext):
                 logging.error(f"Redis operation failed: {str(e)}")
             finally:
                 r.close()
-
-        if bot_data.id == user_in.id:
-            # ЭТОТ бот подключился.
-            logging.debug("TEST: bot_data.id == user_in.id")
-            try:
-                await Misc.send_pin_group_message(message.chat)
-                logging.debug("TEST: Misc.send_pin_group_message")
-            except (TelegramBadRequest, TelegramForbiddenError) as e:
-                logging.error(f"Failed to send pin message: {str(e)}")
 
         if not is_previous_his:
             logging.debug("TEST: not is_previous_his")
@@ -345,6 +337,37 @@ async def process_group_message(message: Message, state: FSMContext):
                         logging.error(f"Failed to send upload success message: {str(e)}")
             if not settings.LOCAL_SERVER and fname:
                 os.unlink(fname)
+
+@router.my_chat_member(F.chat.type.in_((ChatType.GROUP, ChatType.SUPERGROUP)))
+async def handle_bot_status_update(chat_member: ChatMemberUpdated):
+    """
+    Отслеживание подключения/отключения бота к группе
+    """
+    old_status = chat_member.old_chat_member.status
+    new_status = chat_member.new_chat_member.status
+    chat = chat_member.chat
+    
+    # Бот был добавлен в группу
+    if old_status in ['left', 'kicked'] and new_status in ['member', 'administrator']:
+        logging.info(f"Бот добавлен в группу: {chat.title} (ID: {chat.id})")
+        
+        # Сохраняем информацию о группе
+        status, response = await TgGroup.put(
+            chat_id=chat.id,
+            title=chat.title,
+            type_=chat.type,
+        )
+        
+        # Отправляем закреплённое сообщение
+        try:
+            await Misc.send_pin_group_message(chat)
+            logging.debug("TEST: Misc.send_pin_group_message")
+        except (TelegramBadRequest, TelegramForbiddenError) as e:
+            logging.error(f"Failed to send pin message: {str(e)}")
+        
+    # Бот был удалён из группы
+    elif new_status in ['left', 'kicked'] and old_status in ['member', 'administrator']:
+        logging.info(f"Бот удалён из группы: {chat.title} (ID: {chat.id})")
 
 @router.my_chat_member(F.chat.type.in_((ChatType.CHANNEL,)))
 async def echo_my_chat_member_for_bot(chat_member: ChatMemberUpdated):
