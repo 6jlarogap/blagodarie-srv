@@ -21,13 +21,13 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.fsm.state import StatesGroup, State
 
 import aiohttp
+import logging
+import settings
 
-import settings, me
-from settings import logging
+import me
+dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
 TIMEOUT = aiohttp.ClientTimeout(total=settings.HTTP_TIMEOUT)
-
-dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
 # Контексты, используемые в разных местах: обычно и в командах и в кнопках
 

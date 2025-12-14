@@ -21,7 +21,6 @@ from handler_offer import Offer
 
 import logging
 import settings
-from settings import logging
 import me
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
 

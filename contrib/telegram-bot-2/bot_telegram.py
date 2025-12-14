@@ -1,8 +1,8 @@
 import base64, re, hashlib, redis, time, tempfile
 from urllib.parse import urlparse
 
+import logging
 import settings
-from settings import logging
 from utils import Misc, Attitude, OperationType, KeyboardType, TgGroup, TgGroupMember
 
 from aiogram import Bot, types

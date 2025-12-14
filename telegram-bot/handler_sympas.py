@@ -18,13 +18,15 @@ from aiogram.fsm.state import StatesGroup, State
 from aiogram.enums import ChatType
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
-import settings, me
-from settings import logging
+import logging
+import settings
 
 from common import Misc, OperationType, KeyboardType, Rcache, TgDesc
 
-router = Router()
+import me
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
+
+router = Router()
 
 class FSMdonateSympa(StatesGroup):
     ask = State()

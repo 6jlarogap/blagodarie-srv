@@ -18,13 +18,14 @@ from aiogram.fsm.state import StatesGroup, State
 
 from handler_bot import is_it_command
 
-import settings, me
-from settings import logging
+import logging
+import settings 
 
 from common import Misc, KeyboardType, TgGroup, TgGroupMember, Rcache, TgDesc
+import me
+dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
 router = Router()
-dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
 class FSMofferPlace(StatesGroup):
     # После создания оффера спросить о месте

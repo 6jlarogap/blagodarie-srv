@@ -13,12 +13,10 @@ from aiogram.utils.parts import safe_split_text
 from aiogram.utils.exceptions import BadRequest
 import aiohttp
 
+import logging
 import settings
 
-from settings import logging
-
 TIMEOUT = aiohttp.ClientTimeout(total=settings.HTTP_TIMEOUT)
-
 
 class Attitude(object):
 

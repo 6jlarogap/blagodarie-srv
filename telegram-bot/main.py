@@ -8,8 +8,9 @@ from aiogram.client.session.aiohttp import AiohttpSession
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-import settings, me
-from settings import logging
+import logging
+import settings
+import me
 
 storage = MemoryStorage()
 

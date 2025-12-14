@@ -19,14 +19,16 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
 from handler_bot import is_it_command, MorphAnalyzer
 
-import settings, me
-from settings import logging
+import logging
+import settings
 
 from common import Misc, OperationType, KeyboardType, Rcache, MeetId, TgDesc
 from common import FSMnewPerson, FSMdelete
 
-router = Router()
+import me
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
+
+router = Router()
 
 class FSMgender(StatesGroup):
     ask = State()

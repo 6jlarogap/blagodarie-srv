@@ -17,13 +17,15 @@ from aiogram.fsm.state import StatesGroup, State
 
 from handler_bot import is_it_command
 
-import settings, me
-from settings import logging
+import logging
+import settings
 
 from common import Misc, KeyboardType, OperationType, TgGroup, TgGroupMember
 
-router = Router()
+import me
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
+
+router = Router()
 
 class FSMpapaMama(StatesGroup):
     ask = State()
