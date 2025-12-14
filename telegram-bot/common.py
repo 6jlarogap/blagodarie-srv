@@ -933,14 +933,14 @@ class Misc(object):
         Сформировать ссылку, которая будет открываться авторизованным пользователем
 
         Пример результата:
-        https://meetgame.us.to/auth/telegram/?redirect_path=https%3A%2F%2Fmeetgame.us.to%2F%3Ff%3D0%26q%3D25
+        https://doverabot.ru/auth/telegram/?redirect_path=https%3A%2F%2Fdoverabot.ru%2F%3Ff%3D0%26q%3D25
 
         где:
-            https://meetgame.us.to/ (в начале)
+            https://doverabot.ru/ (в начале)
                 прописан /setdomain в боте
             redirect_path
                 куда после авторизации уходим. В этом примере, после расшифровки,
-                это https://meetgame.us.to/f=0&q=50
+                это https://doverabot.ru/f=0&q=50
 
         kwargs:
             дополнительные параметры, которые могут быть добавлены в результат

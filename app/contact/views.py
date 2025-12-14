@@ -435,7 +435,7 @@ class ApiAddOperationView(ApiAddOperationMixin, TelegramApiMixin, UuidMixin, Fro
                             dict(
                                 text='Карта участников игры',
 
-                                # https://meetgame.us.to/auth/telegram/?redirect_path=http%3A%2F%2Fmeetgame.us.to&keep_user_data=on
+                                # https://doverabot.ru/auth/telegram/?redirect_path=http%3A%2F%2Fdoverabot.ru&keep_user_data=on
                                 #
                                 login_url=dict(
                                     url=url,

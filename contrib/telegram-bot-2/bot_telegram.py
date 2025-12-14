@@ -5729,8 +5729,8 @@ def text_offer(user_from, offer, message, bot_data):
     Хорошо - 2
     Плохо - 0
 
-    Схема <graph.meetgame.us.to/?offer_uuid=offerUUID>
-    Карта map.meetgame.us.to/?offer_id=offerUUID
+    Схема <graph.doverabot.ru/?offer_uuid=offerUUID>
+    Карта map.doverabot.ru/?offer_id=offerUUID
     Ссылка на опрос <t.me/bot_username?start=offer-offerUUID>
 
     Это всё сообщение - под ним - 5 кнопок:

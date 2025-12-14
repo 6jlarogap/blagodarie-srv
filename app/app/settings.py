@@ -320,22 +320,22 @@ REDIRECT_FROM_CALLBACK = 'oauth-landing'
 
 # Рисуем графики в формате '3d-force-graph' здесь
 #
-GRAPH_URL = 'https://d3.meetgame.us.to'
+GRAPH_URL = 'https://d3.doverabot.ru'
 
 # Рисуем графики в формате '3d-force-graph' здесь
 # для участников игры знакомств
 #
-GRAPH_MEET_URL = 'https://mgraph.meetgame.us.to'
+GRAPH_MEET_URL = 'https://mgraph.doverabot.ru'
 
 # Рисуем карту в формате здесь
 #
-MAP_URL = 'https://map.meetgame.us.to'
+MAP_URL = 'https://map.doverabot.ru'
 
-MEET_URL = 'https://meetgame.us.to'
+MEET_URL = 'https://doverabot.ru'
 
 # Для кнопок loginUrl в телеграме
 #
-TG_LOGIN_URL = 'https://meetgame.us.to/auth/telegram/'
+TG_LOGIN_URL = 'https://doverabot.ru/auth/telegram/'
 
 
 # ------------------------------------------------

@@ -337,8 +337,8 @@ class Offer(object):
         Хорошо - 2
         Плохо - 0
 
-        Схема <d3.meetgame.us.to/?offer_uuid=offerUUID>
-        Карта map.meetgame.us.to/?offer_id=offerUUID
+        Схема <d3.doverabot.ru/?offer_uuid=offerUUID>
+        Карта map.doverabot.ru/?offer_id=offerUUID
         Ссылка на опрос <t.me/bot_username?start=offer-offerUUID>
 
         Это всё сообщение - под ним - 5 кнопок:

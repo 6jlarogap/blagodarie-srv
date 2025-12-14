@@ -18,7 +18,7 @@ START_MODE = 'webhook'
 
 # Webhook параметры
 #
-WEBHOOK_HOST = 'https://bot-dev.meetgame.us.to'
+WEBHOOK_HOST = 'https://bot-dev.doverabot.ru'
 WEBHOOK_PATH = '/'
 WEBAPP_HOST = '127.0.0.1'
 WEBAPP_PORT = 3001
@@ -67,11 +67,11 @@ HTTP_TIMEOUT = 60
 
 # URL апи, без завершающей/, :
 #
-API_HOST = 'https://api.meetgame.us.to'
+API_HOST = 'https://api.doverabot.ru'
 
 # - домен, прописанный в боте
 #
-FRONTEND_HOST = 'https://meetgame.us.to'
+FRONTEND_HOST = 'https://doverabot.ru'
 FRONTEND_HOST_TITLE = 'БлагоРода'
 
 # Карта участников знакомств
@@ -81,12 +81,12 @@ MEET_HOST = FRONTEND_HOST
 # Карта всех пользователей с кластеризацией.
 # При других get параметрах карта предложений, доверий юзера и др.
 #
-MAP_HOST = 'https://map.meetgame.us.to'
+MAP_HOST = 'https://map.doverabot.ru'
 
 # Ссылка на пространство доверия
 # И там находятся ресурсы: <GRAPH_HOST>/res/telegram-bot/*.txt
 #
-GRAPH_HOST = 'https://g.meetgame.us.to'
+GRAPH_HOST = 'https://g.doverabot.ru'
 
 # Ссылка на фронте, которая будет открываться там под авторизованным
 # пользователем:
@@ -94,7 +94,7 @@ GRAPH_HOST = 'https://g.meetgame.us.to'
 #
 FRONTEND_AUTH_PATH = '/auth/telegram/'
 
-SHORT_ID_LINK = 'meetgame.us.to/t/%s'
+SHORT_ID_LINK = 'doverabot.ru/t/%s'
 
 # Админитраторы бота, их telegram ids
 #
@@ -127,7 +127,7 @@ OFFER_MAX_NUM_ANSWERS = 9
 # Подсказки в сообщении о необходимости авторизации для доменов
 #
 AUTH_PROMPT_FOR_DOMAIN = {
-    'meetgame.us.to': 'Для доступа к пространству Доверия требуется авторизация',
+    'doverabot.ru': 'Для доступа к пространству Доверия требуется авторизация',
 }
 
 # Страница голосования по видео
