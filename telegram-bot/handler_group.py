@@ -346,28 +346,62 @@ async def handle_bot_status_update(chat_member: ChatMemberUpdated):
     old_status = chat_member.old_chat_member.status
     new_status = chat_member.new_chat_member.status
     chat = chat_member.chat
+    bot_user = chat_member.new_chat_member.user
+    
+    # Проверяем, что изменение касается нашего бота
+    if bot_user.id != bot_data.id:
+        return
     
     # Бот был добавлен в группу
     if old_status in ['left', 'kicked'] and new_status in ['member', 'administrator']:
         logging.info(f"Бот добавлен в группу: {chat.title} (ID: {chat.id})")
         
-        # Сохраняем информацию о группе
-        status, response = await TgGroup.put(
-            chat_id=chat.id,
-            title=chat.title,
-            type_=chat.type,
-        )
+        # Сохраняем пользователя, который добавил бота
+        if chat_member.from_user and not chat_member.from_user.is_bot:
+            status, user_from = await Misc.post_tg_user(chat_member.from_user, did_bot_start=False)
+            if status == 200:
+                try:
+                    await TgGroupMember.add(
+                        group_chat_id=chat.id,
+                        group_title=chat.title,
+                        group_type=chat.type,
+                        user_tg_uid=chat_member.from_user.id
+                    )
+                    logging.info(f"Пользователь добавлен в группу: {chat.title} (ID: {chat.id}) (UID: {chat_member.from_user.id})")       
+                except Exception as e:
+                    logging.error(f"Group member add failed: {str(e)}")
+        
+        # Пробуем разные методы сохранения группы
+        try:
+            # Сначала пробуем создать/обновить через post (как в обработчике каналов)
+            status, response = await TgGroup.post(chat.id, chat.title, chat.type)
+            logging.debug(f"TgGroup.post result: {status}")
+        except Exception as e:
+            logging.error(f"TgGroup.post failed: {str(e)}")
+            # Если post не сработал, пробуем put
+            try:
+                status, response = await TgGroup.put(
+                    old_chat_id=chat.id,
+                    chat_id=chat.id,
+                    title=chat.title,
+                    type_=chat.type,
+                )
+                logging.debug(f"TgGroup.put result: {status}")
+            except Exception as e:
+                logging.error(f"TgGroup.put also failed: {str(e)}")
         
         # Отправляем закреплённое сообщение
         try:
             await Misc.send_pin_group_message(chat)
-            logging.debug("TEST: Misc.send_pin_group_message")
+            logging.info(f"Pin message sent to group {chat.title}")
         except (TelegramBadRequest, TelegramForbiddenError) as e:
             logging.error(f"Failed to send pin message: {str(e)}")
         
     # Бот был удалён из группы
     elif new_status in ['left', 'kicked'] and old_status in ['member', 'administrator']:
         logging.info(f"Бот удалён из группы: {chat.title} (ID: {chat.id})")
+        # Здесь можно добавить логику удаления группы из базы данных
+        # или пометить её как неактивную
 
 @router.my_chat_member(F.chat.type.in_((ChatType.CHANNEL,)))
 async def echo_my_chat_member_for_bot(chat_member: ChatMemberUpdated):
