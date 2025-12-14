@@ -622,20 +622,20 @@ class Misc(object):
     async def get_template(cls, template):
         status = response = None
         session = AioHttpSessionManager.get_session()
-            try:
-                async with session.request(
-                    'GET',
-                    "%s/res/telegram-bot/%s.txt" % (settings.GRAPH_HOST, template),
-                ) as resp:
-                    status = resp.status
-                    response = await resp.text('UTF-8')
-            except aiohttp.ClientError as e:
-                logging.error(f"HTTP client error in api_request: {e}")
-                return None, None
-            except Exception as e:
-                logging.error(f"Unexpected error in api_request: {e}")
-                return None, None
-            return status, response
+        try:
+            async with session.request(
+                'GET',
+                "%s/res/telegram-bot/%s.txt" % (settings.GRAPH_HOST, template),
+            ) as resp:
+                status = resp.status
+                response = await resp.text('UTF-8')
+        except aiohttp.ClientError as e:
+            logging.error(f"HTTP client error in get_template: {e}")
+            return None, None
+        except Exception as e:
+            logging.error(f"Unexpected error in get_template: {e}")
+            return None, None
+        return status, response
 
     @classmethod
     async def chat_pin_message_text(cls):
@@ -729,7 +729,6 @@ class Misc(object):
             await cls.get_user_photo(tg_user), profile,
         )
 
-
     @classmethod
     async def api_request(cls,
             path,
@@ -741,36 +740,31 @@ class Misc(object):
         ):
         """
         Запрос в апи.
-
-        Если задана data, то это передача формы.
-        Если задан json, то это json- запрос
-        Ответ в соответствии с response_type:
-            'json' или 'text'
         """
         status = response = None
         session = AioHttpSessionManager.get_session()
-            try:
-                async with session.request(
-                    method.upper(),
-                    "%s%s" % (settings.API_HOST, path,),
-                    data=data,
-                    json=json,
-                    params=params,
-                ) as resp:
-                    status = resp.status
-                    if status < 500:
-                        if response_type == 'json':
-                            response = await resp.json()
-                        elif response_type == 'text':
-                            response = await resp.text('UTF-8')
-                    else:
+        try:
+            async with session.request(
+                method.upper(),
+                "%s%s" % (settings.API_HOST, path,),
+                data=data,
+                json=json,
+                params=params,
+            ) as resp:
+                status = resp.status
+                if status < 500:
+                    if response_type == 'json':
+                        response = await resp.json()
+                    elif response_type == 'text':
                         response = await resp.text('UTF-8')
-            except aiohttp.ClientError as e:
-                logging.error(f"HTTP client error in api_request: {e}")
-                return None, None
-            except Exception as e:
-                logging.error(f"Unexpected error in api_request: {e}")
-                return None, None
+                else:
+                    response = await resp.text('UTF-8')
+        except aiohttp.ClientError as e:
+            logging.error(f"HTTP client error in api_request: {e}")
+            return None, None
+        except Exception as e:
+            logging.error(f"Unexpected error in api_request: {e}")
+            return None, None
         return status, response
 
     @classmethod
@@ -1644,10 +1638,8 @@ class Misc(object):
     async def get_qrcode(cls, profile, url):
         """
         Получить qrcode профиля profile (байты картинки), где зашит url.
-
         Возвращает BytesIO qrcod'a, установленный на нулевую позицию
         """
-
         PHOTO_WIDTH = 100
         PHOTO_FRAME_WIDTH = 2
         PHOTO_FILL_COLOR = 'white'
@@ -1667,29 +1659,32 @@ class Misc(object):
             )
             status = photo = None
             session = AioHttpSessionManager.get_session()
-                try:
-                    async with session.request('GET', thumbnail,) as response:
-                        status = response.status
-                        photo = Image.open(BytesIO(await response.read()))
-                except aiohttp.ClientError as e:
-                    logging.error(f"HTTP client error in api_request: {e}")
-                    return None, None
-                except Exception as e:
-                    logging.error(f"Unexpected error in api_request: {e}")
-                    return None, None
-                if status == 200 and photo:
-                    photo_width = PHOTO_WIDTH + PHOTO_FRAME_WIDTH * 2
-                    wpercent = photo_width / float(photo.size[0])
-                    photo_height = int((float(photo.size[1]) * float(wpercent)))
-                    if photo.size[0] != photo_width or photo.size[1] != photo_height:
-                        photo = photo.resize((photo_width, photo_height), Image.LANCZOS)
-                    pos = (
-                        (image.size[0] - photo.size[0]) // 2,
-                        (image.size[1] - photo.size[1]) // 2,
-                    )
-                    image.paste(photo, pos)
+            try:
+                async with session.request('GET', thumbnail,) as response:
+                    status = response.status
+                    photo = Image.open(BytesIO(await response.read()))
+            except aiohttp.ClientError as e:
+                logging.error(f"HTTP client error in get_qrcode: {e}")
+                # Продолжаем без фото, но с QR-кодом
+                pass
+            except Exception as e:
+                logging.error(f"Unexpected error in get_qrcode: {e}")
+                pass
+            
+            if status == 200 and photo:
+                photo_width = PHOTO_WIDTH + PHOTO_FRAME_WIDTH * 2
+                wpercent = photo_width / float(photo.size[0])
+                photo_height = int((float(photo.size[1]) * float(wpercent)))
+                if photo.size[0] != photo_width or photo.size[1] != photo_height:
+                    photo = photo.resize((photo_width, photo_height), Image.LANCZOS)
+                pos = (
+                    (image.size[0] - photo.size[0]) // 2,
+                    (image.size[1] - photo.size[1]) // 2,
+                )
+                image.paste(photo, pos)
 
         image.save(bytes_io, format='JPEG')
+        bytes_io.seek(0)  # Важно: возвращаем указатель в начало
         return bytes_io
 
     @classmethod
@@ -2404,7 +2399,6 @@ class Misc(object):
             reply += f'\n<a href="{href}">Подробнее...</a>'
         return reply
 
-
     @classmethod
     async def pure_tg_request(cls,
             method_name,
@@ -2412,34 +2406,28 @@ class Misc(object):
         ):
         """
         Запрос в телеграм апи.
-
-        Вынужденная мера. В случае подозрения на ошибку в aiogram api.
-        Один раз применялась. Но оказалась не ошибка в aiogram api,
-        а ошибка разработчика :)
         """
         status = response = None
         session = AioHttpSessionManager.get_session()
-            try:
-                async with session.request(
-                    'POST',
-                    f'https://api.telegram.org/bot{settings.TOKEN}/{method_name}',
-                    json=json,
-                ) as resp:
-                    status = resp.status
+        try:
+            async with session.request(
+                'POST',
+                f'https://api.telegram.org/bot{settings.TOKEN}/{method_name}',
+                json=json,
+            ) as resp:
+                status = resp.status
+                if status < 500:
                     response = await resp.json()
-                    if status < 500:
-                        response = await resp.json()
-                    else:
-                        response = await resp.text('UTF-8')
-            except aiohttp.ClientError as e:
-                logging.error(f"HTTP client error in api_request: {e}")
-                return None, None
-            except Exception as e:
-                logging.error(f"Unexpected error in api_request: {e}")
-                return None, None
+                else:
+                    response = await resp.text('UTF-8')
+        except aiohttp.ClientError as e:
+            logging.error(f"HTTP client error in pure_tg_request: {e}")
+            return None, None
+        except Exception as e:
+            logging.error(f"Unexpected error in pure_tg_request: {e}")
+            return None, None
         return status, response
-
-
+        
     @classmethod
     def message_delete_user(cls, profile, owner):
         if profile['uuid'] == owner['uuid']:
