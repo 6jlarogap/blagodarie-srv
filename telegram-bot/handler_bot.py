@@ -28,11 +28,15 @@ import pymorphy3
 from common import AioHttpSessionManager
 
 # Create a custom opener that uses our managed session
-async def custom_opener():
-    session = AioHttpSessionManager.get_session()
-    return session
+def custom_opener():
+    return AioHttpSessionManager.get_session()
 
-MorphAnalyzer = pymorphy3.MorphAnalyzer(opener=custom_opener)
+# Initialize morph analyzer with our session opener
+MorphAnalyzer = pymorphy3.MorphAnalyzer(
+    opener=custom_opener,
+    # Disable pymorphy3's internal session management
+    use_http_session=False
+)
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
