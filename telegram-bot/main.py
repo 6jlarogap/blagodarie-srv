@@ -77,15 +77,15 @@ async def main_():
         logging.error(f"Критическая ошибка в боте: {e}", exc_info=True)
     finally:
         logging.info("Закрытие сессий...")
-        try:
-            await AioHttpSessionManager.close()
-        except Exception as e:
-            logging.error(f"Ошибка при закрытии HTTP сессии: {e}")
+        # Close application session first
+        await AioHttpSessionManager.close()
         
-        try:
-            await bot.session.close()
-        except Exception as e:
-            logging.error(f"Ошибка при закрытии сессии бота: {e}")
+        # Then close bot session
+        if bot.session:
+            try:
+                await bot.session.close()
+            except Exception as e:
+                logging.error(f"Ошибка при закрытии сессии бота: {e}")
         
         logging.info("Бот завершил работу")
 

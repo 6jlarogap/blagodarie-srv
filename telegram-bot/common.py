@@ -45,9 +45,14 @@ class AioHttpSessionManager:
     
     @classmethod
     async def close(cls):
-        if cls._session and not cls._session.closed:
-            await cls._session.close()
-            cls._session = None
+        if cls._session:
+            try:
+                if not cls._session.closed:
+                    await cls._session.close()
+            except Exception as e:
+                logging.error(f"Error closing HTTP session: {e}")
+            finally:
+                cls._session = None
 
 
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
