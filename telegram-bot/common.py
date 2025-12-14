@@ -91,45 +91,12 @@ class Attitude(object):
     def text(cls, attitude):
         result = 'не знакомы'
         if attitude == Attitude.TRUST:
-              else:
-                    logging.debug(f"AioHttpSessionManager: Сессия уже была закрыта (id={id(cls._session)})")
-            except Exception as e:
-                logging.error(f"AioHttpSessionManager: Ошибка при закрытии сессии: {e}", exc_info=True)
-            finally:
-                cls._session = None
-                logging.debug("AioHttpSessionManager: Сессия обнулена")
-
-dp, bot, bot_data = me.dp, me.bot, me.bot_data
-
-# Контексты, используемые в разных местах: обычно и в командах и в кнопках
-
-class FSMnewPerson(StatesGroup):
-    ask = State()
-    ask_gender = State()
-
-class FSMgeo(StatesGroup):
-    geo = State()
-
-class FSMdelete(StatesGroup):
-    ask = State()
-
-class Attitude(object):
-
-    ACQ = 'a'
-    TRUST = 't'
-    MISTRUST = 'mt'
-
-    @classmethod
-    def text(cls, attitude):
-        result = 'не знакомы'
-        if attitude == Attitude.TRUST:
             result = 'доверие'
         elif attitude == Attitude.MISTRUST:
             result = 'недоверие'
         elif attitude == Attitude.ACQ:
             result = 'знакомы'
         return result
-
 
 class Rcache(object):
     """
