@@ -25,8 +25,14 @@ from common import FSMnewPerson, FSMgeo, FSMdelete
 from common import Misc, KeyboardType, OperationType, Rcache, MeetId
 
 import pymorphy3
-MorphAnalyzer = pymorphy3.MorphAnalyzer()
+from common import AioHttpSessionManager
 
+# Create a custom opener that uses our managed session
+async def custom_opener():
+    session = AioHttpSessionManager.get_session()
+    return session
+
+MorphAnalyzer = pymorphy3.MorphAnalyzer(opener=custom_opener)
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
