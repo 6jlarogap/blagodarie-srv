@@ -150,15 +150,6 @@ async def process_group_message(message: Message, state: FSMContext):
     except Exception as e:
         logging.debug("ERROR: Migrate TgGroupMember.add")
         return
-
-    if bot_data.id == tg_user_sender.id:
-        # ЭТОТ бот подключился.
-        logging.debug(f"bot_data.id == tg_user_sender.id {str(bot_data.id)} {str(tg_user_sender.id)}")
-        try:
-            await Misc.send_pin_group_message(message.chat)
-            logging.debug(f"Pin message sent")
-        except (TelegramBadRequest, TelegramForbiddenError) as e:
-            logging.error(f"Failed to send pin message: {str(e)}")
     
     if tg_user_sender.is_bot:
         return
