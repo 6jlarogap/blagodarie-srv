@@ -26,136 +26,19 @@ from settings import logging
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
-@router.chat_member(F.chat.type.in_((ChatType.GROUP, ChatType.SUPERGROUP, ChatType.CHANNEL)))
-async def handle_chat_member_update(chat_member: ChatMemberUpdated):
-    """
-    Обработка событий обновления статуса участников чата
-    Включает в себя вступление/выход пользователей и добавление/удаление бота
-    """
-    try:
-        old_status = chat_member.old_chat_member.status
-        new_status = chat_member.new_chat_member.status
-        
-        chat = chat_member.chat
-        user = chat_member.new_chat_member.user
-        
-        logging.info(
-            f"ChatMemberUpdated: chat_id={chat.id}, title={chat.title}, type={chat.type}, "
-            f"user_id={user.id}, username={user.username or 'no_username'}, "
-            f"old_status={old_status}, new_status={new_status}"
-        )
-        
-        # Обработка добавления/удаления нашего бота в группу/канал
-        if user.id == bot_data.id:
-            if new_status in ("administrator", "member"):
-                # Бота добавили в группу/канал
-                status, response = await TgGroup.post(chat.id, chat.title, chat.type)
-                if status == 200:
-                    logging.info(f"Бот добавлен в {chat.type}: {chat.title} (ID: {chat.id})")
-                    # Отправляем приветственное сообщение
-                    await Misc.send_pin_group_message(chat)
-                    
-                    # Добавляем пользователя, который добавил бота, в базу и в группу
-                    if chat_member.from_user and not chat_member.from_user.is_bot:
-                        try:
-                            status_user, user_data = await Misc.post_tg_user(chat_member.from_user, did_bot_start=False)
-                            if status_user == 200:
-                                await TgGroupMember.add(
-                                    group_chat_id=chat.id,
-                                    group_title=chat.title,
-                                    group_type=chat.type,
-                                    user_tg_uid=chat_member.from_user.id
-                                )
-                                logging.info(f"Пользователь {chat_member.from_user.id} добавлен в группу при добавлении бота")
-                        except Exception as user_err:
-                            logging.error(f"Ошибка при добавлении пользователя: {user_err}")
-                else:
-                    logging.error(f"Ошибка при сохранении группы в базе: {response}")
-            elif new_status in ("left", "kicked"):
-                # Бота удалили из группы/канала
-                logging.info(f"Бот удален из {chat.type}: {chat.title} (ID: {chat.id})")
-            return
-        
-        # Обработка вступления/выхода пользователей (только для групп)
-        if chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
-            # Пользователь присоединился к группе
-            if old_status in ("left", "kicked", "restricted") and new_status in ("member", "administrator"):
-                if not user.is_bot:
-                    try:
-                        # Создаем пользователя в базе если его нет
-                        status, user_data = await Misc.post_tg_user(user, did_bot_start=False)
-                        if status == 200:
-                            # Добавляем пользователя в члены группы
-                            await TgGroupMember.add(
-                                group_chat_id=chat.id,
-                                group_title=chat.title,
-                                group_type=chat.type,
-                                user_tg_uid=user.id
-                            )
-                            logging.info(f"Пользователь {user.username or user.id} добавлен в группу {chat.title}")
-                        
-                        # Записываем в Redis последнего пользователя для топиков
-                        try:
-                            if r := redis.Redis(**settings.REDIS_CONNECT):
-                                last_user_in_group_rec = (
-                                    Rcache.LAST_USER_IN_GROUP_PREFIX + 
-                                    str(chat.id)
-                                )
-                                r.setex(last_user_in_group_rec, 3600, user.id)  # TTL 1 час
-                                r.close()
-                        except Exception as redis_err:
-                            logging.error(f"Ошибка Redis при записи пользователя: {redis_err}")
-                    except Exception as e:
-                        logging.error(f"Ошибка при добавлении пользователя в группу: {e}")
-            
-            # Пользователь покинул группу
-            elif old_status in ("member", "administrator") and new_status in ("left", "kicked"):
-                if not user.is_bot:
-                    try:
-                        # Удаляем пользователя из членов группы
-                        await TgGroupMember.remove(
-                            group_chat_id=chat.id,
-                            group_title=chat.title,
-                            group_type=chat.type,
-                            user_tg_uid=user.id
-                        )
-                        logging.info(f"Пользователь {user.username or user.id} удален из группы {chat.title}")
-                    except Exception as e:
-                        logging.error(f"Ошибка при удалении пользователя из группы: {e}")
-    
-    except Exception as e:
-        logging.error(f"Ошибка в обработчике ChatMemberUpdated: {e}", exc_info=True)
-
-# Также добавляем обработчик my_chat_member для получения событий о самом боте
-@router.my_chat_member(F.chat.type.in_((ChatType.GROUP, ChatType.SUPERGROUP, ChatType.CHANNEL)))
-async def handle_my_chat_member_update(chat_member: ChatMemberUpdated):
-    """
-    Обработка событий обновления статуса самого бота
-    (дублирует handle_chat_member_update для my_chat_member)
-    """
-    await handle_chat_member_update(chat_member)
-
 @router.message(F.chat.type.in_((ChatType.GROUP, ChatType.SUPERGROUP)), StateFilter(None))
 async def process_group_message(message: Message, state: FSMContext):
     """
-    Обработка обычных сообщений в группе и логика миграции группы в супергруппу
+    Обработка сообщений в группу
     """
-    logging.debug(f'process_group_message called: chat_id={message.chat.id}, chat_title={message.chat.title}')
-    
-    # Enhanced logging for join scenarios
-    if message.new_chat_members:
-        for user in message.new_chat_members:
-            logging.info(f'NEW_MEMBER_DETECTED: User {user.id} ({user.first_name} {user.last_name}) joined group {message.chat.id} ({message.chat.title}) via invite link')
-            if user.username:
-                logging.debug(f'User {user.id} username: @{user.username}')
-    
     tg_user_sender = message.from_user
 
-    # Игнорируем системные сообщения от Telegram
+    # tg_user_sender.id == 777000:
+    #   Если к группе привязан канал, то сообщения идут от этого пользователя
+    #
     if tg_user_sender.id == 777000:
         return
 
-    # Игнорируем служебные обновления чата
     if message.content_type in(
             ContentType.NEW_CHAT_PHOTO,
             ContentType.NEW_CHAT_TITLE,
@@ -167,14 +50,52 @@ async def process_group_message(message: Message, state: FSMContext):
             ContentType.FORUM_TOPIC_EDITED,
             ContentType.GENERAL_FORUM_TOPIC_HIDDEN,
             ContentType.GENERAL_FORUM_TOPIC_UNHIDDEN,
-        ):
+       ):
         return
 
-    # Обработка оферов (если нужно)
+    #
+    # Это отработано.
+    # Пересылается офер в группу, и бот формирует офер с кнопками
     # if await Offer.offer_forwarded_in_group_or_channel(message, state):
     #     return
 
-    # Обработка миграции группы в супергруппу
+    # При преобразовании группы в супергруппу сообщения:
+    #   Это если юзер сделал из частной группы публичную:
+    # {
+    #     "update_id":178689763,
+    #     \n"message":{
+    #         "message_id":15251,
+    #         "from":{
+    #             "id":1109405488,"is_bot":false,"first_name":"...","last_name":"...",
+    #             "username":"...","language_code":"ru"
+    #         },
+    #         "chat":{
+    #             "id":-989004337,"title":"SevGroupTest","type":"group","all_members_are_administrators":false
+    #         },
+    #         "date":1691488438,
+    #         "migrate_to_chat_id":-1001962534553
+    #     }
+    # },
+    #   Это вслед за тем как юзер сделал из частной группы публичную,
+    #   Надеюсь, что и при других случаях, когда телеграм сам преобразует
+    #   группу в публичную, будет то же самое
+    # {
+    #     "update_id":178689764,
+    #     \n"message":{
+    #         "message_id":1,
+    #         "from":{
+    #             "id":1087968824,"is_bot":true,"first_name":"Group","username":"GroupAnonymousBot"
+    #         },
+    #         "sender_chat":{
+    #             "id":-1001962534553,"title":"SevGroupTest","type":"supergroup"
+    #         },
+    #         "chat":{
+    #             "id":-1001962534553,"title":"SevGroupTest","type":"supergroup"
+    #         },
+    #         "date":1691488438,
+    #         "migrate_from_chat_id":-989004337
+    #     }
+    # }
     try:
         if message.migrate_to_chat_id:
             # Это сообщение может быть обработано позже чем
@@ -183,7 +104,6 @@ async def process_group_message(message: Message, state: FSMContext):
             return
     except (TypeError, AttributeError,):
         pass
-    
     try:
         if message.migrate_from_chat_id:
             status, response = await TgGroup.put(
@@ -192,20 +112,28 @@ async def process_group_message(message: Message, state: FSMContext):
                 title=message.chat.title,
                 type_=message.chat.type,
             )
-            if status == 200 and response.get('pin_message_id'):
-                text, reply_markup = Misc.make_pin_group_message(message.chat)
-                try:
-                    await bot.edit_message_text(
-                        chat_id=message.migrate_from_chat_id,
-                        message_id=response['pin_message_id'],
-                        text=text,
-                        reply_markup=reply_markup,
-                    )
-                except TelegramBadRequest as e:
-                    logging.debug(f'TelegramBadRequest while editing pin message: {e}')
-        return
-    except (TypeError, AttributeError,) as e:
-        logging.debug(f'Error accessing migrate_from_chat_id: {e}')
+            if status == 200:
+                if message.chat.type == ChatType.SUPERGROUP:
+                    msg_failover = 'Ура! Группа стала супергруппой'
+                else:
+                    # Если что-то случится при понижении статуса, то зачем об этом говорить?
+                    msg_failover = ''
+                if response['pin_message_id']:
+                    text, reply_markup = Misc.make_pin_group_message(message.chat)
+                    try:
+                        await bot.edit_message_text(
+                            chat_id=message.migrate_from_chat_id,
+                            message_id=response['pin_message_id'],
+                            text=text,
+                            reply_markup=reply_markup,
+                        )
+                    except TelegramBadRequest:
+                        if msg_failover:
+                            await bot.send_message(message.chat.id, msg_failover)
+                elif msg_failover:
+                    await bot.send_message(message.chat.id, msg_failover)
+            return
+    except (TypeError, AttributeError,):
         pass
 
     # Данные из телеграма пользователя /пользователей/, данные которых надо выводить при поступлении
@@ -221,38 +149,21 @@ async def process_group_message(message: Message, state: FSMContext):
     a_users_in = [ tg_user_sender ]
     try:
         tg_user_left = message.left_chat_member
-        logging.debug(f'Accessed left_chat_member: {tg_user_left}')
-    except Exception as e:
-        logging.debug(f'Exception accessing left_chat_member: {type(e).__name__}: {e}')
+    except (TypeError, AttributeError,):
         tg_user_left = None
     if tg_user_left:
         a_users_in = [ tg_user_left ]
-        logging.debug(f'Processing user who left group: {tg_user_left.id} ({tg_user_left.first_name})')
     try:
         tg_users_new = message.new_chat_members
-        logging.debug(f'Accessed new_chat_members: {tg_users_new}')
-    except (TypeError, AttributeError,) as e:
-        logging.debug(f'Exception accessing new_chat_members: {type(e).__name__}: {e}')
+    except (TypeError, AttributeError,):
         tg_users_new = []
     if tg_users_new:
         a_users_in += tg_users_new
-    
-    # Deduplicate users to avoid duplicate API calls
-    seen_user_ids = set()
-    unique_users = []
-    for user in a_users_in:
-        if user.id not in seen_user_ids:
-            seen_user_ids.add(user.id)
-            unique_users.append(user)
-    if len(a_users_in) != len(unique_users):
-        logging.debug(f'Deduplicated {len(a_users_in)} users to {len(unique_users)} unique users')
-    a_users_in = unique_users
 
     if not tg_users_new and not tg_user_left and tg_user_sender.is_bot:
         # tg_user_sender.is_bot:
         #   анонимное послание в группу или от имени канала
         # Но делаем исключение, когда анонимный владелей
-        logging.debug('Skipping anonymous/channel message')
         return
 
     logging.debug(
@@ -304,63 +215,51 @@ async def process_group_message(message: Message, state: FSMContext):
         reply_markup = None
         response_from = {}
         if user_in.is_bot:
-            logging.debug(f'Skipping bot user {user_in.id} ({user_in.first_name})')
             a_users_out.append({})
         else:
-            logging.debug(f'Processing user {user_in.id} ({user_in.first_name}) - is_new_member: {user_in in tg_users_new}, is_left_user: {tg_user_left and user_in.id == tg_user_left.id}')
             status, response_from = await Misc.post_tg_user(user_in, did_bot_start=False)
             if status != 200:
-                logging.error(f'CRITICAL: Failed to create/update user {user_in.id} ({user_in.first_name}), status: {status}, response: {response_from}')
                 a_users_out.append({})
                 continue
-            else:
-                logging.debug(f'SUCCESS: User {user_in.id} ({user_in.first_name}) created/updated successfully')
             a_users_out.append(response_from)
             if tg_user_left:
-                logging.debug(f'Removing user {user_in.id} from group (left user: {tg_user_left.id} {tg_user_left.first_name})')
                 await TgGroupMember.remove(
                     group_chat_id=message.chat.id,
                     group_title=message.chat.title,
                     group_type=message.chat.type,
                     user_tg_uid=user_in.id
                 )
-                if status_remove != 200:
-                    logging.error(f'CRITICAL: Failed to remove user {user_in.id} from group {message.chat.id}, status: {status_remove}, response: {response_remove}')
-                else:
-                    logging.debug(f'SUCCESS: User {user_in.id} removed from group {message.chat.id}')
             else:
-                logging.debug(f'No user left detected, skipping removal logic')
-                
-                # Only add user to database if they are actually in the group
-                # This prevents adding users when invite links are expired
-                if tg_users_new and user_in in tg_users_new:
-                    try:
-                        # Check if user is actually a member of the group
-                        chat_member = await bot.get_chat_member(message.chat.id, user_in.id)
-                        if chat_member.status in ('member', 'administrator', 'creator'):
-                            logging.debug(f'User {user_in.id} is confirmed as group member, adding to database')
-                            await TgGroupMember.add(
-                                group_chat_id=message.chat.id,
-                                group_title=message.chat.title,
-                                group_type=message.chat.type,
-                                user_tg_uid=user_in.id
-                            )
-                        else:
-                            logging.debug(f'User {user_in.id} is not a group member (status: {chat_member.status}), skipping database addition')
-                    except (TelegramBadRequest, TelegramForbiddenError) as e:
-                        logging.debug(f'Failed to verify user {user_in.id} membership status: {e}, skipping database addition')
-                else:
-                    # Regular message processing (not a new member)
-                    logging.debug(f'Processing regular message from user {user_in.id}')
+                await TgGroupMember.add(
+                    group_chat_id=message.chat.id,
+                    group_title=message.chat.title,
+                    group_type=message.chat.type,
+                    user_tg_uid=user_in.id
+                )
+            if tg_users_new and \
+               tg_user_sender.id != user_in.id:
+                # Сразу доверие c благодарностью добавляемому пользователю
+                post_op = dict(
+                    tg_token=settings.TOKEN,
+                    operation_type_id=OperationType.TRUST,
+                    tg_user_id_from=tg_user_sender.id,
+                    user_id_to=response_from['uuid'],
+                )
+                logging.debug('post operation, payload: %s' % Misc.secret(post_op))
+                status, response = await Misc.api_request(
+                    path='/api/addoperation',
+                    method='post',
+                    data=post_op,
+                )
+                logging.debug('post operation, status: %s' % status)
+                logging.debug('post operation, response: %s' % response)
 
         if not tg_user_left and bot_data.id == user_in.id:
             # ЭТОТ бот подключился.
-            logging.debug('Bot connected to group, sending pin message')
             await Misc.send_pin_group_message(message.chat)
             continue
 
         if not is_previous_his:
-            logging.debug(f'Sending minicard for user {user_in.id}')
             reply = await Misc.group_minicard_text (response_from, message.chat)
             dict_reply = dict(
                 keyboard_type=KeyboardType.TRUST_THANK,
@@ -388,30 +287,22 @@ async def process_group_message(message: Message, state: FSMContext):
                 disable_notification=True,
             )
             if answer and keep_hours:
-                try:
-                    if r := redis.Redis(**settings.REDIS_CONNECT):
-                        s = (
-                            f'{Rcache.CARD_IN_GROUP_PREFIX}{Rcache.KEY_SEP}'
-                            f'{int(time.time())}{Rcache.KEY_SEP}'
-                            f'{answer.chat.id}{Rcache.KEY_SEP}'
-                            f'{answer.message_id}'
-                        )
-                        r.set(name=s, value='1')
-                        r.close()
-                except Exception as redis_err:
-                    logging.error(f"Ошибка Redis при работе с карточками: {redis_err}")
+                if r := redis.Redis(**settings.REDIS_CONNECT):
+                    s = (
+                        f'{Rcache.CARD_IN_GROUP_PREFIX}{Rcache.KEY_SEP}'
+                        f'{int(time.time())}{Rcache.KEY_SEP}'
+                        f'{answer.chat.id}{Rcache.KEY_SEP}'
+                        f'{answer.message_id}'
+                    )
+                    r.set(name=s, value='1')
+                    r.close()
 
-        # Обработка загрузки видео на YouTube для специальных топиков
-        if (message.is_topic_message and
-            message.chat.id in settings.GROUPS_WITH_YOUTUBE_UPLOAD and
-            message.message_thread_id and
-            message.message_thread_id == 
-            settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]['message_thread_id']):
-            
+        if message.is_topic_message and \
+        message.chat.id in settings.GROUPS_WITH_YOUTUBE_UPLOAD and \
+        message.message_thread_id and \
+        message.message_thread_id == \
+        settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]['message_thread_id']:
             if message.content_type == ContentType.VIDEO:
-                # Получаем данные пользователя
-                status, user_data = await Misc.post_tg_user(message.from_user, did_bot_start=False)
-                
                 # Генерируем заголовок на основе даты и времени, если его нет
                 title = message.caption if message.caption else f"Видео от {message.date.strftime('%d.%m.%Y %H:%M UTC')}"
                 
@@ -420,8 +311,8 @@ async def process_group_message(message: Message, state: FSMContext):
                     try:
                         tg_file = await bot.get_file(message.video.file_id)
                         fname = tg_file.file_path
-                    except Exception as e:
-                        logging.error(f"Ошибка получения файла: {e}")
+                    except:
+                        pass
                 else:
                     f = tempfile.NamedTemporaryFile(
                         dir=settings.DIR_TMP, suffix='.video', delete=False,
@@ -431,58 +322,41 @@ async def process_group_message(message: Message, state: FSMContext):
                     try:
                         tg_file = await bot.get_file(message.video.file_id)
                         await bot.download_file(tg_file.file_path, fname)
-                    except Exception as e:
-                        logging.error(f"Ошибка скачивания файла: {e}")
+                    except:
                         os.unlink(fname)
                         fname = None
-                
                 if not fname:
                     try:
                         await bot.send_message(
-                            message.from_user.id,
+                            tg_user_sender.id,
                             'Ошибка скачивания видео из сообщения. Не слишком ли большой файл?'
                         )
-                    except (TelegramBadRequest, TelegramForbiddenError):
+                    except (TelegramBadRequest, TelegramForbiddenError,):
                         pass
                 else:
                     description = (
-                        f'Профиль автора: {user_data["first_name"]}, '
-                        f'{Misc.get_deeplink(user_data, https=True)}\n'
+                        f'Профиль автора: {response_from["first_name"]}, '
+                        f'{Misc.get_deeplink(response_from, https=True)}\n'
                         f'Группа телеграм: '
                         f'{settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]["url_group"]}'
                     )
-                    
-                    try:
-                        response, error = upload_video(
-                            fname=fname,
-                            auth_data=settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]['auth_data'],
-                            snippet=dict(
-                                title=title,
-                                description=description,
-                            ))
-                        
-                        if error:
-                            try:
-                                await bot.send_message(
-                                    message.from_user.id,
-                                    f'Ошибка загрузки видео:\n{error}'
-                                )
-                            except (TelegramBadRequest, TelegramForbiddenError):
-                                pass
-                        else:
-                            href = f'https://www.youtube.com/watch?v={response["id"]}'
-                            try:
-                                await bot.send_message(
-                                    message.from_user.id, (
-                                        f'Видео {Misc.get_html_a(href, title)} загружено.\n'
-                                        f'Автор: {Misc.get_deeplink_with_name(user_data, plus_trusts=True)}'
-                                    ),
-                                    link_preview_options=LinkPreviewOptions(is_disabled=False),
-                                )
-                            except Exception as e:
-                                logging.error(f"Ошибка отправки сообщения о загрузке видео: {e}")
-                    except Exception as upload_err:
-                        logging.error(f"Ошибка загрузки видео на YouTube: {upload_err}")
+                    response, error = upload_video(
+                        fname=fname,
+                        auth_data=settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]['auth_data'],
+                        snippet=dict(
+                            title=title,  # Используем сгенерированный заголовок
+                            description=description,
+                    ))
+                    if error:
+                        try:
+                            await bot.send_message(
+                                tg_user_sender.id,
+                                f'Ошибка загрузки видео:\n{error}'
+                            )
+                        except (TelegramBadRequest, TelegramForbiddenError,):
+                            pass
+                    else:
+                        href = f'https://www.youtube.com/watch?v={response["id"]}'
                         try:
                             await bot.send_message(
                                 tg_user_sender.id, (
@@ -491,11 +365,9 @@ async def process_group_message(message: Message, state: FSMContext):
                                 ),
                                 link_preview_options=LinkPreviewOptions(is_disabled=False),
                             )
-                        except Exception as e:
-                            logging.debug(f'Failed to send success message: {e}')
+                        except:
                             pass
                 if not settings.LOCAL_SERVER and fname:
-                    logging.debug(f'Cleaning up temporary file: {fname}')
                     os.unlink(fname)
 
 @router.my_chat_member(F.chat.type.in_((ChatType.CHANNEL,)))
@@ -505,31 +377,101 @@ async def echo_my_chat_member_for_bot(chat_member: ChatMemberUpdated):
 
     Реакция на подключение к каналу бота
     """
-    logging.debug(f'echo_my_chat_member_for_bot called: chat_id={chat_member.chat.id}, chat_title={chat_member.chat.title}')
-    
     new_chat_member = chat_member.new_chat_member
     bot_ = new_chat_member.user
     tg_user_from = chat_member.from_user
-    
-    logging.debug(f'new_chat_member status: {new_chat_member.status}, bot: {bot_.is_bot}')
-    logging.debug(f'tg_user_from: {tg_user_from}')
-    
     if tg_user_from and not tg_user_from.is_bot:
-        logging.debug(f'Processing regular user: {tg_user_from.id} ({tg_user_from.first_name})')
         status, user_from = await Misc.post_tg_user(tg_user_from, did_bot_start=False)
         if status == 200:
-            logging.debug(f'User created/updated successfully, adding to group')
             await TgGroupMember.add(chat_member.chat.id, chat_member.chat.title, chat_member.chat.type, tg_user_from.id)
         else:
-            logging.debug(f'Failed to create/update user, status: {status}')
             return
     else:
-        logging.debug(f'Processing bot/group event')
         status, response = await TgGroup.post(chat_member.chat.id, chat_member.chat.title, chat_member.chat.type)
         if status != 200:
-            logging.debug(f'Failed to create/update group, status: {status}')
             return
     if bot_.is_bot and new_chat_member.status == 'administrator':
-        logging.debug(f'Bot is administrator, sending pin message')
         await Misc.send_pin_group_message(chat_member.chat)
 
+
+@router.chat_join_request()
+async def echo_join_chat_request(message: ChatJoinRequest):
+    """
+    Пользователь присоединяется к каналу/группе по ссылке- приглашению
+
+    Работает только ссылка, требующая одобрения.
+    Бот, он всегда администратор канала/группы, одобрит.
+    Но до этого:
+        Нового участника надо завести в базе, если его там нет
+        В канал/группу отправится мини- карточка нового участника
+    """
+    tg_subscriber = message.from_user
+    tg_inviter = message.invite_link.creator if message.invite_link else None
+    if tg_inviter:
+        status_inviter, response_inviter = await Misc.post_tg_user(tg_inviter, did_bot_start=False)
+        if status_inviter != 200:
+            return
+        # Владельца канала/группы сразу в канал/группу. Вдруг его там нет
+        #
+        await TgGroupMember.add(
+            group_chat_id=message.chat.id,
+            group_title=message.chat.title,
+            group_type=message.chat.type,
+            user_tg_uid=tg_inviter.id,
+        )
+
+    is_channel = message.chat.type == ChatType.CHANNEL
+    status, response_subscriber = await Misc.post_tg_user(tg_subscriber, did_bot_start=False)
+    if status != 200:
+        return
+    try:
+        await bot.approve_chat_join_request(
+                chat.id,
+                tg_subscriber.id
+        )
+    except TelegramBadRequest as excpt:
+        in_chat = 'в канале' if is_channel else 'в группе'
+        msg = f'Возможно, вы уже {in_chat}'
+        if excpt.message == 'User_already_participant':
+            msg = 'Вы уже {in_chat}'
+        try:
+            await bot.send_message(
+                chat_id=tg_subscriber.id,
+                text=msg,
+            )
+            return
+        except (TelegramBadRequest, TelegramForbiddenError,):
+            pass
+
+    status, response_add_member = await TgGroupMember.add(
+        group_chat_id=message.chat.id,
+        group_title=message.chat.title,
+        group_type=message.chat.type,
+        user_tg_uid=tg_subscriber.id,
+    )
+    if status != 200:
+        return
+
+    to_chat = 'в канал' if is_channel else 'в группу'
+    dl_subscriber = Misc.get_deeplink_with_name(response_subscriber, plus_trusts=True)
+    msg_dict = dict(
+        dl_subscriber=dl_subscriber,
+        to_chat=to_chat,
+        map_link = Misc.get_html_a(href=settings.MAP_HOST, text='карте участников'),
+        group_title=message.chat.title,
+    )
+    msg = (
+            'Ваша заявка на вступление %(to_chat)s %(group_title)s одобрена.\n'
+            'Нажмите /setplace чтобы указать Ваше местоположение на %(map_link)s.'
+    ) %  msg_dict
+    try:
+        await bot.send_message(chat_id=tg_subscriber.id, text=msg)
+    except (TelegramBadRequest, TelegramForbiddenError,):
+        pass
+    if is_channel:
+        reply = '%(dl_subscriber)s подключен(а)' % msg_dict
+        await bot.send_message(
+            message.chat.id,
+            reply,
+            disable_notification=True,
+        )

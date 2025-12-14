@@ -21,53 +21,13 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.fsm.state import StatesGroup, State
 
 import aiohttp
-import logging
-import settings
+
+import settings, me
 from settings import logging
-import me
+
+TIMEOUT = aiohttp.ClientTimeout(total=settings.HTTP_TIMEOUT)
+
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
-
-# Менеджер сессий
-# common.py (исправленная часть)
-
-class AioHttpSessionManager:
-    _session = None
-    _session_count = 0  # Счетчик созданных сессий для отладки
-    
-    @classmethod
-    def get_session(cls):
-        if cls._session is None or cls._session.closed:
-            cls._session_count += 1
-            cls._session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=settings.HTTP_TIMEOUT),
-                connector=aiohttp.TCPConnector(
-                    limit=100,
-                    force_close=True,
-                    enable_cleanup_closed=True
-                )
-            )
-            logging.info(f"AioHttpSessionManager: Создана новая сессия #{cls._session_count} (id={id(cls._session)})")
-            logging.info(f"AioHttpSessionManager: Коннектор: {cls._session._connector}")
-            logging.info(f"AioHttpSessionManager: Connector connections: {getattr(cls._session._connector, '_conns', 'N/A')}")
-        else:
-            logging.debug(f"AioHttpSessionManager: Используется существующая сессия (id={id(cls._session)})")
-        return cls._session
-    
-    @classmethod
-    async def close(cls):
-        if cls._session:
-            try:
-                if not cls._session.closed:
-                    logging.info(f"AioHttpSessionManager: Закрытие сессии (id={id(cls._session)})")
-                    await cls._session.close()
-                    logging.info(f"AioHttpSessionManager: Сессия закрыта")
-                else:
-                    logging.debug(f"AioHttpSessionManager: Сессия уже была закрыта (id={id(cls._session)})")
-            except Exception as e:
-                logging.error(f"AioHttpSessionManager: Ошибка при закрытии сессии: {e}", exc_info=True)
-            finally:
-                cls._session = None
-                logging.debug("AioHttpSessionManager: Сессия обнулена")  
 
 # Контексты, используемые в разных местах: обычно и в командах и в кнопках
 
@@ -97,6 +57,7 @@ class Attitude(object):
         elif attitude == Attitude.ACQ:
             result = 'знакомы'
         return result
+
 
 class Rcache(object):
     """
@@ -637,20 +598,16 @@ class Misc(object):
     @classmethod
     async def get_template(cls, template):
         status = response = None
-        session = AioHttpSessionManager.get_session()
-        try:
-            async with session.request(
-                'GET',
-                "%s/res/telegram-bot/%s.txt" % (settings.GRAPH_HOST, template),
-            ) as resp:
-                status = resp.status
-                response = await resp.text('UTF-8')
-        except aiohttp.ClientError as e:
-            logging.error(f"HTTP client error in get_template: {e}")
-            return None, None
-        except Exception as e:
-            logging.error(f"Unexpected error in get_template: {e}")
-            return None, None
+        async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
+            try:
+                async with session.request(
+                    'GET',
+                    "%s/res/telegram-bot/%s.txt" % (settings.GRAPH_HOST, template),
+                ) as resp:
+                    status = resp.status
+                    response = await resp.text('UTF-8')
+            except:
+                pass
         return status, response
 
     @classmethod
@@ -745,6 +702,7 @@ class Misc(object):
             await cls.get_user_photo(tg_user), profile,
         )
 
+
     @classmethod
     async def api_request(cls,
             path,
@@ -756,34 +714,32 @@ class Misc(object):
         ):
         """
         Запрос в апи.
+
+        Если задана data, то это передача формы.
+        Если задан json, то это json- запрос
+        Ответ в соответствии с response_type:
+            'json' или 'text'
         """
         status = response = None
-        session = AioHttpSessionManager.get_session()
-        logging.debug(f"api_request: Starting request to {method} {path}")
-        try:
-            async with session.request(
-                method.upper(),
-                "%s%s" % (settings.API_HOST, path,),
-                data=data,
-                json=json,
-                params=params,
-            ) as resp:
-                status = resp.status
-                logging.debug(f"api_request: Response status {status}")
-                if status < 500:
-                    if response_type == 'json':
-                        response = await resp.json()
-                    elif response_type == 'text':
+        async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
+            try:
+                async with session.request(
+                    method.upper(),
+                    "%s%s" % (settings.API_HOST, path,),
+                    data=data,
+                    json=json,
+                    params=params,
+                ) as resp:
+                    status = resp.status
+                    if status < 500:
+                        if response_type == 'json':
+                            response = await resp.json()
+                        elif response_type == 'text':
+                            response = await resp.text('UTF-8')
+                    else:
                         response = await resp.text('UTF-8')
-                else:
-                    response = await resp.text('UTF-8')
-                logging.debug(f"api_request: Request completed with status {status}")
-        except aiohttp.ClientError as e:
-            logging.error(f"HTTP client error in api_request: {e}")
-            return None, None
-        except Exception as e:
-            logging.error(f"Unexpected error in api_request: {e}")
-            return None, None
+            except:
+                pass
         return status, response
 
     @classmethod
@@ -1007,7 +963,6 @@ class Misc(object):
         """
         Получить данные и/или сформировать пользователя
         """
-        logging.debug(f"post_tg_user: Starting for user {tg_user_sender.id}")
         payload_sender = dict(
             tg_token=settings.TOKEN,
             tg_uid=tg_user_sender.id,
@@ -1018,28 +973,18 @@ class Misc(object):
             # Если пустой did_bot_start, то он не сбрасывается в профиле юзера
             did_bot_start='1' if did_bot_start else '',
         )
-        logging.info('post_tg_user: Creating/updating tg_user by tg_uid in api')
-        logging.debug('post_tg_user: payload: %s' % cls.secret(payload_sender))
+        logging.debug('get_or_create tg_user by tg_uid in api, payload: %s' % cls.secret(payload_sender))
         status_sender, response_sender = await cls.api_request(
             path='/api/profile',
             method='post',
             data=payload_sender,
         )
-        logging.info(f'post_tg_user: API response status: {status_sender}')
-        logging.debug('post_tg_user: response: %s' % response_sender)
-        
+        logging.debug('get_or_create tg_user by tg_uid in api, status: %s' % status_sender)
+        logging.debug('get_or_create tg_user by tg_uid in api, response: %s' % response_sender)
         if status_sender == 200 and response_sender.get('created'):
-            logging.info('post_tg_user: User created, updating photo')
             status_photo, response_photo = await cls.update_user_photo(tg_user=tg_user_sender, profile=response_sender)
             if status_photo == 200:
                 response_sender = response_photo
-                logging.info('post_tg_user: Photo updated successfully')
-
-        logging.info(f"post_tg_user: Completed with status {status_sender}")
-        logging.debug(f"post_tg_user: response_sender type={type(response_sender)}")
-        if isinstance(response_sender, dict):
-            logging.debug(f"post_tg_user: response_sender keys={list(response_sender.keys())}")
-
         return status_sender, response_sender
 
 
@@ -1437,7 +1382,7 @@ class Misc(object):
 
                 if is_own_account:
                     inline_btn_bank = InlineKeyboardButton(
-                        text='Реквизиты доната',
+                        text='Реквизиты',
                         callback_data=callback_data_template % dict(
                         keyboard_type=KeyboardType.BANKING,
                         uuid=profile['uuid'],
@@ -1662,8 +1607,10 @@ class Misc(object):
     async def get_qrcode(cls, profile, url):
         """
         Получить qrcode профиля profile (байты картинки), где зашит url.
+
         Возвращает BytesIO qrcod'a, установленный на нулевую позицию
         """
+
         PHOTO_WIDTH = 100
         PHOTO_FRAME_WIDTH = 2
         PHOTO_FILL_COLOR = 'white'
@@ -1682,33 +1629,26 @@ class Misc(object):
                 frame_width=PHOTO_FRAME_WIDTH,
             )
             status = photo = None
-            session = AioHttpSessionManager.get_session()
-            try:
-                async with session.request('GET', thumbnail,) as response:
-                    status = response.status
-                    photo = Image.open(BytesIO(await response.read()))
-            except aiohttp.ClientError as e:
-                logging.error(f"HTTP client error in get_qrcode: {e}")
-                # Продолжаем без фото, но с QR-кодом
-                pass
-            except Exception as e:
-                logging.error(f"Unexpected error in get_qrcode: {e}")
-                pass
-            
-            if status == 200 and photo:
-                photo_width = PHOTO_WIDTH + PHOTO_FRAME_WIDTH * 2
-                wpercent = photo_width / float(photo.size[0])
-                photo_height = int((float(photo.size[1]) * float(wpercent)))
-                if photo.size[0] != photo_width or photo.size[1] != photo_height:
-                    photo = photo.resize((photo_width, photo_height), Image.LANCZOS)
-                pos = (
-                    (image.size[0] - photo.size[0]) // 2,
-                    (image.size[1] - photo.size[1]) // 2,
-                )
-                image.paste(photo, pos)
+            async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
+                try:
+                    async with session.request('GET', thumbnail,) as response:
+                        status = response.status
+                        photo = Image.open(BytesIO(await response.read()))
+                except:
+                    pass
+                if status == 200 and photo:
+                    photo_width = PHOTO_WIDTH + PHOTO_FRAME_WIDTH * 2
+                    wpercent = photo_width / float(photo.size[0])
+                    photo_height = int((float(photo.size[1]) * float(wpercent)))
+                    if photo.size[0] != photo_width or photo.size[1] != photo_height:
+                        photo = photo.resize((photo_width, photo_height), Image.LANCZOS)
+                    pos = (
+                        (image.size[0] - photo.size[0]) // 2,
+                        (image.size[1] - photo.size[1]) // 2,
+                    )
+                    image.paste(photo, pos)
 
         image.save(bytes_io, format='JPEG')
-        bytes_io.seek(0)  # Важно: возвращаем указатель в начало
         return bytes_io
 
     @classmethod
@@ -2423,6 +2363,7 @@ class Misc(object):
             reply += f'\n<a href="{href}">Подробнее...</a>'
         return reply
 
+
     @classmethod
     async def pure_tg_request(cls,
             method_name,
@@ -2430,28 +2371,30 @@ class Misc(object):
         ):
         """
         Запрос в телеграм апи.
+
+        Вынужденная мера. В случае подозрения на ошибку в aiogram api.
+        Один раз применялась. Но оказалась не ошибка в aiogram api,
+        а ошибка разработчика :)
         """
         status = response = None
-        session = AioHttpSessionManager.get_session()
-        try:
-            async with session.request(
-                'POST',
-                f'https://api.telegram.org/bot{settings.TOKEN}/{method_name}',
-                json=json,
-            ) as resp:
-                status = resp.status
-                if status < 500:
+        async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
+            try:
+                async with session.request(
+                    'POST',
+                    f'https://api.telegram.org/bot{settings.TOKEN}/{method_name}',
+                    json=json,
+                ) as resp:
+                    status = resp.status
                     response = await resp.json()
-                else:
-                    response = await resp.text('UTF-8')
-        except aiohttp.ClientError as e:
-            logging.error(f"HTTP client error in pure_tg_request: {e}")
-            return None, None
-        except Exception as e:
-            logging.error(f"Unexpected error in pure_tg_request: {e}")
-            return None, None
+                    if status < 500:
+                        response = await resp.json()
+                    else:
+                        response = await resp.text('UTF-8')
+            except:
+                raise
         return status, response
-        
+
+
     @classmethod
     def message_delete_user(cls, profile, owner):
         if profile['uuid'] == owner['uuid']:
@@ -2968,10 +2911,6 @@ class TgGroupMember(object):
         )
         logging.debug('post group member, status: %s' % status)
         logging.debug('post group member, response: %s' % response)
-        if status != 200:
-            logging.error(f'CRITICAL: Failed to add user {user_tg_uid} to group {group_chat_id}, status: {status}, response: {response}')
-        else:
-            logging.info(f'SUCCESS: User {user_tg_uid} added to group {group_chat_id}')
         return status, response
 
     @classmethod

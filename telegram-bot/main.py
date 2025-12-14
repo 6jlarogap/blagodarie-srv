@@ -1,13 +1,4 @@
-# Make sure this is at the VERY TOP of your bot's main file
-import logging
-import settings  # This triggers the logging config
-from settings import logging as logger  # Optional: get configured logger
-
-# Then test logging immediately
-logging.debug("=== BOT STARTING ===")
-
 import asyncio
-import sys
 from aiogram import Bot, Dispatcher, enums
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -17,25 +8,12 @@ from aiogram.client.session.aiohttp import AiohttpSession
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-import me
-from common import AioHttpSessionManager
+import settings, me
+from settings import logging
 
 storage = MemoryStorage()
 
 async def main_():
-    # DIAGNOSTIC: Add startup logging
-    logging.info("=" * 50)
-    logging.info("BOT STARTUP DIAGNOSTIC")
-    logging.info("=" * 50)
-    logging.info(f"Python version: {sys.version}")
-    logging.info(f"Settings.DEBUG: {settings.DEBUG}")
-    logging.info(f"Settings.TOKEN: {'SET' if settings.TOKEN else 'NOT SET'}")
-    logging.info(f"Settings.LOCAL_SERVER: {settings.LOCAL_SERVER}")
-    logging.info(f"Settings.HTTP_TIMEOUT: {settings.HTTP_TIMEOUT}")
-    logging.info(f"Logging level: {logging.getLogger().level}")
-    logging.info(f"Logging handlers: {len(logging.getLogger().handlers)}")
-    logging.info("=" * 50)
-    
     kwargs_bot = dict(
         token=settings.TOKEN,
         default=DefaultBotProperties(
@@ -84,31 +62,9 @@ async def main_():
     )
 
     await bot.delete_webhook(drop_pending_updates=True)
-
-    try:
-        logging.info("Запуск бота...")
-        await dp.start_polling(
-            bot,
-            polling_timeout=20,
-            skip_updates=True
-        )
-    except KeyboardInterrupt:
-        logging.info("Бот остановлен пользователем")
-    except Exception as e:
-        logging.error(f"Критическая ошибка в боте: {e}", exc_info=True)
-    finally:
-        logging.info("Закрытие сессий...")
-        # Close application session first
-        await AioHttpSessionManager.close()
-        
-        # Then close bot session
-        if bot.session:
-            try:
-                await bot.session.close()
-            except Exception as e:
-                logging.error(f"Ошибка при закрытии сессии бота: {e}")
-        
-        logging.info("Бот завершил работу")
+    await dp.start_polling(
+        bot,
+        polling_timeout=20,
+    )
 
 asyncio.run(main_())
-
