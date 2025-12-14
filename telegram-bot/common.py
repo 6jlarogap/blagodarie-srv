@@ -28,6 +28,8 @@ import me
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
 # Менеджер сессий
+# common.py (исправленная часть)
+
 class AioHttpSessionManager:
     _session = None
     _session_count = 0  # Счетчик созданных сессий для отладки
@@ -59,7 +61,13 @@ class AioHttpSessionManager:
                     logging.info(f"AioHttpSessionManager: Закрытие сессии (id={id(cls._session)})")
                     await cls._session.close()
                     logging.info(f"AioHttpSessionManager: Сессия закрыта")
-  
+                else:
+                    logging.debug(f"AioHttpSessionManager: Сессия уже была закрыта (id={id(cls._session)})")
+            except Exception as e:
+                logging.error(f"AioHttpSessionManager: Ошибка при закрытии сессии: {e}", exc_info=True)
+            finally:
+                cls._session = None
+                logging.debug("AioHttpSessionManager: Сессия обнулена")  
 
 # Контексты, используемые в разных местах: обычно и в командах и в кнопках
 
