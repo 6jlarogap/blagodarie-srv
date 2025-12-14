@@ -1,3 +1,11 @@
+# Make sure this is at the VERY TOP of your bot's main file
+import logging
+import settings  # This triggers the logging config
+from settings import logging as logger  # Optional: get configured logger
+
+# Then test logging immediately
+logging.debug("=== BOT STARTING ===")
+
 import asyncio
 import sys
 from aiogram import Bot, Dispatcher, enums
@@ -9,9 +17,8 @@ from aiogram.client.session.aiohttp import AiohttpSession
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-import settings, me
+import me
 from common import AioHttpSessionManager
-from settings import logging
 
 storage = MemoryStorage()
 
@@ -80,25 +87,15 @@ async def main_():
 
     try:
         logging.info("Запуск бота...")
-        logging.info("Проверка подключения к Telegram API...")
-        
-        # Test bot connection
-        me.bot_data = await bot.get_me()
-        logging.info(f"Бот подключен: {me.bot_data.username}")
-        
-        logging.info("Запуск polling...")
         await dp.start_polling(
             bot,
             polling_timeout=20,
             skip_updates=True
         )
-        logging.info("Polling завершен")
     except KeyboardInterrupt:
         logging.info("Бот остановлен пользователем")
     except Exception as e:
         logging.error(f"Критическая ошибка в боте: {e}", exc_info=True)
-        logging.error(f"Тип ошибки: {type(e).__name__}")
-        logging.error(f"Аргументы ошибки: {e.args}")
     finally:
         logging.info("Закрытие сессий...")
         # Close application session first
@@ -108,10 +105,10 @@ async def main_():
         if bot.session:
             try:
                 await bot.session.close()
-                logging.info("Сессия бота закрыта")
             except Exception as e:
                 logging.error(f"Ошибка при закрытии сессии бота: {e}")
         
         logging.info("Бот завершил работу")
 
 asyncio.run(main_())
+
