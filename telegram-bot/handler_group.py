@@ -146,9 +146,9 @@ async def process_group_message(message: Message, state: FSMContext):
             group_type=message.chat.type,
             user_tg_uid=tg_user_sender.id
         )
-        logging.debug("TEST: TgGroupMember.add")
+        logging.debug("TEST: Mirgate TgGroupMember.add")
     except Exception as e:
-        logging.debug("ERROR: TgGroupMember.add")
+        logging.debug("ERROR: Migrate TgGroupMember.add")
         return
 
     if bot_data.id == tg_user_sender.id:
@@ -367,6 +367,7 @@ async def handle_bot_status_update(chat_member: ChatMemberUpdated):
                         group_type=chat.type,
                         user_tg_uid=chat_member.from_user.id
                     )
+                    logging.debug("TEST: AddBot TgGroupMember.add")
                     logging.info(f"Пользователь добавлен в группу: {chat.title} (ID: {chat.id}) (UID: {chat_member.from_user.id})")       
                 except Exception as e:
                     logging.error(f"Group member add failed: {str(e)}")
@@ -419,8 +420,9 @@ async def echo_my_chat_member_for_bot(chat_member: ChatMemberUpdated):
         if status == 200:
             try:
                 await TgGroupMember.add(chat_member.chat.id, chat_member.chat.title, chat_member.chat.type, tg_user_from.id)
+                logging.debug("TEST: Channel TgGroupMember.add")
             except Exception as e:
-                logging.error(f"Group member add failed: {str(e)}")
+                logging.error(f"Channel member add failed: {str(e)}")
         else:
             return
     else:
