@@ -140,7 +140,7 @@ async def process_group_message(message: Message, state: FSMContext):
         logging.error(f"Database operation failed: {str(e)}")
         return
 
-    if bot_data.id == user_in.id:
+    if bot_data.id == tg_user_sender.id:
         # ЭТОТ бот подключился.
         try:
             await Misc.send_pin_group_message(message.chat)
