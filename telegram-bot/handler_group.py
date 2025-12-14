@@ -126,8 +126,6 @@ async def process_group_message(message: Message, state: FSMContext):
                             )
                         except (TelegramBadRequest, TelegramForbiddenError) as e:
                             logging.error(f"Failed to edit pin message: {str(e)}")
-                    except TelegramBadRequest:
-                return
     except (TypeError, AttributeError,):
         pass
 
