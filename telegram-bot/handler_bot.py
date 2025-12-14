@@ -18,7 +18,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command, StateFilter, CommandStart, CommandObject
 from aiogram.fsm.state import StatesGroup, State
 
-import settings, me
+import logging
+import settings
 from settings import logging
 
 from common import FSMnewPerson, FSMgeo, FSMdelete
@@ -27,16 +28,12 @@ from common import Misc, KeyboardType, OperationType, Rcache, MeetId
 import pymorphy3
 from common import AioHttpSessionManager
 
-# Create a custom opener that uses our managed session
-def custom_opener():
-    return AioHttpSessionManager.get_session()
+import me
+dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
 # Initialize morph analyzer with our session opener
-MorphAnalyzer = pymorphy3.MorphAnalyzer(
-    opener=custom_opener
-)
+MorphAnalyzer = pymorphy3.MorphAnalyzer()
 router = Router()
-dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
 class FSMquery(StatesGroup):
     ask = State()
