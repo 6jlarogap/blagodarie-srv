@@ -25,6 +25,8 @@ import aiohttp
 import settings, me
 from settings import logging
 
+dp, bot, bot_data = me.dp, me.bot, me.bot_data
+
 # Менеджер сессий
 class AioHttpSessionManager:
     _session = None
@@ -58,7 +60,6 @@ class AioHttpSessionManager:
                     await cls._session.close()
                     logging.info(f"AioHttpSessionManager: Сессия закрыта")
   
-dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
 # Контексты, используемые в разных местах: обычно и в командах и в кнопках
 
