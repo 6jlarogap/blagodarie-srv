@@ -352,24 +352,6 @@ async def process_group_message(message: Message, state: FSMContext):
                 else:
                     # Regular message processing (not a new member)
                     logging.debug(f'Processing regular message from user {user_in.id}')
-            if tg_users_new and \
-               tg_user_sender.id != user_in.id:
-                # Сразу доверие c благодарностью добавляемому пользователю
-                logging.debug(f'Adding trust operation from {tg_user_sender.id} to {user_in.id}')
-                post_op = dict(
-                    tg_token=settings.TOKEN,
-                    operation_type_id=OperationType.TRUST,
-                    tg_user_id_from=tg_user_sender.id,
-                    user_id_to=response_from['uuid'],
-                )
-                logging.debug('post operation, payload: %s' % Misc.secret(post_op))
-                status, response = await Misc.api_request(
-                    path='/api/addoperation',
-                    method='post',
-                    data=post_op,
-                )
-                logging.debug('post operation, status: %s' % status)
-                logging.debug('post operation, response: %s' % response)
 
         if not tg_user_left and bot_data.id == user_in.id:
             # ЭТОТ бот подключился.
