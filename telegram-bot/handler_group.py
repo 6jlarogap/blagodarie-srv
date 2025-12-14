@@ -151,59 +151,59 @@ async def process_group_message(message: Message, state: FSMContext):
     
     tg_user_sender = message.from_user
 
-        # Игнорируем системные сообщения от Telegram
-        if tg_user_sender.id == 777000:
-            return
+    # Игнорируем системные сообщения от Telegram
+    if tg_user_sender.id == 777000:
+        return
 
-        # Игнорируем служебные обновления чата
-        if message.content_type in(
-                ContentType.NEW_CHAT_PHOTO,
-                ContentType.NEW_CHAT_TITLE,
-                ContentType.DELETE_CHAT_PHOTO,
-                ContentType.PINNED_MESSAGE,
-                ContentType.FORUM_TOPIC_CREATED,
-                ContentType.FORUM_TOPIC_CLOSED,
-                ContentType.FORUM_TOPIC_REOPENED,
-                ContentType.FORUM_TOPIC_EDITED,
-                ContentType.GENERAL_FORUM_TOPIC_HIDDEN,
-                ContentType.GENERAL_FORUM_TOPIC_UNHIDDEN,
-           ):
-            return
+    # Игнорируем служебные обновления чата
+    if message.content_type in(
+            ContentType.NEW_CHAT_PHOTO,
+            ContentType.NEW_CHAT_TITLE,
+            ContentType.DELETE_CHAT_PHOTO,
+            ContentType.PINNED_MESSAGE,
+            ContentType.FORUM_TOPIC_CREATED,
+            ContentType.FORUM_TOPIC_CLOSED,
+            ContentType.FORUM_TOPIC_REOPENED,
+            ContentType.FORUM_TOPIC_EDITED,
+            ContentType.GENERAL_FORUM_TOPIC_HIDDEN,
+            ContentType.GENERAL_FORUM_TOPIC_UNHIDDEN,
+        ):
+        return
 
-        # Обработка оферов (если нужно)
-        # if await Offer.offer_forwarded_in_group_or_channel(message, state):
-        #     return
+    # Обработка оферов (если нужно)
+    # if await Offer.offer_forwarded_in_group_or_channel(message, state):
+    #     return
 
-        # Обработка миграции группы в супергруппу
-        try:
-            if message.migrate_to_chat_id:
-                # Это сообщение может быть обработано позже чем
-                # сообщение с migrate_from_chat_id и еще со старым chat_id,
-                # и будет воссоздана старая группа в апи
-                return
-        except (TypeError, AttributeError,):
-            pass
-        
-        try:
-            if message.migrate_from_chat_id:
-                status, response = await TgGroup.put(
-                    old_chat_id=message.migrate_from_chat_id,
-                    chat_id=message.chat.id,
-                    title=message.chat.title,
-                    type_=message.chat.type,
-                )
-                if status == 200 and response.get('pin_message_id'):
-                    text, reply_markup = Misc.make_pin_group_message(message.chat)
-                    try:
-                        await bot.edit_message_text(
-                            chat_id=message.migrate_from_chat_id,
-                            message_id=response['pin_message_id'],
-                            text=text,
-                            reply_markup=reply_markup,
-                        )
-                    except TelegramBadRequest as e:
-                        logging.debug(f'TelegramBadRequest while editing pin message: {e}')
+    # Обработка миграции группы в супергруппу
+    try:
+        if message.migrate_to_chat_id:
+            # Это сообщение может быть обработано позже чем
+            # сообщение с migrate_from_chat_id и еще со старым chat_id,
+            # и будет воссоздана старая группа в апи
             return
+    except (TypeError, AttributeError,):
+        pass
+    
+    try:
+        if message.migrate_from_chat_id:
+            status, response = await TgGroup.put(
+                old_chat_id=message.migrate_from_chat_id,
+                chat_id=message.chat.id,
+                title=message.chat.title,
+                type_=message.chat.type,
+            )
+            if status == 200 and response.get('pin_message_id'):
+                text, reply_markup = Misc.make_pin_group_message(message.chat)
+                try:
+                    await bot.edit_message_text(
+                        chat_id=message.migrate_from_chat_id,
+                        message_id=response['pin_message_id'],
+                        text=text,
+                        reply_markup=reply_markup,
+                    )
+                except TelegramBadRequest as e:
+                    logging.debug(f'TelegramBadRequest while editing pin message: {e}')
+        return
     except (TypeError, AttributeError,) as e:
         logging.debug(f'Error accessing migrate_from_chat_id: {e}')
         pass
