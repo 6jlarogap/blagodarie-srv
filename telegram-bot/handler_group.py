@@ -114,40 +114,41 @@ async def process_group_message(message: Message, state: FSMContext):
                 type_=message.chat.type,
             )
             if status == 200:
-                if message.chat.type == ChatType.SUPERGROUP:
-                    msg_failover = 'Ура! Группа стала супергруппой'
-                else:
-                    # Если что-то случится при понижении статуса, то зачем об этом говорить?
-                    msg_failover = ''
                 if response['pin_message_id']:
                     text, reply_markup = Misc.make_pin_group_message(message.chat)
                     try:
-                        await bot.edit_message_text(
-                            chat_id=message.migrate_from_chat_id,
-                            message_id=response['pin_message_id'],
-                            text=text,
-                            reply_markup=reply_markup,
-                        )
+                        try:
+                            await bot.edit_message_text(
+                                chat_id=message.migrate_from_chat_id,
+                                message_id=response['pin_message_id'],
+                                text=text,
+                                reply_markup=reply_markup,
+                            )
+                        except (TelegramBadRequest, TelegramForbiddenError) as e:
+                            logging.error(f"Failed to edit pin message: {str(e)}")
                     except TelegramBadRequest:
-                        if msg_failover:
-                            await bot.send_message(message.chat.id, msg_failover)
-                elif msg_failover:
-                    await bot.send_message(message.chat.id, msg_failover)
             return
     except (TypeError, AttributeError,):
         pass
 
-    status, response_from = await Misc.post_tg_user(tg_user_sender, did_bot_start=False)
-    await TgGroupMember.add(
-        group_chat_id=message.chat.id,
-        group_title=message.chat.title,
-        group_type=message.chat.type,
-        user_tg_uid=tg_user_sender.id
-    )
+    try:
+        status, response_from = await Misc.post_tg_user(tg_user_sender, did_bot_start=False)
+        await TgGroupMember.add(
+            group_chat_id=message.chat.id,
+            group_title=message.chat.title,
+            group_type=message.chat.type,
+            user_tg_uid=tg_user_sender.id
+        )
+    except Exception as e:
+        logging.error(f"Database operation failed: {str(e)}")
+        return
 
     if bot_data.id == user_in.id:
         # ЭТОТ бот подключился.
-        await Misc.send_pin_group_message(message.chat)
+        try:
+            await Misc.send_pin_group_message(message.chat)
+        except (TelegramBadRequest, TelegramForbiddenError) as e:
+            logging.error(f"Failed to send pin message: {str(e)}")
         continue
 
     if tg_user_sender.is_bot:
@@ -185,22 +186,29 @@ async def process_group_message(message: Message, state: FSMContext):
         'topic_messages' in settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids']
        ):
         if r := redis.Redis(**settings.REDIS_CONNECT):
-            last_user_in_grop_rec = (
-                Rcache.LAST_USER_IN_GROUP_PREFIX + \
-                str(message.chat.id) + \
-                Rcache.KEY_SEP + \
-                str(message.message_thread_id)
-            )
-            previous_user_in_group = r.get(last_user_in_grop_rec)
-            if str(previous_user_in_group) != str(message.from_user.id):
-                r.set(last_user_in_grop_rec, message.from_user.id)
-                is_previous_his = False
-                keep_hours = settings.GROUPS_WITH_CARDS[message.chat.id].get('keep_hours')
-            r.close()
+            try:
+                last_user_in_grop_rec = (
+                    Rcache.LAST_USER_IN_GROUP_PREFIX + \
+                    str(message.chat.id) + \
+                    Rcache.KEY_SEP + \
+                    str(message.message_thread_id)
+                )
+                previous_user_in_group = r.get(last_user_in_grop_rec)
+                if str(previous_user_in_group) != str(message.from_user.id):
+                    r.set(last_user_in_grop_rec, message.from_user.id)
+                    is_previous_his = False
+                    keep_hours = settings.GROUPS_WITH_CARDS[message.chat.id].get('keep_hours')
+            except Exception as e:
+                logging.error(f"Redis operation failed: {str(e)}")
+            finally:
+                r.close()
 
         if bot_data.id == user_in.id:
             # ЭТОТ бот подключился.
-            await Misc.send_pin_group_message(message.chat)
+            try:
+                await Misc.send_pin_group_message(message.chat)
+            except (TelegramBadRequest, TelegramForbiddenError) as e:
+                logging.error(f"Failed to send pin message: {str(e)}")
             continue
 
         if not is_previous_his:
@@ -225,21 +233,29 @@ async def process_group_message(message: Message, state: FSMContext):
                 callback_data=callback_data_template % dict_reply,
             )
             logging.debug('minicard in group text: '+ repr(reply))
-            answer = await message.answer(
-                reply,
-                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[inline_btn_thank]]),
-                disable_notification=True,
-            )
+            try:
+                answer = await message.answer(
+                    reply,
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[inline_btn_thank]]),
+                    disable_notification=True,
+                )
+            except (TelegramBadRequest, TelegramForbiddenError) as e:
+                logging.error(f"Failed to send minicard group message: {str(e)}")
+                return
             if answer and keep_hours:
                 if r := redis.Redis(**settings.REDIS_CONNECT):
-                    s = (
-                        f'{Rcache.CARD_IN_GROUP_PREFIX}{Rcache.KEY_SEP}'
-                        f'{int(time.time())}{Rcache.KEY_SEP}'
-                        f'{answer.chat.id}{Rcache.KEY_SEP}'
-                        f'{answer.message_id}'
-                    )
-                    r.set(name=s, value='1')
-                    r.close()
+                    try:
+                        s = (
+                            f'{Rcache.CARD_IN_GROUP_PREFIX}{Rcache.KEY_SEP}'
+                            f'{int(time.time())}{Rcache.KEY_SEP}'
+                            f'{answer.chat.id}{Rcache.KEY_SEP}'
+                            f'{answer.message_id}'
+                        )
+                        r.set(name=s, value='1')
+                    except Exception as e:
+                        logging.error(f"Redis operation failed: {str(e)}")
+                    finally:
+                        r.close()
 
     if message.is_topic_message and \
     message.chat.id in settings.GROUPS_WITH_YOUTUBE_UPLOAD and \
@@ -255,7 +271,8 @@ async def process_group_message(message: Message, state: FSMContext):
                 try:
                     tg_file = await bot.get_file(message.video.file_id)
                     fname = tg_file.file_path
-                except:
+                except (TelegramBadRequest, TelegramForbiddenError) as e:
+                    logging.error(f"Failed to get ytvideo file: {str(e)}")
                     pass
             else:
                 f = tempfile.NamedTemporaryFile(
@@ -266,7 +283,8 @@ async def process_group_message(message: Message, state: FSMContext):
                 try:
                     tg_file = await bot.get_file(message.video.file_id)
                     await bot.download_file(tg_file.file_path, fname)
-                except:
+                except (TelegramBadRequest, TelegramForbiddenError) as e:
+                    logging.error(f"Failed to download video file: {str(e)}")
                     os.unlink(fname)
                     fname = None
             if not fname:
@@ -275,8 +293,8 @@ async def process_group_message(message: Message, state: FSMContext):
                         tg_user_sender.id,
                         'Ошибка скачивания видео из сообщения. Не слишком ли большой файл?'
                     )
-                except (TelegramBadRequest, TelegramForbiddenError,):
-                    pass
+                except (TelegramBadRequest, TelegramForbiddenError) as e:
+                    logging.error(f"Failed to send error message: {str(e)}")
             else:
                 description = (
                     f'Профиль автора: {response_from["first_name"]}, '
@@ -297,8 +315,8 @@ async def process_group_message(message: Message, state: FSMContext):
                             tg_user_sender.id,
                             f'Ошибка загрузки видео:\n{error}'
                         )
-                    except (TelegramBadRequest, TelegramForbiddenError,):
-                        pass
+                    except (TelegramBadRequest, TelegramForbiddenError) as e:
+                        logging.error(f"Failed to send upload error message: {str(e)}")
                 else:
                     href = f'https://www.youtube.com/watch?v={response["id"]}'
                     try:
@@ -309,8 +327,8 @@ async def process_group_message(message: Message, state: FSMContext):
                             ),
                             link_preview_options=LinkPreviewOptions(is_disabled=False),
                         )
-                    except:
-                        pass
+                    except (TelegramBadRequest, TelegramForbiddenError) as e:
+                        logging.error(f"Failed to send upload success message: {str(e)}")
             if not settings.LOCAL_SERVER and fname:
                 os.unlink(fname)
 
@@ -327,12 +345,21 @@ async def echo_my_chat_member_for_bot(chat_member: ChatMemberUpdated):
     if tg_user_from and not tg_user_from.is_bot:
         status, user_from = await Misc.post_tg_user(tg_user_from, did_bot_start=False)
         if status == 200:
-            await TgGroupMember.add(chat_member.chat.id, chat_member.chat.title, chat_member.chat.type, tg_user_from.id)
+            try:
+                await TgGroupMember.add(chat_member.chat.id, chat_member.chat.title, chat_member.chat.type, tg_user_from.id)
+            except Exception as e:
+                logging.error(f"Group member add failed: {str(e)}")
         else:
             return
     else:
-        status, response = await TgGroup.post(chat_member.chat.id, chat_member.chat.title, chat_member.chat.type)
-        if status != 200:
-            return
+        try:
+            status, response = await TgGroup.post(chat_member.chat.id, chat_member.chat.title, chat_member.chat.type)
+            if status != 200:
+                return
+        except Exception as e:
+            logging.error(f"TgGroup.post failed: {str(e)}")
     if bot_.is_bot and new_chat_member.status == 'administrator':
-        await Misc.send_pin_group_message(chat_member.chat)
+        try:
+            await Misc.send_pin_group_message(chat_member.chat)
+        except (TelegramBadRequest, TelegramForbiddenError) as e:
+            logging.error(f"Failed to send pin message: {str(e)}")
