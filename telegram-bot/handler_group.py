@@ -144,6 +144,7 @@ async def process_group_message(message: Message, state: FSMContext):
         # ЭТОТ бот подключился.
         try:
             await Misc.send_pin_group_message(message.chat)
+            logging.info(f"Pin message sent")
         except (TelegramBadRequest, TelegramForbiddenError) as e:
             logging.error(f"Failed to send pin message: {str(e)}")
     
