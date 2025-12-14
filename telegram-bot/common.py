@@ -25,14 +25,15 @@ import aiohttp
 import settings, me
 from settings import logging
 
-
 # Менеджер сессий
 class AioHttpSessionManager:
     _session = None
+    _session_count = 0  # Счетчик созданных сессий для отладки
     
     @classmethod
     def get_session(cls):
         if cls._session is None or cls._session.closed:
+            cls._session_count += 1
             cls._session = aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=settings.HTTP_TIMEOUT),
                 connector=aiohttp.TCPConnector(
@@ -41,6 +42,10 @@ class AioHttpSessionManager:
                     enable_cleanup_closed=True
                 )
             )
+            logging.debug(f"AioHttpSessionManager: Создана новая сессия #{cls._session_count} (id={id(cls._session)})")
+            logging.debug(f"AioHttpSessionManager: Коннектор: {cls._session._connector}")
+        else:
+            logging.debug(f"AioHttpSessionManager: Используется существующая сессия (id={id(cls._session)})")
         return cls._session
     
     @classmethod
@@ -48,12 +53,41 @@ class AioHttpSessionManager:
         if cls._session:
             try:
                 if not cls._session.closed:
+                    logging.debug(f"AioHttpSessionManager: Закрытие сессии (id={id(cls._session)})")
                     await cls._session.close()
+                    logging.debug(f"AioHttpSessionManager: Сессия закрыта")
+  
+dp, bot, bot_data = me.dp, me.bot, me.bot_data
+
+# Контексты, используемые в разных местах: обычно и в командах и в кнопках
+
+class FSMnewPerson(StatesGroup):
+    ask = State()
+    ask_gender = State()
+
+class FSMgeo(StatesGroup):
+    geo = State()
+
+class FSMdelete(StatesGroup):
+    ask = State()
+
+class Attitude(object):
+
+    ACQ = 'a'
+    TRUST = 't'
+    MISTRUST = 'mt'
+
+    @classmethod
+    def text(cls, attitude):
+        result = 'не знакомы'
+        if attitude == Attitude.TRUST:
+              else:
+                    logging.debug(f"AioHttpSessionManager: Сессия уже была закрыта (id={id(cls._session)})")
             except Exception as e:
-                logging.error(f"Error closing HTTP session: {e}")
+                logging.error(f"AioHttpSessionManager: Ошибка при закрытии сессии: {e}", exc_info=True)
             finally:
                 cls._session = None
-
+                logging.debug("AioHttpSessionManager: Сессия обнулена")
 
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
