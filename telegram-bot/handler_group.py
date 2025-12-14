@@ -31,7 +31,7 @@ async def process_group_message(message: Message, state: FSMContext):
     """
     Обработка сообщений в группу
     """
-    logging.info("TEST: process_group_message handler called")
+    logging.debug("TEST: process_group_message handler called")
 
     tg_user_sender = message.from_user
 
@@ -39,6 +39,7 @@ async def process_group_message(message: Message, state: FSMContext):
     #   Если к группе привязан канал, то сообщения идут от этого пользователя
     #
     if tg_user_sender.id == 777000:
+        logging.debug("TEST: tg_user_sender.id == 777000")
         return
 
     if message.content_type in(
@@ -53,6 +54,7 @@ async def process_group_message(message: Message, state: FSMContext):
             ContentType.GENERAL_FORUM_TOPIC_HIDDEN,
             ContentType.GENERAL_FORUM_TOPIC_UNHIDDEN,
        ):
+        logging.debug("TEST: filtered content type")
         return
 
     #
@@ -103,8 +105,10 @@ async def process_group_message(message: Message, state: FSMContext):
             # Это сообщение может быть обработано позже чем
             # сообщение с migrate_from_chat_id и еще со старым chat_id,
             # и будет воссоздана старая группа в апи
+            logging.debug("TEST: return message.migrate_to_chat_id")
             return
     except (TypeError, AttributeError,):
+        logging.debug("ERROR: return message.migrate_to_chat_id")
         pass
     try:
         if message.migrate_from_chat_id:
@@ -115,7 +119,9 @@ async def process_group_message(message: Message, state: FSMContext):
                 type_=message.chat.type,
             )
             if status == 200:
+                logging.debug("TEST: TgGroup.put")
                 if response['pin_message_id']:
+                    logging.debug("TEST: tg_user_sender.id == 777000")
                     text, reply_markup = Misc.make_pin_group_message(message.chat)
                     try:
                         await bot.edit_message_text(
@@ -126,6 +132,9 @@ async def process_group_message(message: Message, state: FSMContext):
                         )
                     except (TelegramBadRequest, TelegramForbiddenError) as e:
                         logging.error(f"Failed to edit pin message: {str(e)}")
+            else:
+                logging.debug("ERROR: TgGroup.put")
+
     except (TypeError, AttributeError,):
         pass
 
@@ -137,8 +146,9 @@ async def process_group_message(message: Message, state: FSMContext):
             group_type=message.chat.type,
             user_tg_uid=tg_user_sender.id
         )
+        logging.debug("TEST: TgGroupMember.add")
     except Exception as e:
-        logging.error(f"Database operation failed: {str(e)}")
+        logging.debug("ERROR: TgGroupMember.add")
         return
 
     if bot_data.id == tg_user_sender.id:
@@ -183,6 +193,8 @@ async def process_group_message(message: Message, state: FSMContext):
         message.message_thread_id in settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids'] or
         'topic_messages' in settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids']
        ):
+        logging.debug("TEST: GROUPS_WITH_CARDS")
+       
         if r := redis.Redis(**settings.REDIS_CONNECT):
             try:
                 last_user_in_grop_rec = (
@@ -191,11 +203,13 @@ async def process_group_message(message: Message, state: FSMContext):
                     Rcache.KEY_SEP + \
                     str(message.message_thread_id)
                 )
+                logging.debug("TEST: last_user_in_grop_rec")
                 previous_user_in_group = r.get(last_user_in_grop_rec)
                 if str(previous_user_in_group) != str(message.from_user.id):
                     r.set(last_user_in_grop_rec, message.from_user.id)
                     is_previous_his = False
                     keep_hours = settings.GROUPS_WITH_CARDS[message.chat.id].get('keep_hours')
+                    logging.debug("TEST: is_previous_his = False")
             except Exception as e:
                 logging.error(f"Redis operation failed: {str(e)}")
             finally:
@@ -203,12 +217,15 @@ async def process_group_message(message: Message, state: FSMContext):
 
         if bot_data.id == user_in.id:
             # ЭТОТ бот подключился.
+            logging.debug("TEST: bot_data.id == user_in.id")
             try:
                 await Misc.send_pin_group_message(message.chat)
+                logging.debug("TEST: Misc.send_pin_group_message")
             except (TelegramBadRequest, TelegramForbiddenError) as e:
                 logging.error(f"Failed to send pin message: {str(e)}")
 
         if not is_previous_his:
+            logging.debug("TEST: not is_previous_his")
             reply = await Misc.group_minicard_text (response_from, message.chat)
             dict_reply = dict(
                 keyboard_type=KeyboardType.TRUST_THANK,
@@ -336,6 +353,7 @@ async def echo_my_chat_member_for_bot(chat_member: ChatMemberUpdated):
 
     Реакция на подключение к каналу бота
     """
+    logging.debug("TEST: echo_my_chat_member_for_bot")
     new_chat_member = chat_member.new_chat_member
     bot_ = new_chat_member.user
     tg_user_from = chat_member.from_user
