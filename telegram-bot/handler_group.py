@@ -117,15 +117,14 @@ async def process_group_message(message: Message, state: FSMContext):
                 if response['pin_message_id']:
                     text, reply_markup = Misc.make_pin_group_message(message.chat)
                     try:
-                        try:
-                            await bot.edit_message_text(
-                                chat_id=message.migrate_from_chat_id,
-                                message_id=response['pin_message_id'],
-                                text=text,
-                                reply_markup=reply_markup,
-                            )
-                        except (TelegramBadRequest, TelegramForbiddenError) as e:
-                            logging.error(f"Failed to edit pin message: {str(e)}")
+                        await bot.edit_message_text(
+                            chat_id=message.migrate_from_chat_id,
+                            message_id=response['pin_message_id'],
+                            text=text,
+                            reply_markup=reply_markup,
+                        )
+                    except (TelegramBadRequest, TelegramForbiddenError) as e:
+                        logging.error(f"Failed to edit pin message: {str(e)}")
     except (TypeError, AttributeError,):
         pass
 
