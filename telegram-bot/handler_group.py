@@ -406,17 +406,18 @@ async def process_group_message(message: Message, state: FSMContext):
                 disable_notification=True,
             )
             if answer and keep_hours:
-                if r := redis.Redis(**settings.REDIS_CONNECT):
-                    s = (
-                        f'{Rcache.CARD_IN_GROUP_PREFIX}{Rcache.KEY_SEP}'
-                        f'{int(time.time())}{Rcache.KEY_SEP}'
-                        f'{answer.chat.id}{Rcache.KEY_SEP}'
-                        f'{answer.message_id}'
-                    )
-                    r.set(name=s, value='1')
-                    r.close()
-            except Exception as redis_err:
-                logging.error(f"Ошибка Redis при работе с карточками: {redis_err}")
+                try:
+                    if r := redis.Redis(**settings.REDIS_CONNECT):
+                        s = (
+                            f'{Rcache.CARD_IN_GROUP_PREFIX}{Rcache.KEY_SEP}'
+                            f'{int(time.time())}{Rcache.KEY_SEP}'
+                            f'{answer.chat.id}{Rcache.KEY_SEP}'
+                            f'{answer.message_id}'
+                        )
+                        r.set(name=s, value='1')
+                        r.close()
+                except Exception as redis_err:
+                    logging.error(f"Ошибка Redis при работе с карточками: {redis_err}")
 
         # Обработка загрузки видео на YouTube для специальных топиков
         if (message.is_topic_message and
