@@ -33,9 +33,7 @@ def custom_opener():
 
 # Initialize morph analyzer with our session opener
 MorphAnalyzer = pymorphy3.MorphAnalyzer(
-    opener=custom_opener,
-    # Disable pymorphy3's internal session management
-    use_http_session=False
+    opener=custom_opener
 )
 router = Router()
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
