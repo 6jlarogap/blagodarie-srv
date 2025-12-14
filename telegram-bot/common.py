@@ -42,8 +42,9 @@ class AioHttpSessionManager:
                     enable_cleanup_closed=True
                 )
             )
-            logging.debug(f"AioHttpSessionManager: Создана новая сессия #{cls._session_count} (id={id(cls._session)})")
-            logging.debug(f"AioHttpSessionManager: Коннектор: {cls._session._connector}")
+            logging.info(f"AioHttpSessionManager: Создана новая сессия #{cls._session_count} (id={id(cls._session)})")
+            logging.info(f"AioHttpSessionManager: Коннектор: {cls._session._connector}")
+            logging.info(f"AioHttpSessionManager: Connector connections: {getattr(cls._session._connector, '_conns', 'N/A')}")
         else:
             logging.debug(f"AioHttpSessionManager: Используется существующая сессия (id={id(cls._session)})")
         return cls._session
@@ -53,9 +54,9 @@ class AioHttpSessionManager:
         if cls._session:
             try:
                 if not cls._session.closed:
-                    logging.debug(f"AioHttpSessionManager: Закрытие сессии (id={id(cls._session)})")
+                    logging.info(f"AioHttpSessionManager: Закрытие сессии (id={id(cls._session)})")
                     await cls._session.close()
-                    logging.debug(f"AioHttpSessionManager: Сессия закрыта")
+                    logging.info(f"AioHttpSessionManager: Сессия закрыта")
   
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
@@ -782,6 +783,7 @@ class Misc(object):
         """
         status = response = None
         session = AioHttpSessionManager.get_session()
+        logging.debug(f"api_request: Starting request to {method} {path}")
         try:
             async with session.request(
                 method.upper(),
@@ -791,6 +793,7 @@ class Misc(object):
                 params=params,
             ) as resp:
                 status = resp.status
+                logging.debug(f"api_request: Response status {status}")
                 if status < 500:
                     if response_type == 'json':
                         response = await resp.json()
@@ -798,6 +801,7 @@ class Misc(object):
                         response = await resp.text('UTF-8')
                 else:
                     response = await resp.text('UTF-8')
+                logging.debug(f"api_request: Request completed with status {status}")
         except aiohttp.ClientError as e:
             logging.error(f"HTTP client error in api_request: {e}")
             return None, None
@@ -1027,6 +1031,7 @@ class Misc(object):
         """
         Получить данные и/или сформировать пользователя
         """
+        logging.debug(f"post_tg_user: Starting for user {tg_user_sender.id}")
         payload_sender = dict(
             tg_token=settings.TOKEN,
             tg_uid=tg_user_sender.id,
@@ -1037,23 +1042,27 @@ class Misc(object):
             # Если пустой did_bot_start, то он не сбрасывается в профиле юзера
             did_bot_start='1' if did_bot_start else '',
         )
-        logging.debug('get_or_create tg_user by tg_uid in api, payload: %s' % cls.secret(payload_sender))
+        logging.info('post_tg_user: Creating/updating tg_user by tg_uid in api')
+        logging.debug('post_tg_user: payload: %s' % cls.secret(payload_sender))
         status_sender, response_sender = await cls.api_request(
             path='/api/profile',
             method='post',
             data=payload_sender,
         )
-        logging.debug('get_or_create tg_user by tg_uid in api, status: %s' % status_sender)
-        logging.debug('get_or_create tg_user by tg_uid in api, response: %s' % response_sender)
+        logging.info(f'post_tg_user: API response status: {status_sender}')
+        logging.debug('post_tg_user: response: %s' % response_sender)
+        
         if status_sender == 200 and response_sender.get('created'):
+            logging.info('post_tg_user: User created, updating photo')
             status_photo, response_photo = await cls.update_user_photo(tg_user=tg_user_sender, profile=response_sender)
             if status_photo == 200:
                 response_sender = response_photo
+                logging.info('post_tg_user: Photo updated successfully')
 
-        logging.error(f"DEBUG post_tg_user: status_sender={status_sender}")
-        logging.error(f"DEBUG post_tg_user: response_sender type={type(response_sender)}")
-        logging.error(f"DEBUG post_tg_user: response_sender keys={list(response_sender.keys()) if isinstance(response_sender, dict) else 'Not dict'}")
-        logging.error(f"DEBUG post_tg_user: response_sender full={response_sender}")
+        logging.info(f"post_tg_user: Completed with status {status_sender}")
+        logging.debug(f"post_tg_user: response_sender type={type(response_sender)}")
+        if isinstance(response_sender, dict):
+            logging.debug(f"post_tg_user: response_sender keys={list(response_sender.keys())}")
 
         return status_sender, response_sender
 

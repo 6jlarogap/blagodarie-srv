@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from aiogram import Bot, Dispatcher, enums
 from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -15,6 +16,19 @@ from settings import logging
 storage = MemoryStorage()
 
 async def main_():
+    # DIAGNOSTIC: Add startup logging
+    logging.info("=" * 50)
+    logging.info("BOT STARTUP DIAGNOSTIC")
+    logging.info("=" * 50)
+    logging.info(f"Python version: {sys.version}")
+    logging.info(f"Settings.DEBUG: {settings.DEBUG}")
+    logging.info(f"Settings.TOKEN: {'SET' if settings.TOKEN else 'NOT SET'}")
+    logging.info(f"Settings.LOCAL_SERVER: {settings.LOCAL_SERVER}")
+    logging.info(f"Settings.HTTP_TIMEOUT: {settings.HTTP_TIMEOUT}")
+    logging.info(f"Logging level: {logging.getLogger().level}")
+    logging.info(f"Logging handlers: {len(logging.getLogger().handlers)}")
+    logging.info("=" * 50)
+    
     kwargs_bot = dict(
         token=settings.TOKEN,
         default=DefaultBotProperties(
@@ -66,15 +80,25 @@ async def main_():
 
     try:
         logging.info("Запуск бота...")
+        logging.info("Проверка подключения к Telegram API...")
+        
+        # Test bot connection
+        me.bot_data = await bot.get_me()
+        logging.info(f"Бот подключен: {me.bot_data.username}")
+        
+        logging.info("Запуск polling...")
         await dp.start_polling(
             bot,
             polling_timeout=20,
             skip_updates=True
         )
+        logging.info("Polling завершен")
     except KeyboardInterrupt:
         logging.info("Бот остановлен пользователем")
     except Exception as e:
         logging.error(f"Критическая ошибка в боте: {e}", exc_info=True)
+        logging.error(f"Тип ошибки: {type(e).__name__}")
+        logging.error(f"Аргументы ошибки: {e.args}")
     finally:
         logging.info("Закрытие сессий...")
         # Close application session first
@@ -84,6 +108,7 @@ async def main_():
         if bot.session:
             try:
                 await bot.session.close()
+                logging.info("Сессия бота закрыта")
             except Exception as e:
                 logging.error(f"Ошибка при закрытии сессии бота: {e}")
         
