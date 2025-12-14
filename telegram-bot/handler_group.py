@@ -31,6 +31,8 @@ async def process_group_message(message: Message, state: FSMContext):
     """
     Обработка сообщений в группу
     """
+    logging.info("TEST: process_group_message handler called")
+
     tg_user_sender = message.from_user
 
     # tg_user_sender.id == 777000:
