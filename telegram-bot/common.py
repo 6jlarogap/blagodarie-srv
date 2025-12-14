@@ -21,10 +21,10 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.fsm.state import StatesGroup, State
 
 import aiohttp
-
-import settings, me
+import logging
+import settings
 from settings import logging
-
+import me
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
 # Менеджер сессий
