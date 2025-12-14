@@ -9,6 +9,7 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import settings, me
+from common import AioHttpSessionManager
 from settings import logging
 
 storage = MemoryStorage()
@@ -62,9 +63,30 @@ async def main_():
     )
 
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(
-        bot,
-        polling_timeout=20,
-    )
+
+    try:
+        logging.info("Запуск бота...")
+        await dp.start_polling(
+            bot,
+            polling_timeout=20,
+            skip_updates=True
+        )
+    except KeyboardInterrupt:
+        logging.info("Бот остановлен пользователем")
+    except Exception as e:
+        logging.error(f"Критическая ошибка в боте: {e}", exc_info=True)
+    finally:
+        logging.info("Закрытие сессий...")
+        try:
+            await AioHttpSessionManager.close()
+        except Exception as e:
+            logging.error(f"Ошибка при закрытии HTTP сессии: {e}")
+        
+        try:
+            await bot.session.close()
+        except Exception as e:
+            logging.error(f"Ошибка при закрытии сессии бота: {e}")
+        
+        logging.info("Бот завершил работу")
 
 asyncio.run(main_())

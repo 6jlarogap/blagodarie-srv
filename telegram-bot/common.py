@@ -25,7 +25,30 @@ import aiohttp
 import settings, me
 from settings import logging
 
-TIMEOUT = aiohttp.ClientTimeout(total=settings.HTTP_TIMEOUT)
+
+# Менеджер сессий
+class AioHttpSessionManager:
+    _session = None
+    
+    @classmethod
+    def get_session(cls):
+        if cls._session is None or cls._session.closed:
+            cls._session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=settings.HTTP_TIMEOUT),
+                connector=aiohttp.TCPConnector(
+                    limit=100,
+                    force_close=True,
+                    enable_cleanup_closed=True
+                )
+            )
+        return cls._session
+    
+    @classmethod
+    async def close(cls):
+        if cls._session and not cls._session.closed:
+            await cls._session.close()
+            cls._session = None
+
 
 dp, bot, bot_data = me.dp, me.bot, me.bot_data
 
@@ -598,7 +621,7 @@ class Misc(object):
     @classmethod
     async def get_template(cls, template):
         status = response = None
-        async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
+        session = AioHttpSessionManager.get_session()
             try:
                 async with session.request(
                     'GET',
@@ -606,9 +629,13 @@ class Misc(object):
                 ) as resp:
                     status = resp.status
                     response = await resp.text('UTF-8')
-            except:
-                pass
-        return status, response
+            except aiohttp.ClientError as e:
+                logging.error(f"HTTP client error in api_request: {e}")
+                return None, None
+            except Exception as e:
+                logging.error(f"Unexpected error in api_request: {e}")
+                return None, None
+            return status, response
 
     @classmethod
     async def chat_pin_message_text(cls):
@@ -721,7 +748,7 @@ class Misc(object):
             'json' или 'text'
         """
         status = response = None
-        async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
+        session = AioHttpSessionManager.get_session()
             try:
                 async with session.request(
                     method.upper(),
@@ -738,8 +765,12 @@ class Misc(object):
                             response = await resp.text('UTF-8')
                     else:
                         response = await resp.text('UTF-8')
-            except:
-                pass
+            except aiohttp.ClientError as e:
+                logging.error(f"HTTP client error in api_request: {e}")
+                return None, None
+            except Exception as e:
+                logging.error(f"Unexpected error in api_request: {e}")
+                return None, None
         return status, response
 
     @classmethod
@@ -1635,13 +1666,17 @@ class Misc(object):
                 frame_width=PHOTO_FRAME_WIDTH,
             )
             status = photo = None
-            async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
+            session = AioHttpSessionManager.get_session()
                 try:
                     async with session.request('GET', thumbnail,) as response:
                         status = response.status
                         photo = Image.open(BytesIO(await response.read()))
-                except:
-                    pass
+                except aiohttp.ClientError as e:
+                    logging.error(f"HTTP client error in api_request: {e}")
+                    return None, None
+                except Exception as e:
+                    logging.error(f"Unexpected error in api_request: {e}")
+                    return None, None
                 if status == 200 and photo:
                     photo_width = PHOTO_WIDTH + PHOTO_FRAME_WIDTH * 2
                     wpercent = photo_width / float(photo.size[0])
@@ -2383,7 +2418,7 @@ class Misc(object):
         а ошибка разработчика :)
         """
         status = response = None
-        async with aiohttp.ClientSession(timeout=TIMEOUT) as session:
+        session = AioHttpSessionManager.get_session()
             try:
                 async with session.request(
                     'POST',
@@ -2396,8 +2431,12 @@ class Misc(object):
                         response = await resp.json()
                     else:
                         response = await resp.text('UTF-8')
-            except:
-                raise
+            except aiohttp.ClientError as e:
+                logging.error(f"HTTP client error in api_request: {e}")
+                return None, None
+            except Exception as e:
+                logging.error(f"Unexpected error in api_request: {e}")
+                return None, None
         return status, response
 
 
@@ -2934,10 +2973,6 @@ class TgGroupMember(object):
         )
         logging.debug('delete group member, status: %s' % status)
         logging.debug('delete group member, response: %s' % response)
-        if status != 200:
-            logging.error(f'Failed to remove user {user_tg_uid} from group {group_chat_id}, status: {status}, response: {response}')
-        else:
-            logging.debug(f'Successfully removed user {user_tg_uid} from group {group_chat_id}')
         return status, response
 
 
