@@ -42,6 +42,7 @@ async def process_group_message(message: Message, state: FSMContext):
             if not r.set(dedup_key, "1", ex=300, nx=True):
                 logging.debug(f"Message {message.message_id} already processed, skipping")
                 return
+            logging.debug(f"Message {message.message_id} added to Redis")
         except Exception as e:
             logging.error(f"Redis dedup error: {str(e)}")
             # В случае ошибки Redis продолжаем обработку
