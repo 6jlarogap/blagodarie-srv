@@ -49,15 +49,13 @@ async def process_group_message(message: Message, state: FSMContext):
         finally:
             r.close()
 
-    logging.debug("TEST: arter REDIS process_group_message handler called")
-
     tg_user_sender = message.from_user
 
     # tg_user_sender.id == 777000:
     #   Если к группе привязан канал, то сообщения идут от этого пользователя
     #
     if tg_user_sender.id == 777000:
-        logging.debug("TEST: tg_user_sender.id == 777000")
+        logging.debug("TEST: filtered tg_user_sender.id == 777000")
         return
 
     if message.content_type in(
@@ -72,7 +70,7 @@ async def process_group_message(message: Message, state: FSMContext):
             ContentType.GENERAL_FORUM_TOPIC_HIDDEN,
             ContentType.GENERAL_FORUM_TOPIC_UNHIDDEN,
        ):
-        logging.debug("TEST: filtered content type")
+        logging.debug("TEST: filtered content type {message.content_type}")
         return
 
     #
@@ -137,10 +135,10 @@ async def process_group_message(message: Message, state: FSMContext):
                 type_=message.chat.type,
             )
             if status == 200:
-                logging.debug("TEST: migrate TgGroup.put")                   
+                logging.debug("TEST: migrate TgGroup.put {status}")                   
 #                if response['pin_message_id']:
                 if response.get('pin_message_id'):
-                    logging.debug("TEST: tg_user_sender.id == 777000")
+                    logging.debug("TEST: pin_message_id= {pin_message_id}")
                     text, reply_markup = Misc.make_pin_group_message(message.chat)
                     try:
                         await bot.edit_message_text(
@@ -149,6 +147,7 @@ async def process_group_message(message: Message, state: FSMContext):
                             text=text,
                             reply_markup=reply_markup,
                         )
+                        logging.debug("TEST: migrate edit pin message")
                     except (TelegramBadRequest, TelegramForbiddenError) as e:
                         logging.error(f"Failed to edit pin message: {str(e)}")
             else:
