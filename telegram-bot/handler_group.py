@@ -31,23 +31,28 @@ async def process_group_message(message: Message, state: FSMContext):
     """
     Обработка сообщений в группу
     """
-    # Дедупликация - проверяем, не обрабатывали ли мы это сообщение
-    dedup_key = f"msg:{message.chat.id}:{message.message_id}"
-    
-    # Используем Redis для хранения обработанных сообщений
-    r = redis.Redis(**settings.REDIS_CONNECT)
-    try:
-        # Пытаемся установить ключ с временем жизни 5 минут
-        # Если ключ уже существует (возвращает 0) - сообщение уже обрабатывалось
-        if not r.setex(dedup_key, 300, "1", nx=True):
-            logging.debug(f"Message {message.message_id} already processed, skipping")
-            return
-    except Exception as e:
-        logging.error(f"Redis dedup error: {str(e)}")
-    finally:
-        r.close()
-
     logging.debug("TEST: process_group_message handler called")
+
+ dedup_key = f"msg_dedup:{message.chat.id}:{message.message_id}"
+    
+    r = redis.Redis(**settings.REDIS_CONNECT)
+    
+    logging.debug("TEST: process_group_message handler called")
+
+    if r := redis.Redis(**settings.REDIS_CONNECT):
+        try:
+            # Пытаемся установить ключ с временем жизни 5 минут
+            # Если ключ уже существует (возвращает 0) - сообщение уже обрабатывалось
+            if not r.setex(dedup_key, 300, "1", nx=True):
+                logging.debug(f"Message {message.message_id} already processed, skipping")
+                return
+        except Exception as e:
+            logging.error(f"Redis dedup error: {str(e)}")
+            # В случае ошибки Redis продолжаем обработку
+        finally:
+            r.close()
+
+    logging.debug("TEST: arter REDIS process_group_message handler called")
 
     tg_user_sender = message.from_user
 
