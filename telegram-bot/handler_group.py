@@ -39,7 +39,7 @@ async def process_group_message(message: Message, state: FSMContext):
         try:
             # Пытаемся установить ключ с временем жизни 5 минут
             # Если ключ уже существует (возвращает 0) - сообщение уже обрабатывалось
-            if not r.setex(dedup_key, 300, "1", nx=True):
+            if not r.set(dedup_key, "1", ex=300, nx=True):
                 logging.debug(f"Message {message.message_id} already processed, skipping")
                 return
         except Exception as e:
@@ -136,8 +136,9 @@ async def process_group_message(message: Message, state: FSMContext):
                 type_=message.chat.type,
             )
             if status == 200:
-                logging.debug("TEST: TgGroup.put")
-                if response['pin_message_id']:
+                logging.debug("TEST: migrate TgGroup.put")                   
+#                if response['pin_message_id']:
+                if response.get('pin_message_id'):
                     logging.debug("TEST: tg_user_sender.id == 777000")
                     text, reply_markup = Misc.make_pin_group_message(message.chat)
                     try:
@@ -196,7 +197,7 @@ async def process_group_message(message: Message, state: FSMContext):
     is_previous_his = True
     keep_hours = None
     if message.chat.id in settings.GROUPS_WITH_CARDS and \
-       not tg_user_left and not tg_users_new and message.from_user.id != bot_data.id and \
+       and message.from_user.id != bot_data.id and \
        message.is_topic_message and message.message_thread_id and \
        (
         message.message_thread_id in settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids'] or
