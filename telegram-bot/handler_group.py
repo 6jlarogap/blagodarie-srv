@@ -197,7 +197,7 @@ async def process_group_message(message: Message, state: FSMContext):
     is_previous_his = True
     keep_hours = None
     if message.chat.id in settings.GROUPS_WITH_CARDS and \
-       and message.from_user.id != bot_data.id and \
+       message.from_user.id != bot_data.id and \
        message.is_topic_message and message.message_thread_id and \
        (
         message.message_thread_id in settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids'] or
