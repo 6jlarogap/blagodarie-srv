@@ -31,18 +31,21 @@ async def process_group_message(message: Message, state: FSMContext):
     """
     Обработка сообщений в группу
     """
-
-    global last_processed_message
+    # Дедупликация - проверяем, не обрабатывали ли мы это сообщение
+    dedup_key = f"msg:{message.chat.id}:{message.message_id}"
     
-    # Проверяем, не то же самое ли сообщение
-    if (last_processed_message["chat_id"] == message.chat.id and 
-        last_processed_message["message_id"] == message.message_id):
-        return
-    
-    last_processed_message = {
-        "chat_id": message.chat.id,
-        "message_id": message.message_id
-    }
+    # Используем Redis для хранения обработанных сообщений
+    r = redis.Redis(**settings.REDIS_CONNECT)
+    try:
+        # Пытаемся установить ключ с временем жизни 5 минут
+        # Если ключ уже существует (возвращает 0) - сообщение уже обрабатывалось
+        if not r.setex(dedup_key, 300, "1", nx=True):
+            logging.debug(f"Message {message.message_id} already processed, skipping")
+            return
+    except Exception as e:
+        logging.error(f"Redis dedup error: {str(e)}")
+    finally:
+        r.close()
 
     logging.debug("TEST: process_group_message handler called")
 
