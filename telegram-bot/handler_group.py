@@ -146,9 +146,9 @@ async def process_group_message(message: Message, state: FSMContext):
             group_type=message.chat.type,
             user_tg_uid=tg_user_sender.id
         )
-        logging.debug("TEST: Mirgate TgGroupMember.add")
+        logging.debug("TEST: TgGroupMember.add")
     except Exception as e:
-        logging.debug("ERROR: Migrate TgGroupMember.add")
+        logging.debug("ERROR: TgGroupMember.add")
         return
     
     if tg_user_sender.is_bot:
