@@ -34,7 +34,6 @@ async def process_group_message(message: Message, state: FSMContext):
     logging.debug("TEST: process_group_message handler called")
 
     dedup_key = f"msg_dedup:{message.chat.id}:{message.message_id}"
-    
     if r := redis.Redis(**settings.REDIS_CONNECT):
         try:
             # Пытаемся установить ключ с временем жизни 5 минут
