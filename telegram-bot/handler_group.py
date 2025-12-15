@@ -198,13 +198,25 @@ async def process_group_message(message: Message, state: FSMContext):
     #
     logging.debug(
         "TEST: Before GROUPS_WITH_CARDS"
-        f'message.chat.id: {message.chat.id if message.chat.id else "None"}'
-        f'message.from_user.id: {message.from_user.id if message.from_user.id else "None"}'
-        f'bot_data.id: {bot_data.id if bot_data.id else "None"}'
-        f'message.is_topic_message: {message.is_topic_message if message.is_topic_message else "None"}'
-        f'message.message_thread_id: {message.message_thread_id if message.message_thread_id else "None"}'
-        f'message.chat.id: {message.chat.id if message.chat.id else "None"}'
+        f'message.chat.id: {message.chat.id if message.chat.id else "None"}, '
+        f'message.from_user.id: {message.from_user.id if message.from_user.id else "None", }'
+        f'bot_data.id: {bot_data.id if bot_data.id else "None", }'
+        f'message.is_topic_message: {message.is_topic_message if message.is_topic_message else "None", }'
+        f'message.message_thread_id: {message.message_thread_id if message.message_thread_id else "None", }'
+        f'message.chat.id: {message.chat.id if message.chat.id else "None", }'
     )
+
+    if message.chat.id in settings.GROUPS_WITH_CARDS:
+        logging.debug("TEST: message.chat.id in settings.GROUPS_WITH_CARDS")
+    if message.from_user.id != bot_data.id:
+        logging.debug("TEST: message.from_user.id != bot_data.id")
+    if message.is_topic_message and message.message_thread_id:
+        logging.debug("TEST: is_topic_message and message.message_thread_id")
+    if(
+        message.message_thread_id in settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids'] or
+        'topic_messages' in settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids']
+       ):
+        logging.debug("TEST: GROUPS_WITH_CARDS")
 
     is_previous_his = True
     keep_hours = None
