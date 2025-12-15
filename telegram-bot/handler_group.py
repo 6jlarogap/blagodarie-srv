@@ -194,6 +194,7 @@ async def process_group_message(message: Message, state: FSMContext):
     #               есть слово 'topic_messages'
     #       -   если предыдущее сообщение было от него
     #
+    logging.debug("TEST: Before GROUPS_WITH_CARDS")
     is_previous_his = True
     keep_hours = None
     if message.chat.id in settings.GROUPS_WITH_CARDS and \
