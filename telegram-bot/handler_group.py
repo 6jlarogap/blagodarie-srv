@@ -121,10 +121,10 @@ async def process_group_message(message: Message, state: FSMContext):
             # Это сообщение может быть обработано позже чем
             # сообщение с migrate_from_chat_id и еще со старым chat_id,
             # и будет воссоздана старая группа в апи
-            logging.debug("TEST: return message.migrate_to_chat_id")
+            logging.debug("TEST: return from message.migrate_to_chat_id")
             return
     except (TypeError, AttributeError,):
-        logging.debug("ERROR: return message.migrate_to_chat_id")
+        logging.debug("ERROR: try message.migrate_to_chat_id")
         pass
     try:
         if message.migrate_from_chat_id:
