@@ -1547,7 +1547,7 @@ class ApiProfile(CreateUserMixin, UuidMixin, GenderMixin, FrontendMixin, Telegra
                         owner=user,
                 ))
                 if not created_:
-                    raise ServiceException(f'Банковские реквизиты "{value}" есть уже у другого человека')
+                    raise ServiceException(f'Реквизиты платежей "{value}" есть уже у другого человека')
             if 'tgdesc' in request.data:
                 tgdesc_dict = request.data['tgdesc']
                 if request.data.get('is_first'):

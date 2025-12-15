@@ -647,7 +647,7 @@ async def quest_bank_after_invite(message, state, prefix=''):
     ))
     text= (
         'Чтобы получать добровольные дары - в благодарность за приглашения в игру - '
-        'напишите Ваши платёжные реквизиты для переводов'
+        'напишите Ваши Реквизиты платежей для переводов'
     )
     if prefix:
         text = prefix + '\n\n' + text
@@ -687,7 +687,7 @@ async def cbq_meet_invite(callback: CallbackQuery, state: FSMContext):
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMbankingBeforeInivite.ask))
 async def process_message_banking_after_invite(message: Message, state: FSMContext):
     if (message.content_type != ContentType.TEXT) or not message.text.strip():
-        await quest_bank_after_invite(message, state, prefix='Это не банковские реквизиты')
+        await quest_bank_after_invite(message, state, prefix='Это не Реквизиты платежей')
         return
     if await is_it_command(message, state):
         return
@@ -1685,7 +1685,7 @@ async def cbq_get_banking(callback: CallbackQuery, state: FSMContext):
         if bank_details := await Misc.get_bank_details(uuid):
             text += (
                 '.\n\n'
-                '<b>Ваши текущие реквизиты:</b>\n\n'
+                '<b>Ваши Реквизиты платежей:</b>\n\n'
                 f'{html.quote(bank_details)}\n\n'
                 '<b>будут заменены</b>'
             )
@@ -1708,7 +1708,7 @@ async def process_message_banking(message: Message, state: FSMContext):
         return
     status, response = await put_banking(message, state)
     if status == 200:
-        await message.reply('Реквизиты записаны')
+        await message.reply('Реквизиты платежей записаны')
     await state.clear()
 
 
@@ -1786,8 +1786,8 @@ async def cbq_donate_thank(callback: CallbackQuery, state: FSMContext):
     if bank_details:
         text_after_thank = (
             'Пришлите мне снимок экрана добровольного пожертвования любой суммы '
-            'в качестве благодарности на реквизиты ниже, '
-            'добавьте в сообщение фото/видео и текстовый комментарий\n'
+            'в качестве благодарности на Реквизиты платежей ниже, '
+            'можно добавить фото/видео/текстовый комментарий\n'
             '\n'
             f'{html.quote(bank_details)}\n\n'
         )

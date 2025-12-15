@@ -477,7 +477,7 @@ class Profile(PhotoModel, GeoPointAddressModel):
 
     def has_bank(self):
         """
-        Имеет ли банковские реквизиты
+        Имеет ли Реквизиты платежей
         """
         Key = get_model('contact', 'Key')
         KeyType = get_model('contact', 'KeyType')

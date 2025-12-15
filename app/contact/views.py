@@ -2167,7 +2167,7 @@ class ApiAddKeyView(UuidMixin, APIView):
                             owner=user,
                     ))
                     if not created_:
-                        key_title = 'Банковские реквизиты' if type_id == KeyType.BANKING_DETAILS_ID else 'Контакт'
+                        key_title = 'Реквизиты платежей' if type_id == KeyType.BANKING_DETAILS_ID else 'Контакт'
                         raise ServiceException(f'{key_title } "{value}" есть уже у другого человека',
                             str(key.owner.pk)
                         )

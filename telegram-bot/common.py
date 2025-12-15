@@ -1382,7 +1382,7 @@ class Misc(object):
 
                 if is_own_account:
                     inline_btn_bank = InlineKeyboardButton(
-                        text='Реквизиты',
+                        text='Реквизиты платежей',
                         callback_data=callback_data_template % dict(
                         keyboard_type=KeyboardType.BANKING,
                         uuid=profile['uuid'],
@@ -2256,11 +2256,11 @@ class Misc(object):
 
             if do_thank and journal_id and not bank_details:
                 text_to_recipient += (
-                    '\n\nЧтобы получать добровольные дары - заполните платёжные реквизиты'
+                    '\n\nЧтобы получать добровольные дары - заполните реквизиты банка'
                 )
                 callback_data_template = cls.CALLBACK_DATA_UUID_TEMPLATE
                 inline_btn_bank = InlineKeyboardButton(
-                    text='Реквизиты',
+                    text='Реквизиты платежей',
                     callback_data=callback_data_template % dict(
                     keyboard_type=KeyboardType.BANKING,
                     uuid=profile_to['uuid'],
@@ -2512,7 +2512,7 @@ class Misc(object):
     @classmethod
     async def get_bank_details(cls, uuid):
         """
-        Получить банковские реквизиты юзера с uuid
+        Получить Реквизиты платежей юзера с uuid
         """
         result = ''
         status_bank, response_bank = await cls.api_request(
