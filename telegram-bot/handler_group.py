@@ -31,6 +31,19 @@ async def process_group_message(message: Message, state: FSMContext):
     """
     Обработка сообщений в группу
     """
+
+    global last_processed_message
+    
+    # Проверяем, не то же самое ли сообщение
+    if (last_processed_message["chat_id"] == message.chat.id and 
+        last_processed_message["message_id"] == message.message_id):
+        return
+    
+    last_processed_message = {
+        "chat_id": message.chat.id,
+        "message_id": message.message_id
+    }
+
     logging.debug("TEST: process_group_message handler called")
 
     tg_user_sender = message.from_user
