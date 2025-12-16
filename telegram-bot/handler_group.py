@@ -221,40 +221,48 @@ async def process_group_message(message: Message, state: FSMContext):
              'all_topics' in group_settings['message_thread_ids'])):
             logging.debug("TEST: message_thread_id in group_settings")
 
-            # Instead of sending a new minicard message:
-            # answer = await message.answer(reply, reply_markup=..., disable_notification=True)
-
             # Edit the original message to add buttons:
+            dict_reply = dict(
+                keyboard_type=KeyboardType.TRUST_THANK,
+                operation=OperationType.TRUST,
+                sep=KeyboardType.SEP,
+                user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
+                message_to_forward_id='',
+                group_id=message.chat.id,
+            )
+
+            callback_data_template = (
+                '%(keyboard_type)s%(sep)s'
+                '%(operation)s%(sep)s'
+                '%(user_to_uuid_stripped)s%(sep)s'
+                '%(message_to_forward_id)s%(sep)s'
+                '%(group_id)s%(sep)s'
+            )
+
+            # Create both buttons
+            inline_btn_thank = InlineKeyboardButton(
+                text='Доверяю',
+                callback_data=callback_data_template % dict_reply,
+            )
+
+            # Create profile button with deeplink
+            profile_link = f"https://t.me/doverabot?start={Misc.uuid_strip(response_from['uuid'])}"
+            inline_btn_profile = InlineKeyboardButton(
+                text='Профиль',
+                url=profile_link,  # Using url instead of callback_data for direct link
+            )
+
+            # Edit message with both buttons in one row
             try:
-                dict_reply = dict(
-                    keyboard_type=KeyboardType.TRUST_THANK,
-                    operation=OperationType.TRUST,
-                    sep=KeyboardType.SEP,
-                    user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
-                    message_to_forward_id='',
-                    group_id=message.chat.id,
-                )
-                callback_data_template = (
-                    '%(keyboard_type)s%(sep)s'
-                    '%(operation)s%(sep)s'
-                    '%(user_to_uuid_stripped)s%(sep)s'
-                    '%(message_to_forward_id)s%(sep)s'
-                    '%(group_id)s%(sep)s'
-                )
-                inline_btn_thank = InlineKeyboardButton(
-                    text='Доверяю',
-                    callback_data=callback_data_template % dict_reply,
-                )
-                
-                # Edit the original message to add the button
                 await bot.edit_message_reply_markup(
                     chat_id=message.chat.id,
                     message_id=message.message_id,
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[inline_btn_thank]])
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [inline_btn_thank, inline_btn_profile]  # Both buttons in same row
+                    ])
                 )
             except (TelegramBadRequest, TelegramForbiddenError) as e:
                 logging.error(f"Failed to edit user message: {str(e)}")
-
 
     # Аплоад видео из топика группы - в ютуб канал
     if (message.is_topic_message and \
