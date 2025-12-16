@@ -226,7 +226,7 @@ async def process_group_message(message: Message, state: FSMContext):
                 keyboard_type=KeyboardType.TRUST_THANK,
                 operation=OperationType.TRUST,
                 sep=KeyboardType.SEP,
-                user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
+                user_to_uuid_stripped=Misc.uuid_strip(str(tg_user_sender.id)),
                 message_to_forward_id='',
                 group_id=message.chat.id,
             )
@@ -246,7 +246,7 @@ async def process_group_message(message: Message, state: FSMContext):
             )
 
             # Create profile button with deeplink
-            profile_link = f"https://t.me/doverabot?start={Misc.uuid_strip(response_from['uuid'])}"
+            profile_link = Misc.get_deeplink(response_from, https=False)
             inline_btn_profile = InlineKeyboardButton(
                 text='Профиль',
                 url=profile_link,  # Using url instead of callback_data for direct link
