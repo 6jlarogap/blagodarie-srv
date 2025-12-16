@@ -1295,7 +1295,7 @@ class Misc(object):
             buttons.append([inline_btn_thank])
 
         inline_btn_trusts = InlineKeyboardButton(
-            text='Сеть доверия',
+            text='Схема доверия',
             login_url=cls.make_login_url(
                 redirect_path=f'{settings.GRAPH_HOST}/?user_trusts={profile["username"]}',
                 keep_user_data='on',
@@ -2185,7 +2185,7 @@ class Misc(object):
             if not group_member and (operation_done or operation_already):
                 if not buttons:
                     inline_btn_trusts = InlineKeyboardButton(
-                        text='Сеть доверия',
+                        text='Схема доверия',
                         login_url=cls.make_login_url(
                             redirect_path=f'{settings.GRAPH_HOST}/?user_trusts={profile_to["username"]}',
                             keep_user_data='on',
