@@ -31,8 +31,25 @@ async def process_group_message(message: Message, state: FSMContext):
     """
     Обработка сообщений в группу
     """
-    logging.debug("TEST: process_group_message handler called")
+    logging.debug(
+        f'TEST: process_group_message handler called, '
+        f'message in group: chat_title: {message.chat.title}, '
+        f'chat_id: {message.chat.id}, '
+        f'message_thread_id: {message.message_thread_id}, '
+        f'user_from: {message.from_user.first_name} {message.from_user.last_name}, '
+        f'message.from_user.id: {message.from_user.id}, '
+        f'message text: {repr(message.text)}, '
+        f'message caption: {repr(message.caption)}, '
+        f'content_type: {message.content_type}, '  # Добавить тип контента
+        f'media_group_id: {message.media_group_id if message.media_group_id else "None"}'
+        f'message.is_topic_message: {message.is_topic_message}, '
+        f'message.message_thread_id: {message.message_thread_id}, '
+        f'message.migrate_to_chat_id: {message.migrate_to_chat_id}, '
+        f'message.migrate_from_chat_id: {message.migrate_from_chat_id}, '
+        f'bot_data.id: {bot_data.id if bot_data.id else "None", }'
+    )
 
+    # Добавляем ид сообщения в редис - чтобы не обрабатывать его повторно
     dedup_key = f"msg_dedup:{message.chat.id}:{message.message_id}"
     if r := redis.Redis(**settings.REDIS_CONNECT):
         try:
@@ -48,15 +65,6 @@ async def process_group_message(message: Message, state: FSMContext):
         finally:
             r.close()
 
-    tg_user_sender = message.from_user
-
-    # tg_user_sender.id == 777000:
-    #   Если к группе привязан канал, то сообщения идут от этого пользователя
-    #
-    if tg_user_sender.id == 777000:
-        logging.debug("TEST: filtered tg_user_sender.id == 777000")
-        return
-
     if message.content_type in(
             ContentType.NEW_CHAT_PHOTO,
             ContentType.NEW_CHAT_TITLE,
@@ -71,6 +79,73 @@ async def process_group_message(message: Message, state: FSMContext):
        ):
         logging.debug("TEST: filtered content type {message.content_type}")
         return
+
+    try:
+        if message.migrate_to_chat_id:
+            # Это сообщение может быть обработано позже чем
+            # сообщение с migrate_from_chat_id и еще со старым chat_id,
+            # и будет воссоздана старая группа в апи
+            logging.debug("TEST: return from message.migrate_to_chat_id")
+            return
+    except (TypeError, AttributeError,):
+        logging.debug("ERROR: except message.migrate_to_chat_id")
+        pass
+    try:
+        if message.migrate_from_chat_id:
+            status, response = await TgGroup.put(
+                old_chat_id=message.migrate_from_chat_id,
+                chat_id=message.chat.id,
+                title=message.chat.title,
+                type_=message.chat.type,
+            )
+            if status == 200:
+                logging.debug("TEST: migrate TgGroup.put {status}")                   
+                if response.get('pin_message_id'):
+                    logging.debug("TEST: pin_message_id= {pin_message_id}")
+                    text, reply_markup = Misc.make_pin_group_message(message.chat)
+                    try:
+                        await bot.edit_message_text(
+                            chat_id=message.migrate_from_chat_id,
+                            message_id=response['pin_message_id'],
+                            text=text,
+                            reply_markup=reply_markup,
+                        )
+                        logging.debug("TEST: success edit pin message migrate ")
+                    except (TelegramBadRequest, TelegramForbiddenError) as e:
+                        logging.error(f"Failed to edit pin message: {str(e)}")
+            else:
+                logging.debug("ERROR: TgGroup.put")
+    except (TypeError, AttributeError,):
+        logging.debug("ERROR: except message.migrate_from_chat_id")
+        pass
+
+    tg_user_sender = message.from_user
+
+    # tg_user_sender.id == 777000:
+    #   Если к группе привязан канал, то сообщения идут от этого пользователя
+    #
+    if tg_user_sender.id == 777000:
+        logging.debug("TEST: filtered tg_user_sender.id == 777000")
+        return
+    if tg_user_sender.is_bot:
+        logging.debug("TEST: filtered tg_user_sender.is_bot")
+        return
+
+    # регистрируем пользователя в группе
+    try:
+        status, response_from = await Misc.post_tg_user(tg_user_sender, did_bot_start=False)
+        await TgGroupMember.add(
+            group_chat_id=message.chat.id,
+            group_title=message.chat.title,
+            group_type=message.chat.type,
+            user_tg_uid=tg_user_sender.id
+        )
+        logging.debug("TEST: TgGroupMember.add")
+    except Exception as e:
+        logging.debug("ERROR: TgGroupMember.add")
+        return
+    
+
 
     #
     # Это отработано.
@@ -115,72 +190,7 @@ async def process_group_message(message: Message, state: FSMContext):
     #         "migrate_from_chat_id":-989004337
     #     }
     # }
-    try:
-        if message.migrate_to_chat_id:
-            # Это сообщение может быть обработано позже чем
-            # сообщение с migrate_from_chat_id и еще со старым chat_id,
-            # и будет воссоздана старая группа в апи
-            logging.debug("TEST: return from message.migrate_to_chat_id")
-            return
-    except (TypeError, AttributeError,):
-        logging.debug("ERROR: try message.migrate_to_chat_id")
-        pass
-    try:
-        if message.migrate_from_chat_id:
-            status, response = await TgGroup.put(
-                old_chat_id=message.migrate_from_chat_id,
-                chat_id=message.chat.id,
-                title=message.chat.title,
-                type_=message.chat.type,
-            )
-            if status == 200:
-                logging.debug("TEST: migrate TgGroup.put {status}")                   
-#                if response['pin_message_id']:
-                if response.get('pin_message_id'):
-                    logging.debug("TEST: pin_message_id= {pin_message_id}")
-                    text, reply_markup = Misc.make_pin_group_message(message.chat)
-                    try:
-                        await bot.edit_message_text(
-                            chat_id=message.migrate_from_chat_id,
-                            message_id=response['pin_message_id'],
-                            text=text,
-                            reply_markup=reply_markup,
-                        )
-                        logging.debug("TEST: migrate edit pin message")
-                    except (TelegramBadRequest, TelegramForbiddenError) as e:
-                        logging.error(f"Failed to edit pin message: {str(e)}")
-            else:
-                logging.debug("ERROR: TgGroup.put")
 
-    except (TypeError, AttributeError,):
-        pass
-
-    try:
-        status, response_from = await Misc.post_tg_user(tg_user_sender, did_bot_start=False)
-        await TgGroupMember.add(
-            group_chat_id=message.chat.id,
-            group_title=message.chat.title,
-            group_type=message.chat.type,
-            user_tg_uid=tg_user_sender.id
-        )
-        logging.debug("TEST: TgGroupMember.add")
-    except Exception as e:
-        logging.debug("ERROR: TgGroupMember.add")
-        return
-    
-    if tg_user_sender.is_bot:
-        return
-
-    logging.debug(
-        f'message in group: chat_title: {message.chat.title}, '
-        f'chat_id: {message.chat.id}, '
-        f'message_thread_id: {message.message_thread_id}, '
-        f'user_from: {message.from_user.first_name} {message.from_user.last_name}, '
-        f'message text: {repr(message.text)}, '
-        f'message caption: {repr(message.caption)}, '
-        f'content_type: {message.content_type}, '  # Добавить тип контента
-        f'media_group_id: {message.media_group_id if message.media_group_id else "None"}'
-    )
 
     # Предыдущее сообщение в группу было от текущего юзера:
     #   Выводим миникаточку, если
@@ -195,111 +205,87 @@ async def process_group_message(message: Message, state: FSMContext):
     #               есть слово 'topic_messages'
     #       -   если предыдущее сообщение было от него
     #
-    logging.debug(
-        "TEST: Before GROUPS_WITH_CARDS"
-        f'message.chat.id: {message.chat.id if message.chat.id else "None"}, '
-        f'message.from_user.id: {message.from_user.id if message.from_user.id else "None", }'
-        f'bot_data.id: {bot_data.id if bot_data.id else "None", }'
-        f'message.is_topic_message: {message.is_topic_message if message.is_topic_message else "None", }'
-        f'message.message_thread_id: {message.message_thread_id if message.message_thread_id else "None", }'
-        f'message.chat.id: {message.chat.id if message.chat.id else "None", }'
-    )
 
+    # Добавление мини-карточек юзера после сообщений в топике группы
     if message.chat.id in settings.GROUPS_WITH_CARDS:
-        logging.debug("TEST: message.chat.id in settings.GROUPS_WITH_CARDS")
-    if message.from_user.id != bot_data.id:
-        logging.debug("TEST: message.from_user.id != bot_data.id")
-    if message.is_topic_message and message.message_thread_id:
-        logging.debug("TEST: is_topic_message and message.message_thread_id")
-    if(
-        message.message_thread_id in settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids'] or
-        'topic_messages' in settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids']
-       ):
         logging.debug("TEST: GROUPS_WITH_CARDS")
+        
+        # Получаем настройки группы
+        group_settings = settings.GROUPS_WITH_CARDS[message.chat.id]
+        
+        # Проверяем условия для отправки мини-карточки
+        if (message.is_topic_message and 
+            message.message_thread_id and
+            'message_thread_ids' in group_settings and
+            (message.message_thread_id in group_settings['message_thread_ids'] or
+             'all_topic_messages' in group_settings['message_thread_ids'])):
+            logging.debug("TEST: message_thread_id in group_settings")
 
-    is_previous_his = True
-    keep_hours = None
-    if message.chat.id in settings.GROUPS_WITH_CARDS and \
-       message.from_user.id != bot_data.id and \
-       message.is_topic_message and message.message_thread_id and \
-       (
-        message.message_thread_id in settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids'] or
-        'topic_messages' in settings.GROUPS_WITH_CARDS[message.chat.id]['message_thread_ids']
-       ):
-        logging.debug("TEST: GROUPS_WITH_CARDS")
-       
-        if r := redis.Redis(**settings.REDIS_CONNECT):
-            try:
-                last_user_in_grop_rec = (
-                    Rcache.LAST_USER_IN_GROUP_PREFIX + \
-                    str(message.chat.id) + \
-                    Rcache.KEY_SEP + \
-                    str(message.message_thread_id)
-                )
-                logging.debug("TEST: last_user_in_grop_rec")
-                previous_user_in_group = r.get(last_user_in_grop_rec)
-                if str(previous_user_in_group) != str(message.from_user.id):
-                    r.set(last_user_in_grop_rec, message.from_user.id)
-                    is_previous_his = False
-                    keep_hours = settings.GROUPS_WITH_CARDS[message.chat.id].get('keep_hours')
-                    logging.debug("TEST: is_previous_his = False")
-            except Exception as e:
-                logging.error(f"Redis operation failed: {str(e)}")
-            finally:
-                r.close()
+            is_previous_his = True
 
-        if not is_previous_his:
-            logging.debug("TEST: not is_previous_his")
-            reply = await Misc.group_minicard_text (response_from, message.chat)
-            dict_reply = dict(
-                keyboard_type=KeyboardType.TRUST_THANK,
-                operation=OperationType.TRUST,
-                sep=KeyboardType.SEP,
-                user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
-                message_to_forward_id='',
-                group_id=message.chat.id,
-            )
-            callback_data_template = (
-                    '%(keyboard_type)s%(sep)s'
-                    '%(operation)s%(sep)s'
-                    '%(user_to_uuid_stripped)s%(sep)s'
-                    '%(message_to_forward_id)s%(sep)s'
-                    '%(group_id)s%(sep)s'
-                )
-            inline_btn_thank = InlineKeyboardButton(
-                text='Доверяю',
-                callback_data=callback_data_template % dict_reply,
-            )
-            logging.debug('minicard in group text: '+ repr(reply))
-            try:
-                answer = await message.answer(
-                    reply,
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[inline_btn_thank]]),
-                    disable_notification=True,
-                )
-            except (TelegramBadRequest, TelegramForbiddenError) as e:
-                logging.error(f"Failed to send minicard group message: {str(e)}")
-                return
-            if answer and keep_hours:
-                if r := redis.Redis(**settings.REDIS_CONNECT):
-                    try:
-                        s = (
-                            f'{Rcache.CARD_IN_GROUP_PREFIX}{Rcache.KEY_SEP}'
-                            f'{int(time.time())}{Rcache.KEY_SEP}'
-                            f'{answer.chat.id}{Rcache.KEY_SEP}'
-                            f'{answer.message_id}'
-                        )
-                        r.set(name=s, value='1')
-                    except Exception as e:
-                        logging.error(f"Redis operation failed: {str(e)}")
-                    finally:
-                        r.close()
+            if r := redis.Redis(**settings.REDIS_CONNECT):
+                try:
+                    # Ключ дл5я проверки пользователя
+                    same_user_key = f"last_user_in_topic:{message.from_user.id}:{message.chat.id}:{message.message_thread_id}"
+                    
+                    # Атомарная проверка: если ключ уже существует, значит тот же пользователь
+                    # Устанавливаем TTL = keep_hours или дефолтный 3600 сек (60 минут)
+                    ttl_seconds = group_settings.get('keep_hours', 0.083) * 3600 if group_settings.get('keep_hours') else 3600
+                    
+                    if not r.set(same_user_key, "1", ex=int(ttl_seconds), nx=True):
+                        # Ключ уже существует → тот же пользователь недавно писал
+                        is_previous_his = True
+                        logging.debug("TEST: Same user recently posted, skipping minicard")
+                    else:
+                        # Ключ установлен → другой пользователь или первый в "окне"
+                        is_previous_his = False
+                        logging.debug("TEST: Different user or first message, showing minicard")
+                except Exception as e:
+                    logging.error(f"Redis operation failed: {str(e)}")
+                    # В случае ошибки продолжаем с безопасным значением
+                    is_previous_his = True  # Чтобы не показывать мини-карточку при ошибке
+                finally:
+                    r.close()
 
-    if message.is_topic_message and \
+            if not is_previous_his:
+                logging.debug("TEST: show minicard")
+                reply = await Misc.group_minicard_text(response_from, message.chat)
+                dict_reply = dict(
+                    keyboard_type=KeyboardType.TRUST_THANK,
+                    operation=OperationType.TRUST,
+                    sep=KeyboardType.SEP,
+                    user_to_uuid_stripped=Misc.uuid_strip(response_from['uuid']),
+                    message_to_forward_id='',
+                    group_id=message.chat.id,
+                )
+                callback_data_template = (
+                        '%(keyboard_type)s%(sep)s'
+                        '%(operation)s%(sep)s'
+                        '%(user_to_uuid_stripped)s%(sep)s'
+                        '%(message_to_forward_id)s%(sep)s'
+                        '%(group_id)s%(sep)s'
+                    )
+                inline_btn_thank = InlineKeyboardButton(
+                    text='Доверяю',
+                    callback_data=callback_data_template % dict_reply,
+                )
+                logging.debug('minicard in group text: '+ repr(reply))
+                try:
+                    answer = await message.answer(
+                        reply,
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[inline_btn_thank]]),
+                        disable_notification=True,
+                    )
+                except (TelegramBadRequest, TelegramForbiddenError) as e:
+                    logging.error(f"Failed to send minicard group message: {str(e)}")
+                    return
+
+    # Аплоад видео из топика группы - в ютуб канал
+    if (message.is_topic_message and \
     message.chat.id in settings.GROUPS_WITH_YOUTUBE_UPLOAD and \
     message.message_thread_id and \
     message.message_thread_id == \
-    settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id]['message_thread_id']:
+    settings.GROUPS_WITH_YOUTUBE_UPLOAD[message.chat.id].get('message_thread_id')):
         if message.content_type == ContentType.VIDEO:
             # Генерируем заголовок на основе даты и времени, если его нет
             title = message.caption if message.caption else f"Видео от {message.date.strftime('%d.%m.%Y %H:%M UTC')}"
