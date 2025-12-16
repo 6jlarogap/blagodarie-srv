@@ -207,62 +207,63 @@ async def process_group_message(message: Message, state: FSMContext):
     #
 
     # Добавление мини-карточек юзера после сообщений в топике группы
-    if message.chat.id in settings.GROUPS_WITH_CARDS:
-        logging.debug("TEST: GROUPS_WITH_CARDS")
+    # if message.chat.id in settings.GROUPS_WITH_CARDS:
+    #     logging.debug("TEST: GROUPS_WITH_CARDS")
         
-        # Получаем настройки группы
-        group_settings = settings.GROUPS_WITH_CARDS[message.chat.id]
+    #     # Получаем настройки группы
+    #     group_settings = settings.GROUPS_WITH_CARDS[message.chat.id]
         
-        # Проверяем условия для отправки мини-карточки
-        if (message.is_topic_message and 
-            message.message_thread_id and
-            'message_thread_ids' in group_settings and
-            (message.message_thread_id in group_settings['message_thread_ids'] or
-             'all_topics' in group_settings['message_thread_ids'])):
-            logging.debug("TEST: message_thread_id in group_settings")
+    #     # Проверяем условия для отправки мини-карточки
+    #     if (message.is_topic_message and 
+    #         message.message_thread_id and
+    #         'message_thread_ids' in group_settings and
+    #         (message.message_thread_id in group_settings['message_thread_ids'] or
+    #          'all_topics' in group_settings['message_thread_ids'])):
+    #         logging.debug("TEST: message_thread_id in group_settings")
 
-            # Edit the original message to add buttons:
-            dict_reply = dict(
-                keyboard_type=KeyboardType.TRUST_THANK,
-                operation=OperationType.TRUST,
-                sep=KeyboardType.SEP,
-                user_to_uuid_stripped=Misc.uuid_strip(str(tg_user_sender.id)),
-                message_to_forward_id='',
-                group_id=message.chat.id,
-            )
+    #         # Edit the original message to add buttons:
+    #         dict_reply = dict(
+    #             keyboard_type=KeyboardType.TRUST_THANK,
+    #             operation=OperationType.TRUST,
+    #             sep=KeyboardType.SEP,
+    #             user_to_uuid_stripped=Misc.uuid_strip(str(tg_user_sender.id)),
+    #             message_to_forward_id='',
+    #             group_id=message.chat.id,
+    #         )
 
-            callback_data_template = (
-                '%(keyboard_type)s%(sep)s'
-                '%(operation)s%(sep)s'
-                '%(user_to_uuid_stripped)s%(sep)s'
-                '%(message_to_forward_id)s%(sep)s'
-                '%(group_id)s%(sep)s'
-            )
+    #         callback_data_template = (
+    #             '%(keyboard_type)s%(sep)s'
+    #             '%(operation)s%(sep)s'
+    #             '%(user_to_uuid_stripped)s%(sep)s'
+    #             '%(message_to_forward_id)s%(sep)s'
+    #             '%(group_id)s%(sep)s'
+    #         )
 
-            # Create both buttons
-            inline_btn_thank = InlineKeyboardButton(
-                text='Доверяю',
-                callback_data=callback_data_template % dict_reply,
-            )
+    #         # Create both buttons
+    #         inline_btn_thank = InlineKeyboardButton(
+    #             text='Доверяю',
+    #             callback_data=callback_data_template % dict_reply,
+    #         )
 
-            # Create profile button with deeplink
-            profile_link = Misc.get_deeplink(response_from, https=False)
-            inline_btn_profile = InlineKeyboardButton(
-                text='Профиль',
-                url=profile_link,  # Using url instead of callback_data for direct link
-            )
+    #         # Create profile button with deeplink
+    #         profile_link = Misc.get_deeplink(response_from, https=False)
+    #         inline_btn_profile = InlineKeyboardButton(
+    #             text='Профиль',
+    #             url=profile_link,  # Using url instead of callback_data for direct link
+    #         )
 
-            # Edit message with both buttons in one row
-            try:
-                await bot.edit_message_reply_markup(
-                    chat_id=message.chat.id,
-                    message_id=message.message_id,
-                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                        [inline_btn_thank, inline_btn_profile]  # Both buttons in same row
-                    ])
-                )
-            except (TelegramBadRequest, TelegramForbiddenError) as e:
-                logging.error(f"Failed to edit user message: {str(e)}")
+    #         # Edit message with both buttons in one row
+    #         try:
+    #             await bot.edit_message_reply_markup(
+    #                 chat_id=message.chat.id,
+    #                 message_id=message.message_id,
+    #                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+    #                     [inline_btn_thank, inline_btn_profile]  # Both buttons in same row
+    #                 ])
+    #             )
+    #         except (TelegramBadRequest, TelegramForbiddenError) as e:
+    #             logging.error(f"Failed to edit user message: {str(e)}")
+
 
     # Аплоад видео из топика группы - в ютуб канал
     if (message.is_topic_message and \
