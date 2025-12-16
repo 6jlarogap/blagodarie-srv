@@ -218,38 +218,14 @@ async def process_group_message(message: Message, state: FSMContext):
             message.message_thread_id and
             'message_thread_ids' in group_settings and
             (message.message_thread_id in group_settings['message_thread_ids'] or
-             'all_topic_messages' in group_settings['message_thread_ids'])):
+             'all_topics' in group_settings['message_thread_ids'])):
             logging.debug("TEST: message_thread_id in group_settings")
 
-            is_previous_his = True
+            # Instead of sending a new minicard message:
+            # answer = await message.answer(reply, reply_markup=..., disable_notification=True)
 
-            if r := redis.Redis(**settings.REDIS_CONNECT):
-                try:
-                    # Ключ дл5я проверки пользователя
-                    same_user_key = f"last_user_in_topic:{message.from_user.id}:{message.chat.id}:{message.message_thread_id}"
-                    
-                    # Атомарная проверка: если ключ уже существует, значит тот же пользователь
-                    # Устанавливаем TTL = keep_hours или дефолтный 3600 сек (60 минут)
-                    ttl_seconds = group_settings.get('keep_hours', 0.083) * 3600 if group_settings.get('keep_hours') else 3600
-                    
-                    if not r.set(same_user_key, "1", ex=int(ttl_seconds), nx=True):
-                        # Ключ уже существует → тот же пользователь недавно писал
-                        is_previous_his = True
-                        logging.debug("TEST: Same user recently posted, skipping minicard")
-                    else:
-                        # Ключ установлен → другой пользователь или первый в "окне"
-                        is_previous_his = False
-                        logging.debug("TEST: Different user or first message, showing minicard")
-                except Exception as e:
-                    logging.error(f"Redis operation failed: {str(e)}")
-                    # В случае ошибки продолжаем с безопасным значением
-                    is_previous_his = True  # Чтобы не показывать мини-карточку при ошибке
-                finally:
-                    r.close()
-
-            if not is_previous_his:
-                logging.debug("TEST: show minicard")
-                reply = await Misc.group_minicard_text(response_from, message.chat)
+            # Edit the original message to add buttons:
+            try:
                 dict_reply = dict(
                     keyboard_type=KeyboardType.TRUST_THANK,
                     operation=OperationType.TRUST,
@@ -259,26 +235,26 @@ async def process_group_message(message: Message, state: FSMContext):
                     group_id=message.chat.id,
                 )
                 callback_data_template = (
-                        '%(keyboard_type)s%(sep)s'
-                        '%(operation)s%(sep)s'
-                        '%(user_to_uuid_stripped)s%(sep)s'
-                        '%(message_to_forward_id)s%(sep)s'
-                        '%(group_id)s%(sep)s'
-                    )
+                    '%(keyboard_type)s%(sep)s'
+                    '%(operation)s%(sep)s'
+                    '%(user_to_uuid_stripped)s%(sep)s'
+                    '%(message_to_forward_id)s%(sep)s'
+                    '%(group_id)s%(sep)s'
+                )
                 inline_btn_thank = InlineKeyboardButton(
                     text='Доверяю',
                     callback_data=callback_data_template % dict_reply,
                 )
-                logging.debug('minicard in group text: '+ repr(reply))
-                try:
-                    answer = await message.answer(
-                        reply,
-                        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[inline_btn_thank]]),
-                        disable_notification=True,
-                    )
-                except (TelegramBadRequest, TelegramForbiddenError) as e:
-                    logging.error(f"Failed to send minicard group message: {str(e)}")
-                    return
+                
+                # Edit the original message to add the button
+                await bot.edit_message_reply_markup(
+                    chat_id=message.chat.id,
+                    message_id=message.message_id,
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[[inline_btn_thank]])
+                )
+            except (TelegramBadRequest, TelegramForbiddenError) as e:
+                logging.error(f"Failed to edit user message: {str(e)}")
+
 
     # Аплоад видео из топика группы - в ютуб канал
     if (message.is_topic_message and \
