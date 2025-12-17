@@ -440,3 +440,109 @@ async def echo_my_chat_member_for_bot(chat_member: ChatMemberUpdated):
             await Misc.send_pin_group_message(chat_member.chat)
         except (TelegramBadRequest, TelegramForbiddenError) as e:
             logging.error(f"Failed to send pin message: {str(e)}")
+
+
+@router.chat_join_request()
+async def echo_join_chat_request(message: ChatJoinRequest):
+    """
+    Пользователь присоединяется к каналу/группе по ссылке- приглашению
+
+    Работает только ссылка, требующая одобрения.
+    Бот, он всегда администратор канала/группы, одобрит.
+    Но до этого:
+        Нового участника надо завести в базе, если его там нет
+        В канал/группу отправится мини- карточка нового участника
+    """
+    logging.debug(f'echo_join_chat_request called: chat_id={message.chat.id}, chat_title={message.chat.title}')
+    
+    tg_subscriber = message.from_user
+#    tg_inviter = message.invite_link.creator if message.invite_link else None
+    
+    logging.debug(f'New subscriber: {tg_subscriber.id} ({tg_subscriber.first_name})')
+    # logging.debug(f'Invite creator: {tg_inviter.id if tg_inviter else None}')
+    
+    # if tg_inviter:
+    #     logging.debug(f'Processing invite creator')
+    #     status_inviter, response_inviter = await Misc.post_tg_user(tg_inviter, did_bot_start=False)
+    #     if status_inviter != 200:
+    #         logging.debug(f'Failed to create/update inviter, status: {status_inviter}')
+    #         return
+    #     # Владельца канала/группы сразу в канал/группу. Вдруг его там нет
+    #     #
+    #     await TgGroupMember.add(
+    #         group_chat_id=message.chat.id,
+    #         group_title=message.chat.title,
+    #         group_type=message.chat.type,
+    #         user_tg_uid=tg_inviter.id,
+    #     )
+
+    is_channel = message.chat.type == ChatType.CHANNEL
+    logging.debug(f'Chat type: {message.chat.type}, is_channel: {is_channel}')
+    
+    status, response_subscriber = await Misc.post_tg_user(tg_subscriber, did_bot_start=False)
+    if status != 200:
+        logging.debug(f'Failed to create/update subscriber, status: {status}')
+        return
+        
+    logging.debug(f'Approving chat join request for user {tg_subscriber.id}')
+    try:
+        await bot.approve_chat_join_request(
+                message.chat.id,
+                tg_subscriber.id
+        )
+        logging.debug(f'Chat join request approved successfully')
+    except TelegramBadRequest as excpt:
+        logging.debug(f'TelegramBadRequest while approving join request: {excpt.message}')
+        # in_chat = 'в канале' if is_channel else 'в группе'
+        # msg = f'Возможно, вы уже {in_chat}'
+        # if excpt.message == 'User_already_participant':
+        #     msg = 'Вы уже {in_chat}'
+        # try:
+        #     await bot.send_message(
+        #         chat_id=tg_subscriber.id,
+        #         text=msg,
+        #     )
+        #     return
+        # except (TelegramBadRequest, TelegramForbiddenError,) as e:
+        #     logging.debug(f'Failed to send message to subscriber: {e}')
+        #     pass
+
+    logging.debug(f'Adding subscriber to group database')
+    status, response_add_member = await TgGroupMember.add(
+        group_chat_id=message.chat.id,
+        group_title=message.chat.title,
+        group_type=message.chat.type,
+        user_tg_uid=tg_subscriber.id,
+    )
+    if status != 200:
+        logging.debug(f'Failed to add subscriber to group, status: {status}')
+        return
+
+    to_chat = 'в канал' if is_channel else 'в группу'
+    dl_subscriber = Misc.get_deeplink_with_name(response_subscriber, plus_trusts=True)
+    msg_dict = dict(
+        dl_subscriber=dl_subscriber,
+        to_chat=to_chat,
+        map_link = Misc.get_html_a(href=settings.MAP_HOST, text='карте участников'),
+        group_title=message.chat.title,
+    )
+    msg = (
+            'Ваша заявка на вступление %(to_chat)s %(group_title)s одобрена.\n'
+            'Нажмите /setplace чтобы указать Ваше местоположение на %(map_link)s.'
+    ) %  msg_dict
+    
+    logging.debug(f'Sending welcome message to subscriber')
+    try:
+        await bot.send_message(chat_id=tg_subscriber.id, text=msg)
+    except (TelegramBadRequest, TelegramForbiddenError,) as e:
+        logging.debug(f'Failed to send welcome message: {e}')
+        pass
+        
+    # if is_channel:
+    #     reply = '%(dl_subscriber)s подключен(а)' % msg_dict
+    #     logging.debug(f'Sending announcement in channel')
+    #     await bot.send_message(
+    #         message.chat.id,
+    #         reply,
+    #         disable_notification=True,
+    #     )
