@@ -963,23 +963,6 @@ class Misc(object):
         """
         Получить данные и/или сформировать пользователя
         """
-
-        # Проверка дедупликации по tg_uid
-        dedup_key = f"user_dedup:{tg_user_sender.id}"
-        if r := redis.Redis(**settings.REDIS_CONNECT):
-            try:
-                # Пытаемся установить ключ с временем жизни 5 минут
-                # Если ключ уже существует (возвращает 0) - пользователь уже обрабатывается
-                if not r.set(dedup_key, "1", ex=300, nx=True):
-                    logging.debug(f"User {tg_user_sender.id} already being processed, skipping")
-                    return 429, {"error": "User processing in progress"}
-                logging.debug(f"User {tg_user_sender.id} processing started, added to Redis")
-            except Exception as e:
-                logging.error(f"Redis dedup error: {str(e)}")
-                # В случае ошибки Redis продолжаем обработку
-            finally:
-                r.close()
-
         payload_sender = dict(
             tg_token=settings.TOKEN,
             tg_uid=tg_user_sender.id,
