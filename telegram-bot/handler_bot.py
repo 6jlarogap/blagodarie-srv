@@ -47,6 +47,7 @@ class FSMagreeToRules(StatesGroup):
     Command(re.compile('^graph$', flags=re.I)),
 )
 async def cmd_graph(message: Message, state: FSMContext):
+    logging.debug(f"Executing cmd_graph command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
     inline_btn_all_users = InlineKeyboardButton(
         text='Отношения участников',
         login_url=Misc.make_login_url(
@@ -73,6 +74,7 @@ async def cmd_graph(message: Message, state: FSMContext):
     Command(re.compile('^ya$', flags=re.I)),
 )
 async def cmd_ya(message: Message, state: FSMContext):
+    logging.debug(f"Executing cmd_ya command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     await Misc.show_card(
         profile=response_sender,
@@ -88,6 +90,7 @@ async def cmd_ya(message: Message, state: FSMContext):
     Command(re.compile('^help$', flags=re.I)),
 )
 async def cmd_help(message: Message, state: FSMContext):
+    logging.debug(f"Executing cmd_help command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
     await show_start(message, state)
 
 
@@ -98,6 +101,7 @@ async def cmd_help(message: Message, state: FSMContext):
     Command(re.compile('^setplace$', flags=re.I)),
 )
 async def cmd_setplace(message: Message, state: FSMContext):
+    logging.debug(f"Executing cmd_setplace command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
     await Misc.prompt_location(message, state)
 
 
@@ -108,9 +112,11 @@ async def cmd_setplace(message: Message, state: FSMContext):
     Command(re.compile('^(?:new|new_person)$', flags=re.I)),
 )
 async def cmd_new_person(message: Message, state: FSMContext):
+    logging.debug(f"Executing cmd_new_person command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
         if not Misc.is_power(response_sender):
+            logging.debug(f"User lacks permissions for new_person command - User: {message.from_user.username} (ID: {message.from_user.id})")
             return
         await state.set_state(FSMnewPerson.ask)
         await state.update_data(uuid=response_sender['uuid'])
@@ -124,9 +130,11 @@ async def cmd_new_person(message: Message, state: FSMContext):
     Command(re.compile('^new_org$', flags=re.I)),
 )
 async def cmd_new_org(message: Message, state: FSMContext):
+    logging.debug(f"Executing cmd_new_org command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
         if not Misc.is_power(response_sender):
+            logging.debug(f"User lacks permissions for new_org command - User: {message.from_user.username} (ID: {message.from_user.id})")
             return
         await state.set_state(FSMnewOrg.ask)
         await message.reply(Misc.PROMPT_NEW_ORG, reply_markup=Misc.reply_markup_cancel_row())
@@ -139,10 +147,12 @@ async def cmd_new_org(message: Message, state: FSMContext):
     Command(re.compile('^(?:findpotr|findvozm|findperson)$', flags=re.I)),
 )
 async def cmd_find(message: Message, state: FSMContext):
+    logging.debug(f"Executing cmd_find command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
     message_text = message.text.split()[0].lstrip('/')
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
         if not Misc.is_power(response_sender):
+            logging.debug(f"User lacks permissions for find command - User: {message.from_user.username} (ID: {message.from_user.id})")
             return
         if message_text == 'findpotr':
             what = 'query_wish'
@@ -164,6 +174,7 @@ async def cmd_find(message: Message, state: FSMContext):
     Command(re.compile('^meet$', flags=re.I)),
 )
 async def cmd_meet(message: Message, state: FSMContext):
+    logging.debug(f"Executing cmd_meet command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
     status, profile = await Misc.post_tg_user(message.from_user)
     if status == 200:
         data = dict(profile_from = profile, profile_to=None)
@@ -179,6 +190,7 @@ async def cmd_meet(message: Message, state: FSMContext):
     Command(re.compile('^(?:trust|thank)$', flags=re.I)),
 )
 async def cmd_trust_thank(message: Message, state: FSMContext):
+    logging.debug(f"Executing cmd_trust_thank command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
     command = message.text.strip('/').strip().lower()
     status, profile = await Misc.post_tg_user(message.from_user)
     if status == 200:
@@ -206,6 +218,7 @@ async def cmd_trust_thank(message: Message, state: FSMContext):
     Command(re.compile('^stat$', flags=re.I)),
 )
 async def cmd_stat(message: Message, state: FSMContext):
+    logging.debug(f"Executing cmd_stat command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
     status, response = await Misc.api_request(
         path='/api/bot/stat',
         method='get',
@@ -233,6 +246,7 @@ async def cmd_stat(message: Message, state: FSMContext):
     Command(re.compile('^map$', flags=re.I)),
 )
 async def cmd_map(message: Message, state: FSMContext):
+    logging.debug(f"Executing cmd_map command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
     await bot.send_message(
         message.from_user.id,
         text=Misc.get_html_a(href=settings.MAP_HOST, text='Карта участников'),
@@ -246,6 +260,7 @@ async def cmd_map(message: Message, state: FSMContext):
     Command(re.compile('^feedback$', flags=re.I)),
 )
 async def cmd_feedback(message: Message, state: FSMContext):
+    logging.debug(f"Executing cmd_feedback command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
     await message.reply(
         Misc.get_html_a(settings.BOT_CHAT['href'], settings.BOT_CHAT['caption']),
     )
@@ -273,6 +288,7 @@ async def show_start(message, state, set_state=True):
     Command(re.compile('^start$', flags=re.I)),
 )
 async def cmd_start(message: Message, state: FSMContext):
+    logging.debug(f"Executing cmd_start command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
     arg = Misc.arg_deeplink(message.text)
     if not arg:
         # команда /start
@@ -438,9 +454,11 @@ async def cmd_start(message: Message, state: FSMContext):
     Command(re.compile('^getowned$', flags=re.I)),
 )
 async def cmd_getowned(message: Message, state: FSMContext):
+    logging.debug(f"Executing cmd_getowned command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
     status, response_from = await Misc.post_tg_user(message.from_user)
     if status == 200:
         if not Misc.is_power(response_from):
+            logging.debug(f"User lacks permissions for getowned command - User: {message.from_user.username} (ID: {message.from_user.id})")
             return
         try:
             status, a_response_to = await Misc.api_request(
@@ -466,6 +484,7 @@ async def cmd_getowned(message: Message, state: FSMContext):
     Command(re.compile('^offer|offer_multi$', flags=re.I)),
 )
 async def cmd_offer(message: Message, state: FSMContext):
+    logging.debug(f"Executing cmd_offer command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
     from handler_offer import Offer
     await Offer.cmd_offer(message, state)
 
@@ -477,6 +496,7 @@ async def cmd_offer(message: Message, state: FSMContext):
     Command(re.compile('^quit$', flags=re.I)),
 )
 async def cmd_quit(message: Message, state: FSMContext):
+    logging.debug(f"Executing cmd_quit command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
     status, profile = await Misc.post_tg_user(message.from_user)
     if status == 200:
         if profile['is_active']:
@@ -557,6 +577,7 @@ async def message_to_bot(message: Message, state: FSMContext):
 
     message_text = getattr(message, 'text', '') and message.text.strip() or ''
     if is_forward_from_other:
+        logging.debug(f"Processing forwarded message - Forwarded from: {tg_user_forwarded.username} (ID: {tg_user_forwarded.id}), Forwarded by: {tg_user_sender.username} (ID: {tg_user_sender.id}), Message: {message_text}")
         status_to, response_to = await Misc.post_tg_user(tg_user_forwarded)
         if status_to != 200:
             return
@@ -702,10 +723,12 @@ async def process_location_input(message: Message, state: FSMContext):
     """
     Записать местоположение пользователя телеграма или uuid в состоянии
     """
+    logging.debug(f"Processing location input - User: {message.from_user.username} (ID: {message.from_user.id}), Content type: {message.content_type}")
     if message.content_type == ContentType.TEXT:
         if await is_it_command(message, state):
             return
     else:
+        logging.debug(f"Invalid content type for location input - User: {message.from_user.username} (ID: {message.from_user.id})")
         await message.answer(Misc.MSG_ERR_GEO, reply_markup=Misc.reply_markup_cancel_row())
         return
     await put_location(message, state, show_card=True)
@@ -714,15 +737,19 @@ async def process_location_input(message: Message, state: FSMContext):
 
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMquery.ask))
 async def process_find_input(message: Message, state: FSMContext):
+    logging.debug(f"Processing find input - User: {message.from_user.username} (ID: {message.from_user.id}), Content type: {message.content_type}")
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     data = await state.get_data()
     try:
         what = data['what']
+        logging.debug(f"Find query type: {what} - User: {message.from_user.username} (ID: {message.from_user.id})")
     except KeyError:
+        logging.debug(f"No query type found in state - User: {message.from_user.username} (ID: {message.from_user.id})")
         pass
     else:
         a_found = None
         if message.content_type != ContentType.TEXT:
+            logging.debug(f"Invalid content type for find query - User: {message.from_user.username} (ID: {message.from_user.id})")
             reply_markup = Misc.reply_markup_cancel_row()
             await message.reply(
                 Misc.MSG_ERROR_TEXT_ONLY + '\n\n' +  Misc.PROMPT_QUERY[what],
@@ -730,6 +757,7 @@ async def process_find_input(message: Message, state: FSMContext):
             )
             return
         if len(message.text.strip()) < settings.MIN_LEN_SEARCHED_TEXT:
+            logging.debug(f"Search text too short - User: {message.from_user.username} (ID: {message.from_user.id})")
             reply = Misc.PROMPT_SEARCH_TEXT_TOO_SHORT
         else:
             search_phrase = Misc.text_search_phrase(
@@ -737,14 +765,19 @@ async def process_find_input(message: Message, state: FSMContext):
                 MorphAnalyzer,
             )
             if not search_phrase:
+                logging.debug(f"Search phrase could not be generated - User: {message.from_user.username} (ID: {message.from_user.id})")
                 reply = Misc.PROMPT_SEARCH_PHRASE_TOO_SHORT
             else:
+                logging.debug(f"Searching for: {search_phrase} - User: {message.from_user.username} (ID: {message.from_user.id})")
                 status, a_found = await Misc.search_users(what, search_phrase)
                 if status != 200:
+                    logging.debug(f"Search API error - Status: {status} - User: {message.from_user.username} (ID: {message.from_user.id})")
                     a_found = None
                 elif not a_found:
+                    logging.debug(f"No results found - User: {message.from_user.username} (ID: {message.from_user.id})")
                     reply = Misc.PROMPT_NOTHING_FOUND
         if a_found:
+            logging.debug(f"Found {len(a_found)} results - User: {message.from_user.username} (ID: {message.from_user.id})")
             await Misc.show_deeplinks(a_found, message)
         elif reply:
             await message.reply(reply)
@@ -773,6 +806,7 @@ async def put_location(message, state, show_card=False):
             user_uuid = response_sender.get('uuid')
         latitude, longitude = Misc.check_location_str(message.text)
         if latitude is None or longitude is None:
+            logging.debug(f"Invalid location format - User: {message.from_user.username} (ID: {message.from_user.id}), Input: {message.text}")
             await message.answer(Misc.MSG_ERR_GEO, reply_markup=Misc.reply_markup_cancel_row())
             return
         else:
@@ -791,6 +825,7 @@ async def put_location(message, state, show_card=False):
                     )
                     await message.reply('Координаты записаны', reply_markup=reply_markup)
             else:
+                logging.debug(f"Failed to save location - User: {message.from_user.username} (ID: {message.from_user.id}), Status: {status}")
                 await message.reply('Ошибка записи координат', reply_markup=reply_markup)
     return result
 
@@ -852,7 +887,9 @@ async def process_meet_from_deeplink_and_command(message, state, data):
 
 @router.message(F.chat.type.in_((ChatType.PRIVATE,)), StateFilter(FSMnewOrg.ask))
 async def process_new_org_ask(message: Message, state: FSMContext):
+    logging.debug(f"Processing new org input - User: {message.from_user.username} (ID: {message.from_user.id}), Content type: {message.content_type}")
     if message.content_type != ContentType.TEXT:
+        logging.debug(f"Invalid content type for org creation - User: {message.from_user.username} (ID: {message.from_user.id})")
         await message.reply(
             Misc.MSG_ERROR_TEXT_ONLY + '\n\n' + \
             Misc.PROMPT_NEW_ORG,
@@ -863,11 +900,13 @@ async def process_new_org_ask(message: Message, state: FSMContext):
         return
     first_name = Misc.strip_text(message.text)
     if not first_name or len(first_name) < 5:
+        logging.debug(f"Organization name too short or invalid - User: {message.from_user.username} (ID: {message.from_user.id}), Name: {first_name}")
         await message.reply(
             Misc.PROMPT_ORG_INCORRECT,
             reply_markup=Misc.reply_markup_cancel_row(),
         )
         return
+    logging.debug(f"Creating organization: {first_name} - User: {message.from_user.username} (ID: {message.from_user.id})")
     status_sender, response_sender = await Misc.post_tg_user(message.from_user)
     if status_sender == 200:
         payload_org = dict(
@@ -885,6 +924,7 @@ async def process_new_org_ask(message: Message, state: FSMContext):
         logging.debug('post new org, status: %s' % status)
         logging.debug('post new org, response: %s' % response)
         if status == 200:
+            logging.debug(f"Organization created successfully - User: {message.from_user.username} (ID: {message.from_user.id}), Org: {first_name}")
             await message.reply('Добавлена организация')
             await Misc.show_card(
                 profile=response,
