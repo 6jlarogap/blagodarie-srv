@@ -173,9 +173,12 @@ async def cmd_find(message: Message, state: FSMContext):
     StateFilter(None),
     Command(re.compile('^meet$', flags=re.I)),
 )
-async def cmd_meet(message: Message, state: FSMContext):
+async def cmd_meet(message: Message, state: FSMContext, profile=None):
     logging.debug(f"Executing cmd_meet command - User: {message.from_user.username} (ID: {message.from_user.id}), Message: {message.text}")
-    status, profile = await Misc.post_tg_user(message.from_user)
+    if profile:
+        status = 200
+    else:
+        status, profile = await Misc.post_tg_user(message.from_user)
     if status == 200:
         data = dict(profile_from = profile, profile_to=None)
         await process_meet_from_deeplink_and_command(message, state, data)
@@ -305,10 +308,9 @@ async def cmd_start(message: Message, state: FSMContext):
     if m := re.search(r'^(t|th)\-([0-9a-z]{10})$', arg, flags=re.I):
         status_to, profile_to = await Misc.get_user_by_sid(m.group(2))
         if status_to == 200:
-            status_from, profile_from = await Misc.post_tg_user(message.from_user)
             await Misc.put_attitude(data = dict(
                 tg_user_sender=message.from_user,
-                profile_from = profile_from,
+                profile_from = response_sender,
                 profile_to = profile_to,
                 operation_type_id = OperationType.start_prefix_to_op(m.group(1)),
                 callback=None,
@@ -441,7 +443,7 @@ async def cmd_start(message: Message, state: FSMContext):
         await Misc.prompt_location(message, state)
 
     elif arg == 'meet':
-        await cmd_meet(message, state)
+        await cmd_meet(message, state, profile=response_sender)
 
     else:
         await message.reply(f'Такая команда — /start {arg} — не предусмотрена!')
@@ -656,7 +658,7 @@ async def message_to_bot(message: Message, state: FSMContext):
         status, response = await Misc.search_users('query', search_phrase)
         if status == 400 and response.get('code') and response['code'] == 'programming_error':
             if not found_username:
-                await message.reply('Ошибка доступа к данных. Получили отказ по такой строке в поиске')
+                await message.reply('Ошибка доступа к данным. Получили отказ по такой строке в поиске')
                 return
         elif status == 200:
             if response:
