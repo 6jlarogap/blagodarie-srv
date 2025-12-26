@@ -106,7 +106,7 @@ async def enter_new_person_name(message: Message, state: FSMContext):
     data = await state.get_data()
     if data.get('wait_confirm'):
         await message.reply(
-            'Жду ответ на воставленный выше вопрос',
+            'Пожалуйста, ответьте на поставленный выше вопрос',
             reply_markup=Misc.reply_markup_cancel_row(),
         )
         return
